@@ -1,0 +1,63 @@
+plugins {
+    id 'java'
+    id 'org.jetbrains.kotlin.jvm' version '1.3.71'
+    id 'application'
+    id 'com.palantir.docker' version '0.25.0'
+}
+
+group 'com.exactpro.th2'
+version "${version_major}.${version_minor}.${version_maintenance}"
+
+repositories {
+    mavenCentral()
+
+    maven {
+        name 'Artifactory'
+        url 'http://artifactory5.exp.exactpro.com/artifactory/libs-snapshot'
+    }
+
+}
+
+dependencies {
+    implementation 'io.github.microutils:kotlin-logging:1.7.+'
+
+    implementation 'org.slf4j:slf4j-api:1.7.+'
+    implementation 'org.slf4j:slf4j-log4j12:1.7.+'
+
+    implementation 'com.fasterxml.jackson.core:jackson-core:2.9.+'
+    implementation 'com.fasterxml.jackson.module:jackson-module-kotlin:2.9.+'
+
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8'
+
+    implementation 'com.exactpro.th2:grpc-api:0.1-20200410.143633-8'
+    implementation 'com.exactpro.th2:th2-common:0.1-20200414.092822-9'
+
+    implementation 'com.exactpro.cradle:cradle-core:1.2-20200417.194407-2'
+    implementation 'com.exactpro.cradle:cradle-cassandra:1.2-20200417.194407-2'
+
+    implementation 'io.ktor:ktor-server-netty:1.3.2'
+}
+
+distTar {
+    archiveName "${archivesBaseName}.tar"
+}
+
+dockerPrepare {
+    dependsOn distTar
+}
+
+docker {
+    name "${docker_image_repository}/${docke_image_name}:${version}"
+    tag 'th2-version', "${docke_image_name}:${version}"
+    tag 'th2-latest', "${docke_image_name}:latest"
+    copySpec.from(tarTree("$buildDir/distributions/${archivesBaseName}.tar"))
+}
+
+
+compileKotlin {
+    kotlinOptions.jvmTarget = "12"
+}
+
+application {
+    mainClassName = "com.exactpro.th2.reportdataprovider.MainKt"
+}
