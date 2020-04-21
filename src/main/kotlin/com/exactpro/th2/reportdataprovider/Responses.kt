@@ -6,7 +6,9 @@ import com.exactpro.cradle.testevents.StoredTestEvent
 import com.exactpro.evolution.api.phase_1.Message
 import com.fasterxml.jackson.annotation.JsonRawValue
 import com.google.protobuf.util.JsonFormat
+import mu.KotlinLogging
 import java.time.Instant
+
 
 enum class Direction {
     IN, OUT;
@@ -36,7 +38,15 @@ data class Message(
         timestamp = stored.timestamp,
         sessionId = stored.streamName,
 
-        body = JsonFormat.printer().print(Message.parseFrom(stored.content))
+        body = kotlin.run {
+            try {
+                JsonFormat.printer().print(Message.parseFrom(stored.content))
+            } catch (e: Exception) {
+                KotlinLogging.logger { }.error { "unable to write message content to 'body' property - invalid data" }
+
+                "null"
+            }
+        }
     )
 }
 
@@ -66,6 +76,16 @@ data class Event(
         attachedMessageIds = cradleManager?.storage?.testEventsMessagesLinker
             ?.getMessageIdsByTestEventId(stored.id)?.map(Any::toString)?.toSet().orEmpty(),
 
-        body = String(stored.content).takeUnless(String::isEmpty) ?: "null"
+        body = kotlin.run {
+            try {
+                val data = String(stored.content).takeUnless(String::isEmpty) ?: "{}"
+                jacksonMapper.readTree(data)
+                data
+            } catch (e: Exception) {
+                KotlinLogging.logger { }.error { "unable to write event content to 'body' property - invalid data" }
+
+                "null"
+            }
+        }
     )
 }

@@ -5,6 +5,8 @@ import com.exactpro.cradle.cassandra.connection.CassandraConnection
 import com.exactpro.cradle.cassandra.connection.CassandraConnectionSettings
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.testevents.StoredTestEventId
+import com.fasterxml.jackson.databind.DeserializationFeature
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import io.ktor.application.call
 import io.ktor.http.ContentType
@@ -16,8 +18,10 @@ import io.ktor.server.netty.Netty
 import io.ktor.util.toMap
 import mu.KotlinLogging
 
+val logger = KotlinLogging.logger {}
 
-private val logger = KotlinLogging.logger {}
+val jacksonMapper: ObjectMapper = jacksonObjectMapper()
+    .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
 
 fun main() {
     val configuration = Configuration()
@@ -38,12 +42,6 @@ fun main() {
 
     manager.init(configuration.cassandraInstance.value)
 
-    val jsonMapper = jacksonObjectMapper()
-
-    fun json(data: Any): String {
-        return jsonMapper.writeValueAsString(data)
-    }
-
     embeddedServer(Netty, configuration.port.value.toInt()) {
         routing {
             get("/") {
@@ -63,9 +61,9 @@ fun main() {
                 val idsOnly = call.request.queryParameters["idsOnly"]?.toBoolean() ?: false
 
                 call.respondText(
-                    json(
+                    jacksonMapper.writeValueAsString(
                         manager.storage.testEventsParentsLinker.getChildrenIds(parentId)
-                            .map { if (idsOnly) it.toString() else Event(manager.storage.getTestEvent(it)) }
+                            .map { if (idsOnly) it.toString() else Event(manager.storage.getTestEvent(it), manager) }
                     ),
                     ContentType.Application.Json
                 )
@@ -75,7 +73,7 @@ fun main() {
                 val id = StoredTestEventId.fromString(call.parameters["id"])
 
                 call.respondText(
-                    json(Event(manager.storage.getTestEvent(id))),
+                    jacksonMapper.writeValueAsString(Event(manager.storage.getTestEvent(id))),
                     ContentType.Application.Json
                 )
             }
@@ -84,7 +82,7 @@ fun main() {
                 val id = StoredMessageId.fromString(call.parameters["id"])
 
                 call.respondText(
-                    json(Message(manager.storage.getMessage(id))),
+                    jacksonMapper.writeValueAsString(Message(manager.storage.getMessage(id))),
                     ContentType.Application.Json
                 )
             }
@@ -93,7 +91,7 @@ fun main() {
                 val request = MessageSearchRequest(call.request.queryParameters.toMap())
 
                 call.respondText(
-                    json(manager.storage.messages
+                    jacksonMapper.writeValueAsString(manager.storage.messages
                         .filter {
                             request.attachedEventId
                                 ?.equals(manager.storage.testEventsMessagesLinker.getTestEventIdsByMessageId(it.id))
@@ -112,7 +110,7 @@ fun main() {
                 val request = EventSearchRequest(call.request.queryParameters.toMap())
 
                 call.respondText(
-                    json(manager.storage.getTestEvents(request.isRootEvent ?: true)
+                    jacksonMapper.writeValueAsString(manager.storage.getTestEvents(request.isRootEvent ?: true)
                         .filter {
                             request.attachedMessageId
                                 ?.equals(manager.storage.testEventsMessagesLinker.getMessageIdsByTestEventId(it.id))
@@ -125,7 +123,7 @@ fun main() {
                                     && request.type?.equals(it.type) ?: true
 
                         }
-                        .map { if (request.idsOnly) it.id.toString() else Event(it) }),
+                        .map { if (request.idsOnly) it.id.toString() else Event(it, manager) }),
                     ContentType.Application.Json
                 )
             }

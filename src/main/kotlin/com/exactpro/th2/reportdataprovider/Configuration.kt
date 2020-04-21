@@ -34,6 +34,6 @@ class Configuration(
     val cassandraPort: Variable = Variable("CASSANDRA_PORT", "9042"),
     val cassandraKeyspace: Variable = Variable("CASSANDRA_KEYSPACE", "keySrt113"),
     val cassandraUsername: Variable = Variable("CASSANDRA_USERNAME", "testo"),
-    val cassandraPassword: Variable = Variable("CASSANDRA_PASSWORD", "testoPWD"),
+    val cassandraPassword: Variable = Variable("CASSANDRA_PASSWORD", "testoPWD", false),
     val cassandraInstance: Variable = Variable("CASSANDRA_INSTANCE", "srt113")
 )
