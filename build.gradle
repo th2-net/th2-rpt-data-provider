@@ -5,6 +5,10 @@ plugins {
     id 'com.palantir.docker' version '0.25.0'
 }
 
+ext {
+    dockerImageVersion = "${version_major}.${version_minor}.${version_maintenance}.${version_build}"
+}
+
 group 'com.exactpro.th2'
 version "${version_major}.${version_minor}.${version_maintenance}"
 
@@ -29,11 +33,11 @@ dependencies {
 
     implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8'
 
-    implementation 'com.exactpro.th2:grpc-api:0.1-20200410.143633-8'
-    implementation 'com.exactpro.th2:th2-common:0.1-20200414.092822-9'
+    implementation 'com.exactpro.th2:grpc-api:0.1-SNAPSHOT'
+    implementation 'com.exactpro.th2:th2-common:0.1-SNAPSHOT'
 
-    implementation 'com.exactpro.cradle:cradle-core:1.2-20200421.102909-3'
-    implementation 'com.exactpro.cradle:cradle-cassandra:1.2-20200421.102909-3'
+    implementation 'com.exactpro.cradle:cradle-core:1.2-SNAPSHOT'
+    implementation 'com.exactpro.cradle:cradle-cassandra:1.2-SNAPSHOT'
 
     implementation 'io.ktor:ktor-server-netty:1.3.2'
 }
@@ -47,9 +51,10 @@ dockerPrepare {
 }
 
 docker {
-    name "${docker_image_repository}/${docke_image_name}:${version}"
-    tag 'th2-version', "${docke_image_name}:${version}"
-    tag 'th2-latest', "${docke_image_name}:latest"
+    name "${docker_image_repository}/${docke_image_name}:${dockerImageVersion}"
+    tag 'local-version', "${docke_image_name}:${dockerImageVersion}"
+    tag 'local-latest', "${docke_image_name}:latest"
+    tag 'remote-latest',  "${docker_image_repository}/${docke_image_name}:latest"
     copySpec.from(tarTree("$buildDir/distributions/${archivesBaseName}.tar"))
 }
 
