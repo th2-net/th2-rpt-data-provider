@@ -35,6 +35,7 @@ data class Message(
         direction = Direction.fromStored(stored.direction),
         timestamp = stored.timestamp,
         sessionId = stored.streamName,
+
         body = JsonFormat.printer().print(Message.parseFrom(stored.content))
     )
 }
@@ -43,12 +44,12 @@ data class Event(
     val type: String = "event",
     val eventId: String,
     val eventName: String,
-    val eventType: String,
-    val endTimestamp: Instant,
+    val eventType: String?,
+    val endTimestamp: Instant?,
     val startTimestamp: Instant,
-    val parentEventId: String,
+    val parentEventId: String?,
     val isSuccessful: Boolean,
-    val attachedMessageIds: Set<String>,
+    val attachedMessageIds: Set<String>?,
 
     @JsonRawValue
     val body: String
@@ -59,12 +60,12 @@ data class Event(
         eventType = stored.type,
         startTimestamp = stored.startTimestamp,
         endTimestamp = stored.endTimestamp,
-        parentEventId = stored.parentId.toString(),
+        parentEventId = stored.parentId?.toString(),
         isSuccessful = stored.isSuccess,
 
         attachedMessageIds = cradleManager?.storage?.testEventsMessagesLinker
             ?.getMessageIdsByTestEventId(stored.id)?.map(Any::toString)?.toSet().orEmpty(),
 
-        body = String(stored.content)
+        body = String(stored.content).takeUnless(String::isEmpty) ?: "null"
     )
 }

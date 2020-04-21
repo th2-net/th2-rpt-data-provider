@@ -19,6 +19,8 @@ bin
 external
 provided
 
+logs
+
 #temp files
 .*.swp
 .~*.*#

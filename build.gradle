@@ -32,8 +32,8 @@ dependencies {
     implementation 'com.exactpro.th2:grpc-api:0.1-20200410.143633-8'
     implementation 'com.exactpro.th2:th2-common:0.1-20200414.092822-9'
 
-    implementation 'com.exactpro.cradle:cradle-core:1.2-20200417.194407-2'
-    implementation 'com.exactpro.cradle:cradle-cassandra:1.2-20200417.194407-2'
+    implementation 'com.exactpro.cradle:cradle-core:1.2-20200421.102909-3'
+    implementation 'com.exactpro.cradle:cradle-cassandra:1.2-20200421.102909-3'
 
     implementation 'io.ktor:ktor-server-netty:1.3.2'
 }
