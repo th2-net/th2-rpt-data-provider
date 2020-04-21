@@ -32,6 +32,6 @@ class Configuration(
     val cassandraPort: Variable = Variable("CASSANDRA_PORT", "9042"),
     val cassandraKeyspace: Variable = Variable("CASSANDRA_KEYSPACE", "demo"),
     val cassandraUsername: Variable = Variable("CASSANDRA_USERNAME", "guest"),
-    val cassandraPassword: Variable = Variable("CASSANDRA_PASSWORD", "guest", "false"),
+    val cassandraPassword: Variable = Variable("CASSANDRA_PASSWORD", "guest", false),
     val cassandraInstance: Variable = Variable("CRADLE_INSTANCE_NAME", "instance1")
 )
