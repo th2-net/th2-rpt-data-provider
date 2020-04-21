@@ -1,0 +1,10 @@
+Example of Report data provider component env variables:
+CRADLE_INSTANCE_NAME=instance1
+CASSANDRA_DATA_CENTER=kos
+CASSANDRA_HOST=cassandra
+CASSANDRA_PORT=9042
+CASSANDRA_KEYSPACE=demo
+CASSANDRA_USERNAME=guest
+CASSANDRA_PASSWORD=guest
+HTTP_PORT=8080
+HTTP_HOST=localhost
