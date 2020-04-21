@@ -12,4 +12,4 @@ ENV CRADLE_INSTANCE_NAME=instance1 \
 
 WORKDIR /home
 COPY ./ .
-ENTRYPOINT ["/home/retriever/bin/provider", "run", "com.exactpro.th2.reportdataprovider.MainKt"]
+ENTRYPOINT ["/home/report-data-provider/bin/report-data-provider", "run", "com.exactpro.th2.reportdataprovider.MainKt"]
