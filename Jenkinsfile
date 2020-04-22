@@ -7,7 +7,7 @@ pipeline {
         VERSION_MAINTENANCE = """${sh(
                             returnStdout: true,
                             script: 'git rev-list --count HEAD'
-                            )}""" //TODO: Calculate revision from a specific tag instead of a root commit
+                            ).trim()}""" //TODO: Calculate revision from a specific tag instead of a root commit
         NEXUS = credentials('docker-user_nexus.exp.exactpro.com_9000')
         NEXUS_URL = 'nexus.exp.exactpro.com:9000'
         GRADLE_SWITCHES = " -Pversion_build=${BUILD_NUMBER} -Pversion_maintenance=${VERSION_MAINTENANCE}"
@@ -36,7 +36,7 @@ pipeline {
             steps {
                 script {
                     def gradleProperties = readProperties  file: 'gradle.properties'
-                    def dockerImageVersion = "${gradleProperties['version_major']}.${gradleProperties['version_minor']}.${VERSION_MAINTENANCE}.${BUILD_NUMBER}".trim()
+                    def dockerImageVersion = "${gradleProperties['version_major']}.${gradleProperties['version_minor']}.${VERSION_MAINTENANCE}.${BUILD_NUMBER}"
 
                     def changeLogs = ""
                     try {
