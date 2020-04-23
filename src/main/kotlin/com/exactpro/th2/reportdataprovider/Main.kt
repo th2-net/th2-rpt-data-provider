@@ -3,6 +3,8 @@ package com.exactpro.th2.reportdataprovider
 import com.exactpro.cradle.cassandra.CassandraCradleManager
 import com.exactpro.cradle.cassandra.connection.CassandraConnection
 import com.exactpro.cradle.cassandra.connection.CassandraConnectionSettings
+import com.exactpro.cradle.messages.StoredMessage
+import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.fasterxml.jackson.databind.DeserializationFeature
@@ -10,6 +12,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import io.ktor.application.call
 import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
 import io.ktor.response.respondText
 import io.ktor.routing.get
 import io.ktor.routing.routing
@@ -22,6 +25,10 @@ val logger = KotlinLogging.logger {}
 
 val jacksonMapper: ObjectMapper = jacksonObjectMapper()
     .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
+
+fun <T, R> Sequence<T>.optionalFilter(value: R?, filter: (R, Sequence<T>) -> Sequence<T>): Sequence<T> {
+    return if (value == null) this else filter(value, this)
+}
 
 fun main() {
     val configuration = Configuration()
@@ -90,40 +97,75 @@ fun main() {
             get("/search/messages") {
                 val request = MessageSearchRequest(call.request.queryParameters.toMap())
 
-                call.respondText(
-                    jacksonMapper.writeValueAsString(manager.storage.messages
-                        .filter {
-                            request.attachedEventId
-                                ?.equals(manager.storage.testEventsMessagesLinker.getTestEventIdsByMessageId(it.id))
-                                    ?: true
-
-                                    && request.timestampFrom?.isBefore(it.timestamp) ?: true
-                                    && request.timestampTo?.isAfter(it.timestamp) ?: true
-                                    && request.stream?.equals(it.streamName) ?: true
+                val messages = manager.storage.getMessages(
+                    StoredMessageFilterBuilder()
+                        .let {
+                            if (request.stream != null)
+                                it.streamName().isEqualTo(request.stream) else it
                         }
-                        .map { if (request.idsOnly) it.id.toString() else Message(it) }),
-                    ContentType.Application.Json
-                )
+                        .let {
+                            if (request.timestampFrom != null)
+                                it.timestampFrom().isGreaterThanOrEqualTo(request.timestampFrom) else it
+                        }
+                        .let {
+                            if (request.timestampTo != null)
+                                it.timestampTo().isLessThanOrEqualTo(request.timestampTo) else it
+                        }
+                        .build()
+                ).asSequence<StoredMessage>()
+
+                val linker = manager.storage.testEventsMessagesLinker
+
+                call.respondText(ContentType.Application.Json, HttpStatusCode.OK) {
+                    jacksonMapper.writeValueAsString(
+                        messages
+                            .optionalFilter(request.attachedEventId) { value, stream ->
+                                stream.filter {
+                                    linker.getTestEventIdsByMessageId(it.id)
+                                        .contains(StoredTestEventId.fromString(value))
+                                }
+                            }
+                            .map { if (request.idsOnly) it.id.toString() else Message(it) }
+                            .toList()
+                    )
+                }
+
             }
 
             get("/search/events") {
                 val request = EventSearchRequest(call.request.queryParameters.toMap())
 
+                val events = manager.storage.getTestEvents(request.isRootEvent ?: true).asSequence()
+
+                val linker = manager.storage.testEventsMessagesLinker
+
                 call.respondText(
-                    jacksonMapper.writeValueAsString(manager.storage.getTestEvents(request.isRootEvent ?: true)
-                        .filter {
-                            request.attachedMessageId
-                                ?.equals(manager.storage.testEventsMessagesLinker.getMessageIdsByTestEventId(it.id))
-                                    ?: true
-
-                                    && request.timestampFrom?.isBefore(it.endTimestamp) ?: true
-                                    && request.timestampTo?.isAfter(it.startTimestamp) ?: true
-                                    && request.parentEventId?.equals(it.parentId) ?: true
-                                    && request.name?.equals(it.name) ?: true
-                                    && request.type?.equals(it.type) ?: true
-
-                        }
-                        .map { if (request.idsOnly) it.id.toString() else Event(it, manager) }),
+                    jacksonMapper.writeValueAsString(
+                        events
+                            .optionalFilter(request.attachedMessageId) { value, stream ->
+                                stream.filter {
+                                    linker.getMessageIdsByTestEventId(it.id).contains(StoredMessageId.fromString(value))
+                                }
+                            }
+                            .optionalFilter(request.timestampFrom) { value, stream ->
+                                stream.filter { it.endTimestamp.isAfter(value) }
+                            }
+                            .optionalFilter(request.timestampTo) { value, stream ->
+                                stream.filter { it.startTimestamp.isBefore(value) }
+                            }
+                            .optionalFilter(request.parentEventId) { value, stream ->
+                                stream.filter { it.parentId == StoredTestEventId.fromString(value) }
+                            }
+                            .optionalFilter(request.name) { value, stream ->
+                                stream.filter { it.name == value }
+                            }
+                            .optionalFilter(request.type) { value, stream ->
+                                stream.filter { it.type == value }
+                            }
+                            .map {
+                                if (request.idsOnly) it.id.toString() else Event(it)
+                            }
+                            .toList()),
                     ContentType.Application.Json
                 )
             }
