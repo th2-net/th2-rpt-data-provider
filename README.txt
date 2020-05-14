@@ -1,4 +1,5 @@
 Example of Report data provider component env variables:
+
 CRADLE_INSTANCE_NAME=instance1
 CASSANDRA_DATA_CENTER=kos
 CASSANDRA_HOST=cassandra
