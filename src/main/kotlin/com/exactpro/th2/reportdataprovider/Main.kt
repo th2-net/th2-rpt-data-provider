@@ -42,6 +42,7 @@ fun main() {
             it.cassandraKeyspace.value
         )
 
+        settings.timeout = it.cassandraQueryTimeout.value.toLong()
         settings.username = it.cassandraUsername.value
         settings.password = it.cassandraPassword.value
 
