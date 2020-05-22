@@ -91,7 +91,7 @@ fun main() {
                 async {
 
                     call.respondText(
-                        jacksonMapper.writeValueAsString(Event(manager.storage.getTestEvent(id))),
+                        jacksonMapper.writeValueAsString(Event(manager.storage.getTestEvent(id), manager)),
                         ContentType.Application.Json
                     )
                 }
