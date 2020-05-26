@@ -9,10 +9,12 @@ import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import io.ktor.application.call
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.response.respond
 import io.ktor.response.respondText
 import io.ktor.routing.get
 import io.ktor.routing.routing
@@ -21,17 +23,29 @@ import io.ktor.server.netty.Netty
 import io.ktor.util.toMap
 import kotlinx.coroutines.async
 import mu.KotlinLogging
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
-val logger = KotlinLogging.logger {}
+val formatter: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("yyyy-MM-dd'T'hh:mm:ss.nnnnnnnnn").withZone(ZoneId.of("UTC"))
 
 val jacksonMapper: ObjectMapper = jacksonObjectMapper()
     .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
+    .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+    .registerModule(
+        JavaTimeModule()
+            .addSerializer(Instant::class.java, InstantSerializer())
+            .addDeserializer(Instant::class.java, InstantDeserializer())
+    )
 
 fun <T, R> Sequence<T>.optionalFilter(value: R?, filter: (R, Sequence<T>) -> Sequence<T>): Sequence<T> {
     return if (value == null) this else filter(value, this)
 }
 
 fun main() {
+    val logger = KotlinLogging.logger {}
+
     val configuration = Configuration()
 
     val manager = CassandraCradleManager(CassandraConnection(configuration.let {
@@ -101,10 +115,15 @@ fun main() {
                 val id = StoredMessageId.fromString(call.parameters["id"])
 
                 async {
-                    call.respondText(
-                        jacksonMapper.writeValueAsString(Message(manager.storage.getMessage(id))),
-                        ContentType.Application.Json
-                    )
+                    try {
+                        call.respondText(
+                            jacksonMapper.writeValueAsString(Message(manager.storage.getMessage(id))),
+                            ContentType.Application.Json
+                        )
+                    } catch (e: Exception) {
+                        logger.error(e) { "unable to retrieve message with id=$id" }
+                        call.respond(HttpStatusCode.InternalServerError, "report-data-provider error")
+                    }
                 }
             }
 
@@ -141,7 +160,14 @@ fun main() {
                                             .contains(StoredTestEventId.fromString(value))
                                     }
                                 }
-                                .map { if (request.idsOnly) it.id.toString() else Message(it) }
+                                .map(::Message)
+                                .optionalFilter(request.messageType) { value, stream ->
+                                    stream.filter {
+                                        value.contains(it.messageType)
+                                    }
+                                }
+                                .sortedBy { it.timestamp }
+                                .map { if (request.idsOnly) it.messageId else it }
                                 .toList()
                         )
                     }

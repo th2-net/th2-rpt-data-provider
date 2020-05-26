@@ -5,6 +5,7 @@ import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.testevents.StoredTestEvent
 import com.exactpro.evolution.api.phase_1.Message
 import com.fasterxml.jackson.annotation.JsonRawValue
+import com.fasterxml.jackson.databind.annotation.JsonSerialize
 import com.google.protobuf.util.JsonFormat
 import mu.KotlinLogging
 import java.time.Instant
@@ -25,26 +26,37 @@ enum class Direction {
 data class Message(
     val type: String = "message",
     val messageId: String,
+
+    @JsonSerialize(using = InstantSerializer::class)
     val timestamp: Instant,
+
     val direction: Direction?,
     val sessionId: String,
+    val messageType: String,
 
     @JsonRawValue
-    val body: String
+    val body: String?
 ) {
-    constructor(stored: StoredMessage) : this(
+    constructor(stored: StoredMessage, parsed: Message?) : this(
         messageId = stored.id.toString(),
         direction = Direction.fromStored(stored.direction),
         timestamp = stored.timestamp,
         sessionId = stored.streamName,
+        messageType = parsed?.metadata?.messageType ?: "unknown",
 
-        body = kotlin.run {
+        body = parsed?.let { JsonFormat.printer().print(parsed) }
+    )
+
+    constructor(stored: StoredMessage) : this(
+        stored = stored,
+        parsed = stored.content.let {
             try {
-                JsonFormat.printer().print(Message.parseFrom(stored.content))
+                Message.parseFrom(it)
             } catch (e: Exception) {
-                KotlinLogging.logger { }.error { "unable to write message content to 'body' property - invalid data" }
+                KotlinLogging.logger { }
+                    .error { "unable to parse message (id=${stored.id}) to 'body' property - invalid data" }
 
-                "null"
+                null
             }
         }
     )
@@ -55,14 +67,19 @@ data class Event(
     val eventId: String,
     val eventName: String,
     val eventType: String?,
+
+    @JsonSerialize(using = InstantSerializer::class)
     val endTimestamp: Instant?,
+
+    @JsonSerialize(using = InstantSerializer::class)
     val startTimestamp: Instant,
+
     val parentEventId: String?,
     val isSuccessful: Boolean,
     val attachedMessageIds: Set<String>?,
 
     @JsonRawValue
-    val body: String
+    val body: String?
 ) {
     constructor(stored: StoredTestEvent, cradleManager: CradleManager? = null) : this(
         eventId = stored.id.toString(),
@@ -76,15 +93,16 @@ data class Event(
         attachedMessageIds = cradleManager?.storage?.testEventsMessagesLinker
             ?.getMessageIdsByTestEventId(stored.id)?.map(Any::toString)?.toSet().orEmpty(),
 
-        body = kotlin.run {
+        body = stored.content.let {
             try {
-                val data = String(stored.content).takeUnless(String::isEmpty) ?: "{}"
+                val data = String(it).takeUnless(String::isEmpty) ?: "{}"
                 jacksonMapper.readTree(data)
                 data
             } catch (e: Exception) {
-                KotlinLogging.logger { }.error { "unable to write event content to 'body' property - invalid data" }
+                KotlinLogging.logger { }
+                    .error { "unable to write event content (id=${stored.id}) to 'body' property - invalid data" }
 
-                "null"
+                null
             }
         }
     )

@@ -7,13 +7,15 @@ data class MessageSearchRequest(
     val timestampFrom: Instant?,
     val timestampTo: Instant?,
     val stream: String?,
+    val messageType: List<String>?,
     val idsOnly: Boolean
 ) {
     constructor(parameters: Map<String, List<String>>) : this(
         attachedEventId = parameters["attachedEventId"]?.first(),
-        timestampFrom = parameters["timestampFrom"]?.first()?.toLong()?.let(Instant::ofEpochMilli),
-        timestampTo = parameters["timestampTo"]?.first()?.toLong()?.let(Instant::ofEpochMilli),
+        timestampFrom = parameters["timestampFrom"]?.first()?.toInstant(),
+        timestampTo = parameters["timestampTo"]?.first()?.toInstant(),
         stream = parameters["stream"]?.first(),
+        messageType = parameters["messageType"],
         idsOnly = parameters["idsOnly"]?.first()?.toBoolean() ?: true
     )
 }
@@ -30,8 +32,8 @@ data class EventSearchRequest(
 ) {
     constructor(parameters: Map<String, List<String>>) : this(
         attachedMessageId = parameters["attachedMessageId"]?.first(),
-        timestampFrom = parameters["timestampFrom"]?.first()?.toLong()?.let(Instant::ofEpochMilli),
-        timestampTo = parameters["timestampTo"]?.first()?.toLong()?.let(Instant::ofEpochMilli),
+        timestampFrom = parameters["timestampFrom"]?.first()?.toInstant(),
+        timestampTo = parameters["timestampTo"]?.first()?.toInstant(),
         name = parameters["name"]?.first(),
         type = parameters["type"]?.first(),
         parentEventId = parameters["parentEventId"]?.first(),
