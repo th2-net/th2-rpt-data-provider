@@ -3,7 +3,7 @@ package com.exactpro.th2.reportdataprovider
 import com.exactpro.cradle.CradleManager
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.testevents.StoredTestEventWithContent
-import com.exactpro.evolution.api.phase_1.Message
+import com.exactpro.th2.infra.grpc.Message
 import com.fasterxml.jackson.annotation.JsonRawValue
 import com.google.protobuf.util.JsonFormat
 import mu.KotlinLogging
@@ -55,7 +55,7 @@ data class Message(
                 Message.parseFrom(it)
             } catch (e: Exception) {
                 KotlinLogging.logger { }
-                    .debug { "unable to parse message (id=${stored.id}) to 'body' property - invalid data (${String(stored.content)})" }
+                    .error { "unable to parse message (id=${stored.id}) to 'body' property - invalid data (${String(stored.content)})" }
 
                 null
             }

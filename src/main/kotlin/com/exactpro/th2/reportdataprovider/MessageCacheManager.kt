@@ -17,7 +17,7 @@ class MessageCacheManager(configuration: Configuration, private val cradleManage
         CacheConfigurationBuilder.newCacheConfigurationBuilder(
             String::class.java,
             Message::class.java,
-            ResourcePoolsBuilder.heap(configuration.eventCacheSize.value.toLong())
+            ResourcePoolsBuilder.heap(configuration.messageCacheSize.value.toLong())
         ).build()
     )
 
