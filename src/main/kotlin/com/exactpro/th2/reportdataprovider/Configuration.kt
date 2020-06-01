@@ -27,6 +27,7 @@ class Variable(
 class Configuration(
     val hostname: Variable = Variable("HTTP_HOST", "localhost"),
     val port: Variable = Variable("HTTP_PORT", "8080"),
+    val eventCacheSize: Variable = Variable("EVENT_CACHE_SIZE", "100000"),
     val cassandraDatacenter: Variable = Variable("CASSANDRA_DATA_CENTER", "kos"),
     val cassandraHost: Variable = Variable("CASSANDRA_HOST", "cassandra"),
     val cassandraPort: Variable = Variable("CASSANDRA_PORT", "9042"),

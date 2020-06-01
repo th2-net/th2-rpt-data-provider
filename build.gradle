@@ -34,12 +34,14 @@ dependencies {
     implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8'
 
     implementation 'com.exactpro.th2:grpc-api:1.0-SNAPSHOT'
-    implementation 'com.exactpro.th2:th2-common:1.0-SNAPSHOT'
+    implementation 'com.exactpro.th2:th2-common:1.1-SNAPSHOT'
 
-    implementation 'com.exactpro.cradle:cradle-core:1.2-SNAPSHOT'
-    implementation 'com.exactpro.cradle:cradle-cassandra:1.2-SNAPSHOT'
+    implementation 'com.exactpro.cradle:cradle-core:1.3-SNAPSHOT'
+    implementation 'com.exactpro.cradle:cradle-cassandra:1.3-SNAPSHOT'
 
     implementation 'io.ktor:ktor-server-netty:1.3.2'
+
+    implementation 'org.ehcache:ehcache:3.8.1'
 }
 
 distTar {
@@ -60,7 +62,7 @@ docker {
 
 
 compileKotlin {
-    kotlinOptions.jvmTarget = "12"
+    kotlinOptions.jvmTarget = "11"
 }
 
 application {

@@ -5,11 +5,9 @@ import com.exactpro.cradle.cassandra.connection.CassandraConnection
 import com.exactpro.cradle.cassandra.connection.CassandraConnectionSettings
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageFilterBuilder
-import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import io.ktor.application.call
 import io.ktor.http.ContentType
@@ -21,9 +19,9 @@ import io.ktor.routing.routing
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.util.toMap
-import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 import mu.KotlinLogging
-import java.time.Instant
+import java.nio.file.Paths
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -33,15 +31,11 @@ val formatter: DateTimeFormatter =
 val jacksonMapper: ObjectMapper = jacksonObjectMapper()
     .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
     .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
-    .registerModule(
-        JavaTimeModule()
-            .addSerializer(Instant::class.java, InstantSerializer())
-            .addDeserializer(Instant::class.java, InstantDeserializer())
-    )
-
-fun <T, R> Sequence<T>.optionalFilter(value: R?, filter: (R, Sequence<T>) -> Sequence<T>): Sequence<T> {
-    return if (value == null) this else filter(value, this)
-}
+//    .registerModule(
+//        JavaTimeModule()
+//            .addSerializer(Instant::class.java, InstantSerializer())
+//            .addDeserializer(Instant::class.java, InstantDeserializer())
+//    )
 
 fun main() {
     val logger = KotlinLogging.logger {}
@@ -63,6 +57,9 @@ fun main() {
         settings
     }))
 
+    val eventCache = EventCacheManager(configuration, manager)
+    val messageCache = MessageCacheManager(configuration, manager)
+
     manager.init(configuration.cassandraInstance.value)
 
     embeddedServer(Netty, configuration.port.value.toInt()) {
@@ -79,50 +76,36 @@ fun main() {
                 )
             }
 
-            get("/event/{id}/children") {
-                val parentId = StoredTestEventId.fromString(call.parameters["id"])
-                val idsOnly = call.request.queryParameters["idsOnly"]?.toBoolean() ?: false
+            get("/event/{path...}") {
+                val pathString = call.parameters.getAll("path")?.joinToString("/")
 
-                async {
-                    call.respondText(
-                        jacksonMapper.writeValueAsString(
-                            manager.storage.testEventsParentsLinker.getChildrenIds(parentId)
-                                .map {
-                                    if (idsOnly) it.toString() else Event(
-                                        manager.storage.getTestEvent(it),
-                                        manager
-                                    )
-                                }
-                        ),
-                        ContentType.Application.Json
-                    )
-                }
-            }
+                launch {
+                    try {
+                        val path = Paths.get(pathString!!)
 
-            get("/event/{id}") {
-                val id = StoredTestEventId.fromString(call.parameters["id"])
+                        logger.debug { "handling get event request with path=$path" }
 
-                async {
-
-                    call.respondText(
-                        jacksonMapper.writeValueAsString(Event(manager.storage.getTestEvent(id), manager)),
-                        ContentType.Application.Json
-                    )
+                        call.respondText(
+                            jacksonMapper.writeValueAsString(eventCache.getEvent(path)), ContentType.Application.Json
+                        )
+                    } catch (e: Exception) {
+                        logger.error(e) { "unable to retrieve event with path=$pathString" }
+                        call.respond(HttpStatusCode.InternalServerError, e.message ?: "")
+                    }
                 }
             }
 
             get("/message/{id}") {
-                val id = StoredMessageId.fromString(call.parameters["id"])
+                val id = call.parameters["id"]
 
-                async {
+                launch {
                     try {
                         call.respondText(
-                            jacksonMapper.writeValueAsString(Message(manager.storage.getMessage(id))),
-                            ContentType.Application.Json
+                            jacksonMapper.writeValueAsString(messageCache.get(id!!)), ContentType.Application.Json
                         )
                     } catch (e: Exception) {
                         logger.error(e) { "unable to retrieve message with id=$id" }
-                        call.respond(HttpStatusCode.InternalServerError, "report-data-provider error")
+                        call.respond(HttpStatusCode.InternalServerError, e.message ?: "")
                     }
                 }
             }
@@ -130,89 +113,70 @@ fun main() {
             get("/search/messages") {
                 val request = MessageSearchRequest(call.request.queryParameters.toMap())
 
-                async {
-
-                    val messages = manager.storage.getMessages(
-                        StoredMessageFilterBuilder()
-                            .let {
-                                if (request.stream != null)
-                                    it.streamName().isEqualTo(request.stream) else it
-                            }
-                            .let {
-                                if (request.timestampFrom != null)
-                                    it.timestampFrom().isGreaterThanOrEqualTo(request.timestampFrom) else it
-                            }
-                            .let {
-                                if (request.timestampTo != null)
-                                    it.timestampTo().isLessThanOrEqualTo(request.timestampTo) else it
-                            }
-                            .build()
-                    ).asSequence<StoredMessage>()
-
-                    val linker = manager.storage.testEventsMessagesLinker
-
-                    call.respondText(ContentType.Application.Json, HttpStatusCode.OK) {
-                        jacksonMapper.writeValueAsString(
-                            messages
-                                .optionalFilter(request.attachedEventId) { value, stream ->
-                                    stream.filter {
-                                        linker.getTestEventIdsByMessageId(it.id)
-                                            .contains(StoredTestEventId.fromString(value))
-                                    }
+                launch {
+                    try {
+                        val messages = manager.storage.getMessages(
+                            StoredMessageFilterBuilder()
+                                .let {
+                                    if (request.stream != null)
+                                        it.streamName().isEqualTo(request.stream.first()) else it
                                 }
-                                .map(::Message)
-                                .optionalFilter(request.messageType) { value, stream ->
-                                    stream.filter {
-                                        value.contains(it.messageType)
-                                    }
+                                .let {
+                                    if (request.timestampFrom != null)
+                                        it.timestampFrom().isGreaterThanOrEqualTo(request.timestampFrom) else it
                                 }
-                                .sortedBy { it.timestamp }
-                                .map { if (request.idsOnly) it.messageId else it }
-                                .toList()
-                        )
+                                .let {
+                                    if (request.timestampTo != null)
+                                        it.timestampTo().isLessThanOrEqualTo(request.timestampTo) else it
+                                }
+                                .build()
+                        ).asSequence<StoredMessage>()
+
+                        val linker = manager.storage.testEventsMessagesLinker
+
+                        call.respondText(ContentType.Application.Json, HttpStatusCode.OK) {
+                            jacksonMapper.writeValueAsString(
+                                messages
+                                    .optionalFilter(request.attachedEventId) { value, stream ->
+                                        stream.filter {
+                                            linker.getTestEventIdsByMessageId(it.id)
+                                                .contains(StoredTestEventId(value))
+                                        }
+                                    }
+                                    .map { Message(manager.storage.getProcessedMessage(it.id), it) }
+                                    .optionalFilter(request.messageType) { value, stream ->
+                                        stream.filter {
+                                            value.contains(it.messageType)
+                                        }
+                                    }
+                                    .sortedBy { it.timestamp }
+                                    .map { if (request.idsOnly) it.messageId else it }
+                                    .toList()
+                            )
+                        }
+                    } catch (e: Exception) {
+                        logger.error(e) { "unable to search messages - unexpected exception" }
+                        call.respond(HttpStatusCode.InternalServerError, e.message ?: "")
                     }
                 }
 
             }
 
-            get("/search/events") {
-                val request = EventSearchRequest(call.request.queryParameters.toMap())
-
-                val events = manager.storage.getTestEvents(request.isRootEvent ?: true).asSequence()
-
-                val linker = manager.storage.testEventsMessagesLinker
-                async {
-
-                    call.respondText(
-                        jacksonMapper.writeValueAsString(
-                            events
-                                .optionalFilter(request.attachedMessageId) { value, stream ->
-                                    stream.filter {
-                                        linker.getMessageIdsByTestEventId(it.id)
-                                            .contains(StoredMessageId.fromString(value))
-                                    }
-                                }
-                                .optionalFilter(request.timestampFrom) { value, stream ->
-                                    stream.filter { it.endTimestamp.isAfter(value) }
-                                }
-                                .optionalFilter(request.timestampTo) { value, stream ->
-                                    stream.filter { it.startTimestamp.isBefore(value) }
-                                }
-                                .optionalFilter(request.parentEventId) { value, stream ->
-                                    stream.filter { it.parentId == StoredTestEventId.fromString(value) }
-                                }
-                                .optionalFilter(request.name) { value, stream ->
-                                    stream.filter { it.name == value }
-                                }
-                                .optionalFilter(request.type) { value, stream ->
-                                    stream.filter { it.type == value }
-                                }
-                                .map {
-                                    if (request.idsOnly) it.id.toString() else Event(it)
-                                }
-                                .toList()),
-                        ContentType.Application.Json
-                    )
+            get("/rootEvents") {
+                launch {
+                    try {
+                        call.respondText(
+                            jacksonMapper.writeValueAsString(manager.storage.rootTestEvents.map {
+                                eventCache.getEvent(
+                                    Paths.get(it.id.toString())
+                                )
+                            }),
+                            ContentType.Application.Json
+                        )
+                    } catch (e: Exception) {
+                        logger.error(e) { "unable to search events - unexpected exception" }
+                        call.respond(HttpStatusCode.InternalServerError, e.message ?: "")
+                    }
                 }
             }
 
