@@ -1,7 +1,7 @@
 package com.exactpro.th2.reportdataprovider
 
-import com.exactpro.cradle.testevents.StoredTestEventWithContent
-import com.exactpro.cradle.testevents.StoredTestEventWrapper
+import com.exactpro.cradle.messages.StoredMessage
+import com.exactpro.th2.infra.grpc.Message
 import com.fasterxml.jackson.core.JsonGenerator
 import com.fasterxml.jackson.core.JsonParser
 import com.fasterxml.jackson.databind.DeserializationContext
@@ -10,7 +10,8 @@ import com.fasterxml.jackson.databind.JsonSerializer
 import com.fasterxml.jackson.databind.SerializerProvider
 import mu.KotlinLogging
 import java.time.Instant
-import java.util.*
+
+private val logger = KotlinLogging.logger { }
 
 class InstantSerializer : JsonSerializer<Instant>() {
     override fun serialize(value: Instant?, generator: JsonGenerator?, serializers: SerializerProvider?) {
@@ -28,7 +29,7 @@ fun String.toInstant(): Instant? {
     return try {
         Instant.from(formatter.parse(this))
     } catch (e: Exception) {
-        KotlinLogging.logger { }.error(e) { "unable to parse instant from string '$this'" }
+        logger.error(e) { "unable to parse instant from string '$this'" }
         null
     }
 }
@@ -36,3 +37,14 @@ fun String.toInstant(): Instant? {
 fun <T, R> Sequence<T>.optionalFilter(value: R?, filter: (R, Sequence<T>) -> Sequence<T>): Sequence<T> {
     return if (value == null) this else filter(value, this)
 }
+
+fun StoredMessage.getMessageType(): String {
+    try {
+        return Message.parseFrom(this.content).metadata.messageType
+    } catch (e: Exception) {
+        logger.error(e) { "unable to get message type (id=${this.id})" }
+    }
+
+    return "unknown"
+}
+

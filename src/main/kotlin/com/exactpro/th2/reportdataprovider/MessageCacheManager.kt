@@ -21,6 +21,12 @@ class MessageCacheManager(configuration: Configuration, private val cradleManage
         ).build()
     )
 
+    fun store(id: String, message: Message) {
+        if (!cache.containsKey(id)) {
+            cache.put(id, message)
+        }
+    }
+
     fun get(id: String): Message {
         cache.get(id)?.let { return it }
 

@@ -169,14 +169,18 @@ fun main() {
                                                     .contains(StoredTestEventId(value))
                                             }
                                         }
-                                        .map { messageCache.get(it.id.toString()) }
                                         .optionalFilter(request.messageType) { value, stream ->
-                                            stream.filter {
-                                                value.contains(it.messageType)
+                                            stream.filter { value.contains(it.getMessageType()) }
+                                        }
+                                        .map {
+                                            if (request.idsOnly) {
+                                                it.id.toString()
+                                            } else {
+                                                val message = Message(it, manager.storage.getMessage(it.id))
+                                                messageCache.store(it.id.toString(), message)
+                                                message
                                             }
                                         }
-                                        .sortedBy { it.timestamp }
-                                        .map { if (request.idsOnly) it.messageId else it }
                                         .toList()
                                 )
                             }
