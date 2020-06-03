@@ -5,7 +5,6 @@ import com.exactpro.cradle.testevents.StoredTestEventWithContent
 import com.fasterxml.jackson.annotation.JsonRawValue
 import mu.KotlinLogging
 import java.time.Instant
-import java.util.*
 
 data class Event(
     val type: String = "event",
@@ -24,10 +23,7 @@ data class Event(
     val body: String?
 ) {
     constructor(stored: StoredTestEventWithContent, cradleManager: CradleManager, childrenIds: Set<String>) : this(
-        childrenIds = cradleManager.storage.getTestEvents(stored.id)
-            ?.map { it.id.toString() }?.toSet()
-            ?: Collections.emptySet<String>()
-                .union(childrenIds),
+        childrenIds = childrenIds,
 
         eventId = stored.id.toString(),
         eventName = stored.name,
