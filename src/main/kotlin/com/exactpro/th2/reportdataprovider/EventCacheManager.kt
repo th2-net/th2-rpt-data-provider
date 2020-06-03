@@ -46,7 +46,10 @@ class EventCacheManager(configuration: Configuration, private val cradleManager:
         return filtered
             .map {
                 path.resolve(it.id.toString()) to Event(it, cradleManager,
-                    events.filter { event -> event.parentId == it.id }.map { event -> event.id.toString() }.toSet()
+                    events
+                        .filter { event -> event.parentId == it.id }
+                        .sortedBy { event -> event.startTimestamp.toEpochMilli() }
+                        .map { event -> event.id.toString() }
                 )
             }
             .union(filtered.flatMap { saveSubtreeRecursive(events, it.id, path.resolve(it.id.toString())) })
@@ -86,8 +89,8 @@ class EventCacheManager(configuration: Configuration, private val cradleManager:
                     cradleManager,
 
                     directChildren
+                        .sortedBy { event -> event.startTimestamp.toEpochMilli() }
                         .map { event -> event.id.toString() }
-                        .toSet()
                 )
 
                 cache.put(fullPath, event)

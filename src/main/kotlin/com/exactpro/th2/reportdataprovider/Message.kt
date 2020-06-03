@@ -33,21 +33,25 @@ data class Message(
         }
     }
 
-    constructor(stored: StoredMessage, parsed: Message?, rawData: String?) : this(
-        bodyBase64 = rawData,
-        messageId = stored.id.toString(),
-        direction = Direction.fromStored(stored.direction),
-        timestamp = stored.timestamp,
-        sessionId = stored.streamName,
+    constructor(stored: StoredMessage?, parsed: Message?, rawMessage: StoredMessage?) : this(
+        bodyBase64 = rawMessage?.content?.let { Base64.getEncoder().encodeToString(it) },
+        messageId = rawMessage?.id?.toString() ?: stored?.id.toString(),
+
+        direction = Direction.fromStored(
+            rawMessage?.direction ?: stored?.direction ?: com.exactpro.cradle.Direction.FIRST
+        ),
+
+        timestamp = rawMessage?.timestamp ?: stored?.timestamp ?: Instant.ofEpochMilli(0),
+        sessionId = rawMessage?.streamName ?: stored?.streamName ?: "unknown",
         messageType = parsed?.metadata?.messageType ?: "unknown",
 
         body = parsed?.let { JsonFormat.printer().print(parsed) }
     )
 
-    constructor(stored: StoredMessage, raw: StoredMessage) : this(
-        rawData = raw.content?.let { Base64.getEncoder().encodeToString(it) },
+    constructor(stored: StoredMessage?, rawMessage: StoredMessage?) : this(
+        rawMessage = rawMessage,
         stored = stored,
-        parsed = stored.content.let {
+        parsed = stored?.content?.let {
             try {
                 Message.parseFrom(it)
             } catch (e: Exception) {

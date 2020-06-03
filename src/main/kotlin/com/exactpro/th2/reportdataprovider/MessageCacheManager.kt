@@ -21,13 +21,17 @@ class MessageCacheManager(configuration: Configuration, private val cradleManage
         ).build()
     )
 
-    fun store(id: String, message: Message) {
+    fun put(id: String, message: Message) {
         if (!cache.containsKey(id)) {
             cache.put(id, message)
         }
     }
 
-    fun get(id: String): Message {
+    fun get(id: String): Message? {
+        return cache.get(id)
+    }
+
+    fun getOrPut(id: String): Message {
         cache.get(id)?.let { return it }
 
         logger.debug { "Message cache miss for id=$id" }

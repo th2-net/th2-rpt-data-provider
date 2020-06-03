@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.DeserializationContext
 import com.fasterxml.jackson.databind.JsonDeserializer
 import com.fasterxml.jackson.databind.JsonSerializer
 import com.fasterxml.jackson.databind.SerializerProvider
+import kotlinx.coroutines.flow.Flow
 import mu.KotlinLogging
 import java.time.Instant
 
@@ -35,6 +36,10 @@ fun String.toInstant(): Instant? {
 }
 
 fun <T, R> Sequence<T>.optionalFilter(value: R?, filter: (R, Sequence<T>) -> Sequence<T>): Sequence<T> {
+    return if (value == null) this else filter(value, this)
+}
+
+fun <T, R> Flow<T>.optionalFilter(value: R?, filter: (R, Flow<T>) -> Flow<T>): Flow<T> {
     return if (value == null) this else filter(value, this)
 }
 

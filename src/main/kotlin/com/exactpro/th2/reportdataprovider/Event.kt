@@ -17,12 +17,12 @@ data class Event(
     val parentEventId: String?,
     val isSuccessful: Boolean,
     val attachedMessageIds: Set<String>?,
-    val childrenIds: Set<String>,
+    val childrenIds: List<String>,
 
     @JsonRawValue
     val body: String?
 ) {
-    constructor(stored: StoredTestEventWithContent, cradleManager: CradleManager, childrenIds: Set<String>) : this(
+    constructor(stored: StoredTestEventWithContent, cradleManager: CradleManager, childrenIds: List<String>) : this(
         childrenIds = childrenIds,
 
         eventId = stored.id.toString(),
