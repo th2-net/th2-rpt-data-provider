@@ -2,6 +2,7 @@ package com.exactpro.th2.reportdataprovider
 
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.th2.infra.grpc.Message
+import com.exactpro.th2.infra.grpc.RawMessage
 import com.fasterxml.jackson.annotation.JsonRawValue
 import com.google.protobuf.util.JsonFormat
 import mu.KotlinLogging
@@ -33,34 +34,40 @@ data class Message(
         }
     }
 
-    constructor(stored: StoredMessage?, parsed: Message?, rawMessage: StoredMessage?) : this(
-        bodyBase64 = rawMessage?.content?.let { Base64.getEncoder().encodeToString(it) },
-        messageId = rawMessage?.id?.toString() ?: stored?.id.toString(),
+    constructor(stored: StoredMessage?, parsed: Message?, storedRaw: StoredMessage?) : this(
+        bodyBase64 = storedRaw?.content?.let {
+            try {
+                RawMessage.parseFrom(it)?.body?.let { body -> Base64.getEncoder().encodeToString(body.toByteArray()) }
+            } catch (e: Exception) {
+                KotlinLogging.logger { }
+                    .error { "unable to unpack raw message (id=${storedRaw.id}) - invalid data (${String(storedRaw.content)})" }
+
+                null
+            }
+        },
+
+        messageId = storedRaw?.id?.toString() ?: stored?.id.toString(),
 
         direction = Direction.fromStored(
-            rawMessage?.direction ?: stored?.direction ?: com.exactpro.cradle.Direction.FIRST
+            storedRaw?.direction ?: stored?.direction ?: com.exactpro.cradle.Direction.FIRST
         ),
 
-        timestamp = rawMessage?.timestamp ?: stored?.timestamp ?: Instant.ofEpochMilli(0),
-        sessionId = rawMessage?.streamName ?: stored?.streamName ?: "unknown",
+        timestamp = storedRaw?.timestamp ?: stored?.timestamp ?: Instant.ofEpochMilli(0),
+        sessionId = storedRaw?.streamName ?: stored?.streamName ?: "unknown",
         messageType = parsed?.metadata?.messageType ?: "unknown",
 
         body = parsed?.let { JsonFormat.printer().print(parsed) }
     )
 
     constructor(stored: StoredMessage?, rawMessage: StoredMessage?) : this(
-        rawMessage = rawMessage,
+        storedRaw = rawMessage,
         stored = stored,
         parsed = stored?.content?.let {
             try {
                 Message.parseFrom(it)
             } catch (e: Exception) {
                 KotlinLogging.logger { }
-                    .error {
-                        "unable to parse message (id=${stored.id}) to 'body' property - invalid data (${String(
-                            stored.content
-                        )})"
-                    }
+                    .error { "unable to parse message (id=${stored.id}) - invalid data (${String(stored.content)})" }
 
                 null
             }
