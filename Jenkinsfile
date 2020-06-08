@@ -28,7 +28,7 @@ pipeline {
                 // publish via docker cli image to Nexus
                 sh """
                     docker login -u ${TH2_REGISTRY_USR} -p ${TH2_REGISTRY_PSW} ${TH2_REGISTRY_URL}
-                    ./gradlew dockerPush dockerPushRemote-latest ${GRADLE_SWITCHES} \
+                    ./gradlew dockerPush ${GRADLE_SWITCHES} \
                     -Ptarget_docker_repository=${TH2_REGISTRY_URL}
                 """ // TODO: Exec from root repository
             }
