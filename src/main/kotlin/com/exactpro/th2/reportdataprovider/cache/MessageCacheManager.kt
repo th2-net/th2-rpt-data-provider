@@ -1,7 +1,9 @@
-package com.exactpro.th2.reportdataprovider
+package com.exactpro.th2.reportdataprovider.cache
 
 import com.exactpro.cradle.CradleManager
 import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.th2.reportdataprovider.Configuration
+import com.exactpro.th2.reportdataprovider.entities.Message
 import mu.KotlinLogging
 import org.ehcache.Cache
 import org.ehcache.config.builders.CacheConfigurationBuilder

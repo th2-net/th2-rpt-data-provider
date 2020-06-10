@@ -3,9 +3,10 @@ package com.exactpro.th2.reportdataprovider
 import com.exactpro.cradle.cassandra.CassandraCradleManager
 import com.exactpro.cradle.cassandra.connection.CassandraConnection
 import com.exactpro.cradle.cassandra.connection.CassandraConnectionSettings
-import com.exactpro.cradle.messages.StoredMessage
-import com.exactpro.cradle.messages.StoredMessageFilterBuilder
-import com.exactpro.cradle.testevents.StoredTestEventId
+import com.exactpro.th2.reportdataprovider.cache.EventCacheManager
+import com.exactpro.th2.reportdataprovider.cache.MessageCacheManager
+import com.exactpro.th2.reportdataprovider.handlers.getRootEvents
+import com.exactpro.th2.reportdataprovider.handlers.searchMessages
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
@@ -27,7 +28,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import mu.KotlinLogging
-import java.nio.file.Paths
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.system.measureTimeMillis
@@ -105,12 +105,10 @@ fun main() {
                     try {
                         withTimeout(timeout) {
                             measureTimeMillis {
-                                val path = Paths.get(pathString!!)
-
                                 call.response.cacheControl(cacheControl)
 
                                 call.respondText(
-                                    jacksonMapper.writeValueAsString(eventCache.getEvent(path)),
+                                    jacksonMapper.writeValueAsString(eventCache.getOrPut(pathString!!)),
                                     ContentType.Application.Json
                                 )
                             }.let { logger.debug { "get event request took $it milliseconds" } }
@@ -149,94 +147,41 @@ fun main() {
                 measureTimeMillis {
                     try {
                         withTimeout(timeout) {
-                            withContext(Dispatchers.IO) {
-                                val messages = manager.storage.getMessages(
-                                    StoredMessageFilterBuilder()
-                                        .let {
-                                            if (request.stream != null)
-                                                it.streamName().isEqualTo(request.stream.first()) else it
-                                        }
-                                        .let {
-                                            if (request.timestampFrom != null)
-                                                it.timestampFrom().isGreaterThanOrEqualTo(request.timestampFrom) else it
-                                        }
-                                        .let {
-                                            if (request.timestampTo != null)
-                                                it.timestampTo().isLessThanOrEqualTo(request.timestampTo) else it
-                                        }
-                                        .build()
-                                ).asSequence<StoredMessage>()
-
-                                val linker = manager.storage.testEventsMessagesLinker
-
-                                jacksonMapper.writeValueAsString(
-                                    messages
-                                        .optionalFilter(request.attachedEventId) { value, stream ->
-                                            stream.filter {
-                                                linker.getTestEventIdsByMessageId(it.id)
-                                                    .contains(StoredTestEventId(value))
-
-                                            }
-                                        }
-                                        .optionalFilter(request.messageType) { value, stream ->
-                                            stream.filter {
-                                                value.contains(
-                                                    manager.storage.getProcessedMessage(it.id)?.getMessageType()
-                                                        ?: "unknown"
-                                                )
-                                            }
-                                        }
-                                        .map {
-                                            if (request.idsOnly) {
-                                                it.id.toString()
-                                            } else {
-                                                messageCache.get(it.id.toString())
-                                                    ?: Message(manager.storage.getProcessedMessage(it.id), it)
-                                                        .let { message ->
-                                                            messageCache.put(it.id.toString(), message)
-                                                            message
-                                                        }
-                                            }
-                                        }
-                                        .toList()
-                                )
-                            }.let {
-                                call.response.cacheControl(cacheControl)
-                                call.respondText(ContentType.Application.Json, HttpStatusCode.OK) { it }
-                            }
+                            searchMessages(request, manager, messageCache)
+                                .let {
+                                    call.response.cacheControl(cacheControl)
+                                    call.respondText(ContentType.Application.Json, HttpStatusCode.OK) {
+                                        jacksonMapper.writeValueAsString(it)
+                                    }
+                                }
                         }
                     } catch (e: Exception) {
                         logger.error(e) { "unable to search messages - unexpected exception" }
                         call.respond(HttpStatusCode.InternalServerError, e.message ?: "")
                     }
                 }.let { logger.debug { "message search request took $it milliseconds" } }
-
             }
 
             get("/rootEvents") {
+                val request = EventSearchRequest(call.request.queryParameters.toMap())
 
-                logger.debug { "handling get root events request" }
+                logger.debug { "handling get root events request (query=$request)" }
 
-                withContext(Dispatchers.IO) {
+                measureTimeMillis {
                     try {
-                        measureTimeMillis {
+                        withTimeout(timeout) {
+                            getRootEvents(request, manager, eventCache)
+                        }.let {
                             call.response.cacheControl(cacheControl)
-
-                            call.respondText(
-                                jacksonMapper.writeValueAsString(manager.storage.rootTestEvents.map {
-                                    eventCache.getEvent(
-                                        Paths.get(it.id.toString())
-                                    )
-                                }),
-                                ContentType.Application.Json
-                            )
-
-                        }.let { logger.debug { "root events request took $it milliseconds" } }
+                            call.respondText(ContentType.Application.Json, HttpStatusCode.OK) {
+                                jacksonMapper.writeValueAsString(it)
+                            }
+                        }
                     } catch (e: Exception) {
                         logger.error(e) { "unable to search events - unexpected exception" }
                         call.respond(HttpStatusCode.InternalServerError, e.message ?: "")
                     }
-                }
+                }.let { logger.debug { "root events request took $it milliseconds" } }
             }
 
         }

@@ -1,7 +1,8 @@
-package com.exactpro.th2.reportdataprovider
+package com.exactpro.th2.reportdataprovider.entities
 
 import com.exactpro.cradle.CradleManager
 import com.exactpro.cradle.testevents.StoredTestEventWithContent
+import com.exactpro.th2.reportdataprovider.jacksonMapper
 import com.fasterxml.jackson.annotation.JsonRawValue
 import mu.KotlinLogging
 import java.time.Instant
@@ -26,8 +27,8 @@ data class Event(
         childrenIds = childrenIds,
 
         eventId = stored.id.toString(),
-        eventName = stored.name,
-        eventType = stored.type,
+        eventName = stored.name ?: "unknown",
+        eventType = stored.type ?: "unknown",
         startTimestamp = stored.startTimestamp,
         endTimestamp = stored.endTimestamp,
         parentEventId = stored.parentId?.toString(),

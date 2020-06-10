@@ -26,8 +26,6 @@ data class EventSearchRequest(
     val timestampTo: Instant?,
     val name: String?,
     val type: String?,
-    val parentEventId: String?,
-    val isRootEvent: Boolean?,
     val idsOnly: Boolean
 ) {
     constructor(parameters: Map<String, List<String>>) : this(
@@ -36,8 +34,6 @@ data class EventSearchRequest(
         timestampTo = parameters["timestampTo"]?.first()?.let { Instant.ofEpochMilli(it.toLong()) },
         name = parameters["name"]?.first(),
         type = parameters["type"]?.first(),
-        parentEventId = parameters["parentEventId"]?.first(),
-        isRootEvent = parameters["isRootEvent"]?.first()?.toBoolean(),
-        idsOnly = parameters["idsOnly"]?.first()?.toBoolean() ?: true
+        idsOnly = parameters["idsOnly"]?.first()?.toBoolean() ?: false
     )
 }

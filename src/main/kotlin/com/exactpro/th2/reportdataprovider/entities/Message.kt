@@ -1,4 +1,4 @@
-package com.exactpro.th2.reportdataprovider
+package com.exactpro.th2.reportdataprovider.entities
 
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.th2.infra.grpc.Message
