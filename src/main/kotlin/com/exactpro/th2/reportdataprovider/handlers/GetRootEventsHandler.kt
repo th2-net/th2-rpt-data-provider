@@ -4,10 +4,12 @@ import com.exactpro.cradle.CradleManager
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.reportdataprovider.EventSearchRequest
 import com.exactpro.th2.reportdataprovider.cache.EventCacheManager
-import com.exactpro.th2.reportdataprovider.optionalFilter
+import com.exactpro.th2.reportdataprovider.getEventIdsSuspend
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 
+@Suppress("ConvertCallChainIntoSequence")
 suspend fun getRootEvents(
     request: EventSearchRequest,
     manager: CradleManager,
@@ -15,34 +17,39 @@ suspend fun getRootEvents(
 ): List<Any> {
     val linker = manager.storage.testEventsMessagesLinker
 
-    return withContext(Dispatchers.IO) {
+    return withContext(Dispatchers.Default) {
         manager.storage.rootTestEvents
-            .asSequence()
-            .optionalFilter(request.attachedMessageId) { value, stream ->
-                stream.filter { linker.getTestEventIdsByMessageId(StoredMessageId.fromString(value)).contains(it.id) }
-            }
-            .optionalFilter(request.name) { value, stream ->
-                stream.filter { it.name?.contains(value) ?: false }
-            }
-            .optionalFilter(request.type) { value, stream ->
-                stream.filter { it.type == value }
-            }
-            .optionalFilter(request.timestampFrom) { value, stream ->
-                stream.filter { it.endTimestamp?.isAfter(value) ?: false }
-            }
-            .optionalFilter(request.timestampTo) { value, stream ->
-                stream.filter { it.startTimestamp?.isBefore(value) ?: false }
-            }
-            .map {
-                val id = it.id.toString()
+            .map { event ->
+                async {
+                    event to (
+                            (request.attachedMessageId?.let {
+                                linker.getEventIdsSuspend(StoredMessageId.fromString(it)).contains(event.id)
+                            } ?: true)
 
-                if (request.idsOnly) {
-                    id
-                } else {
-                    eventCache.getOrPut(id)
+                                    && (request.name?.let { event.name.contains(it) } ?: true)
+                                    && (request.type?.let { event.type == it } ?: true)
+
+                                    && (request.timestampFrom?.let { event.endTimestamp?.isAfter(it) ?: false }
+                                ?: true)
+
+                                    && (request.timestampTo?.let { event.startTimestamp?.isBefore(it) ?: false }
+                                ?: true)
+                            )
                 }
             }
-            .filterNotNull()
+            .filter { it.await().second }
+            .map {
+                async {
+                    val id = it.await().first.id.toString()
+
+                    if (request.idsOnly) {
+                        id
+                    } else {
+                        eventCache.getOrPut(id)
+                    }
+                }
+            }
+            .mapNotNull { it.await() }
             .toList()
     }
 }

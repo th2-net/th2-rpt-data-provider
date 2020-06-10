@@ -1,16 +1,19 @@
 package com.exactpro.th2.reportdataprovider
 
+import com.exactpro.cradle.CradleStorage
 import com.exactpro.cradle.messages.StoredMessage
+import com.exactpro.cradle.messages.StoredMessageFilter
+import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventWithContent
 import com.exactpro.cradle.testevents.StoredTestEventWrapper
+import com.exactpro.cradle.testevents.TestEventsMessagesLinker
 import com.exactpro.th2.infra.grpc.Message
 import com.fasterxml.jackson.core.JsonGenerator
 import com.fasterxml.jackson.core.JsonParser
-import com.fasterxml.jackson.databind.DeserializationContext
-import com.fasterxml.jackson.databind.JsonDeserializer
-import com.fasterxml.jackson.databind.JsonSerializer
-import com.fasterxml.jackson.databind.SerializerProvider
-import kotlinx.coroutines.flow.Flow
+import com.fasterxml.jackson.databind.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import mu.KotlinLogging
 import java.time.Instant
 import java.util.*
@@ -38,14 +41,6 @@ fun String.toInstant(): Instant? {
     }
 }
 
-fun <T, R> Sequence<T>.optionalFilter(value: R?, filter: (R, Sequence<T>) -> Sequence<T>): Sequence<T> {
-    return if (value == null) this else filter(value, this)
-}
-
-fun <T, R> Flow<T>.optionalFilter(value: R?, filter: (R, Flow<T>) -> Flow<T>): Flow<T> {
-    return if (value == null) this else filter(value, this)
-}
-
 fun StoredMessage.getMessageType(): String {
     try {
         return Message.parseFrom(this.content).metadata.messageType
@@ -56,7 +51,7 @@ fun StoredMessage.getMessageType(): String {
     return "unknown"
 }
 
-public data class Unwrapped(val isBatched: Boolean, val event: StoredTestEventWithContent)
+data class Unwrapped(val isBatched: Boolean, val event: StoredTestEventWithContent)
 
 fun StoredTestEventWrapper.unwrap(): Collection<Unwrapped> {
     return try {
@@ -70,6 +65,62 @@ fun StoredTestEventWrapper.unwrap(): Collection<Unwrapped> {
     } catch (e: Exception) {
         logger.error(e) { "unable to unwrap test events (id=${this.id})" }
         Collections.emptyList()
+    }
+}
+
+suspend fun ObjectMapper.asStringSuspend(data: Any?): String {
+    val mapper = this
+
+    return withContext(Dispatchers.IO) {
+        mapper.writeValueAsString(data)
+    }
+}
+
+suspend fun CradleStorage.getMessagesSuspend(filter: StoredMessageFilter): Iterable<StoredMessage> {
+    val storage = this
+
+    return withContext(Dispatchers.IO) {
+        storage.getMessages(filter)
+    }
+}
+
+suspend fun CradleStorage.getProcessedMessageSuspend(id: StoredMessageId): StoredMessage? {
+    val storage = this
+
+    return withContext(Dispatchers.IO) {
+        storage.getProcessedMessage(id)
+    }
+}
+
+suspend fun CradleStorage.getMessageSuspend(id: StoredMessageId): StoredMessage? {
+    val storage = this
+
+    return withContext(Dispatchers.IO) {
+        storage.getMessage(id)
+    }
+}
+
+suspend fun CradleStorage.getEventSuspend(id: StoredTestEventId): StoredTestEventWrapper? {
+    val storage = this
+
+    return withContext(Dispatchers.IO) {
+        storage.getTestEvent(id)
+    }
+}
+
+suspend fun CradleStorage.getEventsSuspend(parentId: StoredTestEventId): Iterable<StoredTestEventWrapper> {
+    val storage = this
+
+    return withContext(Dispatchers.IO) {
+        storage.getTestEvents(parentId)
+    }
+}
+
+suspend fun TestEventsMessagesLinker.getEventIdsSuspend(id: StoredMessageId): Collection<StoredTestEventId> {
+    val linker = this
+
+    return withContext(Dispatchers.IO) {
+        linker.getTestEventIdsByMessageId(id)
     }
 }
 

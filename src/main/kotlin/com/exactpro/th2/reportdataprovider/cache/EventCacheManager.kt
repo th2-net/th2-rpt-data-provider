@@ -5,7 +5,12 @@ import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventWithContent
 import com.exactpro.th2.reportdataprovider.Configuration
 import com.exactpro.th2.reportdataprovider.entities.Event
+import com.exactpro.th2.reportdataprovider.getEventSuspend
+import com.exactpro.th2.reportdataprovider.getEventsSuspend
 import com.exactpro.th2.reportdataprovider.unwrap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.withContext
 import mu.KotlinLogging
 import org.ehcache.Cache
 import org.ehcache.config.builders.CacheConfigurationBuilder
@@ -39,7 +44,7 @@ class EventCacheManager(configuration: Configuration, private val cradleManager:
         return cache.get(Paths.get(pathString))
     }
 
-    fun getOrPut(pathString: String): Event? {
+    suspend fun getOrPut(pathString: String): Event? {
         val path = Paths.get(pathString)
 
         cache.get(path)?.let { return it }
@@ -48,7 +53,7 @@ class EventCacheManager(configuration: Configuration, private val cradleManager:
         return traverseEventChainRecursive(path, path)
     }
 
-    private fun saveSubtreeRecursive(
+    private suspend fun saveSubtreeRecursive(
         events: Collection<StoredTestEventWithContent>,
         parent: StoredTestEventId?,
         path: Path
@@ -59,65 +64,79 @@ class EventCacheManager(configuration: Configuration, private val cradleManager:
             "${filtered.count()} items out of ${events.count()} are children of ${parent?.toString() ?: "<null>"} "
         }
 
-        return filtered
-            .map {
-                path.resolve(it.id.toString()) to Event(it, cradleManager,
-                    events
-                        .filter { event -> event.parentId == it.id }
-                        .sortedBy { event -> event.startTimestamp.toEpochMilli() }
-                        .map { event -> event.id.toString() }
+        return withContext(Dispatchers.Default) {
+            filtered
+                .map {
+                    async {
+                        path.resolve(it.id.toString()) to Event(it, cradleManager,
+                            events
+                                .filter { event -> event.parentId == it.id }
+                                .sortedBy { event -> event.startTimestamp.toEpochMilli() }
+                                .map { event -> event.id.toString() }
+                        )
+                    }
+                }
+                .map { it.await() }
+                .union(
+                    filtered
+                        .map {
+                            async { saveSubtreeRecursive(events, it.id, path.resolve(it.id.toString())) }
+                        }
+                        .flatMap { it.await() }
                 )
-            }
-            .union(filtered.flatMap { saveSubtreeRecursive(events, it.id, path.resolve(it.id.toString())) })
+        }
     }
 
-    private fun traverseEventChainRecursive(path: Path, fullPath: Path): Event? {
-        cradleManager.storage.getTestEvent(StoredTestEventId(path.fileName.toString()))?.let {
-            logger.debug { "found last non-batched parent (id=${it.id})" }
+    private suspend fun traverseEventChainRecursive(path: Path, fullPath: Path): Event? {
+        return withContext(Dispatchers.Default) {
+            cradleManager.storage.getEventSuspend(StoredTestEventId(path.fileName.toString()))?.let {
+                logger.debug { "found last non-batched parent (id=${it.id})" }
 
-            val unwrappedChildren = cradleManager.storage.getTestEvents(it.id)
-                .flatMap { event -> event.unwrap() }
+                val unwrappedChildren = cradleManager.storage.getEventsSuspend(it.id)
+                    .flatMap { event -> event.unwrap() }
 
-            val directChildren = unwrappedChildren
-                .filter { unwrapped -> unwrapped.event.parentId == it.id }
-                .map { unwrapped -> unwrapped.event }
+                val directChildren = unwrappedChildren
+                    .filter { unwrapped -> unwrapped.event.parentId == it.id }
+                    .map { unwrapped -> unwrapped.event }
 
-            val unbatchedChildren = saveSubtreeRecursive(
-                unwrappedChildren
-                    .filter { unwrapped -> unwrapped.isBatched }
-                    .map { unwrapped -> unwrapped.event },
+                val unbatchedChildren = saveSubtreeRecursive(
+                    unwrappedChildren
+                        .filter { unwrapped -> unwrapped.isBatched }
+                        .map { unwrapped -> unwrapped.event },
+                    it.id,
+                    path
+                ).toMap()
 
-                it.id,
-                path
-            ).toMap()
+                cache.putAll(unbatchedChildren)
 
-            cache.putAll(unbatchedChildren)
+                if (unbatchedChildren.containsKey(fullPath)) {
+                    logger.debug { "batched event id=${it.id} has been found (path=$fullPath)" }
+                    return@withContext unbatchedChildren[fullPath]
+                }
 
-            if (unbatchedChildren.containsKey(fullPath)) {
-                logger.debug { "batched event id=${it.id} has been found (path=$fullPath)" }
-                return unbatchedChildren[fullPath]
+                if (it.id.toString() == fullPath.fileName.toString() && it.isSingle) {
+                    logger.debug { "single event id=${it.id} has been found (path=$fullPath)" }
+                    val event = Event(
+                        it.unwrap().first().event,
+                        cradleManager,
+
+                        directChildren
+                            .sortedBy { event -> event.startTimestamp?.toEpochMilli() ?: 0 }
+                            .map { event -> event.id.toString() }
+                    )
+
+                    cache.put(fullPath, event)
+                    return@withContext event
+                }
+
+                logger.error { "no matching event (path=$fullPath) has been found" }
+                return@withContext null
             }
 
-            if (it.id.toString() == fullPath.fileName.toString() && it.isSingle) {
-                logger.debug { "single event id=${it.id} has been found (path=$fullPath)" }
-                val event = Event(
-                    it.unwrap().first().event,
-                    cradleManager,
-
-                    directChildren
-                        .sortedBy { event -> event.startTimestamp?.toEpochMilli() ?: 0 }
-                        .map { event -> event.id.toString() }
-                )
-
-                cache.put(fullPath, event)
-                return event
-            }
-
-            logger.error { "no matching event (path=$fullPath) has been found" }
-            return null
+            if (path.toString().isEmpty())
+                null
+            else
+                traverseEventChainRecursive(path.parent, path)
         }
-
-        return if (path.toString().isEmpty()) null
-        else traverseEventChainRecursive(path.parent, path)
     }
 }

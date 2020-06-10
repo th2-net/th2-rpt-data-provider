@@ -4,6 +4,10 @@ import com.exactpro.cradle.CradleManager
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.reportdataprovider.Configuration
 import com.exactpro.th2.reportdataprovider.entities.Message
+import com.exactpro.th2.reportdataprovider.getMessageSuspend
+import com.exactpro.th2.reportdataprovider.getProcessedMessageSuspend
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import mu.KotlinLogging
 import org.ehcache.Cache
 import org.ehcache.config.builders.CacheConfigurationBuilder
@@ -33,16 +37,19 @@ class MessageCacheManager(configuration: Configuration, private val cradleManage
         return cache.get(id)
     }
 
-    fun getOrPut(id: String): Message {
+    suspend fun getOrPut(id: String): Message {
         cache.get(id)?.let { return it }
 
         logger.debug { "Message cache miss for id=$id" }
-        val storedMessageId = StoredMessageId.fromString(id)
 
-        val message = Message(
-            cradleManager.storage.getProcessedMessage(storedMessageId),
-            cradleManager.storage.getMessage(storedMessageId)
-        )
+        val message = withContext(Dispatchers.Default) {
+            val storedMessageId = StoredMessageId.fromString(id)
+
+            Message(
+                cradleManager.storage.getProcessedMessageSuspend(storedMessageId),
+                cradleManager.storage.getMessageSuspend(storedMessageId)
+            )
+        }
 
         cache.put(id, message)
         return message

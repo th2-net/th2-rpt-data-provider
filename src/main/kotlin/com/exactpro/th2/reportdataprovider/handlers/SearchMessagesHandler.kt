@@ -1,26 +1,25 @@
 package com.exactpro.th2.reportdataprovider.handlers
 
 import com.exactpro.cradle.CradleManager
-import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.testevents.StoredTestEventId
-import com.exactpro.th2.reportdataprovider.MessageSearchRequest
+import com.exactpro.th2.reportdataprovider.*
 import com.exactpro.th2.reportdataprovider.cache.MessageCacheManager
 import com.exactpro.th2.reportdataprovider.entities.Message
-import com.exactpro.th2.reportdataprovider.getMessageType
-import com.exactpro.th2.reportdataprovider.optionalFilter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 
+@Suppress("ConvertCallChainIntoSequence")
 suspend fun searchMessages(
     request: MessageSearchRequest,
     manager: CradleManager,
     messageCache: MessageCacheManager
 ): List<Any> {
-    return withContext(Dispatchers.IO) {
+    return withContext(Dispatchers.Default) {
         val linker = manager.storage.testEventsMessagesLinker
 
-        manager.storage.getMessages(
+        manager.storage.getMessagesSuspend(
             StoredMessageFilterBuilder()
                 .let {
                     if (request.stream != null)
@@ -35,38 +34,43 @@ suspend fun searchMessages(
                         it.timestampTo().isLessThanOrEqualTo(request.timestampTo) else it
                 }
                 .build()
-        ).asSequence<StoredMessage>()
-            .optionalFilter(request.attachedEventId) { value, stream ->
-                stream.filter {
-                    linker.getTestEventIdsByMessageId(it.id)
-                        .contains(StoredTestEventId(value))
+        )
+            .map { message ->
+                async {
+                    message to (
+                            (request.attachedEventId?.let {
+                                linker.getEventIdsSuspend(message.id)
+                                    .contains(StoredTestEventId(it))
+                            } ?: true)
 
+                                    && (request.messageType?.contains(
+                                manager.storage.getProcessedMessageSuspend(message.id)?.getMessageType() ?: "unknown"
+                            ) ?: true)
+                            )
                 }
             }
-            .optionalFilter(request.messageType) { value, stream ->
-                stream.filter {
-                    value.contains(
-                        manager.storage.getProcessedMessage(it.id)?.getMessageType()
-                            ?: "unknown"
-                    )
-                }
-            }
+            .filter { it.await().second }
             .map {
-                if (request.idsOnly) {
-                    it.id.toString()
-                } else {
-                    messageCache.get(it.id.toString())
-                        ?: Message(
-                            manager.storage.getProcessedMessage(
-                                it.id
-                            ), it
-                        )
-                            .let { message ->
-                                messageCache.put(it.id.toString(), message)
-                                message
-                            }
+                async {
+                    val event = it.await().first
+
+                    if (request.idsOnly) {
+                        event.id.toString()
+                    } else {
+                        messageCache.get(event.id.toString())
+                            ?: Message(
+                                manager.storage.getProcessedMessageSuspend(
+                                    event.id
+                                ), event
+                            )
+                                .let { message ->
+                                    messageCache.put(event.id.toString(), message)
+                                    message
+                                }
+                    }
                 }
             }
+            .map { it.await() }
             .toList()
     }
 }

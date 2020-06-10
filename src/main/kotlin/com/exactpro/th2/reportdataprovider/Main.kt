@@ -101,14 +101,14 @@ fun main() {
 
                 logger.debug { "handling get event request with path=$pathString" }
 
-                withContext(Dispatchers.IO) {
+                withContext(Dispatchers.Default) {
                     try {
                         withTimeout(timeout) {
                             measureTimeMillis {
                                 call.response.cacheControl(cacheControl)
 
                                 call.respondText(
-                                    jacksonMapper.writeValueAsString(eventCache.getOrPut(pathString!!)),
+                                    jacksonMapper.asStringSuspend(eventCache.getOrPut(pathString!!)),
                                     ContentType.Application.Json
                                 )
                             }.let { logger.debug { "get event request took $it milliseconds" } }
@@ -125,12 +125,12 @@ fun main() {
 
                 logger.debug { "handling get message request with id=$id" }
 
-                withContext(Dispatchers.IO) {
+                withContext(Dispatchers.Default) {
                     try {
                         call.response.cacheControl(cacheControl)
 
                         call.respondText(
-                            jacksonMapper.writeValueAsString(messageCache.getOrPut(id!!)), ContentType.Application.Json
+                            jacksonMapper.asStringSuspend(messageCache.getOrPut(id!!)), ContentType.Application.Json
                         )
                     } catch (e: Exception) {
                         logger.error(e) { "unable to retrieve message with id=$id" }
@@ -151,7 +151,7 @@ fun main() {
                                 .let {
                                     call.response.cacheControl(cacheControl)
                                     call.respondText(ContentType.Application.Json, HttpStatusCode.OK) {
-                                        jacksonMapper.writeValueAsString(it)
+                                        jacksonMapper.asStringSuspend(it)
                                     }
                                 }
                         }
@@ -174,7 +174,7 @@ fun main() {
                         }.let {
                             call.response.cacheControl(cacheControl)
                             call.respondText(ContentType.Application.Json, HttpStatusCode.OK) {
-                                jacksonMapper.writeValueAsString(it)
+                                jacksonMapper.asStringSuspend(it)
                             }
                         }
                     } catch (e: Exception) {
