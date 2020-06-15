@@ -42,8 +42,9 @@ data class Event(
             } catch (e: Exception) {
                 KotlinLogging.logger { }
                     .error(e) { "unable to get messages attached to event (id=${stored.id})" }
+
+                Collections.emptySet<String>()
             }
-            Collections.emptySet<String>()
         },
 
         body = stored.content.let {
