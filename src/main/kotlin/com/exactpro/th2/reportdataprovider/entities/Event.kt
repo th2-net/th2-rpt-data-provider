@@ -6,6 +6,7 @@ import com.exactpro.th2.reportdataprovider.jacksonMapper
 import com.fasterxml.jackson.annotation.JsonRawValue
 import mu.KotlinLogging
 import java.time.Instant
+import java.util.*
 
 data class Event(
     val type: String = "event",
@@ -34,8 +35,16 @@ data class Event(
         parentEventId = stored.parentId?.toString(),
         isSuccessful = stored.isSuccess,
 
-        attachedMessageIds = cradleManager.storage?.testEventsMessagesLinker
-            ?.getMessageIdsByTestEventId(stored.id)?.map(Any::toString)?.toSet().orEmpty(),
+        attachedMessageIds = stored.id.let {
+            try {
+                cradleManager.storage?.testEventsMessagesLinker
+                    ?.getMessageIdsByTestEventId(it)?.map(Any::toString)?.toSet().orEmpty()
+            } catch (e: Exception) {
+                KotlinLogging.logger { }
+                    .error(e) { "unable to get messages attached to event (id=${stored.id})" }
+            }
+            Collections.emptySet<String>()
+        },
 
         body = stored.content.let {
             try {
@@ -44,7 +53,7 @@ data class Event(
                 data
             } catch (e: Exception) {
                 KotlinLogging.logger { }
-                    .error { "unable to write event content (id=${stored.id}) to 'body' property - invalid data" }
+                    .error(e) { "unable to write event content (id=${stored.id}) to 'body' property - invalid data" }
 
                 null
             }

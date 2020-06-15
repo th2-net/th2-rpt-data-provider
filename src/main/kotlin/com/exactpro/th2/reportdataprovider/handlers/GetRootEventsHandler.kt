@@ -37,10 +37,12 @@ suspend fun getRootEvents(
                             )
                 }
             }
-            .filter { it.await().second }
+            .map { it.await() }
+            .filter { it.second }
+            .sortedByDescending { it.first.startTimestamp?.toEpochMilli() ?: 0 }
             .map {
                 async {
-                    val id = it.await().first.id.toString()
+                    val id = it.first.id.toString()
 
                     if (request.idsOnly) {
                         id

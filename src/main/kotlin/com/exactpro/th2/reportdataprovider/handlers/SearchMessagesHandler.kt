@@ -49,10 +49,12 @@ suspend fun searchMessages(
                             )
                 }
             }
-            .filter { it.await().second }
+            .map { it.await() }
+            .filter { it.second }
+            .sortedByDescending { it.first.timestamp?.toEpochMilli() ?: 0 }
             .map {
                 async {
-                    val event = it.await().first
+                    val event = it.first
 
                     if (request.idsOnly) {
                         event.id.toString()
