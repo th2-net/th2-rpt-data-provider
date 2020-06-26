@@ -1,4 +1,4 @@
-FROM openjdk:12-alpine
+FROM adoptopenjdk/openjdk12:jdk-12.0.2_10-slim
 
 ENV CRADLE_INSTANCE_NAME=instance1 \
     CASSANDRA_DATA_CENTER=kos \
