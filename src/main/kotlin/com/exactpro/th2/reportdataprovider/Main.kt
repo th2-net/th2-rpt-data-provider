@@ -25,12 +25,14 @@ import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.util.toMap
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO_PARALLELISM_PROPERTY_NAME
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import mu.KotlinLogging
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.system.measureTimeMillis
+
 
 val formatter: DateTimeFormatter =
     DateTimeFormatter.ofPattern("yyyy-MM-dd'T'hh:mm:ss.nnnnnnnnn").withZone(ZoneId.of("UTC"))
@@ -47,6 +49,8 @@ val jacksonMapper: ObjectMapper = jacksonObjectMapper()
 fun main() {
     val logger = KotlinLogging.logger {}
     val configuration = Configuration()
+
+    System.setProperty(IO_PARALLELISM_PROPERTY_NAME, configuration.ioDispatcherThreadPoolSize.value)
 
     val manager = CassandraCradleManager(CassandraConnection(configuration.let {
         val settings = CassandraConnectionSettings(

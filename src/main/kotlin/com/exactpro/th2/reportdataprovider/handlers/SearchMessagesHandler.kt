@@ -19,22 +19,36 @@ suspend fun searchMessages(
     return withContext(Dispatchers.Default) {
         val linker = manager.storage.testEventsMessagesLinker
 
-        manager.storage.getMessagesSuspend(
-            StoredMessageFilterBuilder()
-                .let {
-                    if (request.stream != null)
-                        it.streamName().isEqualTo(request.stream.first()) else it
-                }
-                .let {
-                    if (request.timestampFrom != null)
-                        it.timestampFrom().isGreaterThanOrEqualTo(request.timestampFrom) else it
-                }
-                .let {
-                    if (request.timestampTo != null)
-                        it.timestampTo().isLessThanOrEqualTo(request.timestampTo) else it
-                }
-                .build()
-        )
+        (if (request.stream == null) {
+            manager.storage.getMessagesSuspend(
+                StoredMessageFilterBuilder()
+                    .let {
+                        if (request.timestampFrom != null)
+                            it.timestampFrom().isGreaterThanOrEqualTo(request.timestampFrom) else it
+                    }
+                    .let {
+                        if (request.timestampTo != null)
+                            it.timestampTo().isLessThanOrEqualTo(request.timestampTo) else it
+                    }
+                    .build()
+            )
+        } else {
+            request.stream.flatMap {
+                manager.storage.getMessagesSuspend(
+                    StoredMessageFilterBuilder()
+                        .streamName().isEqualTo(request.stream.first())
+                        .let {
+                            if (request.timestampFrom != null)
+                                it.timestampFrom().isGreaterThanOrEqualTo(request.timestampFrom) else it
+                        }
+                        .let {
+                            if (request.timestampTo != null)
+                                it.timestampTo().isLessThanOrEqualTo(request.timestampTo) else it
+                        }
+                        .build()
+                )
+            }
+        })
             .map { message ->
                 async {
                     message to (
