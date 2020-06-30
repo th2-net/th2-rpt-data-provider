@@ -40,5 +40,5 @@ class Configuration(
     val cassandraUsername: Variable = Variable("CASSANDRA_USERNAME", "guest"),
     val cassandraPassword: Variable = Variable("CASSANDRA_PASSWORD", "guest", false),
     val cassandraInstance: Variable = Variable("CRADLE_INSTANCE_NAME", "instance1"),
-    val ioDispatcherThreadPoolSize: Variable = Variable("THREAD_POOL_SIZE", "100")
+    val ioDispatcherThreadPoolSize: Variable = Variable("THREAD_POOL_SIZE", "1")
 )
