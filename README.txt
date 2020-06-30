@@ -17,3 +17,4 @@ CLIENT_CACHE_TIMEOUT=60 - defined in seconds; sets max-age value in http cache c
 
 EVENT_CACHE_SIZE=100000 - sets in-memory cache limit (item count)
 MESSAGE_CACHE_SIZE=100000 - sets in-memory cache limit (item count)
+THREAD_POOL_SIZE=100 - sets the thread pool size of IO corutine dispatcher
