@@ -6,6 +6,7 @@ import com.exactpro.cradle.cassandra.connection.CassandraConnectionSettings
 import com.exactpro.th2.reportdataprovider.cache.EventCacheManager
 import com.exactpro.th2.reportdataprovider.cache.MessageCacheManager
 import com.exactpro.th2.reportdataprovider.handlers.getRootEvents
+import com.exactpro.th2.reportdataprovider.handlers.searchChildrenEvents
 import com.exactpro.th2.reportdataprovider.handlers.searchMessages
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -164,6 +165,38 @@ fun main() {
                         call.respond(HttpStatusCode.InternalServerError, e.message ?: "")
                     }
                 }.let { logger.debug { "message search request took $it milliseconds" } }
+            }
+
+            get("search/events/{path...}") {
+                val request = EventSearchRequest(call.request.queryParameters.toMap())
+                val pathString = call.parameters.getAll("path")?.joinToString("/")
+
+                logger.debug { "handling search events request with path=$pathString (query=$request)" }
+
+                withContext(Dispatchers.Default) {
+                    try {
+                        withTimeout(timeout) {
+                            measureTimeMillis {
+                                call.response.cacheControl(cacheControl)
+
+                                call.respondText(
+                                    jacksonMapper.asStringSuspend(
+                                        if (pathString.isNullOrEmpty()) {
+                                            getRootEvents(request, manager, eventCache)
+                                        } else {
+                                            searchChildrenEvents(request, pathString, eventCache)
+                                        }
+                                    ),
+                                    ContentType.Application.Json
+                                )
+                            }.let { logger.debug { "search events request took $it milliseconds" } }
+                        }
+                    } catch (e: Exception) {
+                        logger.error(e) { "unable to search events with path=$pathString" }
+                        call.respond(HttpStatusCode.InternalServerError, e.message ?: "")
+                    }
+                }
+
             }
 
             get("/rootEvents") {

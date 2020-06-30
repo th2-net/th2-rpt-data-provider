@@ -1,57 +1,53 @@
 package com.exactpro.th2.reportdataprovider.handlers
 
-import com.exactpro.cradle.CradleManager
-import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.reportdataprovider.EventSearchRequest
 import com.exactpro.th2.reportdataprovider.cache.EventCacheManager
-import com.exactpro.th2.reportdataprovider.getEventIdsSuspend
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
+import java.nio.file.Paths
 
 @Suppress("ConvertCallChainIntoSequence")
-suspend fun getRootEvents(
+suspend fun searchChildrenEvents(
     request: EventSearchRequest,
-    manager: CradleManager,
+    pathString: String,
     eventCache: EventCacheManager
 ): List<Any> {
-    val linker = manager.storage.testEventsMessagesLinker
-
     return withContext(Dispatchers.Default) {
-        manager.storage.rootTestEvents
-            .map { event ->
+        (eventCache.getOrPut(pathString)?.childrenIds ?: listOf<String>().asIterable())
+            .map { id ->
                 async {
+                    val event = eventCache.getOrPut(Paths.get(pathString, id).toString())!!
+
                     event to (
                             (request.attachedMessageId?.let {
-                                linker.getEventIdsSuspend(StoredMessageId.fromString(it)).contains(event.id)
+                                event.attachedMessageIds?.contains(request.attachedMessageId) ?: false
                             } ?: true)
 
-                                    && (request.name?.let { event.name.toLowerCase().contains(it.toLowerCase()) } ?: true)
+                                    && (request.name?.let {
+                                event.eventName.toLowerCase().contains(it.toLowerCase())
+                            } ?: true)
+
                                     && (request.type?.let { event.type == it } ?: true)
 
                                     && (request.timestampFrom?.let { event.endTimestamp?.isAfter(it) ?: false }
                                 ?: true)
 
-                                    && (request.timestampTo?.let { event.startTimestamp?.isBefore(it) ?: false }
+                                    && (request.timestampTo?.let { event.startTimestamp.isBefore(it) }
                                 ?: true)
                             )
                 }
             }
             .map { it.await() }
             .filter { it.second }
-            .sortedByDescending { it.first.startTimestamp?.toEpochMilli() ?: 0 }
+            .sortedByDescending { it.first.startTimestamp.toEpochMilli() }
             .map {
-                async {
-                    val id = it.first.id.toString()
-
-                    if (request.idsOnly) {
-                        id
-                    } else {
-                        eventCache.getOrPut(id)
-                    }
+                if (request.idsOnly) {
+                    it.first.eventId
+                } else {
+                    it.first
                 }
             }
-            .mapNotNull { it.await() }
             .toList()
     }
 }
