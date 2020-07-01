@@ -33,10 +33,10 @@ suspend fun searchMessages(
                     .build()
             )
         } else {
-            request.stream.flatMap {
+            request.stream.flatMap { streamName ->
                 manager.storage.getMessagesSuspend(
                     StoredMessageFilterBuilder()
-                        .streamName().isEqualTo(request.stream.first())
+                        .streamName().isEqualTo(streamName)
                         .let {
                             if (request.timestampFrom != null)
                                 it.timestampFrom().isGreaterThanOrEqualTo(request.timestampFrom) else it
