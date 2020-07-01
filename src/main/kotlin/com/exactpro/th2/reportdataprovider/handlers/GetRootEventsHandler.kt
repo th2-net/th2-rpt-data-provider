@@ -5,53 +5,65 @@ import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.reportdataprovider.EventSearchRequest
 import com.exactpro.th2.reportdataprovider.cache.EventCacheManager
 import com.exactpro.th2.reportdataprovider.getEventIdsSuspend
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
 
 @Suppress("ConvertCallChainIntoSequence")
 suspend fun getRootEvents(
     request: EventSearchRequest,
     manager: CradleManager,
-    eventCache: EventCacheManager
+    eventCache: EventCacheManager,
+    timeout: Long
 ): List<Any> {
     val linker = manager.storage.testEventsMessagesLinker
 
     return withContext(Dispatchers.Default) {
-        manager.storage.rootTestEvents
-            .map { event ->
-                async {
-                    event to (
-                            (request.attachedMessageId?.let {
-                                linker.getEventIdsSuspend(StoredMessageId.fromString(it)).contains(event.id)
-                            } ?: true)
+        withTimeout(timeout) {
+            manager.storage.rootTestEvents
+                .map { event ->
 
-                                    && (request.name?.let { event.name.toLowerCase().contains(it.toLowerCase()) } ?: true)
-                                    && (request.type?.let { event.type == it } ?: true)
+                    if (!isActive) {
+                        throw Exception("filtering was cancelled")
+                    }
 
-                                    && (request.timestampFrom?.let { event.endTimestamp?.isAfter(it) ?: false }
-                                ?: true)
+                    async {
+                        event to (
+                                (request.attachedMessageId?.let {
+                                    linker.getEventIdsSuspend(StoredMessageId.fromString(it)).contains(event.id)
+                                } ?: true)
 
-                                    && (request.timestampTo?.let { event.startTimestamp?.isBefore(it) ?: false }
-                                ?: true)
-                            )
-                }
-            }
-            .map { it.await() }
-            .filter { it.second }
-            .sortedByDescending { it.first.startTimestamp?.toEpochMilli() ?: 0 }
-            .map {
-                async {
-                    val id = it.first.id.toString()
+                                        && (request.name?.let { event.name.toLowerCase().contains(it.toLowerCase()) }
+                                    ?: true)
+                                        && (request.type?.let { event.type == it } ?: true)
 
-                    if (request.idsOnly) {
-                        id
-                    } else {
-                        eventCache.getOrPut(id)
+                                        && (request.timestampFrom?.let { event.endTimestamp?.isAfter(it) ?: false }
+                                    ?: true)
+
+                                        && (request.timestampTo?.let { event.startTimestamp?.isBefore(it) ?: false }
+                                    ?: true)
+                                )
                     }
                 }
-            }
-            .mapNotNull { it.await() }
-            .toList()
+                .map { it.await() }
+                .filter { it.second }
+                .sortedByDescending { it.first.startTimestamp?.toEpochMilli() ?: 0 }
+                .map {
+
+                    if (!isActive) {
+                        throw Exception("result generation was cancelled")
+                    }
+
+                    async {
+                        val id = it.first.id.toString()
+
+                        if (request.idsOnly) {
+                            id
+                        } else {
+                            eventCache.getOrPut(id)
+                        }
+                    }
+                }
+                .mapNotNull { it.await() }
+                .toList()
+        }
     }
 }
