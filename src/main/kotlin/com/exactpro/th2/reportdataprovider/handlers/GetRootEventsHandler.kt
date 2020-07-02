@@ -43,6 +43,8 @@ suspend fun getRootEvents(
                 }
                 .map { it.await() }
                 .filter { it.second }
+                .toList()
+                .sortedByDescending { it.first.startTimestamp }
                 .map {
 
                     async {
@@ -56,7 +58,6 @@ suspend fun getRootEvents(
                     }
                 }
                 .mapNotNull { it.await() }
-                .toList()
         }
     }
 }

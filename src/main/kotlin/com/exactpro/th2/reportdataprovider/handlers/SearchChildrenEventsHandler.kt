@@ -47,6 +47,8 @@ suspend fun searchChildrenEvents(
                 }
                 .map { it.await() }
                 .filter { it.second }
+                .toList()
+                .sortedByDescending { it.first.startTimestamp }
                 .map {
                     if (request.idsOnly) {
                         it.first.eventId
@@ -54,7 +56,6 @@ suspend fun searchChildrenEvents(
                         it.first
                     }
                 }
-                .toList()
         }
     }
 }

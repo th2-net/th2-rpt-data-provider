@@ -72,6 +72,8 @@ suspend fun searchMessages(
                 }
                 .map { it.await() }
                 .filter { it.second }
+                .toList()
+                .sortedByDescending { it.first.timestamp }
                 .map {
                     async {
                         val event = it.first
@@ -93,7 +95,6 @@ suspend fun searchMessages(
                     }
                 }
                 .map { it.await() }
-                .toList()
         }
     }
 }
