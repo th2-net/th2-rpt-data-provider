@@ -2,10 +2,16 @@ package com.exactpro.th2.reportdataprovider.handlers
 
 import com.exactpro.th2.reportdataprovider.EventSearchRequest
 import com.exactpro.th2.reportdataprovider.cache.EventCacheManager
-import kotlinx.coroutines.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.nio.file.Paths
 
-@Suppress("ConvertCallChainIntoSequence")
 suspend fun searchChildrenEvents(
     request: EventSearchRequest,
     pathString: String,
@@ -14,12 +20,8 @@ suspend fun searchChildrenEvents(
 ): List<Any> {
     return withContext(Dispatchers.Default) {
         withTimeout(timeout) {
-            (eventCache.getOrPut(pathString)?.childrenIds ?: listOf<String>().asIterable())
+            (eventCache.getOrPut(pathString)?.childrenIds?.asFlow() ?: listOf<String>().asFlow())
                 .map { id ->
-
-                    if (!isActive) {
-                        throw Exception("event children filtering was cancelled")
-                    }
 
                     async {
                         val event = eventCache.getOrPut(Paths.get(pathString, id).toString())!!
@@ -45,7 +47,6 @@ suspend fun searchChildrenEvents(
                 }
                 .map { it.await() }
                 .filter { it.second }
-                .sortedByDescending { it.first.startTimestamp.toEpochMilli() }
                 .map {
                     if (request.idsOnly) {
                         it.first.eventId

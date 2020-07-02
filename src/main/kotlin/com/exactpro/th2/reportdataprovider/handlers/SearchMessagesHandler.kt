@@ -6,9 +6,15 @@ import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.th2.reportdataprovider.*
 import com.exactpro.th2.reportdataprovider.cache.MessageCacheManager
 import com.exactpro.th2.reportdataprovider.entities.Message
-import kotlinx.coroutines.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
-@Suppress("ConvertCallChainIntoSequence")
 suspend fun searchMessages(
     request: MessageSearchRequest,
     manager: CradleManager,
@@ -48,13 +54,8 @@ suspend fun searchMessages(
                             .build()
                     )
                 }
-            })
+            }).asFlow()
                 .map { message ->
-
-                    if (!isActive) {
-                        throw Exception("pre-filter calculations were cancelled")
-                    }
-
                     async {
                         message to (
                                 (request.attachedEventId?.let {
@@ -71,13 +72,7 @@ suspend fun searchMessages(
                 }
                 .map { it.await() }
                 .filter { it.second }
-                .sortedByDescending { it.first.timestamp?.toEpochMilli() ?: 0 }
                 .map {
-
-                    if (!isActive) {
-                        throw Exception("result generation was cancelled")
-                    }
-
                     async {
                         val event = it.first
 

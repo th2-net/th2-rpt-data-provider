@@ -5,9 +5,12 @@ import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.reportdataprovider.EventSearchRequest
 import com.exactpro.th2.reportdataprovider.cache.EventCacheManager
 import com.exactpro.th2.reportdataprovider.getEventIdsSuspend
-import kotlinx.coroutines.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
-@Suppress("ConvertCallChainIntoSequence")
 suspend fun getRootEvents(
     request: EventSearchRequest,
     manager: CradleManager,
@@ -18,13 +21,8 @@ suspend fun getRootEvents(
 
     return withContext(Dispatchers.Default) {
         withTimeout(timeout) {
-            manager.storage.rootTestEvents
+            manager.storage.rootTestEvents.asFlow()
                 .map { event ->
-
-                    if (!isActive) {
-                        throw Exception("filtering was cancelled")
-                    }
-
                     async {
                         event to (
                                 (request.attachedMessageId?.let {
@@ -45,12 +43,7 @@ suspend fun getRootEvents(
                 }
                 .map { it.await() }
                 .filter { it.second }
-                .sortedByDescending { it.first.startTimestamp?.toEpochMilli() ?: 0 }
                 .map {
-
-                    if (!isActive) {
-                        throw Exception("result generation was cancelled")
-                    }
 
                     async {
                         val id = it.first.id.toString()
