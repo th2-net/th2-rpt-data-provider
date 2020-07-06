@@ -9,6 +9,7 @@ import java.time.Instant
 import java.util.*
 
 data class Event(
+    val isBatched: Boolean,
     val type: String = "event",
     val eventId: String,
     val eventName: String,
@@ -24,9 +25,14 @@ data class Event(
     @JsonRawValue
     val body: String?
 ) {
-    constructor(stored: StoredTestEventWithContent, cradleManager: CradleManager, childrenIds: List<String>) : this(
+    constructor(
+        stored: StoredTestEventWithContent,
+        cradleManager: CradleManager,
+        childrenIds: List<String>,
+        isBatched: Boolean
+    ) : this(
         childrenIds = childrenIds,
-
+        isBatched = isBatched,
         eventId = stored.id.toString(),
         eventName = stored.name ?: "unknown",
         eventType = stored.type ?: "unknown",

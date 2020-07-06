@@ -18,16 +18,22 @@ import org.ehcache.config.builders.CacheManagerBuilder
 import org.ehcache.config.builders.ResourcePoolsBuilder
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.time.Duration
+import java.time.Instant
 
 class EventCacheManager(configuration: Configuration, private val cradleManager: CassandraCradleManager) {
+
     private val manager = CacheManagerBuilder.newCacheManagerBuilder().build(true)
     private val logger = KotlinLogging.logger { }
+    private val timeout = configuration.serverCacheTimeout.value.toLong()
 
-    private val cache: Cache<Path, Event> = manager.createCache(
+    data class CachedEvent(val event: Event, val isBatched: Boolean, val cachedAt: Instant)
+
+    private val cache: Cache<Path, CachedEvent> = manager.createCache(
         "events",
         CacheConfigurationBuilder.newCacheConfigurationBuilder(
             Path::class.java,
-            Event::class.java,
+            CachedEvent::class.java,
             ResourcePoolsBuilder.heap(configuration.eventCacheSize.value.toLong())
         ).build()
     )
@@ -36,18 +42,31 @@ class EventCacheManager(configuration: Configuration, private val cradleManager:
         val path = Paths.get(pathString)
 
         if (!cache.containsKey(path)) {
-            cache.put(path, event)
+            cache.put(path, CachedEvent(event, event.isBatched, Instant.now()))
+        }
+    }
+
+    private fun validateAndReturn(key: Path): CachedEvent? {
+        val cached = cache.get(key)
+
+        return if (cached != null && (!cached.isBatched)
+            && Duration.between(Instant.now(), cached.cachedAt).toMillis() > timeout
+        ) {
+            cache.remove(key)
+            null
+        } else {
+            cached
         }
     }
 
     fun get(pathString: String): Event? {
-        return cache.get(Paths.get(pathString))
+        return validateAndReturn(Paths.get(pathString))?.event
     }
 
     suspend fun getOrPut(pathString: String): Event? {
         val path = Paths.get(pathString)
 
-        cache.get(path)?.let { return it }
+        validateAndReturn(path)?.let { return it.event }
 
         logger.debug { "Event cache miss for path=$path" }
         return traverseEventChainRecursive(path, path)
@@ -72,7 +91,8 @@ class EventCacheManager(configuration: Configuration, private val cradleManager:
                             events
                                 .filter { event -> event.parentId == it.id }
                                 .sortedBy { event -> event.startTimestamp.toEpochMilli() }
-                                .map { event -> event.id.toString() }
+                                .map { event -> event.id.toString() },
+                            true
                         )
                     }
                 }
@@ -107,7 +127,13 @@ class EventCacheManager(configuration: Configuration, private val cradleManager:
                     path
                 ).toMap()
 
-                cache.putAll(unbatchedChildren)
+                cache.putAll(unbatchedChildren.mapValues { entry ->
+                    CachedEvent(
+                        entry.value,
+                        entry.value.isBatched,
+                        Instant.now()
+                    )
+                })
 
                 if (unbatchedChildren.containsKey(fullPath)) {
                     logger.debug { "batched event id=${it.id} has been found (path=$fullPath)" }
@@ -122,10 +148,15 @@ class EventCacheManager(configuration: Configuration, private val cradleManager:
 
                         directChildren
                             .sortedBy { event -> event.startTimestamp?.toEpochMilli() ?: 0 }
-                            .map { event -> event.id.toString() }
+                            .map { event -> event.id.toString() },
+                        false
                     )
 
-                    cache.put(fullPath, event)
+                    cache.put(
+                        fullPath,
+                        event.let { eventToCache -> CachedEvent(eventToCache, eventToCache.isBatched, Instant.now()) }
+                    )
+
                     return@withContext event
                 }
 
