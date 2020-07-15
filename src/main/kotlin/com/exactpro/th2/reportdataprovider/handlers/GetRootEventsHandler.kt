@@ -23,7 +23,10 @@ import com.exactpro.th2.reportdataprovider.cache.EventCacheManager
 import com.exactpro.th2.reportdataprovider.getEventIdsSuspend
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 
@@ -45,12 +48,16 @@ suspend fun getRootEvents(
                                     linker.getEventIdsSuspend(StoredMessageId.fromString(it)).contains(event.id)
                                 } ?: true)
 
-                                        && (request.name?.let { event.name.toLowerCase().contains(it.toLowerCase()) }
+                                        && (request.name?.any { event.name.toLowerCase().contains(it.toLowerCase()) }
                                     ?: true)
-                                        && (request.type?.let { event.type == it } ?: true)
 
-                                        && (request.timestampFrom?.let { event.endTimestamp?.isAfter(it) ?: false }
+                                        && (request.type?.any { event.type.toLowerCase().contains(it.toLowerCase()) }
                                     ?: true)
+
+                                        && (request.timestampFrom
+                                    ?.let {
+                                        event.endTimestamp?.isAfter(it) ?: (event.startTimestamp?.isAfter(it) ?: false)
+                                    } ?: true)
 
                                         && (request.timestampTo?.let { event.startTimestamp?.isBefore(it) ?: false }
                                     ?: true)

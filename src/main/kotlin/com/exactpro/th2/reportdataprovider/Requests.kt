@@ -40,16 +40,16 @@ data class EventSearchRequest(
     val attachedMessageId: String?,
     val timestampFrom: Instant?,
     val timestampTo: Instant?,
-    val name: String?,
-    val type: String?,
+    val name: List<String>?,
+    val type: List<String>?,
     val idsOnly: Boolean
 ) {
     constructor(parameters: Map<String, List<String>>) : this(
         attachedMessageId = parameters["attachedMessageId"]?.first(),
         timestampFrom = parameters["timestampFrom"]?.first()?.let { Instant.ofEpochMilli(it.toLong()) },
         timestampTo = parameters["timestampTo"]?.first()?.let { Instant.ofEpochMilli(it.toLong()) },
-        name = parameters["name"]?.first(),
-        type = parameters["type"]?.first(),
+        name = parameters["name"],
+        type = parameters["type"],
         idsOnly = parameters["idsOnly"]?.first()?.toBoolean() ?: false
     )
 }

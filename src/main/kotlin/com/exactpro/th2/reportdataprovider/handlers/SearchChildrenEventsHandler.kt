@@ -47,13 +47,16 @@ suspend fun searchChildrenEvents(
                                     event.attachedMessageIds?.contains(request.attachedMessageId) ?: false
                                 } ?: true)
 
-                                        && (request.name?.let {
-                                    event.eventName.toLowerCase().contains(it.toLowerCase())
-                                } ?: true)
+                                        && (request.name
+                                    ?.any { event.eventName.toLowerCase().contains(it.toLowerCase()) }
+                                    ?: true)
 
-                                        && (request.type?.let { event.type == it } ?: true)
+                                        && (request.type
+                                    ?.any { event.eventType?.toLowerCase()?.contains(it.toLowerCase()) ?: false }
+                                    ?: true)
 
-                                        && (request.timestampFrom?.let { event.endTimestamp?.isAfter(it) ?: false }
+                                        && (request.timestampFrom
+                                    ?.let { event.endTimestamp?.isAfter(it) ?: (event.startTimestamp.isAfter(it)) }
                                     ?: true)
 
                                         && (request.timestampTo?.let { event.startTimestamp.isBefore(it) }
