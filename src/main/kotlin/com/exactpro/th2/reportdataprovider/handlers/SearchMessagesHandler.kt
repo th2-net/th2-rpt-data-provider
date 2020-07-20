@@ -63,6 +63,7 @@ suspend fun searchMessages(
                 }
 
                 return request.stream
+                    ?.distinct()
                     ?.flatMap { streamName ->
                         manager.storage.getMessagesSuspend(
                             StoredMessageFilterBuilder()
