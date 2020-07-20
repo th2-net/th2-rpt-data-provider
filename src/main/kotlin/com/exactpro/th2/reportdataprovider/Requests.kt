@@ -18,12 +18,29 @@ package com.exactpro.th2.reportdataprovider
 
 import java.time.Instant
 
+enum class TimelineDirection(val alias: String) {
+    PREVIOUS("previous"), NEXT("next");
+
+    companion object {
+        fun byAlias(alias: String): TimelineDirection {
+            try {
+                return values().first { it.alias == alias }
+            } catch (e: NoSuchElementException) {
+                throw IllegalArgumentException("'$alias' is not a valid timeline direction")
+            }
+        }
+    }
+}
+
 data class MessageSearchRequest(
     val attachedEventId: String?,
     val timestampFrom: Instant?,
     val timestampTo: Instant?,
     val stream: List<String>?,
     val messageType: List<String>?,
+    val limit: Int,
+    val timelineDirection: TimelineDirection,
+    val messageId: String?,
     val idsOnly: Boolean
 ) {
     constructor(parameters: Map<String, List<String>>) : this(
@@ -32,6 +49,12 @@ data class MessageSearchRequest(
         timestampTo = parameters["timestampTo"]?.first()?.let { Instant.ofEpochMilli(it.toLong()) },
         stream = parameters["stream"],
         messageType = parameters["messageType"],
+        limit = parameters["limit"]?.first()?.toInt() ?: 100,
+
+        timelineDirection = parameters["timelineDirection"]
+            ?.let { TimelineDirection.byAlias(it.first()) } ?: TimelineDirection.NEXT,
+
+        messageId = parameters["messageId"]?.first(),
         idsOnly = parameters["idsOnly"]?.first()?.toBoolean() ?: true
     )
 }
