@@ -132,24 +132,26 @@ fun main() {
                         logger.error(e) { "unable to retrieve event with path=$pathString" }
                         call.respond(HttpStatusCode.InternalServerError, e.message ?: "")
                     }
-                }.let { logger.debug { "get event request took $it milliseconds" } }
-
+                }.let { logger.debug { "get event handled - time=${it}ms path=$pathString" } }
             }
 
             get("/message/{id}") {
                 val id = call.parameters["id"]
 
                 logger.debug { "handling get message request with id=$id" }
-                try {
-                    call.response.cacheControl(cacheControl)
 
-                    call.respondText(
-                        jacksonMapper.asStringSuspend(messageCache.getOrPut(id!!)), ContentType.Application.Json
-                    )
-                } catch (e: Exception) {
-                    logger.error(e) { "unable to retrieve message with id=$id" }
-                    call.respond(HttpStatusCode.InternalServerError, e.message ?: "")
-                }
+                measureTimeMillis {
+                    try {
+                        call.response.cacheControl(cacheControl)
+
+                        call.respondText(
+                            jacksonMapper.asStringSuspend(messageCache.getOrPut(id!!)), ContentType.Application.Json
+                        )
+                    } catch (e: Exception) {
+                        logger.error(e) { "unable to retrieve message with id=$id" }
+                        call.respond(HttpStatusCode.InternalServerError, e.message ?: "")
+                    }
+                }.let { logger.debug { "get message handled - time=${it}ms id=$id" } }
             }
 
             get("/search/messages") {
@@ -172,7 +174,7 @@ fun main() {
                         logger.error(e) { "unable to search messages - unexpected exception" }
                         call.respond(HttpStatusCode.InternalServerError, e.message ?: "")
                     }
-                }.let { logger.debug { "message search request took $it milliseconds" } }
+                }.let { logger.debug { "message search handled - time=${it}ms request=$request" } }
             }
 
             get("search/events/{path...}") {
@@ -201,7 +203,7 @@ fun main() {
                         logger.error(e) { "unable to search events with path=$pathString" }
                         call.respond(HttpStatusCode.InternalServerError, e.message ?: "")
                     }
-                }.let { logger.debug { "search events request took $it milliseconds" } }
+                }.let { logger.debug { "search events handled - time=${it}ms request=$request path=$pathString" } }
             }
 
             get("/rootEvents") {
@@ -223,7 +225,7 @@ fun main() {
                         logger.error(e) { "unable to search events - unexpected exception" }
                         call.respond(HttpStatusCode.InternalServerError, e.message ?: "")
                     }
-                }.let { logger.debug { "root events request took $it milliseconds" } }
+                }.let { logger.debug { "get root events handled - time=${it}ms request=$request" } }
             }
 
         }
