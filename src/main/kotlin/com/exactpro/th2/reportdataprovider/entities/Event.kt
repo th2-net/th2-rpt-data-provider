@@ -81,15 +81,15 @@ data class Event(
                 jacksonMapper.writeValueAsString(listOf(
                     object {
                         val type = "message"
-                        val text = "Content of this event is an invalid object"
+                        val data = "Content of this event is an invalid object"
                     },
                     object {
                         val type = "message"
-                        val text = "raw event body: \n${String(it)}"
+                        val data = "raw event body: \n${String(it)}"
                     },
                     object {
                         val type = "message"
-                        val text = "error: \n$e"
+                        val data = "error: \n$e"
                     }
                 ))
             }
