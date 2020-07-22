@@ -76,9 +76,22 @@ data class Event(
                 data
             } catch (e: Exception) {
                 KotlinLogging.logger { }
-                    .error(e) { "unable to write event content (id=${stored.id}) to 'body' property - invalid data" }
+                    .warn(e) { "unable to write event content (id=${stored.id}) to 'body' property - invalid data" }
 
-                null
+                jacksonMapper.writeValueAsString(listOf(
+                    object {
+                        val type = "message"
+                        val text = "Content of this event is an invalid object"
+                    },
+                    object {
+                        val type = "message"
+                        val text = "raw event body: \n${String(it)}"
+                    },
+                    object {
+                        val type = "message"
+                        val text = "error: \n$e"
+                    }
+                ))
             }
         }
     )
