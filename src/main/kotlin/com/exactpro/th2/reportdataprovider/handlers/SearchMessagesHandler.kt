@@ -29,6 +29,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import mu.KotlinLogging
+
+val logger = KotlinLogging.logger {  }
 
 suspend fun searchMessages(
     request: MessageSearchRequest,
@@ -42,6 +45,8 @@ suspend fun searchMessages(
             var limitReached = false
 
             suspend fun pullMore(): List<StoredMessage> {
+                logger.debug { "pulling more messages from ${message?.id ?: "start"}" }
+
                 if (limitReached) {
                     return emptyList()
                 }
@@ -82,6 +87,7 @@ suspend fun searchMessages(
                                 .build()
                         )
                     }
+                    ?.filterNot { message?.id == it.id }
 
                     ?.let { flow ->
                         if (request.timelineDirection == TimelineDirection.NEXT) {
