@@ -33,7 +33,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import mu.KotlinLogging
 
-val logger = KotlinLogging.logger {  }
+val logger = KotlinLogging.logger { }
 
 suspend fun searchMessages(
     request: MessageSearchRequest,
@@ -84,7 +84,7 @@ suspend fun searchMessages(
                                         it.timestampTo().isLessThanOrEqualTo(timestampTo) else it
                                 }
                                 .let {
-                                    it.limit(request.limit)
+                                    it.limit(request.limit + 1)
                                 }
                                 .build()
                         )
@@ -113,12 +113,13 @@ suspend fun searchMessages(
             val linker = manager.storage.testEventsMessagesLinker
 
             flow {
-                var data = pullMore()
+                do {
+                    val data = pullMore()
 
-                while (data.isNotEmpty()) {
-                    data.forEach { emit(it) }
-                    data = pullMore()
-                }
+                    for (item in data) {
+                        emit(item)
+                    }
+                } while (data.isNotEmpty())
             }
                 .map { messageToFilter ->
                     async {
@@ -136,7 +137,7 @@ suspend fun searchMessages(
                     }
                 }
                 .map { it.await() }
-                .filter { it.second && (!(message?.id?.equals(it.first.id) ?: false)) }
+                .filter { it.second }
                 .take(request.limit)
                 .map {
                     async {

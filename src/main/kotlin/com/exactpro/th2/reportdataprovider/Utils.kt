@@ -100,7 +100,7 @@ suspend fun CradleStorage.getMessagesSuspend(filter: StoredMessageFilter): Itera
     return withContext(Dispatchers.IO) {
         logTime("getMessages (filter=${filter.convertToString()})") {
             storage.getMessages(filter)
-        }
+        }!!
     }
 }
 
@@ -141,7 +141,7 @@ suspend fun CradleStorage.getEventsSuspend(parentId: StoredTestEventId): Iterabl
         logTime("getTestEvents (parentId=$parentId)") {
             storage.getTestEvents(parentId)
         }
-    }
+    }!!
 }
 
 suspend fun TestEventsMessagesLinker.getEventIdsSuspend(id: StoredMessageId): Collection<StoredTestEventId> {
@@ -151,16 +151,16 @@ suspend fun TestEventsMessagesLinker.getEventIdsSuspend(id: StoredMessageId): Co
         logTime("getTestEventIdsByMessageId (id=$id)") {
             linker.getTestEventIdsByMessageId(id)
         }
-    }
+    }!!
 }
 
-suspend fun <T> logTime(methodName: String, lambda: () -> T): T {
+suspend fun <T> logTime(methodName: String, lambda: () -> T): T? {
     var result: T? = null
 
     measureTimeMillis { result = lambda.invoke() }
         .also { logger.debug { "cradle: $methodName took ${it}ms" } }
 
-    return result!!
+    return result
 }
 
 fun StoredMessageFilter.convertToString(): String {
