@@ -21,6 +21,8 @@ import com.exactpro.cradle.cassandra.connection.CassandraConnection
 import com.exactpro.cradle.cassandra.connection.CassandraConnectionSettings
 import com.exactpro.th2.reportdataprovider.cache.EventCacheManager
 import com.exactpro.th2.reportdataprovider.cache.MessageCacheManager
+import com.exactpro.th2.reportdataprovider.entities.EventSearchRequest
+import com.exactpro.th2.reportdataprovider.entities.MessageSearchRequest
 import com.exactpro.th2.reportdataprovider.handlers.getRootEvents
 import com.exactpro.th2.reportdataprovider.handlers.searchChildrenEvents
 import com.exactpro.th2.reportdataprovider.handlers.searchMessages

@@ -24,6 +24,8 @@ import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.th2.reportdataprovider.*
 import com.exactpro.th2.reportdataprovider.cache.MessageCacheManager
 import com.exactpro.th2.reportdataprovider.entities.Message
+import com.exactpro.th2.reportdataprovider.entities.MessageSearchRequest
+import com.exactpro.th2.reportdataprovider.entities.TimelineDirection
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.*

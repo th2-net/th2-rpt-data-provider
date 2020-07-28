@@ -31,8 +31,10 @@ import com.fasterxml.jackson.databind.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import mu.KotlinLogging
+import java.time.Duration
 import java.time.Instant
 import java.util.*
+import kotlin.system.measureTimeMillis
 
 private val logger = KotlinLogging.logger { }
 
@@ -96,7 +98,9 @@ suspend fun CradleStorage.getMessagesSuspend(filter: StoredMessageFilter): Itera
     val storage = this
 
     return withContext(Dispatchers.IO) {
-        storage.getMessages(filter)
+        logTime("getMessages (filter=${filter.convertToString()})") {
+            storage.getMessages(filter)
+        }
     }
 }
 
@@ -104,7 +108,9 @@ suspend fun CradleStorage.getProcessedMessageSuspend(id: StoredMessageId): Store
     val storage = this
 
     return withContext(Dispatchers.IO) {
-        storage.getProcessedMessage(id)
+        logTime("getProcessedMessage (id=$id)") {
+            storage.getProcessedMessage(id)
+        }
     }
 }
 
@@ -112,7 +118,9 @@ suspend fun CradleStorage.getMessageSuspend(id: StoredMessageId): StoredMessage?
     val storage = this
 
     return withContext(Dispatchers.IO) {
-        storage.getMessage(id)
+        logTime("getMessage (id=$id)") {
+            storage.getMessage(id)
+        }
     }
 }
 
@@ -120,7 +128,9 @@ suspend fun CradleStorage.getEventSuspend(id: StoredTestEventId): StoredTestEven
     val storage = this
 
     return withContext(Dispatchers.IO) {
-        storage.getTestEvent(id)
+        logTime("getTestEvent (id=$id)") {
+            storage.getTestEvent(id)
+        }
     }
 }
 
@@ -128,7 +138,9 @@ suspend fun CradleStorage.getEventsSuspend(parentId: StoredTestEventId): Iterabl
     val storage = this
 
     return withContext(Dispatchers.IO) {
-        storage.getTestEvents(parentId)
+        logTime("getTestEvents (parentId=$parentId)") {
+            storage.getTestEvents(parentId)
+        }
     }
 }
 
@@ -136,7 +148,31 @@ suspend fun TestEventsMessagesLinker.getEventIdsSuspend(id: StoredMessageId): Co
     val linker = this
 
     return withContext(Dispatchers.IO) {
-        linker.getTestEventIdsByMessageId(id)
+        logTime("getTestEventIdsByMessageId (id=$id)") {
+            linker.getTestEventIdsByMessageId(id)
+        }
     }
+}
+
+suspend fun <T> logTime(methodName: String, lambda: () -> T): T {
+    var result: T? = null
+
+    measureTimeMillis { result = lambda.invoke() }
+        .also { logger.debug { "cradle: $methodName took ${it}ms" } }
+
+    return result!!
+}
+
+fun StoredMessageFilter.convertToString(): String {
+    val filter = this
+
+    return "(limit=${filter.limit} " +
+            "direction=${filter.direction?.value} " +
+            "timestampFrom=${filter.timestampFrom?.value} " +
+            "timestampTo=${filter.timestampTo?.value} " +
+            "stream=${filter.streamName?.value} " +
+            "timestampDiff=${if (filter.timestampFrom != null && filter.timestampTo != null) {
+                Duration.between(filter.timestampFrom.value, filter.timestampTo.value)
+            } else null})"
 }
 

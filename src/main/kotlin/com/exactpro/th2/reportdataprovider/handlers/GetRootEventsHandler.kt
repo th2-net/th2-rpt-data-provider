@@ -18,7 +18,7 @@ package com.exactpro.th2.reportdataprovider.handlers
 
 import com.exactpro.cradle.CradleManager
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.reportdataprovider.EventSearchRequest
+import com.exactpro.th2.reportdataprovider.entities.EventSearchRequest
 import com.exactpro.th2.reportdataprovider.cache.EventCacheManager
 import com.exactpro.th2.reportdataprovider.getEventIdsSuspend
 import kotlinx.coroutines.Dispatchers
@@ -59,7 +59,9 @@ suspend fun getRootEvents(
                                         event.endTimestamp?.isAfter(it) ?: (event.startTimestamp?.isAfter(it) ?: false)
                                     } ?: true)
 
-                                        && (request.timestampTo?.let { event.startTimestamp?.isBefore(it) ?: false }
+                                        && (request.timestampTo
+                                    ?.let {
+                                        event.startTimestamp?.isBefore(it) ?: false }
                                     ?: true)
                                 )
                     }

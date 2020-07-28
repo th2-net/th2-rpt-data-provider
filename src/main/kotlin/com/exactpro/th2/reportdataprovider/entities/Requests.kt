@@ -14,7 +14,7 @@
  * limitations under the License.
  ******************************************************************************/
 
-package com.exactpro.th2.reportdataprovider
+package com.exactpro.th2.reportdataprovider.entities
 
 import java.time.Instant
 

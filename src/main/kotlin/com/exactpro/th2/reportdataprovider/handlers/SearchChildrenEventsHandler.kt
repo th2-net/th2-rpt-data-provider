@@ -16,7 +16,7 @@
 
 package com.exactpro.th2.reportdataprovider.handlers
 
-import com.exactpro.th2.reportdataprovider.EventSearchRequest
+import com.exactpro.th2.reportdataprovider.entities.EventSearchRequest
 import com.exactpro.th2.reportdataprovider.cache.EventCacheManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
