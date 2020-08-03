@@ -132,6 +132,8 @@ class EventCacheManager(configuration: Configuration, private val cradleManager:
                 val unwrappedChildren = cradleManager.storage.getEventsSuspend(it.id)
                     .flatMap { event -> event.unwrap() }
 
+                System.gc()
+
                 val directChildren = unwrappedChildren
                     .filter { unwrapped -> unwrapped.event.parentId == it.id }
                     .map { unwrapped -> unwrapped.event }

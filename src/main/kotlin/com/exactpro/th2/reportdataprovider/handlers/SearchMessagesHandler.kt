@@ -17,6 +17,7 @@
 package com.exactpro.th2.reportdataprovider.handlers
 
 import com.exactpro.cradle.CradleManager
+import com.exactpro.cradle.Direction
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
@@ -32,8 +33,125 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import mu.KotlinLogging
+import java.time.Instant
 
-val logger = KotlinLogging.logger { }
+private val logger = KotlinLogging.logger { }
+
+private suspend fun pullMore(
+    startId: StoredMessageId,
+    limit: Int,
+    timelineDirection: TimelineDirection,
+    manager: CradleManager
+): List<StoredMessage> {
+    logger.debug { "pulling more messages (id=$startId limit=$limit direction=$timelineDirection)" }
+
+    return manager.storage.getMessagesSuspend(
+        StoredMessageFilterBuilder()
+            .let {
+                if (timelineDirection == TimelineDirection.NEXT) {
+                    it.next(startId, limit)
+                } else {
+                    it.previous(startId, limit)
+                }
+            }
+            .build()
+    )
+
+        .let { list ->
+            if (timelineDirection == TimelineDirection.NEXT) {
+                list.sortedBy { it.timestamp }
+            } else {
+                list.sortedByDescending { it.timestamp }
+            }
+        }
+        .toList()
+}
+
+private suspend fun getNearestMessageId(
+    timestamp: Instant,
+    stream: String,
+    direction: Direction,
+    timelineDirection: TimelineDirection,
+    manager: CradleManager
+): StoredMessageId {
+    logger.debug { "getting nearest message id (timestamp=$timestamp stream=$stream(${direction.label}) direction=$timelineDirection)" }
+
+    var currentId = manager.storage.getFirstMessageIdSuspend(
+        Instant.ofEpochSecond(timestamp.epochSecond + if (timelineDirection == TimelineDirection.PREVIOUS) 1 else 0),
+        stream,
+        direction
+    )!!
+
+    return flow {
+        emit(manager.storage.getMessageSuspend(currentId)!!)
+
+        do {
+            val data = pullMore(currentId, 1000, timelineDirection, manager)
+            var hasData = false
+
+            for (item in data) {
+                emit(item)
+                hasData = true
+            }
+
+            currentId = data.last().id
+        } while (hasData)
+    }
+        .first {
+            if (timelineDirection == TimelineDirection.NEXT) {
+                it.timestamp == timestamp || it.timestamp.isAfter(timestamp)
+            } else {
+                it.timestamp == timestamp || it.timestamp.isBefore(timestamp)
+            }
+        }
+        .id
+}
+
+private suspend fun pullMoreMerged(
+    startTimestamp: Instant,
+    streams: List<String>,
+    timelineDirection: TimelineDirection,
+    perStreamLimit: Int,
+    manager: CradleManager
+): List<StoredMessage> {
+    logger.debug { "pulling more messages (timestamp=$startTimestamp streams=$streams direction=$timelineDirection perStreamLimit=$perStreamLimit)" }
+
+    return streams
+        .distinct()
+        .flatMap { listOf(it to Direction.FIRST, it to Direction.SECOND) }
+        .flatMap { pair ->
+            pullMore(
+                if (timelineDirection == TimelineDirection.NEXT) {
+                    getNearestMessageId(
+                        startTimestamp,
+                        pair.first,
+                        pair.second,
+                        TimelineDirection.NEXT,
+                        manager
+                    )
+                } else {
+                    getNearestMessageId(
+                        startTimestamp,
+                        pair.first,
+                        pair.second,
+                        TimelineDirection.PREVIOUS,
+                        manager
+                    )
+                },
+
+                perStreamLimit,
+                timelineDirection,
+                manager
+            )
+        }
+        .let { list ->
+            if (timelineDirection == TimelineDirection.NEXT) {
+                list.sortedBy { it.timestamp }
+            } else {
+                list.sortedByDescending { it.timestamp }
+            }
+        }
+}
 
 suspend fun searchMessages(
     request: MessageSearchRequest,
@@ -43,78 +161,27 @@ suspend fun searchMessages(
 ): List<Any> {
     return withContext(Dispatchers.Default) {
         withTimeout(timeout) {
-            var message = request.messageId?.let { manager.storage.getMessageSuspend(StoredMessageId.fromString(it)) }
-            var limitReached = false
-
-            suspend fun pullMore(): List<StoredMessage> {
-                logger.debug { "pulling more messages from ${message?.id ?: "start"}" }
-
-                if (limitReached) {
-                    return emptyList()
-                }
-
-                val timestampFrom = message.let {
-                    if (it != null && request.timelineDirection == TimelineDirection.NEXT) {
-                        it.timestamp
-                    } else {
-                        request.timestampFrom
-                    }
-                }
-
-                val timestampTo = message.let {
-                    if (it != null && request.timelineDirection == TimelineDirection.PREVIOUS) {
-                        it.timestamp
-                    } else {
-                        request.timestampTo
-                    }
-                }
-
-                return request.stream
-                    ?.distinct()
-                    ?.flatMap { streamName ->
-                        manager.storage.getMessagesSuspend(
-                            StoredMessageFilterBuilder()
-                                .streamName().isEqualTo(streamName)
-                                .let {
-                                    if (timestampFrom != null)
-                                        it.timestampFrom().isGreaterThanOrEqualTo(timestampFrom) else it
-                                }
-                                .let {
-                                    if (timestampTo != null)
-                                        it.timestampTo().isLessThanOrEqualTo(timestampTo) else it
-                                }
-                                .let {
-                                    it.limit(request.limit + 1)
-                                }
-                                .build()
-                        )
-                    }
-                    ?.filterNot { message?.id == it.id }
-
-                    ?.let { flow ->
-                        if (request.timelineDirection == TimelineDirection.NEXT) {
-                            flow.sortedBy { it.timestamp }
-                        } else {
-                            flow.sortedByDescending { it.timestamp }
-                        }
-                    }
-
-                    ?.also {
-                        try {
-                            message = it.last()
-                        } catch (e: NoSuchElementException) {
-                            limitReached = true
-                        }
-                    }
-
-                    ?: emptyList()
-            }
-
             val linker = manager.storage.testEventsMessagesLinker
 
             flow {
                 do {
-                    val data = pullMore()
+                    val data = pullMoreMerged(
+                        request.messageId?.let {
+                            manager.storage.getMessageSuspend(StoredMessageId.fromString(it))?.timestamp
+                        } ?: (
+                                if (request.timelineDirection == TimelineDirection.NEXT) {
+                                    request.timestampFrom
+                                } else {
+                                    request.timestampTo
+                                }
+
+                                ) ?: Instant.now(),
+
+                        request.stream ?: emptyList(),
+                        request.timelineDirection,
+                        request.limit,
+                        manager
+                    )
 
                     for (item in data) {
                         emit(item)
@@ -138,7 +205,21 @@ suspend fun searchMessages(
                 }
                 .map { it.await() }
                 .filter { it.second }
+                .takeWhile {
+                    it.first.timestamp.let { timestamp ->
+                        if (request.timelineDirection == TimelineDirection.NEXT) {
+                            request.timestampTo == null
+                                    || timestamp.isBefore(request.timestampTo) || timestamp == request.timestampTo
+                        } else {
+                            request.timestampFrom == null
+                                    || timestamp.isAfter(request.timestampTo) || timestamp == request.timestampTo
+                        }
+                    }
+                }
                 .take(request.limit)
+                .toList()
+                .distinctBy { it.first.id }
+                .filterNot { it.first.id.toString() == request.messageId }
                 .map {
                     async {
                         val event = it.first
@@ -160,7 +241,6 @@ suspend fun searchMessages(
                     }
                 }
                 .map { it.await() }
-                .toList()
         }
     }
 }

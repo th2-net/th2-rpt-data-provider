@@ -17,6 +17,7 @@
 package com.exactpro.th2.reportdataprovider
 
 import com.exactpro.cradle.CradleStorage
+import com.exactpro.cradle.Direction
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageFilter
 import com.exactpro.cradle.messages.StoredMessageId
@@ -142,6 +143,20 @@ suspend fun CradleStorage.getEventsSuspend(parentId: StoredTestEventId): Iterabl
             storage.getTestEvents(parentId)
         }
     }!!
+}
+
+suspend fun CradleStorage.getFirstMessageIdSuspend(
+    timestamp: Instant,
+    stream: String,
+    direction: Direction
+): StoredMessageId? {
+    val storage = this
+
+    return withContext(Dispatchers.IO) {
+        logTime(("getFirstMessageId (timestamp=$timestamp stream=$stream direction=${direction.label} )")) {
+            storage.getFirstMessageId(timestamp, stream, direction)
+        }
+    }
 }
 
 suspend fun TestEventsMessagesLinker.getEventIdsSuspend(id: StoredMessageId): Collection<StoredTestEventId> {

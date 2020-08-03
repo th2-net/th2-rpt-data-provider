@@ -1,3 +1,7 @@
+Report data provider 1.3
+
+This component serves as a backend for report-viewer.
+
 Example of Report data provider component env variables:
 
 CRADLE_INSTANCE_NAME=instance1

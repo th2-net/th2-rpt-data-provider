@@ -60,6 +60,8 @@ val jacksonMapper: ObjectMapper = jacksonObjectMapper()
     .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
 
 fun main() {
+    //96fdb4ec-d11c-11ea-b952-a1147361d4fc
+
     val logger = KotlinLogging.logger {}
     val configuration = Configuration()
 
@@ -132,9 +134,30 @@ fun main() {
                         }.join()
                     } catch (e: Exception) {
                         logger.error(e) { "unable to retrieve event with path=$pathString" }
-                        call.respond(HttpStatusCode.InternalServerError, e.message ?: "")
+                        call.respond(HttpStatusCode.InternalServerError, e.message ?: e.toString())
                     }
                 }.let { logger.debug { "get event handled - time=${it}ms path=$pathString" } }
+            }
+
+            get("/messageStreams") {
+                measureTimeMillis {
+                    try {
+                        launch {
+                            withTimeout(timeout) {
+                                call.response.cacheControl(cacheControl)
+
+                                call.respondText(
+                                    jacksonMapper.asStringSuspend(manager.storage.streams),
+                                    ContentType.Application.Json
+                                )
+                            }
+                        }
+                    }
+                    catch (e: Exception) {
+                        logger.error(e) { "unable to retrieve message streams" }
+                        call.respond(HttpStatusCode.InternalServerError, e.message ?: e.toString())
+                    }
+                }.let { logger.debug { "get message streams handled - time=${it}ms" } }
             }
 
             get("/message/{id}") {
@@ -151,7 +174,7 @@ fun main() {
                         )
                     } catch (e: Exception) {
                         logger.error(e) { "unable to retrieve message with id=$id" }
-                        call.respond(HttpStatusCode.InternalServerError, e.message ?: "")
+                        call.respond(HttpStatusCode.InternalServerError, e.message ?: e.toString())
                     }
                 }.let { logger.debug { "get message handled - time=${it}ms id=$id" } }
             }
@@ -174,7 +197,7 @@ fun main() {
                         }.join()
                     } catch (e: Exception) {
                         logger.error(e) { "unable to search messages - unexpected exception" }
-                        call.respond(HttpStatusCode.InternalServerError, e.message ?: "")
+                        call.respond(HttpStatusCode.InternalServerError, e.message ?: e.toString())
                     }
                 }.let { logger.debug { "message search handled - time=${it}ms request=$request" } }
             }
@@ -203,7 +226,7 @@ fun main() {
                         }.join()
                     } catch (e: Exception) {
                         logger.error(e) { "unable to search events with path=$pathString" }
-                        call.respond(HttpStatusCode.InternalServerError, e.message ?: "")
+                        call.respond(HttpStatusCode.InternalServerError, e.message ?: e.toString())
                     }
                 }.let { logger.debug { "search events handled - time=${it}ms request=$request path=$pathString" } }
             }
@@ -225,7 +248,7 @@ fun main() {
                         }.join()
                     } catch (e: Exception) {
                         logger.error(e) { "unable to search events - unexpected exception" }
-                        call.respond(HttpStatusCode.InternalServerError, e.message ?: "")
+                        call.respond(HttpStatusCode.InternalServerError, e.message ?: e.toString())
                     }
                 }.let { logger.debug { "get root events handled - time=${it}ms request=$request" } }
             }
