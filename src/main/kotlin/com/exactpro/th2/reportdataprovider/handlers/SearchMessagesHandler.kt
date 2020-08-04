@@ -38,12 +38,14 @@ import java.time.Instant
 private val logger = KotlinLogging.logger { }
 
 private suspend fun pullMore(
-    startId: StoredMessageId,
+    startId: StoredMessageId?,
     limit: Int,
     timelineDirection: TimelineDirection,
     manager: CradleManager
 ): List<StoredMessage> {
     logger.debug { "pulling more messages (id=$startId limit=$limit direction=$timelineDirection)" }
+
+    if (startId == null) return emptyList()
 
     return manager.storage.getMessagesSuspend(
         StoredMessageFilterBuilder()
@@ -73,14 +75,14 @@ private suspend fun getNearestMessageId(
     direction: Direction,
     timelineDirection: TimelineDirection,
     manager: CradleManager
-): StoredMessageId {
+): StoredMessageId? {
     logger.debug { "getting nearest message id (timestamp=$timestamp stream=$stream(${direction.label}) direction=$timelineDirection)" }
 
-    var currentId = manager.storage.getFirstMessageIdSuspend(
+    var currentId: StoredMessageId = manager.storage.getFirstMessageIdSuspend(
         Instant.ofEpochSecond(timestamp.epochSecond + if (timelineDirection == TimelineDirection.PREVIOUS) 1 else 0),
         stream,
         direction
-    )!!
+    ) ?: return null
 
     return flow {
         emit(manager.storage.getMessageSuspend(currentId)!!)
