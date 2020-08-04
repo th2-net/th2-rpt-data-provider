@@ -108,7 +108,7 @@ fun main() {
                     """
                         <h1>Report data provider is working.</h1>
                         <div>Cassandra endpoint is set to <u><pre style="display: inline">${configuration.cassandraHost.value}:${configuration.cassandraPort.value}</pre></u>.</div>
-                        <a href="search/events">list of root events (json)</a>
+                        <a href="search/events?idsOnly=true">list of root events (json)</a>
                         <div>Check API reference for details.</div>
                     """.trimIndent(),
                     ContentType.Text.Html
@@ -151,7 +151,7 @@ fun main() {
                                     ContentType.Application.Json
                                 )
                             }
-                        }
+                        }.join()
                     }
                     catch (e: Exception) {
                         logger.error(e) { "unable to retrieve message streams" }
