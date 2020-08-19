@@ -16,65 +16,68 @@
 
 package com.exactpro.th2.reportdataprovider.handlers
 
-import com.exactpro.th2.reportdataprovider.entities.EventSearchRequest
+
+import com.exactpro.cradle.CradleManager
+import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.th2.reportdataprovider.cache.EventCacheManager
+import com.exactpro.th2.reportdataprovider.entities.EventSearchRequest
+import com.exactpro.th2.reportdataprovider.getEventSuspend
+import com.exactpro.th2.reportdataprovider.getEventsSuspend
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.flow.asFlow
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import java.nio.file.Paths
 
 suspend fun searchChildrenEvents(
     request: EventSearchRequest,
-    pathString: String,
+    id: String,
     eventCache: EventCacheManager,
+    cradleManager: CradleManager,
     timeout: Long
 ): List<Any> {
     return withContext(Dispatchers.Default) {
         withTimeout(timeout) {
-            (eventCache.getOrPut(pathString)?.childrenIds?.asFlow() ?: listOf<String>().asFlow())
-                .map { id ->
+            val parent = eventCache.getOrPut(id)
+            val linker = cradleManager.storage.testEventsMessagesLinker
 
-                    async {
-                        val event = eventCache.getOrPut(Paths.get(pathString, id).toString())!!
+            val parentId = StoredTestEventId(parent.eventId)
 
-                        event to (
-                                (request.attachedMessageId?.let {
-                                    event.attachedMessageIds?.contains(request.attachedMessageId) ?: false
-                                } ?: true)
+            if (parent.isBatched) {
+                val events =
+                    cradleManager.storage.getEventSuspend(StoredTestEventId(parent.batchId))?.asBatch()?.testEvents
+                        ?: throw IllegalArgumentException("unable to get test events of batch ${parent.batchId}")
 
-                                        && (request.name
-                                    ?.any { event.eventName.toLowerCase().contains(it.toLowerCase()) }
-                                    ?: true)
-
-                                        && (request.type
-                                    ?.any { event.eventType?.toLowerCase()?.contains(it.toLowerCase()) ?: false }
-                                    ?: true)
-
-                                        && (request.timestampFrom
-                                    ?.let { event.endTimestamp?.isAfter(it) ?: (event.startTimestamp.isAfter(it)) }
-                                    ?: true)
-
-                                        && (request.timestampTo?.let { event.startTimestamp.isBefore(it) }
-                                    ?: true)
+                events
+                    .filter {
+                        it.parentId == parentId
+                                && it.startTimestamp.isAfter(request.timestampFrom)
+                                && it.startTimestamp.isBefore(request.timestampTo)
+                                && (request.type == null || request.type.contains(it.type))
+                                && (request.name == null || request.name.any { item -> it.name.contains(item, true) })
+                                && (
+                                request.attachedMessageId == null ||
+                                        linker.getTestEventIdsByMessageId(StoredMessageId.fromString(request.attachedMessageId))
+                                            .contains(it.id)
                                 )
                     }
-                }
-                .map { it.await() }
-                .filter { it.second }
-                .toList()
-                .sortedByDescending { it.first.startTimestamp }
-                .map {
-                    if (request.idsOnly) {
-                        it.first.eventId
-                    } else {
-                        it.first
+                    .map { it.id }
+            } else {
+                cradleManager.storage.getEventsSuspend(
+                    parentId,
+                    request.timestampFrom,
+                    request.timestampTo
+                )
+                    .filter {
+                        (request.type == null || request.type.contains(it.type))
+                                && (request.name == null || request.name.any { item -> it.name.contains(item, true) })
+                                && (
+                                request.attachedMessageId == null ||
+                                        linker.getTestEventIdsByMessageId(StoredMessageId.fromString(request.attachedMessageId))
+                                            .contains(it.id)
+                                )
                     }
-                }
+                    .map { it.id }
+            }
         }
     }
 }

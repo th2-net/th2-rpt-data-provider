@@ -36,17 +36,20 @@ import io.ktor.http.CacheControl
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.response.cacheControl
-import io.ktor.response.respond
 import io.ktor.response.respondText
 import io.ktor.routing.get
 import io.ktor.routing.routing
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
+import io.ktor.util.InternalAPI
+import io.ktor.util.rootCause
 import io.ktor.util.toMap
 import kotlinx.coroutines.IO_PARALLELISM_PROPERTY_NAME
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import mu.KotlinLogging
+import java.time.Instant
+import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.system.measureTimeMillis
@@ -59,9 +62,8 @@ val jacksonMapper: ObjectMapper = jacksonObjectMapper()
     .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
     .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
 
+@InternalAPI
 fun main() {
-    //96fdb4ec-d11c-11ea-b952-a1147361d4fc
-
     val logger = KotlinLogging.logger {}
     val configuration = Configuration()
 
@@ -104,21 +106,25 @@ fun main() {
 
         routing {
             get("/") {
+                val startOfDay = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).atZone(ZoneId.of("UTC")).toEpochSecond() * 1000
+                val currentTime = LocalDateTime.now().atZone(ZoneId.of("UTC")).toEpochSecond() * 1000
+
                 call.respondText(
                     """
                         <h1>Report data provider is working.</h1>
                         <div>Cassandra endpoint is set to <u><pre style="display: inline">${configuration.cassandraHost.value}:${configuration.cassandraPort.value}</pre></u>.</div>
-                        <a href="search/events?idsOnly=true">list of root events (json)</a>
+                        <div>Keyspace is set to <pre style="display: inline">${configuration.cassandraKeyspace.value}</pre></div>
+                        <a href="rootEvents?timestampFrom=${startOfDay}&timestampTo=${currentTime}">list of root events (json)</a>
                         <div>Check API reference for details.</div>
                     """.trimIndent(),
                     ContentType.Text.Html
                 )
             }
 
-            get("/event/{path...}") {
-                val pathString = call.parameters.getAll("path")?.joinToString("/")
+            get("/event/{id}") {
+                val id = call.parameters["id"]
 
-                logger.debug { "handling get event request with path=$pathString" }
+                logger.debug { "handling get event request with id=$id" }
 
                 measureTimeMillis {
                     try {
@@ -127,16 +133,20 @@ fun main() {
                                 call.response.cacheControl(cacheControl)
 
                                 call.respondText(
-                                    jacksonMapper.asStringSuspend(eventCache.getOrPut(pathString!!)),
+                                    jacksonMapper.asStringSuspend(eventCache.getOrPut(id!!)),
                                     ContentType.Application.Json
                                 )
                             }
                         }.join()
                     } catch (e: Exception) {
-                        logger.error(e) { "unable to retrieve event with path=$pathString" }
-                        call.respond(HttpStatusCode.InternalServerError, e.message ?: e.toString())
+                        logger.error(e) { "unable to retrieve event with id=$id" }
+                        call.respondText(
+                            e.rootCause?.message ?: e.toString(),
+                            ContentType.Text.Plain,
+                            HttpStatusCode.InternalServerError
+                        )
                     }
-                }.let { logger.debug { "get event handled - time=${it}ms path=$pathString" } }
+                }.let { logger.debug { "get event handled - time=${it}ms id=$id" } }
             }
 
             get("/messageStreams") {
@@ -152,10 +162,13 @@ fun main() {
                                 )
                             }
                         }.join()
-                    }
-                    catch (e: Exception) {
+                    } catch (e: Exception) {
                         logger.error(e) { "unable to retrieve message streams" }
-                        call.respond(HttpStatusCode.InternalServerError, e.message ?: e.toString())
+                        call.respondText(
+                            e.rootCause?.message ?: e.toString(),
+                            ContentType.Text.Plain,
+                            HttpStatusCode.InternalServerError
+                        )
                     }
                 }.let { logger.debug { "get message streams handled - time=${it}ms" } }
             }
@@ -174,7 +187,11 @@ fun main() {
                         )
                     } catch (e: Exception) {
                         logger.error(e) { "unable to retrieve message with id=$id" }
-                        call.respond(HttpStatusCode.InternalServerError, e.message ?: e.toString())
+                        call.respondText(
+                            e.rootCause?.message ?: e.toString(),
+                            ContentType.Text.Plain,
+                            HttpStatusCode.InternalServerError
+                        )
                     }
                 }.let { logger.debug { "get message handled - time=${it}ms id=$id" } }
             }
@@ -197,16 +214,20 @@ fun main() {
                         }.join()
                     } catch (e: Exception) {
                         logger.error(e) { "unable to search messages - unexpected exception" }
-                        call.respond(HttpStatusCode.InternalServerError, e.message ?: e.toString())
+                        call.respondText(
+                            e.rootCause?.message ?: e.toString(),
+                            ContentType.Text.Plain,
+                            HttpStatusCode.InternalServerError
+                        )
                     }
                 }.let { logger.debug { "message search handled - time=${it}ms request=$request" } }
             }
 
-            get("search/events/{path...}") {
+            get("search/events/{id}") {
                 val request = EventSearchRequest(call.request.queryParameters.toMap())
-                val pathString = call.parameters.getAll("path")?.joinToString("/")
+                val id = call.parameters["id"]!!
 
-                logger.debug { "handling search events request with path=$pathString (query=$request)" }
+                logger.debug { "handling search events request with parentId=$id (query=$request)" }
 
                 measureTimeMillis {
                     try {
@@ -215,20 +236,26 @@ fun main() {
 
                             call.respondText(
                                 jacksonMapper.asStringSuspend(
-                                    if (pathString.isNullOrEmpty()) {
-                                        getRootEvents(request, manager, eventCache, timeout)
-                                    } else {
-                                        searchChildrenEvents(request, pathString, eventCache, timeout)
-                                    }
+                                    searchChildrenEvents(
+                                        request,
+                                        id,
+                                        eventCache,
+                                        manager,
+                                        timeout
+                                    )
                                 ),
                                 ContentType.Application.Json
                             )
                         }.join()
                     } catch (e: Exception) {
-                        logger.error(e) { "unable to search events with path=$pathString" }
-                        call.respond(HttpStatusCode.InternalServerError, e.message ?: e.toString())
+                        logger.error(e) { "unable to search events with parentId=$id" }
+                        call.respondText(
+                            e.rootCause?.message ?: e.toString(),
+                            ContentType.Text.Plain,
+                            HttpStatusCode.InternalServerError
+                        )
                     }
-                }.let { logger.debug { "search events handled - time=${it}ms request=$request path=$pathString" } }
+                }.let { logger.debug { "search events handled - time=${it}ms request=$request parentId=$id" } }
             }
 
             get("/rootEvents") {
@@ -239,7 +266,7 @@ fun main() {
                 measureTimeMillis {
                     try {
                         launch {
-                            getRootEvents(request, manager, eventCache, timeout).let {
+                            getRootEvents(request, manager, timeout).let {
                                 call.response.cacheControl(cacheControl)
                                 call.respondText(ContentType.Application.Json, HttpStatusCode.OK) {
                                     jacksonMapper.asStringSuspend(it)
@@ -248,11 +275,14 @@ fun main() {
                         }.join()
                     } catch (e: Exception) {
                         logger.error(e) { "unable to search events - unexpected exception" }
-                        call.respond(HttpStatusCode.InternalServerError, e.message ?: e.toString())
+                        call.respondText(
+                            e.rootCause?.message ?: e.toString(),
+                            ContentType.Text.Plain,
+                            HttpStatusCode.InternalServerError
+                        )
                     }
                 }.let { logger.debug { "get root events handled - time=${it}ms request=$request" } }
             }
-
         }
     }.start(false)
 

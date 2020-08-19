@@ -21,10 +21,7 @@ import com.exactpro.cradle.Direction
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageFilter
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.cradle.testevents.StoredTestEventId
-import com.exactpro.cradle.testevents.StoredTestEventWithContent
-import com.exactpro.cradle.testevents.StoredTestEventWrapper
-import com.exactpro.cradle.testevents.TestEventsMessagesLinker
+import com.exactpro.cradle.testevents.*
 import com.exactpro.th2.infra.grpc.Message
 import com.fasterxml.jackson.core.JsonGenerator
 import com.fasterxml.jackson.core.JsonParser
@@ -130,17 +127,18 @@ suspend fun CradleStorage.getEventSuspend(id: StoredTestEventId): StoredTestEven
 
     return withContext(Dispatchers.IO) {
         logTime("getTestEvent (id=$id)") {
+            logger.debug { "requesting with id=${id}" }
             storage.getTestEvent(id)
         }
     }
 }
 
-suspend fun CradleStorage.getEventsSuspend(parentId: StoredTestEventId): Iterable<StoredTestEventWrapper> {
+suspend fun CradleStorage.getEventsSuspend(parentId: StoredTestEventId, from: Instant, to: Instant): Iterable<StoredTestEventMetadata> {
     val storage = this
 
     return withContext(Dispatchers.IO) {
         logTime("getTestEvents (parentId=$parentId)") {
-            storage.getTestEvents(parentId)
+            storage.getTestEvents(parentId, from, to)
         }
     }!!
 }
@@ -169,7 +167,7 @@ suspend fun TestEventsMessagesLinker.getEventIdsSuspend(id: StoredMessageId): Co
     }!!
 }
 
-suspend fun <T> logTime(methodName: String, lambda: () -> T): T? {
+fun <T> logTime(methodName: String, lambda: () -> T): T? {
     var result: T? = null
 
     measureTimeMillis { result = lambda.invoke() }

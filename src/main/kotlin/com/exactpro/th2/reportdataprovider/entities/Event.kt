@@ -25,9 +25,10 @@ import java.time.Instant
 import java.util.*
 
 data class Event(
-    val isBatched: Boolean,
     val type: String = "event",
     val eventId: String,
+    val batchId: String?,
+    val isBatched: Boolean,
     val eventName: String,
     val eventType: String?,
     val endTimestamp: Instant?,
@@ -36,19 +37,20 @@ data class Event(
     val parentEventId: String?,
     val isSuccessful: Boolean,
     val attachedMessageIds: Set<String>?,
-    val childrenIds: List<String>,
 
     @JsonRawValue
     val body: String?
 ) {
+    constructor(stored: StoredTestEventWithContent, cradleManager: CradleManager)
+            : this(stored, cradleManager, null)
+
     constructor(
         stored: StoredTestEventWithContent,
         cradleManager: CradleManager,
-        childrenIds: List<String>,
-        isBatched: Boolean
+        batchId: String?
     ) : this(
-        childrenIds = childrenIds,
-        isBatched = isBatched,
+        batchId = batchId,
+        isBatched = batchId != null,
         eventId = stored.id.toString(),
         eventName = stored.name ?: "unknown",
         eventType = stored.type ?: "unknown",
