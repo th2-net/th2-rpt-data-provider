@@ -27,7 +27,7 @@ class ProviderEventId(val batchId: StoredTestEventId?, val eventId: StoredTestEv
     )
 
     override fun toString(): String {
-        return (batchId?.toString()?.let { it + divider }) ?: "" + eventId.toString()
+        return (batchId?.toString()?.let { it + divider } ?: "") + eventId.toString()
     }
 
 

@@ -22,6 +22,7 @@ import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.th2.reportdataprovider.cache.EventCacheManager
 import com.exactpro.th2.reportdataprovider.entities.EventSearchRequest
+import com.exactpro.th2.reportdataprovider.entities.ProviderEventId
 import com.exactpro.th2.reportdataprovider.getEventSuspend
 import com.exactpro.th2.reportdataprovider.getEventsSuspend
 import kotlinx.coroutines.Dispatchers
@@ -34,7 +35,7 @@ suspend fun searchChildrenEvents(
     eventCache: EventCacheManager,
     cradleManager: CradleManager,
     timeout: Long
-): List<Any> {
+): List<String> {
     return withContext(Dispatchers.Default) {
         withTimeout(timeout) {
             val parent = eventCache.getOrPut(id)
@@ -43,8 +44,10 @@ suspend fun searchChildrenEvents(
             val parentId = StoredTestEventId(parent.eventId)
 
             if (parent.isBatched) {
+                val batchId = StoredTestEventId(parent.batchId)
+
                 val events =
-                    cradleManager.storage.getEventSuspend(StoredTestEventId(parent.batchId))?.asBatch()?.testEvents
+                    cradleManager.storage.getEventSuspend(batchId)?.asBatch()?.testEvents
                         ?: throw IllegalArgumentException("unable to get test events of batch ${parent.batchId}")
 
                 events
@@ -60,7 +63,7 @@ suspend fun searchChildrenEvents(
                                             .contains(it.id)
                                 )
                     }
-                    .map { it.id }
+                    .map { ProviderEventId(batchId, it.id).toString() }
             } else {
                 cradleManager.storage.getEventsSuspend(
                     parentId,
@@ -76,7 +79,7 @@ suspend fun searchChildrenEvents(
                                             .contains(it.id)
                                 )
                     }
-                    .map { it.id }
+                    .map { ProviderEventId(null, it.id).toString() }
             }
         }
     }
