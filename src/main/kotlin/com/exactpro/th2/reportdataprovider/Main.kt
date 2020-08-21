@@ -48,7 +48,6 @@ import kotlinx.coroutines.IO_PARALLELISM_PROPERTY_NAME
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import mu.KotlinLogging
-import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -106,7 +105,8 @@ fun main() {
 
         routing {
             get("/") {
-                val startOfDay = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).atZone(ZoneId.of("UTC")).toEpochSecond() * 1000
+                val startOfDay =
+                    LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).atZone(ZoneId.of("UTC")).toEpochSecond() * 1000
                 val currentTime = LocalDateTime.now().atZone(ZoneId.of("UTC")).toEpochSecond() * 1000
 
                 call.respondText(
@@ -236,13 +236,8 @@ fun main() {
 
                             call.respondText(
                                 jacksonMapper.asStringSuspend(
-                                    searchChildrenEvents(
-                                        request,
-                                        id,
-                                        eventCache,
-                                        manager,
-                                        timeout
-                                    )
+                                    searchChildrenEvents(request, id, eventCache, manager, timeout)
+                                        .map { it.toString() }
                                 ),
                                 ContentType.Application.Json
                             )

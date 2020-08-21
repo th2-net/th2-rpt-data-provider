@@ -35,7 +35,7 @@ suspend fun searchChildrenEvents(
     eventCache: EventCacheManager,
     cradleManager: CradleManager,
     timeout: Long
-): List<String> {
+): List<ProviderEventId> {
     return withContext(Dispatchers.Default) {
         withTimeout(timeout) {
             val parent = eventCache.getOrPut(id)
@@ -44,26 +44,7 @@ suspend fun searchChildrenEvents(
             val parentId = StoredTestEventId(parent.eventId)
 
             if (parent.isBatched) {
-                val batchId = StoredTestEventId(parent.batchId)
-
-                val events =
-                    cradleManager.storage.getEventSuspend(batchId)?.asBatch()?.testEvents
-                        ?: throw IllegalArgumentException("unable to get test events of batch ${parent.batchId}")
-
-                events
-                    .filter {
-                        it.parentId == parentId
-                                && it.startTimestamp.isAfter(request.timestampFrom)
-                                && it.startTimestamp.isBefore(request.timestampTo)
-                                && (request.type == null || request.type.contains(it.type))
-                                && (request.name == null || request.name.any { item -> it.name.contains(item, true) })
-                                && (
-                                request.attachedMessageId == null ||
-                                        linker.getTestEventIdsByMessageId(StoredMessageId.fromString(request.attachedMessageId))
-                                            .contains(it.id)
-                                )
-                    }
-                    .map { ProviderEventId(batchId, it.id).toString() }
+                getDirectBatchedChildrenIds(StoredTestEventId(parent.batchId), parentId, request, cradleManager)
             } else {
                 cradleManager.storage.getEventsSuspend(
                     parentId,
@@ -79,8 +60,40 @@ suspend fun searchChildrenEvents(
                                             .contains(it.id)
                                 )
                     }
-                    .map { ProviderEventId(null, it.id).toString() }
+                    .flatMap {
+                        if (it.isBatch) {
+                            getDirectBatchedChildrenIds(it.id, parentId, request, cradleManager)
+                        } else {
+                            listOf(ProviderEventId(null, it.id))
+                        }
+                    }
             }
         }
     }
+}
+
+suspend fun getDirectBatchedChildrenIds(
+    batchId: StoredTestEventId,
+    parentId: StoredTestEventId,
+    request: EventSearchRequest,
+    cradleManager: CradleManager
+): List<ProviderEventId> {
+    val linker = cradleManager.storage.testEventsMessagesLinker
+
+    return (cradleManager.storage.getEventSuspend(batchId)?.asBatch()?.testEvents
+        ?: throw IllegalArgumentException("unable to get test events of batch $batchId"))
+
+        .filter {
+            it.parentId == parentId
+                    && it.startTimestamp.isAfter(request.timestampFrom)
+                    && it.startTimestamp.isBefore(request.timestampTo)
+                    && (request.type == null || request.type.contains(it.type))
+                    && (request.name == null || request.name.any { item -> it.name.contains(item, true) })
+                    && (
+                    request.attachedMessageId == null ||
+                            linker.getTestEventIdsByMessageId(StoredMessageId.fromString(request.attachedMessageId))
+                                .contains(it.id)
+                    )
+        }
+        .map { ProviderEventId(batchId, it.id) }
 }
