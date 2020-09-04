@@ -106,7 +106,8 @@ fun main() {
         routing {
             get("/") {
                 val startOfDay =
-                    LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).atZone(ZoneId.of("UTC")).toEpochSecond() * 1000
+                    LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).atZone(ZoneId.of("UTC"))
+                        .toEpochSecond() * 1000
                 val currentTime = LocalDateTime.now().atZone(ZoneId.of("UTC")).toEpochSecond() * 1000
 
                 call.respondText(
@@ -182,8 +183,15 @@ fun main() {
                     try {
                         call.response.cacheControl(cacheControl)
 
-                        call.respondText(
-                            jacksonMapper.asStringSuspend(messageCache.getOrPut(id!!)), ContentType.Application.Json
+                        messageCache.getOrPut(id!!)?.let {
+                            call.respondText(
+                                jacksonMapper.asStringSuspend(it),
+                                ContentType.Application.Json
+                            )
+                        } ?: call.respondText(
+                            "Message $id not found",
+                            ContentType.Text.Plain,
+                            HttpStatusCode.NotFound
                         )
                     } catch (e: Exception) {
                         logger.error(e) { "unable to retrieve message with id=$id" }
