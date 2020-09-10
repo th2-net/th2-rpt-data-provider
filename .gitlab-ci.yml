@@ -1,0 +1,12 @@
+variables:
+  APP_NAME: "report-data-provider"
+  MAJOR_VERSION: "1"
+  MINOR_VERSION: "4"
+  INSPECTION_ENABLED: 'true'
+  TEST_ENABLED: 'false'
+  ARTIFACTORY_PUBLISH: 'true'
+
+include:
+  - project: 'vivarium/th2/pipelines'
+    ref: master
+    file: '/.gitlab-ci-java-template.yml'
