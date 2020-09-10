@@ -53,7 +53,7 @@ class MessageCacheManager(configuration: Configuration, private val cradleManage
         return cache.get(id)
     }
 
-    suspend fun getOrPut(id: String): Message {
+    suspend fun getOrPut(id: String): Message? {
         cache.get(id)?.let { return it }
 
         logger.debug { "Message cache miss for id=$id" }
@@ -61,14 +61,20 @@ class MessageCacheManager(configuration: Configuration, private val cradleManage
         val message = withContext(Dispatchers.Default) {
             val storedMessageId = StoredMessageId.fromString(id)
 
-            Message(
-                cradleManager.storage.getProcessedMessageSuspend(storedMessageId),
-                cradleManager.storage.getMessageSuspend(storedMessageId)
-            )
+            val processedMessage =
+                cradleManager.storage.getProcessedMessageSuspend(storedMessageId)
+            val message = cradleManager.storage.getMessageSuspend(storedMessageId)
+
+            if (processedMessage != null || message != null)
+                Message(processedMessage, message)
+            else
+                null
+
         }
 
-        cache.put(id, message)
-        return message
+        return message?.let {
+            put(id, it)
+            it
+        }
     }
-
 }
