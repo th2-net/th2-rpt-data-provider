@@ -1,4 +1,4 @@
-Report data provider 1.3
+Report data provider 1.5
 
 This component serves as a backend for report-viewer.
 
