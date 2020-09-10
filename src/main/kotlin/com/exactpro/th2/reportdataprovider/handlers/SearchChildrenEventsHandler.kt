@@ -22,6 +22,7 @@ import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.testevents.StoredTestEvent
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.th2.reportdataprovider.entities.EventSearchRequest
+import com.exactpro.th2.reportdataprovider.entities.ProviderEventId
 import com.exactpro.th2.reportdataprovider.getEventSuspend
 import com.exactpro.th2.reportdataprovider.getEventsSuspend
 import com.fasterxml.jackson.annotation.JsonIgnore
@@ -40,8 +41,8 @@ data class EventTreeNode(
     val parentEventId: String?,
     val childList: MutableList<EventTreeNode>
 ) {
-    constructor(data: StoredTestEvent) : this(
-        eventId = data.id.toString(),
+    constructor(batchId: StoredTestEventId?, data: StoredTestEvent) : this(
+        eventId =  ProviderEventId(batchId, data.id).toString(),
         eventName = data.name,
         eventType = data.type,
         isSuccessful = data.isSuccess,
@@ -83,7 +84,7 @@ suspend fun searchChildrenEvents(
                     if (it.isBatch) {
                         getDirectBatchedChildren(it.id, request, cradleManager)
                     } else {
-                        listOf(EventTreeNode(it))
+                        listOf(EventTreeNode(null, it))
                     }
                 }
 
@@ -124,5 +125,6 @@ suspend fun getDirectBatchedChildren(
                                 .contains(it.id)
                     )
         }
-        .map { EventTreeNode(it) }
+        .map { EventTreeNode(batchId, it) }
+
 }
