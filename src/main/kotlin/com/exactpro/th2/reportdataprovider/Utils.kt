@@ -121,6 +121,15 @@ suspend fun CradleStorage.getMessageSuspend(id: StoredMessageId): StoredMessage?
         }
     }
 }
+suspend fun CradleStorage.getEventsSuspend(from: Instant, to: Instant): Iterable<StoredTestEventMetadata> {
+    val storage = this
+    return withContext(Dispatchers.IO) {
+        logTime("Get events from: $from to: $to") {
+            storage.getTestEvents(from, to)
+        }
+    }!!
+}
+
 
 suspend fun CradleStorage.getEventSuspend(id: StoredTestEventId): StoredTestEventWrapper? {
     val storage = this

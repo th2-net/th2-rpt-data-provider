@@ -19,73 +19,102 @@ package com.exactpro.th2.reportdataprovider.handlers
 
 import com.exactpro.cradle.CradleManager
 import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.cradle.testevents.StoredTestEvent
 import com.exactpro.cradle.testevents.StoredTestEventId
-import com.exactpro.th2.reportdataprovider.cache.EventCacheManager
 import com.exactpro.th2.reportdataprovider.entities.EventSearchRequest
-import com.exactpro.th2.reportdataprovider.entities.ProviderEventId
 import com.exactpro.th2.reportdataprovider.getEventSuspend
 import com.exactpro.th2.reportdataprovider.getEventsSuspend
+import com.fasterxml.jackson.annotation.JsonIgnore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import java.time.Instant
+
+data class EventTreeNode(
+    val eventId: String,
+    val eventName: String,
+    val eventType: String,
+    val isSuccessful: Boolean,
+    val startTimestamp: Instant,
+    @JsonIgnore
+    val parentEventId: String?,
+    val childList: MutableList<EventTreeNode>
+) {
+    constructor(data: StoredTestEvent) : this(
+        eventId = data.id.toString(),
+        eventName = data.name,
+        eventType = data.type,
+        isSuccessful = data.isSuccess,
+        startTimestamp = data.startTimestamp,
+        parentEventId = data.parentId?.toString(),
+        childList = mutableListOf<EventTreeNode>()
+    )
+}
+
+fun EventTreeNode.addChild(child: EventTreeNode) {
+    childList.add(child)
+}
+
 
 suspend fun searchChildrenEvents(
     request: EventSearchRequest,
-    id: String,
-    eventCache: EventCacheManager,
     cradleManager: CradleManager,
     timeout: Long
-): List<ProviderEventId> {
+): List<EventTreeNode> {
     return withContext(Dispatchers.Default) {
         withTimeout(timeout) {
-            val parent = eventCache.getOrPut(id)
+
             val linker = cradleManager.storage.testEventsMessagesLinker
 
-            val parentId = StoredTestEventId(parent.eventId)
+            val filteredList = cradleManager.storage.getEventsSuspend(
+                request.timestampFrom,
+                request.timestampTo
+            )
+                .filter {
+                    (request.type == null || request.type.contains(it.type))
+                            && (request.name == null || request.name.any { item -> it.name.contains(item, true) })
+                            && (
+                            request.attachedMessageId == null ||
+                                    linker.getTestEventIdsByMessageId(StoredMessageId.fromString(request.attachedMessageId))
+                                        .contains(it.id)
+                            )
+                }
+                .flatMap {
+                    if (it.isBatch) {
+                        getDirectBatchedChildren(it.id, request, cradleManager)
+                    } else {
+                        listOf(EventTreeNode(it))
+                    }
+                }
 
-            if (parent.isBatched) {
-                getDirectBatchedChildrenIds(StoredTestEventId(parent.batchId), parentId, request, cradleManager)
-            } else {
-                cradleManager.storage.getEventsSuspend(
-                    parentId,
-                    request.timestampFrom,
-                    request.timestampTo
-                )
-                    .filter {
-                        (request.type == null || request.type.contains(it.type))
-                                && (request.name == null || request.name.any { item -> it.name.contains(item, true) })
-                                && (
-                                request.attachedMessageId == null ||
-                                        linker.getTestEventIdsByMessageId(StoredMessageId.fromString(request.attachedMessageId))
-                                            .contains(it.id)
-                                )
-                    }
-                    .flatMap {
-                        if (it.isBatch) {
-                            getDirectBatchedChildrenIds(it.id, parentId, request, cradleManager)
-                        } else {
-                            listOf(ProviderEventId(null, it.id))
-                        }
-                    }
+            val eventTreeMap = mapOf(*filteredList.map { it.eventId to it }.toTypedArray())
+
+            val result = mutableListOf<EventTreeNode>()
+
+            for (event in filteredList) {
+                if (event.parentEventId != null && eventTreeMap.containsKey(event.parentEventId))
+                    eventTreeMap[event.parentEventId]?.addChild(event)
+                else
+                    result.add(event)
             }
+
+            result
         }
     }
 }
 
-suspend fun getDirectBatchedChildrenIds(
+
+suspend fun getDirectBatchedChildren(
     batchId: StoredTestEventId,
-    parentId: StoredTestEventId,
     request: EventSearchRequest,
     cradleManager: CradleManager
-): List<ProviderEventId> {
+): List<EventTreeNode> {
     val linker = cradleManager.storage.testEventsMessagesLinker
 
     return (cradleManager.storage.getEventSuspend(batchId)?.asBatch()?.testEvents
         ?: throw IllegalArgumentException("unable to get test events of batch $batchId"))
-
         .filter {
-            it.parentId == parentId
-                    && it.startTimestamp.isAfter(request.timestampFrom)
+            it.startTimestamp.isAfter(request.timestampFrom)
                     && it.startTimestamp.isBefore(request.timestampTo)
                     && (request.type == null || request.type.contains(it.type))
                     && (request.name == null || request.name.any { item -> it.name.contains(item, true) })
@@ -95,5 +124,5 @@ suspend fun getDirectBatchedChildrenIds(
                                 .contains(it.id)
                     )
         }
-        .map { ProviderEventId(batchId, it.id) }
+        .map { EventTreeNode(it) }
 }
