@@ -223,11 +223,10 @@ fun main() {
                 }.let { logger.debug { "message search handled - time=${it}ms request=$request" } }
             }
 
-            get("search/events/{id}") {
+            get("search/events") {
                 val request = EventSearchRequest(call.request.queryParameters.toMap())
-                val id = call.parameters["id"]!!
 
-                logger.debug { "handling search events request with parentId=$id (query=$request)" }
+                logger.debug { "handling search events request with (query=$request)" }
 
                 measureTimeMillis {
                     try {
@@ -236,21 +235,20 @@ fun main() {
 
                             call.respondText(
                                 jacksonMapper.asStringSuspend(
-                                    searchChildrenEvents(request, id, eventCache, manager, timeout)
-                                        .map { it.toString() }
+                                    searchChildrenEvents(request, manager, timeout)
                                 ),
                                 ContentType.Application.Json
                             )
                         }.join()
                     } catch (e: Exception) {
-                        logger.error(e) { "unable to search events with parentId=$id" }
+                        logger.error(e) { "unable to search events with request=$request" }
                         call.respondText(
                             e.rootCause?.message ?: e.toString(),
                             ContentType.Text.Plain,
                             HttpStatusCode.InternalServerError
                         )
                     }
-                }.let { logger.debug { "search events handled - time=${it}ms request=$request parentId=$id" } }
+                }.let { logger.debug { "search events handled - time=${it}ms request=$request" } }
             }
 
             get("/rootEvents") {
