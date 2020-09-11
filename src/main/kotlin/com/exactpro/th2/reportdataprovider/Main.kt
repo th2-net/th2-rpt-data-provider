@@ -26,7 +26,6 @@ import com.exactpro.th2.reportdataprovider.entities.MessageSearchRequest
 import com.exactpro.th2.reportdataprovider.handlers.getRootEvents
 import com.exactpro.th2.reportdataprovider.handlers.searchChildrenEvents
 import com.exactpro.th2.reportdataprovider.handlers.searchMessages
-import com.exactpro.th2.schema.factory.CommonFactory
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
@@ -52,7 +51,6 @@ import mu.KotlinLogging
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import kotlin.math.absoluteValue
 import kotlin.system.measureTimeMillis
 
 
@@ -66,7 +64,6 @@ val jacksonMapper: ObjectMapper = jacksonObjectMapper()
 @InternalAPI
 fun main(args: Array<String>) {
     val logger = KotlinLogging.logger {}
-
     val configuration = Configuration(args)
 
     System.setProperty(IO_PARALLELISM_PROPERTY_NAME, configuration.ioDispatcherThreadPoolSize.value)
@@ -123,7 +120,6 @@ fun main(args: Array<String>) {
                     """.trimIndent(),
                     ContentType.Text.Html
                 )
-
             }
 
             get("/event/{id}") {
@@ -136,21 +132,11 @@ fun main(args: Array<String>) {
                         launch {
                             withTimeout(timeout) {
                                 call.response.cacheControl(cacheControl)
-                                try {
-                                    call.respondText(
-                                        jacksonMapper.asStringSuspend(eventCache.getOrPut(id!!)),
-                                        ContentType.Application.Json
-                                    )
-                                } catch (e: IllegalArgumentException) {
-                                    logger.error(e) { "Event id=$id not found" }
-                                    call.respondText(
-                                        e.rootCause?.message ?: e.toString(),
-                                        ContentType.Text.Plain,
-                                        HttpStatusCode.NotFound
-                                    )
-                                } catch (e:Exception) {
-                                    throw e
-                                }
+
+                                call.respondText(
+                                    jacksonMapper.asStringSuspend(eventCache.getOrPut(id!!)),
+                                    ContentType.Application.Json
+                                )
                             }
                         }.join()
                     } catch (e: Exception) {
@@ -197,16 +183,13 @@ fun main(args: Array<String>) {
                     try {
                         call.response.cacheControl(cacheControl)
 
-                        messageCache.getOrPut(id!!).let {
+                        messageCache.getOrPut(id!!)?.let {
                             call.respondText(
                                 jacksonMapper.asStringSuspend(it),
                                 ContentType.Application.Json
                             )
-                        }
-                    } catch (e: IllegalArgumentException) {
-                        logger.error(e) { "Message id=$id not found" }
-                        call.respondText(
-                            e.rootCause?.message ?: e.toString(),
+                        } ?: call.respondText(
+                            "Message $id not found",
                             ContentType.Text.Plain,
                             HttpStatusCode.NotFound
                         )

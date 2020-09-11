@@ -53,12 +53,12 @@ class MessageCacheManager(configuration: Configuration, private val cradleManage
         return cache.get(id)
     }
 
-    suspend fun getOrPut(id: String): Message {
+    suspend fun getOrPut(id: String): Message? {
         cache.get(id)?.let { return it }
 
         logger.debug { "Message cache miss for id=$id" }
 
-        return withContext(Dispatchers.Default) {
+        val message = withContext(Dispatchers.Default) {
             val storedMessageId = StoredMessageId.fromString(id)
 
             val processedMessage =
@@ -68,8 +68,13 @@ class MessageCacheManager(configuration: Configuration, private val cradleManage
             if (processedMessage != null || message != null)
                 Message(processedMessage, message)
             else
-                throw IllegalArgumentException("$storedMessageId is not a valid id")
+                null
 
+        }
+
+        return message?.let {
+            put(id, it)
+            it
         }
     }
 }
