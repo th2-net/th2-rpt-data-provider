@@ -64,6 +64,7 @@ val jacksonMapper: ObjectMapper = jacksonObjectMapper()
 @InternalAPI
 fun main() {
     val logger = KotlinLogging.logger {}
+
     val configuration = Configuration()
 
     System.setProperty(IO_PARALLELISM_PROPERTY_NAME, configuration.ioDispatcherThreadPoolSize.value)
@@ -120,6 +121,7 @@ fun main() {
                     """.trimIndent(),
                     ContentType.Text.Html
                 )
+
             }
 
             get("/event/{id}") {
@@ -132,11 +134,21 @@ fun main() {
                         launch {
                             withTimeout(timeout) {
                                 call.response.cacheControl(cacheControl)
-
-                                call.respondText(
-                                    jacksonMapper.asStringSuspend(eventCache.getOrPut(id!!)),
-                                    ContentType.Application.Json
-                                )
+                                try {
+                                    call.respondText(
+                                        jacksonMapper.asStringSuspend(eventCache.getOrPut(id!!)),
+                                        ContentType.Application.Json
+                                    )
+                                } catch (e: IllegalArgumentException) {
+                                    logger.error(e) { "Event id=$id not found" }
+                                    call.respondText(
+                                        e.rootCause?.message ?: e.toString(),
+                                        ContentType.Text.Plain,
+                                        HttpStatusCode.NotFound
+                                    )
+                                } catch (e:Exception) {
+                                    throw e
+                                }
                             }
                         }.join()
                     } catch (e: Exception) {
@@ -183,13 +195,16 @@ fun main() {
                     try {
                         call.response.cacheControl(cacheControl)
 
-                        messageCache.getOrPut(id!!)?.let {
+                        messageCache.getOrPut(id!!).let {
                             call.respondText(
                                 jacksonMapper.asStringSuspend(it),
                                 ContentType.Application.Json
                             )
-                        } ?: call.respondText(
-                            "Message $id not found",
+                        }
+                    } catch (e: IllegalArgumentException) {
+                        logger.error(e) { "Message id=$id not found" }
+                        call.respondText(
+                            e.rootCause?.message ?: e.toString(),
                             ContentType.Text.Plain,
                             HttpStatusCode.NotFound
                         )
