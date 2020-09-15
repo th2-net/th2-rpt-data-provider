@@ -33,7 +33,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.time.Instant
 
-data class EventTreeNode(
+class EventTreeNode(
     val eventId: String,
     val eventName: String,
     val eventType: String,
@@ -41,7 +41,7 @@ data class EventTreeNode(
     val startTimestamp: Instant,
     @JsonIgnore
     val parentEventId: String?,
-    val childList: MutableList<EventTreeNode>,
+    val childList: MutableSet<EventTreeNode>,
     var filtered: Boolean,
     @JsonIgnore
     var batch: StoredTestEventBatch?
@@ -53,7 +53,7 @@ data class EventTreeNode(
         isSuccessful = data.isSuccess,
         startTimestamp = data.startTimestamp,
         parentEventId = data.parentId?.let { ProviderEventId(batchId, it).toString() },
-        childList = mutableListOf<EventTreeNode>(),
+        childList = mutableSetOf<EventTreeNode>(),
         filtered = true,
         batch = batch
     )
@@ -65,10 +65,29 @@ data class EventTreeNode(
         isSuccessful = data.isSuccess,
         startTimestamp = data.startTimestamp,
         parentEventId = data.parentId?.let { ProviderEventId(batchId, it).toString() },
-        childList = mutableListOf<EventTreeNode>(),
+        childList = mutableSetOf<EventTreeNode>(),
         filtered = true,
         batch = batch
     )
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as EventTreeNode
+
+        if (eventId != other.eventId) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        return eventId.hashCode()
+    }
+
+    override fun toString(): String {
+        return "EventTreeNode(eventId='$eventId', eventName='$eventName', eventType='$eventType', isSuccessful=$isSuccessful, startTimestamp=$startTimestamp, parentEventId=$parentEventId, childList=$childList, filtered=$filtered, batch=$batch)"
+    }
 }
 
 fun EventTreeNode.addChild(child: EventTreeNode) {
@@ -128,11 +147,6 @@ suspend fun recursiveParentSearch(
         return
     }
 
-    if (result.containsKey(event.parentEventId)) {
-        result[event.parentEventId]?.addChild(event)
-        return
-    }
-
     var parsedId = ProviderEventId(event.parentEventId)
     val batch = event.batch
     val parentEvent =
@@ -141,8 +155,8 @@ suspend fun recursiveParentSearch(
     if (parentEvent != null) {
         val parent = EventTreeNode(batch?.id, batch, parentEvent).apply {
             filtered = false
-            childList.add(event)
         }
+
         recursiveParentSearch(parent, result, cradleManager)
     } else {
         throw IllegalArgumentException("${parsedId.eventId} is not a valid id")
@@ -152,15 +166,20 @@ suspend fun recursiveParentSearch(
 suspend fun buildEventTree(filteredList: List<EventTreeNode>, cradleManager: CradleManager): List<EventTreeNode> {
     val eventTreeMap =
         filteredList.associateBy({ it.eventId }, { it }) as MutableMap
+
+    // add all parents not included in the filter
     for (event in filteredList) {
-        if (event.parentEventId != null && eventTreeMap.containsKey(event.parentEventId))
-            eventTreeMap[event.parentEventId]?.addChild(event)
-        else
+        if (event.parentEventId != null && !eventTreeMap.containsKey(event.parentEventId))
             recursiveParentSearch(event, eventTreeMap, cradleManager)
-
     }
-    // take only root elements
 
+    // for each element (except for the root ones) indicate its parent among the filtered ones
+    for (event in eventTreeMap.values) {
+        if (event.parentEventId != null)
+            eventTreeMap[event.parentEventId]?.addChild(event)
+    }
+
+    // take only root elements
     return eventTreeMap.values.filter { it.parentEventId == null }
 }
 
