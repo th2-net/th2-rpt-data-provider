@@ -31,7 +31,11 @@ import com.fasterxml.jackson.annotation.JsonIgnore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import mu.KotlinLogging
 import java.time.Instant
+
+
+private val logger = KotlinLogging.logger { }
 
 class EventTreeNode(
     val eventId: String,
@@ -40,7 +44,7 @@ class EventTreeNode(
     val isSuccessful: Boolean,
     val startTimestamp: Instant,
     @JsonIgnore
-    val parentEventId: String?,
+    var parentEventId: String?,
     val childList: MutableSet<EventTreeNode>,
     var filtered: Boolean,
     @JsonIgnore
@@ -147,7 +151,7 @@ suspend fun recursiveParentSearch(
         return
     }
 
-    var parsedId = ProviderEventId(event.parentEventId)
+    var parsedId = ProviderEventId(event.parentEventId!!)
     val batch = event.batch
     val parentEvent =
         batch?.getTestEvent(parsedId.eventId) ?: cradleManager.storage.getEventSuspend(parsedId.eventId)?.asSingle()
@@ -159,7 +163,8 @@ suspend fun recursiveParentSearch(
 
         recursiveParentSearch(parent, result, cradleManager)
     } else {
-        throw IllegalArgumentException("${parsedId.eventId} is not a valid id")
+        logger.error { "${parsedId.eventId} is not a valid id" }
+        event.parentEventId = null
     }
 }
 
@@ -167,19 +172,21 @@ suspend fun buildEventTree(filteredList: List<EventTreeNode>, cradleManager: Cra
     val eventTreeMap =
         filteredList.associateBy({ it.eventId }, { it }) as MutableMap
 
+
     // add all parents not included in the filter
     for (event in filteredList) {
-        if (event.parentEventId != null && !eventTreeMap.containsKey(event.parentEventId))
+        if (event.parentEventId != null && !eventTreeMap.containsKey(event.parentEventId!!))
             recursiveParentSearch(event, eventTreeMap, cradleManager)
     }
 
     // for each element (except for the root ones) indicate its parent among the filtered ones
     for (event in eventTreeMap.values) {
         if (event.parentEventId != null)
-            eventTreeMap[event.parentEventId]?.addChild(event)
+            eventTreeMap[event.parentEventId!!]?.addChild(event)
     }
 
     // take only root elements
+
     return eventTreeMap.values.filter { it.parentEventId == null }
 }
 
