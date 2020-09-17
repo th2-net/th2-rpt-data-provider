@@ -18,6 +18,7 @@ package com.exactpro.th2.reportdataprovider
 
 import com.exactpro.cradle.CradleStorage
 import com.exactpro.cradle.Direction
+import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageFilter
 import com.exactpro.cradle.messages.StoredMessageId
@@ -121,6 +122,7 @@ suspend fun CradleStorage.getMessageSuspend(id: StoredMessageId): StoredMessage?
         }
     }
 }
+
 suspend fun CradleStorage.getEventsSuspend(from: Instant, to: Instant): Iterable<StoredTestEventMetadata> {
     val storage = this
     return withContext(Dispatchers.IO) {
@@ -142,7 +144,11 @@ suspend fun CradleStorage.getEventSuspend(id: StoredTestEventId): StoredTestEven
     }
 }
 
-suspend fun CradleStorage.getEventsSuspend(parentId: StoredTestEventId, from: Instant, to: Instant): Iterable<StoredTestEventMetadata> {
+suspend fun CradleStorage.getEventsSuspend(
+    parentId: StoredTestEventId,
+    from: Instant,
+    to: Instant
+): Iterable<StoredTestEventMetadata> {
     val storage = this
 
     return withContext(Dispatchers.IO) {
@@ -155,13 +161,14 @@ suspend fun CradleStorage.getEventsSuspend(parentId: StoredTestEventId, from: In
 suspend fun CradleStorage.getFirstMessageIdSuspend(
     timestamp: Instant,
     stream: String,
-    direction: Direction
+    direction: Direction,
+    timelineDirection: TimeRelation
 ): StoredMessageId? {
     val storage = this
 
     return withContext(Dispatchers.IO) {
         logTime(("getFirstMessageId (timestamp=$timestamp stream=$stream direction=${direction.label} )")) {
-            storage.getFirstMessageId(timestamp, stream, direction)
+            storage.getNearestMessageId(stream, direction, timestamp, timelineDirection)
         }
     }
 }

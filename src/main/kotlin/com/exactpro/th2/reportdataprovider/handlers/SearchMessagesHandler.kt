@@ -18,6 +18,7 @@ package com.exactpro.th2.reportdataprovider.handlers
 
 import com.exactpro.cradle.CradleManager
 import com.exactpro.cradle.Direction
+import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
@@ -26,7 +27,6 @@ import com.exactpro.th2.reportdataprovider.*
 import com.exactpro.th2.reportdataprovider.cache.MessageCacheManager
 import com.exactpro.th2.reportdataprovider.entities.Message
 import com.exactpro.th2.reportdataprovider.entities.MessageSearchRequest
-import com.exactpro.th2.reportdataprovider.entities.TimelineDirection
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.*
@@ -40,7 +40,7 @@ private val logger = KotlinLogging.logger { }
 private suspend fun pullMore(
     startId: StoredMessageId?,
     limit: Int,
-    timelineDirection: TimelineDirection,
+    timelineDirection: TimeRelation,
     manager: CradleManager
 ): List<StoredMessage> {
     logger.debug { "pulling more messages (id=$startId limit=$limit direction=$timelineDirection)" }
@@ -50,7 +50,7 @@ private suspend fun pullMore(
     return manager.storage.getMessagesSuspend(
         StoredMessageFilterBuilder()
             .let {
-                if (timelineDirection == TimelineDirection.NEXT) {
+                if (timelineDirection == TimeRelation.AFTER) {
                     it.next(startId, limit)
                 } else {
                     it.previous(startId, limit)
@@ -60,7 +60,7 @@ private suspend fun pullMore(
     )
 
         .let { list ->
-            if (timelineDirection == TimelineDirection.NEXT) {
+            if (timelineDirection == TimeRelation.AFTER) {
                 list.sortedBy { it.timestamp }
             } else {
                 list.sortedByDescending { it.timestamp }
@@ -69,50 +69,10 @@ private suspend fun pullMore(
         .toList()
 }
 
-private suspend fun getNearestMessageId(
-    timestamp: Instant,
-    stream: String,
-    direction: Direction,
-    timelineDirection: TimelineDirection,
-    manager: CradleManager
-): StoredMessageId? {
-    logger.debug { "getting nearest message id (timestamp=$timestamp stream=$stream(${direction.label}) direction=$timelineDirection)" }
-
-    var currentId: StoredMessageId = manager.storage.getFirstMessageIdSuspend(
-        Instant.ofEpochSecond(timestamp.epochSecond + if (timelineDirection == TimelineDirection.PREVIOUS) 1 else 0),
-        stream,
-        direction
-    ) ?: return null
-
-    return flow {
-        emit(manager.storage.getMessageSuspend(currentId)!!)
-
-        do {
-            val data = pullMore(currentId, 1000, timelineDirection, manager)
-            var hasData = false
-
-            for (item in data) {
-                emit(item)
-                hasData = true
-            }
-
-            currentId = data.last().id
-        } while (hasData)
-    }
-        .first {
-            if (timelineDirection == TimelineDirection.NEXT) {
-                it.timestamp == timestamp || it.timestamp.isAfter(timestamp)
-            } else {
-                it.timestamp == timestamp || it.timestamp.isBefore(timestamp)
-            }
-        }
-        .id
-}
-
 private suspend fun pullMoreMerged(
     startTimestamp: Instant,
     streams: List<String>,
-    timelineDirection: TimelineDirection,
+    timelineDirection: TimeRelation,
     perStreamLimit: Int,
     manager: CradleManager
 ): List<StoredMessage> {
@@ -123,31 +83,14 @@ private suspend fun pullMoreMerged(
         .flatMap { listOf(it to Direction.FIRST, it to Direction.SECOND) }
         .flatMap { pair ->
             pullMore(
-                if (timelineDirection == TimelineDirection.NEXT) {
-                    getNearestMessageId(
-                        startTimestamp,
-                        pair.first,
-                        pair.second,
-                        TimelineDirection.NEXT,
-                        manager
-                    )
-                } else {
-                    getNearestMessageId(
-                        startTimestamp,
-                        pair.first,
-                        pair.second,
-                        TimelineDirection.PREVIOUS,
-                        manager
-                    )
-                },
-
+                manager.storage.getFirstMessageIdSuspend(startTimestamp, pair.first, pair.second, timelineDirection),
                 perStreamLimit,
                 timelineDirection,
                 manager
             )
         }
         .let { list ->
-            if (timelineDirection == TimelineDirection.NEXT) {
+            if (timelineDirection == TimeRelation.AFTER) {
                 list.sortedBy { it.timestamp }
             } else {
                 list.sortedByDescending { it.timestamp }
@@ -171,7 +114,7 @@ suspend fun searchMessages(
                         request.messageId?.let {
                             manager.storage.getMessageSuspend(StoredMessageId.fromString(it))?.timestamp
                         } ?: (
-                                if (request.timelineDirection == TimelineDirection.NEXT) {
+                                if (request.timelineDirection == TimeRelation.AFTER) {
                                     request.timestampFrom
                                 } else {
                                     request.timestampTo
@@ -209,7 +152,7 @@ suspend fun searchMessages(
                 .filter { it.second }
                 .takeWhile {
                     it.first.timestamp.let { timestamp ->
-                        if (request.timelineDirection == TimelineDirection.NEXT) {
+                        if (request.timelineDirection == TimeRelation.AFTER) {
                             request.timestampTo == null
                                     || timestamp.isBefore(request.timestampTo) || timestamp == request.timestampTo
                         } else {

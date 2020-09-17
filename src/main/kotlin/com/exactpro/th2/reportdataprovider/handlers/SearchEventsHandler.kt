@@ -37,6 +37,7 @@ import java.time.Instant
 
 private val logger = KotlinLogging.logger { }
 
+@Suppress("MemberVisibilityCanBePrivate")
 class EventTreeNode(
     val eventId: String,
     val eventName: String,
@@ -104,7 +105,7 @@ fun EventTreeNode.addChild(child: EventTreeNode) {
 }
 
 
-suspend fun searchChildrenEvents(
+suspend fun searchEvents(
     request: EventSearchRequest,
     cradleManager: CradleManager,
     timeout: Long
@@ -156,7 +157,7 @@ suspend fun recursiveParentSearch(
         return
     }
 
-    var parsedId = ProviderEventId(event.parentEventId!!)
+    val parsedId = ProviderEventId(event.parentEventId!!)
     val batch = event.batch
     val parentEvent =
         batch?.getTestEvent(parsedId.eventId) ?: cradleManager.storage.getEventSuspend(parsedId.eventId)?.asSingle()

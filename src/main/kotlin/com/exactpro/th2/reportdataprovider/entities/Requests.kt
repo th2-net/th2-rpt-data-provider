@@ -16,20 +16,14 @@
 
 package com.exactpro.th2.reportdataprovider.entities
 
+import com.exactpro.cradle.TimeRelation
 import java.time.Instant
 
-enum class TimelineDirection(val alias: String) {
-    PREVIOUS("previous"), NEXT("next");
+fun asCradleTimeRelation(value: String): TimeRelation {
+    if (value == "next") return TimeRelation.AFTER
+    if (value == "previous") return TimeRelation.BEFORE
 
-    companion object {
-        fun byAlias(alias: String): TimelineDirection {
-            try {
-                return values().first { it.alias == alias }
-            } catch (e: NoSuchElementException) {
-                throw IllegalArgumentException("'$alias' is not a valid timeline direction")
-            }
-        }
-    }
+    throw IllegalArgumentException("'$value' is not a valid timeline direction. Use 'next' or 'previous'")
 }
 
 data class MessageSearchRequest(
@@ -39,7 +33,7 @@ data class MessageSearchRequest(
     val stream: List<String>?,
     val messageType: List<String>?,
     val limit: Int,
-    val timelineDirection: TimelineDirection,
+    val timelineDirection: TimeRelation,
     val messageId: String?,
     val idsOnly: Boolean
 ) {
@@ -51,9 +45,9 @@ data class MessageSearchRequest(
         messageType = parameters["messageType"],
         limit = parameters["limit"]?.first()?.toInt() ?: 100,
 
-        timelineDirection = parameters["timelineDirection"]
-            ?.let { TimelineDirection.byAlias(it.first()) } ?: TimelineDirection.NEXT,
-
+        timelineDirection = parameters["timelineDirection"]?.let { asCradleTimeRelation(it.first()) }
+            ?: TimeRelation.AFTER,
+        
         messageId = parameters["messageId"]?.first(),
         idsOnly = parameters["idsOnly"]?.first()?.toBoolean() ?: true
     )

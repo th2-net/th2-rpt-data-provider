@@ -23,8 +23,7 @@ import com.exactpro.th2.reportdataprovider.cache.EventCacheManager
 import com.exactpro.th2.reportdataprovider.cache.MessageCacheManager
 import com.exactpro.th2.reportdataprovider.entities.EventSearchRequest
 import com.exactpro.th2.reportdataprovider.entities.MessageSearchRequest
-import com.exactpro.th2.reportdataprovider.handlers.getRootEvents
-import com.exactpro.th2.reportdataprovider.handlers.searchChildrenEvents
+import com.exactpro.th2.reportdataprovider.handlers.searchEvents
 import com.exactpro.th2.reportdataprovider.handlers.searchMessages
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -116,7 +115,7 @@ fun main() {
                         <h1>Report data provider is working.</h1>
                         <div>Cassandra endpoint is set to <u><pre style="display: inline">${configuration.cassandraHost.value}:${configuration.cassandraPort.value}</pre></u>.</div>
                         <div>Keyspace is set to <pre style="display: inline">${configuration.cassandraKeyspace.value}</pre></div>
-                        <a href="rootEvents?timestampFrom=${startOfDay}&timestampTo=${currentTime}">list of root events (json)</a>
+                        <a href="search/events?timestampFrom=${startOfDay}&timestampTo=${currentTime}">list of events since the start of day (json)</a>
                         <div>Check API reference for details.</div>
                     """.trimIndent(),
                     ContentType.Text.Html
@@ -146,7 +145,7 @@ fun main() {
                                         ContentType.Text.Plain,
                                         HttpStatusCode.NotFound
                                     )
-                                } catch (e:Exception) {
+                                } catch (e: Exception) {
                                     throw e
                                 }
                             }
@@ -258,7 +257,7 @@ fun main() {
 
                             call.respondText(
                                 jacksonMapper.asStringSuspend(
-                                    searchChildrenEvents(request, manager, timeout)
+                                    searchEvents(request, manager, timeout)
                                 ),
                                 ContentType.Application.Json
                             )
@@ -272,32 +271,6 @@ fun main() {
                         )
                     }
                 }.let { logger.debug { "search events handled - time=${it}ms request=$request" } }
-            }
-
-            get("/rootEvents") {
-                val request = EventSearchRequest(call.request.queryParameters.toMap())
-
-                logger.debug { "handling get root events request (query=$request)" }
-
-                measureTimeMillis {
-                    try {
-                        launch {
-                            getRootEvents(request, manager, timeout).let {
-                                call.response.cacheControl(cacheControl)
-                                call.respondText(ContentType.Application.Json, HttpStatusCode.OK) {
-                                    jacksonMapper.asStringSuspend(it)
-                                }
-                            }
-                        }.join()
-                    } catch (e: Exception) {
-                        logger.error(e) { "unable to search events - unexpected exception" }
-                        call.respondText(
-                            e.rootCause?.message ?: e.toString(),
-                            ContentType.Text.Plain,
-                            HttpStatusCode.InternalServerError
-                        )
-                    }
-                }.let { logger.debug { "get root events handled - time=${it}ms request=$request" } }
             }
         }
     }.start(false)
