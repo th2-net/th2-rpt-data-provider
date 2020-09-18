@@ -121,7 +121,9 @@ suspend fun searchEvents(
             )
                 .filter {
                     (request.type == null || request.type.contains(it.type))
-                            && (request.name == null || request.name.any { item -> it.name.contains(item, true) })
+                            && (request.name == null || request.name.any { item ->
+                        it.name?.contains(item, true) ?: false
+                    })
                             && (
                             request.attachedMessageId == null ||
                                     linker.getTestEventIdsByMessageId(StoredMessageId.fromString(request.attachedMessageId))
