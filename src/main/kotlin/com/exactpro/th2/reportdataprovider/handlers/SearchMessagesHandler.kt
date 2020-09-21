@@ -157,10 +157,11 @@ suspend fun searchMessages(
                                     || timestamp.isBefore(request.timestampTo) || timestamp == request.timestampTo
                         } else {
                             request.timestampFrom == null
-                                    || timestamp.isAfter(request.timestampTo) || timestamp == request.timestampTo
+                                    || timestamp.isAfter(request.timestampFrom) || timestamp == request.timestampFrom
                         }
                     }
                 }
+
                 .take(request.limit)
                 .toList()
                 .distinctBy { it.first.id }
