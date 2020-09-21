@@ -22,11 +22,11 @@ plugins {
 }
 
 ext {
-    dockerImageVersion = "${version_major}.${version_minor}.${version_maintenance}.${version_build}"
+    dockerImageVersion = release_version
 }
 
 group 'com.exactpro.th2'
-version "${version_major}.${version_minor}.${version_maintenance}"
+version release_version
 
 repositories {
     mavenCentral()
@@ -36,6 +36,10 @@ repositories {
         url 'http://artifactory5.exp.exactpro.com/artifactory/libs-snapshot'
     }
 
+    maven {
+        name 'Artifactory release'
+        url 'http://artifactory5.exp.exactpro.com/artifactory/libs-release'
+    }
 }
 
 dependencies {
@@ -49,8 +53,8 @@ dependencies {
 
     implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8'
 
-    implementation 'com.exactpro.th2:th2-grpc-infra:1.1-SNAPSHOT'
-    implementation 'com.exactpro.th2:th2-common:1.1-SNAPSHOT'
+    implementation 'com.exactpro.th2:th2-grpc-infra:1.4.2'
+    implementation 'com.exactpro.th2:th2-common:1.4.2'
 
     implementation 'com.exactpro.cradle:cradle-core:1.5-SNAPSHOT'
     implementation 'com.exactpro.cradle:cradle-cassandra:1.5-SNAPSHOT'
@@ -60,8 +64,24 @@ dependencies {
     implementation 'org.ehcache:ehcache:3.8.1'
 }
 
+jar {
+    manifest {
+        attributes(
+                'Created-By':               "${System.getProperty('java.version')} (${System.getProperty('java.vendor')})",
+                'Specification-Title':      '',
+                'Specification-Vendor':     'Exactpro Systems LLC',
+                'Implementation-Title':     project.archivesBaseName,
+                'Implementation-Vendor':    'Exactpro Systems LLC',
+                'Implementation-Vendor-Id': 'com.exactpro',
+                'Implementation-Version':   project.version
+        )
+    }
+}
+
+applicationName = 'service'
+
 distTar {
-    archiveName "${archivesBaseName}.tar"
+    archiveName "${applicationName}.tar"
 }
 
 dockerPrepare {
@@ -69,10 +89,7 @@ dockerPrepare {
 }
 
 docker {
-    name "${target_docker_repository}/${docke_image_name}:${dockerImageVersion}"
-    tag 'local-version', "${docke_image_name}:${dockerImageVersion}"
-
-    copySpec.from(tarTree("$buildDir/distributions/${archivesBaseName}.tar"))
+    copySpec.from(tarTree("$buildDir/distributions/${applicationName}.tar"))
 }
 
 
