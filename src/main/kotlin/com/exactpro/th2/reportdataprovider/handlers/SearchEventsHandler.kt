@@ -42,7 +42,7 @@ class EventTreeNode(
     val eventId: String,
     val eventName: String,
     val eventType: String,
-    val isSuccessful: Boolean,
+    val successful: Boolean,
     val startTimestamp: Instant,
     @JsonIgnore
     var parentEventId: String?,
@@ -58,7 +58,7 @@ class EventTreeNode(
         cleanEventId = data.id.toString(),
         eventName = data.name,
         eventType = data.type,
-        isSuccessful = data.isSuccess,
+        successful = data.isSuccess,
         startTimestamp = data.startTimestamp,
         parentEventId = data.parentId?.toString(),
         childList = mutableSetOf<EventTreeNode>(),
@@ -71,7 +71,7 @@ class EventTreeNode(
         cleanEventId = data.id.toString(),
         eventName = data.name,
         eventType = data.type,
-        isSuccessful = data.isSuccess,
+        successful = data.isSuccess,
         startTimestamp = data.startTimestamp,
         parentEventId = data.parentId?.toString(),
         childList = mutableSetOf<EventTreeNode>(),
@@ -95,7 +95,7 @@ class EventTreeNode(
     }
 
     override fun toString(): String {
-        return "EventTreeNode(eventId='$eventId', eventName='$eventName', eventType='$eventType', isSuccessful=$isSuccessful, startTimestamp=$startTimestamp, parentEventId=$parentEventId, cleanEventId=$cleanEventId, childList=$childList, filtered=$filtered, batch=$batch)"
+        return "EventTreeNode(eventId='$eventId', eventName='$eventName', eventType='$eventType', isSuccessful=$successful, startTimestamp=$startTimestamp, parentEventId=$parentEventId, cleanEventId=$cleanEventId, childList=$childList, filtered=$filtered, batch=$batch)"
     }
 
 }
