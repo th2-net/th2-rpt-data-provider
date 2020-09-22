@@ -3,7 +3,7 @@ variables:
   MAJOR_VERSION: "1"
   MINOR_VERSION: "5"
   MAINTENANCE_VERSION: '124'
-  INSPECTION_ENABLED: 'true'
+  INSPECTION_ENABLED: 'false'
 
 include:
   - project: 'vivarium/th2/pipelines'
