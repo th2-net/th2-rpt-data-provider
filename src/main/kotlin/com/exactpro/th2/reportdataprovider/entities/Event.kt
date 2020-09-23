@@ -35,7 +35,7 @@ data class Event(
     val startTimestamp: Instant,
 
     val parentEventId: String?,
-    val isSuccessful: Boolean,
+    val successful: Boolean,
     val attachedMessageIds: Set<String>?,
 
     @JsonRawValue
@@ -57,7 +57,7 @@ data class Event(
         startTimestamp = stored.startTimestamp,
         endTimestamp = stored.endTimestamp,
         parentEventId = stored.parentId?.toString(),
-        isSuccessful = stored.isSuccess,
+        successful = stored.isSuccess,
 
         attachedMessageIds = stored.id.let {
             try {
