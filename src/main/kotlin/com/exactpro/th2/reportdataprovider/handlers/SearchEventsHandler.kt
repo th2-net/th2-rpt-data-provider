@@ -119,23 +119,25 @@ suspend fun searchEvents(
                 request.timestampFrom,
                 request.timestampTo
             )
-                .filter {
-                    (request.type == null || request.type.contains(it.type))
-                            && (request.name == null || request.name.any { item ->
-                        it.name?.contains(item, true) ?: false
-                    })
-                            && (
-                            request.attachedMessageId == null ||
-                                    linker.getTestEventIdsByMessageId(StoredMessageId.fromString(request.attachedMessageId))
-                                        .contains(it.id)
-                            )
-                }
                 .flatMap {
                     if (it.isBatch) {
                         getDirectBatchedChildren(it.id, request, cradleManager)
                     } else {
                         listOf(EventTreeNode(null, null, it))
                     }
+                }
+                .filter {
+                    (request.type == null || request.type.any { item ->
+                        it.eventType.toLowerCase().contains(item.toLowerCase())
+                    })
+
+                            && (request.name == null || request.name.any { item ->
+                        it.eventName.toLowerCase().contains(item.toLowerCase())
+                    })
+
+                            && (request.attachedMessageId == null ||
+                            linker.getTestEventIdsByMessageId(StoredMessageId.fromString(request.attachedMessageId))
+                                .contains(StoredTestEventId(it.eventId)))
                 }
 
             if (request.flat)
@@ -189,8 +191,7 @@ suspend fun buildEventTree(filteredList: List<EventTreeNode>, cradleManager: Cra
 
     // for each element (except for the root ones) indicate its parent among the filtered ones
     for (event in eventTreeMap.values) {
-        if (event.parentEventId != null)
-            eventTreeMap[event.parentEventId!!]?.addChild(event)
+        event.parentEventId?.also { eventTreeMap[it]?.addChild(event) }
     }
 
     // take only root elements

@@ -200,8 +200,7 @@ fun StoredMessageFilter.convertToString(): String {
             "timestampFrom=${filter.timestampFrom?.value} " +
             "timestampTo=${filter.timestampTo?.value} " +
             "stream=${filter.streamName?.value} " +
-            "timestampDiff=${if (filter.timestampFrom != null && filter.timestampTo != null) {
-                Duration.between(filter.timestampFrom.value, filter.timestampTo.value)
-            } else null})"
+            "indexValue=${filter.index?.value} " +
+            "indexOperation=${filter.index?.operation?.name}"
 }
 
