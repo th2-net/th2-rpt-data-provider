@@ -1,4 +1,4 @@
-Report data provider 1.5
+# Report data provider 1.5
 
 # Overview
 This component serves as a backend for report-viewer. It will connect to the configured cassandra database via crale api and expose the data stored in there as REST resources.
@@ -6,6 +6,10 @@ This component serves as a backend for report-viewer. It will connect to the con
 
 # API
 `http://localhost:8080/` - a test page showing the configured cassandra keyspace and host
+
+
+
+`http://localhost:8080/messageStreams` - returns a list of message stream names
 
 
 
