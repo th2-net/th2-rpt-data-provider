@@ -1,10 +1,9 @@
 variables:
-  APP_NAME: "report-data-provider"
+  APP_NAME: "th2-report-data-provider"
   MAJOR_VERSION: "1"
   MINOR_VERSION: "5"
-  INSPECTION_ENABLED: 'true'
-  TEST_ENABLED: 'false'
-  ARTIFACTORY_PUBLISH: 'true'
+  MAINTENANCE_VERSION: '126'
+  INSPECTION_ENABLED: 'false'
 
 include:
   - project: 'vivarium/th2/pipelines'

@@ -14,5 +14,5 @@
  * limitations under the License.
  ******************************************************************************/
 
-rootProject.name = 'report-data-provider'
+rootProject.name = 'th2-report-data-provider'
 

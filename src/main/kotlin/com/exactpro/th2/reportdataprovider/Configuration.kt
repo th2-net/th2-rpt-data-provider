@@ -34,9 +34,9 @@ class Variable(
                 val valueToLog = if (showInLog) it ?: defaultValue else "*****"
 
                 if (it == null)
-                    "environment variable '$name' is not set - defaulting to '$valueToLog'"
+                    "property '$name' is not set - defaulting to '$valueToLog'"
                 else
-                    "environment variable '$name' is set to '$valueToLog'"
+                    "property '$name' is set to '$valueToLog'"
             }
         }
         ?: defaultValue
@@ -67,31 +67,51 @@ class Configuration(args: Array<String>) {
         configurationFactory.getCustomConfiguration(CustomConfigurationClass::class.java)
     private val cradleConfiguration = configurationFactory.cradleConfiguration
 
-    val hostname: Variable = Variable("HTTP_HOST", customConfiguration.hostname, "localhost")
-    val port: Variable = Variable("HTTP_PORT", customConfiguration.port.toString(), "8080")
+    val cassandraDatacenter: Variable =
+        Variable("cradle: dataCenter", cradleConfiguration.dataCenter, "kos")
+
+    val cassandraHost: Variable =
+        Variable("cradle: host", cradleConfiguration.host, "cassandra")
+
+    val cassandraPort: Variable =
+        Variable("cradle: port", cradleConfiguration.port.toString(), "9042")
+
+    val cassandraKeyspace: Variable =
+        Variable("cradle: keyspace", cradleConfiguration.keyspace, "demo")
+
+    val cassandraUsername: Variable =
+        Variable("cradle: username", cradleConfiguration.username, "guest")
+
+    val cassandraPassword: Variable =
+        Variable("cradle: password", cradleConfiguration.password, "guest", false)
+
+    val hostname: Variable =
+        Variable("hostname", customConfiguration.hostname, "localhost")
+
+    val port: Variable =
+        Variable("port", customConfiguration.port.toString(), "8080")
+
     val responseTimeout: Variable =
-        Variable("HTTP_RESPONSE_TIMEOUT", customConfiguration.responseTimeout.toString(), "60000")
+        Variable("responseTimeout", customConfiguration.responseTimeout.toString(), "60000")
+
     val serverCacheTimeout: Variable =
-        Variable("SERVER_CACHE_TIMEOUT", customConfiguration.serverCacheTimeout.toString(), "60000")
+        Variable("serverCacheTimeout", customConfiguration.serverCacheTimeout.toString(), "60000")
+
     val clientCacheTimeout: Variable =
-        Variable("CLIENT_CACHE_TIMEOUT", customConfiguration.clientCacheTimeout.toString(), "60")
+        Variable("clientCacheTimeout", customConfiguration.clientCacheTimeout.toString(), "60")
 
     val eventCacheSize: Variable =
-        Variable("EVENT_CACHE_SIZE", customConfiguration.eventCacheSize.toString(), "100000")
+        Variable("eventCacheSize", customConfiguration.eventCacheSize.toString(), "100000")
+
     val messageCacheSize: Variable =
-        Variable("MESSAGE_CACHE_SIZE", customConfiguration.messageCacheSize.toString(), "100000")
-    val cassandraDatacenter: Variable = Variable("CASSANDRA_DATA_CENTER", cradleConfiguration.dataCenter, "kos")
-    val cassandraHost: Variable = Variable("CASSANDRA_HOST", cradleConfiguration.host, "cassandra")
-    val cassandraPort: Variable = Variable("CASSANDRA_PORT", cradleConfiguration.port.toString(), "9042")
-    val cassandraKeyspace: Variable = Variable("CASSANDRA_KEYSPACE", cradleConfiguration.keyspace, "demo")
+        Variable("messageCacheSize", customConfiguration.messageCacheSize.toString(), "100000")
 
     val cassandraQueryTimeout: Variable =
-        Variable("CASSANDRA_QUERY_TIMEOUT", customConfiguration.cassandraQueryTimeout.toString(), "30000")
+        Variable("cassandraQueryTimeout", customConfiguration.cassandraQueryTimeout.toString(), "30000")
 
-    val cassandraUsername: Variable = Variable("CASSANDRA_USERNAME", cradleConfiguration.username, "guest")
-    val cassandraPassword: Variable = Variable("CASSANDRA_PASSWORD", cradleConfiguration.password, "guest", false)
     val cassandraInstance: Variable =
-        Variable("CRADLE_INSTANCE_NAME", customConfiguration.cassandraInstance, "instance1")
+        Variable("cassandraInstance", customConfiguration.cassandraInstance, "instance1")
+
     val ioDispatcherThreadPoolSize: Variable =
-        Variable("THREAD_POOL_SIZE", customConfiguration.ioDispatcherThreadPoolSize.toString(), "1")
+        Variable("ioDispatcherThreadPoolSize", customConfiguration.ioDispatcherThreadPoolSize.toString(), "1")
 }
