@@ -196,9 +196,13 @@ suspend fun buildEventTree(
             recursiveParentSearch(event, eventTreeMap, cradleManager)
     }
 
+    eventTreeMap.values.forEach { event ->
+        event.parentEventId?.also { eventTreeMap[it]?.addChild(event) }
+    }
+
     // for each element (except for the root ones) indicate its parent among the filtered ones
     childrenPoolMap.values.forEach { event ->
-        event.parentEventId?.also { childrenPoolMap[it]?.addChild(event) }
+        event.parentEventId?.also { eventTreeMap[it]?.addChild(event) }
     }
 
     // take only root elements
