@@ -43,7 +43,7 @@ class Variable(
 class Configuration(
     val hostname: Variable = Variable("HTTP_HOST", "localhost"),
     val port: Variable = Variable("HTTP_PORT", "8080"),
-    val responseTimeout: Variable = Variable("HTTP_RESPONSE_TIMEOUT", "6000000"),
+    val responseTimeout: Variable = Variable("HTTP_RESPONSE_TIMEOUT", "60000"),
     val serverCacheTimeout: Variable = Variable("SERVER_CACHE_TIMEOUT", "60000"),
     val clientCacheTimeout: Variable = Variable("CLIENT_CACHE_TIMEOUT", "60"),
 
