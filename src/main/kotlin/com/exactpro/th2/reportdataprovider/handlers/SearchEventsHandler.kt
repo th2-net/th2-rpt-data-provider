@@ -56,8 +56,8 @@ class EventTreeNode(
     constructor(batchId: StoredTestEventId?, batch: StoredTestEventBatch?, data: StoredTestEvent) : this(
         eventId = ProviderEventId(batchId, data.id).toString(),
         cleanEventId = data.id.toString(),
-        eventName = data.name,
-        eventType = data.type,
+        eventName = data.name ?: "",
+        eventType = data.type ?: "",
         successful = data.isSuccess,
         startTimestamp = data.startTimestamp,
         parentEventId = data.parentId?.toString(),
@@ -69,8 +69,8 @@ class EventTreeNode(
     constructor(batchId: StoredTestEventId?, batch: StoredTestEventBatch?, data: StoredTestEventWithContent) : this(
         eventId = ProviderEventId(batchId, data.id).toString(),
         cleanEventId = data.id.toString(),
-        eventName = data.name,
-        eventType = data.type,
+        eventName = data.name ?: "",
+        eventType = data.type ?: "",
         successful = data.isSuccess,
         startTimestamp = data.startTimestamp,
         parentEventId = data.parentId?.toString(),
