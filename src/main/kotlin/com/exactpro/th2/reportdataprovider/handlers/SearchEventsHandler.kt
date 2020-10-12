@@ -95,8 +95,6 @@ class SearchEventsHandler(private val cradle: CradleService, private val timeout
                 }
 
         if (parentEvent == null) {
-            event.parentEventId = null
-
             logger.error { "non-root event '${event.id}' has a parent '${event.parentEventId}' which is missing in cradle" }
             event.parentEventId = null
             return

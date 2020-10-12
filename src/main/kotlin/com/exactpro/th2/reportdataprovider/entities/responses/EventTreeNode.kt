@@ -123,4 +123,19 @@ data class EventTreeNode(
     fun addChild(child: EventTreeNode) {
         childList.add(child)
     }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as EventTreeNode
+
+        if (id.eventId != other.id.eventId) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        return id.eventId.hashCode()
+    }
 }
