@@ -18,6 +18,8 @@ package com.exactpro.th2.reportdataprovider.handlers
 
 
 import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
+import com.exactpro.cradle.testevents.StoredTestEventBatchMetadata
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.reportdataprovider.entities.internal.ProviderEventId
@@ -28,6 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import mu.KotlinLogging
+import java.time.Instant
 
 class SearchEventsHandler(private val cradle: CradleService, private val timeout: Long) {
     companion object {
@@ -44,7 +47,9 @@ class SearchEventsHandler(private val cradle: CradleService, private val timeout
                 ).flatMap { metadata ->
                     if (metadata.isBatch) {
                         metadata.batchMetadata?.rootTestEvents
-                            ?.map { EventTreeNode(metadata.batchMetadata, it) } ?: listOf()
+                            ?.map { EventTreeNode(metadata.batchMetadata, it) }
+
+                            ?: getDirectBatchedChildren(metadata.id, request.timestampFrom, request.timestampTo)
                     } else {
                         listOf(EventTreeNode(null, metadata))
                     }
@@ -75,10 +80,10 @@ class SearchEventsHandler(private val cradle: CradleService, private val timeout
 
     private suspend fun recursiveParentSearch(
         event: EventTreeNode,
-        result: MutableMap<ProviderEventId, EventTreeNode>
+        result: MutableMap<StoredTestEventId, EventTreeNode>
     ) {
 
-        result.computeIfAbsent(event.id) { event }
+        result.computeIfAbsent(event.id.eventId) { event }
 
         val parentEventId = event.parentEventId?.eventId ?: return
         val batch = event.batch
@@ -105,29 +110,48 @@ class SearchEventsHandler(private val cradle: CradleService, private val timeout
         filteredList: List<EventTreeNode>
     ): List<EventTreeNode> {
 
-        val eventTreeMap =
-            filteredList.associateBy({ it.id }, { it }) as MutableMap
+        val eventTreeMap: MutableMap<StoredTestEventId, EventTreeNode> =
+            filteredList.associateBy({ it.id.eventId }, { it }) as MutableMap
 
-        val childrenPoolMap =
-            childrenPool.associateBy({ it.id }, { it }) as MutableMap
+        val childrenPoolMap: MutableMap<StoredTestEventId, EventTreeNode> =
+            childrenPool.associateBy({ it.id.eventId }, { it }) as MutableMap
 
         // add all parents not included in the filter
         for (event in filteredList) {
-            if (event.parentEventId?.let { !eventTreeMap.containsKey(it) } == true) {
+            if (event.parentEventId?.let { !eventTreeMap.containsKey(it.eventId) } == true) {
                 recursiveParentSearch(event, eventTreeMap)
             }
         }
 
         eventTreeMap.values.forEach { event ->
-            event.parentEventId?.also { eventTreeMap[it]?.addChild(event) }
+            event.parentEventId?.also { eventTreeMap[it.eventId]?.addChild(event) }
         }
 
         // for each element (except for the root ones) indicate its parent among the filtered ones
         childrenPoolMap.values.forEach { event ->
-            event.parentEventId?.also { eventTreeMap[it]?.addChild(event) }
+            event.parentEventId?.also { eventTreeMap[it.eventId]?.addChild(event) }
         }
 
         // take only root elements
         return eventTreeMap.values.filter { it.parentEventId == null }
+    }
+
+    // this is a fallback that should be deprecated after migration to cradle 1.6
+    private suspend fun getDirectBatchedChildren(
+        batchId: StoredTestEventId,
+        timestampFrom: Instant,
+        timestampTo: Instant
+    ): List<EventTreeNode> {
+
+        val batch = cradle.getEventSuspend(batchId)?.asBatch()
+
+        return (batch?.testEvents
+            ?: throw IllegalArgumentException("unable to get test events of batch '$batchId'"))
+            .filter { it.startTimestamp.isAfter(timestampFrom) && it.startTimestamp.isBefore(timestampTo) }
+            .map {
+                val batchMetadata = StoredTestEventBatchMetadata(batch)
+
+                EventTreeNode(batchMetadata, BatchedStoredTestEventMetadata(it, batchMetadata))
+            }
     }
 }

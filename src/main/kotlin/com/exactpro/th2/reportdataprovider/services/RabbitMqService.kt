@@ -38,9 +38,9 @@ class RabbitMqService(private val configuration: Configuration) {
     private val decodeRequests = HashSet<Pair<MessageID, Channel<Message>>>()
 
     private val amqpUri =
-        "amqp://${configuration.amqpUsername.value}:${configuration.amqpPassword.value}@${configuration.amqpHost.value}:${configuration.amqpPort.value}/".also { logger.debug { it } }
+        "amqp://${configuration.amqpUsername.value}:${configuration.amqpPassword.value}@${configuration.amqpHost.value}:${configuration.amqpPort.value}/"
 
-    private val connection: Connection = factory.newConnection(amqpUri).also {
+    private val connection: Connection? = try {
         factory.newConnection(amqpUri).also { connection ->
             connection.use { usedConnection: Connection ->
                 usedConnection.createChannel().use { channel: com.rabbitmq.client.Channel ->
@@ -98,9 +98,16 @@ class RabbitMqService(private val configuration: Configuration) {
                 }
             }
         }
+    } catch (e: Exception) {
+        logger.error(e) { "unable to establish amqp connection" }
+        null
     }
 
     suspend fun decodeMessage(batch: RawMessageBatch): Collection<Message> {
+        if (connection == null) {
+            return listOf()
+        }
+
         val requests: Set<Pair<MessageID, Channel<Message>>> = batch.messagesList
             .map { it.metadata.id to Channel<Message>(0) }
             .toSet()
