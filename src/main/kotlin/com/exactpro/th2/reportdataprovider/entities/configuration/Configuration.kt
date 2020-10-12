@@ -25,7 +25,7 @@ class Configuration(
 
     val eventCacheSize: Variable = Variable("EVENT_CACHE_SIZE", "100"),
     val messageCacheSize: Variable = Variable("MESSAGE_CACHE_SIZE", "100"),
-    val codecCacheSize: Variable = Variable("MESSAGE_CACHE_SIZE", "100"),
+    val codecCacheSize: Variable = Variable("CODEC_CACHE_SIZE", "100"),
 
     val cassandraDatacenter: Variable = Variable("CASSANDRA_DATA_CENTER", "kos"),
     val cassandraHost: Variable = Variable("CASSANDRA_HOST", "cassandra"),

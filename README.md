@@ -119,7 +119,21 @@ HTTP_RESPONSE_TIMEOUT=60000 - defined in milliseconds
 SERVER_CACHE_TIMEOUT=60000 - defined in milliseconds; sets the cache invalidation timeout for non-batched events
 CLIENT_CACHE_TIMEOUT=60 - defined in seconds; sets max-age value in http cache control header
 
-EVENT_CACHE_SIZE=100000 - sets in-memory cache limit (item count)
-MESSAGE_CACHE_SIZE=100000 - sets in-memory cache limit (item count)
-THREAD_POOL_SIZE=100 - sets the thread pool size of IO coroutine dispatcher
+EVENT_CACHE_SIZE=100 - sets in-memory cache limit (item count)
+MESSAGE_CACHE_SIZE=100 - sets in-memory cache limit (item count)
+CODEC_CACHE_SIZE=100 - sets in-memory cache limit (item count)
+THREAD_POOL_SIZE=1 - sets the thread pool size of IO coroutine dispatcher
+
+AMQP_USERNAME=""
+AMQP_PASSWORD=""
+AMQP_HOST=""
+AMQP_PORT=""
+
+AMQP_CODEC_EXCHANGE_NAME=default_general_exchange
+
+AMQP_CODEC_ROUTING_KEY_OUT=default_general_decode_out
+AMQP_CODEC_ROUTING_KEY_IN=default_general_decode_in
+
+AMQP_PROVIDER_QUEUE_PREFIX=report-data-provider
+AMQP_PROVIDER_CONSUMER_TAG=report-data-provider
 ```
