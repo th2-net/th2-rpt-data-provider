@@ -41,6 +41,7 @@ class Configuration(
     val amqpPassword: Variable = Variable("AMQP_PASSWORD", "", false),
     val amqpHost: Variable = Variable("AMQP_HOST", ""),
     val amqpPort: Variable = Variable("AMQP_PORT", ""),
+    val amqpVhost: Variable = Variable("AMQP_VHOST", ""),
 
     val amqpCodecExchangeName: Variable = Variable("AMQP_CODEC_EXCHANGE_NAME", "default_general_exchange"),
 

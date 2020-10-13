@@ -22,7 +22,6 @@ import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventBatchMetadata
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
-import com.exactpro.th2.reportdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.reportdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.reportdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.reportdataprovider.services.CradleService
@@ -46,7 +45,7 @@ class SearchEventsHandler(private val cradle: CradleService, private val timeout
                     request.timestampTo
                 ).flatMap { metadata ->
                     if (metadata.isBatch) {
-                        metadata.batchMetadata?.rootTestEvents
+                        metadata.batchMetadata?.testEvents
                             ?.map { EventTreeNode(metadata.batchMetadata, it) }
 
                             ?: getDirectBatchedChildren(metadata.id, request.timestampFrom, request.timestampTo)
@@ -104,15 +103,15 @@ class SearchEventsHandler(private val cradle: CradleService, private val timeout
     }
 
     private suspend fun buildEventTree(
-        childrenPool: List<EventTreeNode>,
+        unfilteredList: List<EventTreeNode>,
         filteredList: List<EventTreeNode>
     ): List<EventTreeNode> {
 
         val eventTreeMap: MutableMap<StoredTestEventId, EventTreeNode> =
             filteredList.associateBy({ it.id.eventId }, { it }) as MutableMap
 
-        val childrenPoolMap: MutableMap<StoredTestEventId, EventTreeNode> =
-            childrenPool.associateBy({ it.id.eventId }, { it }) as MutableMap
+        val unfilteredEventMap: MutableMap<StoredTestEventId, EventTreeNode> =
+            unfilteredList.associateBy({ it.id.eventId }, { it }) as MutableMap
 
         // add all parents not included in the filter
         for (event in filteredList) {
@@ -121,13 +120,9 @@ class SearchEventsHandler(private val cradle: CradleService, private val timeout
             }
         }
 
-        eventTreeMap.values.forEach { event ->
-            event.parentEventId?.also { eventTreeMap[it.eventId]?.addChild(event) }
-        }
-
         // for each element (except for the root ones) indicate its parent among the filtered ones
-        childrenPoolMap.values.forEach { event ->
-            event.parentEventId?.also { eventTreeMap[it.eventId]?.addChild(event) }
+        unfilteredEventMap.values.forEach { event ->
+            event.parentEventId?.also { unfilteredEventMap[it.eventId]?.addChild(event) }
         }
 
         // take only root elements

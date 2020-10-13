@@ -38,7 +38,7 @@ class RabbitMqService(private val configuration: Configuration) {
     private val decodeRequests = HashSet<Pair<MessageID, Channel<Message>>>()
 
     private val amqpUri =
-        "amqp://${configuration.amqpUsername.value}:${configuration.amqpPassword.value}@${configuration.amqpHost.value}:${configuration.amqpPort.value}/"
+        "amqp://${configuration.amqpUsername.value}:${configuration.amqpPassword.value}@${configuration.amqpHost.value}:${configuration.amqpPort.value}/${configuration.amqpVhost.value}"
 
     private val connection: Connection? = try {
         factory.newConnection(amqpUri).also { connection ->
