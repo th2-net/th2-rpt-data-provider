@@ -120,9 +120,23 @@ class SearchEventsHandler(private val cradle: CradleService, private val timeout
             }
         }
 
-        // for each element (except for the root ones) indicate its parent among the filtered ones
+        // TODO("FIX ME")
+        // for each element in unfiltered events (except for the root ones) indicate its parent
+        // building tree from unfiltered elements
         unfilteredEventMap.values.forEach { event ->
             event.parentEventId?.also { unfilteredEventMap[it.eventId]?.addChild(event) }
+        }
+
+        // building a tree from filtered elements. In recursiveParentSearch we have added
+        // new items to eventTreeMap and now we need to insert them into the tree
+        eventTreeMap.values.forEach { event ->
+            event.parentEventId?.also { eventTreeMap[it.eventId]?.addChild(event) }
+        }
+
+        // New elements found in the previous step could be absent among the
+        // unfiltered elements, but have children among them
+        unfilteredEventMap.values.forEach { event ->
+            event.parentEventId?.also { eventTreeMap[it.eventId]?.addChild(event) }
         }
 
         // take only root elements
