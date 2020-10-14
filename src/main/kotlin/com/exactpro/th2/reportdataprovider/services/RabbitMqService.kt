@@ -79,6 +79,7 @@ class RabbitMqService(private val configuration: Configuration) {
                                 if (match != null) {
                                     match.let { decodeRequests.remove(it) }
                                     GlobalScope.launch { match.second.send(message) }
+                                    channel.basicAck(delivery.envelope.deliveryTag, false)
                                 } else {
                                     logger.warn {
                                         val id = message?.metadata?.id
@@ -95,7 +96,6 @@ class RabbitMqService(private val configuration: Configuration) {
                                 logger.debug { "${decodeRequests.size} decode requests remaining" }
                             }
 
-                            channel.basicAck(delivery.envelope.deliveryTag, false)
                         } catch (e: InvalidProtocolBufferException) {
                             logger.error { "unable to parse delivery '${delivery.envelope.deliveryTag}' data:'${delivery.body}'" }
                         }
