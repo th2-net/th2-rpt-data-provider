@@ -44,67 +44,68 @@ class RabbitMqService(private val configuration: Configuration) {
                 it.username = configuration.amqpUsername.value
                 it.password = configuration.amqpPassword.value
                 it.virtualHost = configuration.amqpVhost.value
-            }
-                .newConnection()
-                .also { connection ->
-                    connection.use { usedConnection: Connection ->
-                        usedConnection.createChannel().use { channel: com.rabbitmq.client.Channel ->
-
-                            val queueName = configuration.amqpProviderQueuePrefix.value + "-IN"
-
-                            channel.queueDeclare(queueName, false, false, true, emptyMap())
-                            channel.queueBind(
-                                queueName,
-                                configuration.amqpCodecExchangeName.value,
-                                configuration.amqpCodecRoutingKeyIn.value
-                            )
-
-                            channel.basicConsume(
-                                queueName,
-                                false,
-                                configuration.amqpProviderConsumerTag.value,
-                                { _, delivery ->
-                                    try {
-                                        val decodedBatch = MessageBatch.parseFrom(delivery.body)
-
-                                        logger.debug {
-                                            val firstId = decodedBatch.messagesList?.first()?.metadata?.id
-                                            val session = firstId?.connectionId?.sessionAlias
-                                            val direcrion = firstId?.direction?.name
-                                            val firstSeqNum = firstId?.sequence
-                                            val lastSeqNum = decodedBatch.messagesList?.last()?.metadata?.id?.sequence
-                                            val count = decodedBatch.messagesCount
-
-                                            "codec response received (session=$session direction=$direcrion firstSeqNum=$firstSeqNum lastSeqNum=$lastSeqNum count=$count)"
-                                        }
-
-                                        decodedBatch.messagesList.forEach { message ->
-                                            val match = decodeRequests.firstOrNull { it.first == message.metadata.id }
-
-                                            if (match != null) {
-                                                logger.debug { "response found - ${match.first}" }
-
-                                                match.let { decodeRequests.remove(it) }
-                                                GlobalScope.launch { match.second.send(message) }
-
-                                            } else {
-                                                logger.warn { "decoded message '${message?.metadata?.id}' was received but no request was found" }
-                                            }
-                                        }
-
-                                        channel.basicAck(delivery.envelope.deliveryTag, false)
-                                    } catch (e: InvalidProtocolBufferException) {
-                                        logger.error { "unable to parse delivery '${delivery.envelope.deliveryTag}' data:'${delivery.body}'" }
-                                    }
-
-                                },
-                                { consumerTag -> logger.error { "consumer '$consumerTag' was unexpectedly cancelled" } }
-                            )
-                        }
-                    }
-                }
+            }.newConnection()
         } catch (e: Exception) {
             logger.error(e) { "unable to establish amqp connection" }
+            null
+        }
+
+    private val receiveChannel: com.rabbitmq.client.Channel? =
+        try {
+            connection?.createChannel()?.also { channel ->
+
+                val queueName = configuration.amqpProviderQueuePrefix.value + "-IN"
+
+                channel.queueDeclare(queueName, false, false, true, emptyMap())
+                channel.queueBind(
+                    queueName,
+                    configuration.amqpCodecExchangeName.value,
+                    configuration.amqpCodecRoutingKeyIn.value
+                )
+
+                logger.debug { "receive queue '$queueName' is bound to routing key '${configuration.amqpCodecRoutingKeyIn.value}'" }
+
+                channel.basicConsume(
+                    queueName,
+                    false,
+                    configuration.amqpProviderConsumerTag.value,
+                    { _, delivery ->
+                        try {
+                            val decodedBatch = MessageBatch.parseFrom(delivery.body)
+
+                            decodedBatch.messagesList.forEach { message ->
+                                val match = decodeRequests.firstOrNull { it.first == message.metadata.id }
+
+                                if (match != null) {
+                                    match.let { decodeRequests.remove(it) }
+                                    GlobalScope.launch { match.second.send(message) }
+                                } else {
+                                    logger.warn {
+                                        val id = message?.metadata?.id
+
+                                        val idString =
+                                            "(stream=${id?.connectionId?.sessionAlias}, direction=${id?.direction}, sequence=${id?.sequence})"
+
+                                        "decoded message '$idString' was received but no request was found"
+                                    }
+                                }
+                            }
+
+                            if (decodeRequests.size > 0) {
+                                logger.debug { "${decodeRequests.size} decode requests remaining" }
+                            }
+
+                            channel.basicAck(delivery.envelope.deliveryTag, false)
+                        } catch (e: InvalidProtocolBufferException) {
+                            logger.error { "unable to parse delivery '${delivery.envelope.deliveryTag}' data:'${delivery.body}'" }
+                        }
+
+                    },
+                    { consumerTag -> logger.error { "consumer '$consumerTag' was unexpectedly cancelled" } }
+                )
+            }
+        } catch (e: Exception) {
+            logger.error(e) { "unable to create a receive channel" }
             null
         }
 
@@ -120,6 +121,8 @@ class RabbitMqService(private val configuration: Configuration) {
         return withContext(Dispatchers.IO) {
             val deferred = requests.map { async { it.second.receive() } }
 
+            decodeRequests.addAll(requests)
+
             connection.createChannel()
                 .use { channel ->
                     channel.basicPublish(
@@ -130,7 +133,7 @@ class RabbitMqService(private val configuration: Configuration) {
                     )
                 }
 
-            logger.debug {
+            val requestDebugInfo = let {
                 val firstId = batch.messagesList?.first()?.metadata?.id
                 val session = firstId?.connectionId?.sessionAlias
                 val direcrion = firstId?.direction?.name
@@ -138,10 +141,12 @@ class RabbitMqService(private val configuration: Configuration) {
                 val lastSeqNum = batch.messagesList?.last()?.metadata?.id?.sequence
                 val count = batch.messagesCount
 
-                "codec request published (session=$session direction=$direcrion firstSeqNum=$firstSeqNum lastSeqNum=$lastSeqNum count=$count)"
+                "(session=$session direction=$direcrion firstSeqNum=$firstSeqNum lastSeqNum=$lastSeqNum count=$count)"
             }
 
-            deferred.awaitAll()
+            logger.debug { "codec request published $requestDebugInfo" }
+
+            deferred.awaitAll().also { logger.debug { "codec response received $requestDebugInfo" } }
         }
     }
 }

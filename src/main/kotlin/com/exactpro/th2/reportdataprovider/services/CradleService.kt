@@ -127,7 +127,10 @@ class CradleService(configuration: Configuration) {
             logTime("getMessageIdsByTestEventId (id=$id)") {
                 linker.getMessageIdsByTestEventId(id)
             }
-        }!!
+        } ?: let {
+            logger.error { "unable to get attached messages of event '$id' - method returned null" }
+            emptyList<StoredMessageId>()
+        }
     }
 
     suspend fun getMessageStreams(): Collection<String> {
