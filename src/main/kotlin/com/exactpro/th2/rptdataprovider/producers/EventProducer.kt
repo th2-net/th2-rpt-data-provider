@@ -14,13 +14,13 @@
  * limitations under the License.
  ******************************************************************************/
 
-package com.exactpro.th2.reportdataprovider.producers
+package com.exactpro.th2.rptdataprovider.producers
 
 import com.exactpro.cradle.testevents.StoredTestEventBatch
 import com.exactpro.cradle.testevents.StoredTestEventWithContent
-import com.exactpro.th2.reportdataprovider.entities.internal.ProviderEventId
-import com.exactpro.th2.reportdataprovider.entities.responses.Event
-import com.exactpro.th2.reportdataprovider.services.CradleService
+import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
+import com.exactpro.th2.rptdataprovider.entities.responses.Event
+import com.exactpro.th2.rptdataprovider.services.CradleService
 import com.fasterxml.jackson.databind.ObjectMapper
 import mu.KotlinLogging
 import java.util.*

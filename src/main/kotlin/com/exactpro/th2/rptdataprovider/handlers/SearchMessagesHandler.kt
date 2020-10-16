@@ -14,17 +14,17 @@
  * limitations under the License.
  ******************************************************************************/
 
-package com.exactpro.th2.reportdataprovider.handlers
+package com.exactpro.th2.rptdataprovider.handlers
 
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.reportdataprovider.cache.MessageCache
-import com.exactpro.th2.reportdataprovider.entities.requests.MessageSearchRequest
-import com.exactpro.th2.reportdataprovider.producers.MessageProducer
-import com.exactpro.th2.reportdataprovider.services.CradleService
+import com.exactpro.th2.rptdataprovider.cache.MessageCache
+import com.exactpro.th2.rptdataprovider.entities.requests.MessageSearchRequest
+import com.exactpro.th2.rptdataprovider.producers.MessageProducer
+import com.exactpro.th2.rptdataprovider.services.CradleService
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.take

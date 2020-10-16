@@ -14,12 +14,12 @@
  * limitations under the License.
  ******************************************************************************/
 
-package com.exactpro.th2.reportdataprovider.entities.responses
+package com.exactpro.th2.rptdataprovider.entities.responses
 
 import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventBatchMetadata
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
-import com.exactpro.th2.reportdataprovider.entities.internal.ProviderEventId
+import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.fasterxml.jackson.annotation.JsonIgnore
 import java.time.Instant
 

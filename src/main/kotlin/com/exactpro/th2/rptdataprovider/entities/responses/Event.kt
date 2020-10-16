@@ -14,7 +14,7 @@
  * limitations under the License.
  ******************************************************************************/
 
-package com.exactpro.th2.reportdataprovider.entities.responses
+package com.exactpro.th2.rptdataprovider.entities.responses
 
 import com.exactpro.cradle.testevents.StoredTestEventWithContent
 import com.fasterxml.jackson.annotation.JsonRawValue

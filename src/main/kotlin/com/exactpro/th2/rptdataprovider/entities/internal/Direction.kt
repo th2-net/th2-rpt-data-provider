@@ -14,7 +14,7 @@
  * limitations under the License.
  ******************************************************************************/
 
-package com.exactpro.th2.reportdataprovider.entities.internal
+package com.exactpro.th2.rptdataprovider.entities.internal
 
 enum class Direction {
     IN, OUT;

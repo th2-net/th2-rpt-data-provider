@@ -14,7 +14,7 @@
  * limitations under the License.
  ******************************************************************************/
 
-package com.exactpro.th2.reportdataprovider.services
+package com.exactpro.th2.rptdataprovider.services
 
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.TimeRelation
@@ -27,9 +27,9 @@ import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventWrapper
-import com.exactpro.th2.reportdataprovider.convertToString
-import com.exactpro.th2.reportdataprovider.entities.configuration.Configuration
-import com.exactpro.th2.reportdataprovider.logTime
+import com.exactpro.th2.rptdataprovider.convertToString
+import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
+import com.exactpro.th2.rptdataprovider.logTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import mu.KotlinLogging

@@ -14,7 +14,7 @@
  * limitations under the License.
  ******************************************************************************/
 
-package com.exactpro.th2.reportdataprovider.entities.requests
+package com.exactpro.th2.rptdataprovider.entities.requests
 
 import com.exactpro.cradle.TimeRelation
 import java.time.Instant

@@ -14,10 +14,10 @@
  * limitations under the License.
  ******************************************************************************/
 
-package com.exactpro.th2.reportdataprovider
+package com.exactpro.th2.rptdataprovider
 
-import com.exactpro.th2.reportdataprovider.entities.requests.EventSearchRequest
-import com.exactpro.th2.reportdataprovider.entities.requests.MessageSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.requests.MessageSearchRequest
 import io.ktor.application.call
 import io.ktor.application.install
 import io.ktor.features.Compression

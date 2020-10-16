@@ -14,18 +14,18 @@
  * limitations under the License.
  ******************************************************************************/
 
-package com.exactpro.th2.reportdataprovider
+package com.exactpro.th2.rptdataprovider
 
-import com.exactpro.th2.reportdataprovider.cache.CodecCache
-import com.exactpro.th2.reportdataprovider.cache.EventCache
-import com.exactpro.th2.reportdataprovider.cache.MessageCache
-import com.exactpro.th2.reportdataprovider.entities.configuration.Configuration
-import com.exactpro.th2.reportdataprovider.handlers.SearchEventsHandler
-import com.exactpro.th2.reportdataprovider.handlers.SearchMessagesHandler
-import com.exactpro.th2.reportdataprovider.producers.EventProducer
-import com.exactpro.th2.reportdataprovider.producers.MessageProducer
-import com.exactpro.th2.reportdataprovider.services.CradleService
-import com.exactpro.th2.reportdataprovider.services.RabbitMqService
+import com.exactpro.th2.rptdataprovider.cache.CodecCache
+import com.exactpro.th2.rptdataprovider.cache.EventCache
+import com.exactpro.th2.rptdataprovider.cache.MessageCache
+import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
+import com.exactpro.th2.rptdataprovider.handlers.SearchEventsHandler
+import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
+import com.exactpro.th2.rptdataprovider.producers.EventProducer
+import com.exactpro.th2.rptdataprovider.producers.MessageProducer
+import com.exactpro.th2.rptdataprovider.services.CradleService
+import com.exactpro.th2.rptdataprovider.services.RabbitMqService
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper

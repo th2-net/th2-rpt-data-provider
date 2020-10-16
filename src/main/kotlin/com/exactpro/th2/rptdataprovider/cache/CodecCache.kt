@@ -14,10 +14,10 @@
  * limitations under the License.
  ******************************************************************************/
 
-package com.exactpro.th2.reportdataprovider.cache
+package com.exactpro.th2.rptdataprovider.cache
 
 import com.exactpro.th2.infra.grpc.Message
-import com.exactpro.th2.reportdataprovider.entities.configuration.Configuration
+import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import mu.KotlinLogging
 import org.ehcache.Cache
 import org.ehcache.config.builders.CacheConfigurationBuilder

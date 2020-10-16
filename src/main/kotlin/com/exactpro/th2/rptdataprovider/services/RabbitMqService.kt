@@ -14,13 +14,13 @@
  * limitations under the License.
  ******************************************************************************/
 
-package com.exactpro.th2.reportdataprovider.services
+package com.exactpro.th2.rptdataprovider.services
 
 import com.exactpro.th2.infra.grpc.Message
 import com.exactpro.th2.infra.grpc.MessageBatch
 import com.exactpro.th2.infra.grpc.MessageID
 import com.exactpro.th2.infra.grpc.RawMessageBatch
-import com.exactpro.th2.reportdataprovider.entities.configuration.Configuration
+import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.google.protobuf.InvalidProtocolBufferException
 import com.rabbitmq.client.Connection
 import com.rabbitmq.client.ConnectionFactory

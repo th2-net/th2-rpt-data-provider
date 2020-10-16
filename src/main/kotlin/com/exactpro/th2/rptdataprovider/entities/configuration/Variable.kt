@@ -14,7 +14,7 @@
  * limitations under the License.
  ******************************************************************************/
 
-package com.exactpro.th2.reportdataprovider.entities.configuration
+package com.exactpro.th2.rptdataprovider.entities.configuration
 
 import mu.KotlinLogging
 

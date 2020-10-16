@@ -14,7 +14,7 @@
  * limitations under the License.
  ******************************************************************************/
 
-package com.exactpro.th2.reportdataprovider
+package com.exactpro.th2.rptdataprovider
 
 import com.exactpro.cradle.messages.StoredMessageFilter
 import com.fasterxml.jackson.databind.ObjectMapper

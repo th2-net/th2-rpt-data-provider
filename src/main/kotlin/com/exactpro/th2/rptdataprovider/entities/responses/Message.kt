@@ -14,11 +14,11 @@
  * limitations under the License.
  ******************************************************************************/
 
-package com.exactpro.th2.reportdataprovider.entities.responses
+package com.exactpro.th2.rptdataprovider.entities.responses
 
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.reportdataprovider.entities.internal.Direction
+import com.exactpro.th2.rptdataprovider.entities.internal.Direction
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.annotation.JsonRawValue
 import java.time.Instant

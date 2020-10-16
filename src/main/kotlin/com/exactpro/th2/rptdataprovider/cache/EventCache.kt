@@ -14,11 +14,11 @@
  * limitations under the License.
  ******************************************************************************/
 
-package com.exactpro.th2.reportdataprovider.cache
+package com.exactpro.th2.rptdataprovider.cache
 
-import com.exactpro.th2.reportdataprovider.entities.internal.ProviderEventId
-import com.exactpro.th2.reportdataprovider.entities.responses.Event
-import com.exactpro.th2.reportdataprovider.producers.EventProducer
+import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
+import com.exactpro.th2.rptdataprovider.entities.responses.Event
+import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import mu.KotlinLogging
 import org.ehcache.Cache
 import org.ehcache.config.builders.CacheConfigurationBuilder
