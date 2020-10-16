@@ -73,13 +73,14 @@ class RabbitMqService(private val configuration: Configuration) {
                         try {
                             val decodedBatch = MessageBatch.parseFrom(delivery.body)
 
+                            var needAck:Boolean = false
                             decodedBatch.messagesList.forEach { message ->
                                 val match = decodeRequests.firstOrNull { it.first == message.metadata.id }
 
                                 if (match != null) {
                                     match.let { decodeRequests.remove(it) }
                                     GlobalScope.launch { match.second.send(message) }
-                                    channel.basicAck(delivery.envelope.deliveryTag, false)
+                                    needAck = true
                                 } else {
                                     logger.warn {
                                         val id = message?.metadata?.id
@@ -90,6 +91,10 @@ class RabbitMqService(private val configuration: Configuration) {
                                         "decoded message '$idString' was received but no request was found"
                                     }
                                 }
+                            }
+
+                            if (needAck) {
+                                channel.basicAck(delivery.envelope.deliveryTag, false)
                             }
 
                             if (decodeRequests.size > 0) {
@@ -136,12 +141,12 @@ class RabbitMqService(private val configuration: Configuration) {
             val requestDebugInfo = let {
                 val firstId = batch.messagesList?.first()?.metadata?.id
                 val session = firstId?.connectionId?.sessionAlias
-                val direcrion = firstId?.direction?.name
+                val direction = firstId?.direction?.name
                 val firstSeqNum = firstId?.sequence
                 val lastSeqNum = batch.messagesList?.last()?.metadata?.id?.sequence
                 val count = batch.messagesCount
 
-                "(session=$session direction=$direcrion firstSeqNum=$firstSeqNum lastSeqNum=$lastSeqNum count=$count)"
+                "(session=$session direction=$direction firstSeqNum=$firstSeqNum lastSeqNum=$lastSeqNum count=$count)"
             }
 
             logger.debug { "codec request published $requestDebugInfo" }
