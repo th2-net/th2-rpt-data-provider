@@ -130,7 +130,6 @@ class CradleService(configuration: Configuration) {
                 linker.getMessageIdsByTestEventId(id)
             }
         } ?: let {
-            logger.error { "unable to get attached messages of event '$id' - method returned null" }
             emptyList<StoredMessageId>()
         }
     }

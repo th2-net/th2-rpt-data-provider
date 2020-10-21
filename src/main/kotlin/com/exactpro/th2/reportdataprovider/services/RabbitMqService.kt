@@ -73,7 +73,7 @@ class RabbitMqService(private val configuration: Configuration) {
                         try {
                             val decodedBatch = MessageBatch.parseFrom(delivery.body)
 
-                            var needAck:Boolean = false
+                            var needAck = false
                             decodedBatch.messagesList.forEach { message ->
                                 val match = decodeRequests.firstOrNull { it.first == message.metadata.id }
 
@@ -82,7 +82,7 @@ class RabbitMqService(private val configuration: Configuration) {
                                     GlobalScope.launch { match.second.send(message) }
                                     needAck = true
                                 } else {
-                                    logger.warn {
+                                    logger.debug {
                                         val id = message?.metadata?.id
 
                                         val idString =

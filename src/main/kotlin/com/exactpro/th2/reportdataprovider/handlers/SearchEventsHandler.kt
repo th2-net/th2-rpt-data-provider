@@ -26,6 +26,10 @@ import com.exactpro.th2.reportdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.reportdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.reportdataprovider.services.CradleService
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import mu.KotlinLogging
@@ -43,16 +47,21 @@ class SearchEventsHandler(private val cradle: CradleService, private val timeout
                 val baseList = cradle.getEventsSuspend(
                     request.timestampFrom,
                     request.timestampTo
-                ).flatMap { metadata ->
-                    if (metadata.isBatch) {
-                        metadata.batchMetadata?.testEvents
-                            ?.map { EventTreeNode(metadata.batchMetadata, it) }
+                ).asFlow()
+                    .map { metadata ->
+                        async {
+                            if (metadata.isBatch) {
+                                metadata.batchMetadata?.testEvents
+                                    ?.map { EventTreeNode(metadata.batchMetadata, it) }
 
-                            ?: getDirectBatchedChildren(metadata.id, request.timestampFrom, request.timestampTo)
-                    } else {
-                        listOf(EventTreeNode(null, metadata))
+                                    ?: getDirectBatchedChildren(metadata.id, request.timestampFrom, request.timestampTo)
+                            } else {
+                                listOf(EventTreeNode(null, metadata))
+                            }
+                        }
                     }
-                }
+                    .toList()
+                    .flatMap { it.await() }
 
                 val filteredList = baseList
                     .filter {
