@@ -35,6 +35,7 @@ import kotlinx.coroutines.future.await
 import kotlinx.coroutines.withContext
 import mu.KotlinLogging
 import java.time.Instant
+import kotlin.coroutines.coroutineContext
 
 class CradleService(configuration: Configuration) {
 
@@ -85,7 +86,7 @@ class CradleService(configuration: Configuration) {
     }
 
     suspend fun getEventsSuspend(from: Instant, to: Instant): Iterable<StoredTestEventMetadata> {
-        return withContext(Dispatchers.Default) {
+        return withContext(coroutineContext) {
             logTime("Get events from: $from to: $to") {
                 storage.getTestEventsAsync(from, to).await()
             }
@@ -95,7 +96,7 @@ class CradleService(configuration: Configuration) {
 
 
     suspend fun getEventSuspend(id: StoredTestEventId): StoredTestEventWrapper? {
-        return withContext(Dispatchers.IO) {
+        return withContext(coroutineContext) {
             logTime("getTestEvent (id=$id)") {
                 storage.getTestEventAsync(id).await()
             }
