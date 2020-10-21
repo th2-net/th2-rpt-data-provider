@@ -59,7 +59,7 @@ class MessageProducer(
 
         return Message(
             rawMessage,
-            processed.let { JsonFormat.printer().print(processed) },
+            processed?.let { JsonFormat.printer().print(processed) },
 
             rawMessage.content?.let {
                 try {
@@ -74,11 +74,11 @@ class MessageProducer(
                 }
             },
 
-            processed.metadata?.messageType ?: ""
+            processed?.metadata?.messageType ?: ""
         )
     }
 
-    private suspend fun parseMessage(message: StoredMessage): com.exactpro.th2.infra.grpc.Message {
+    private suspend fun parseMessage(message: StoredMessage): com.exactpro.th2.infra.grpc.Message? {
         return codecCache.get(message.id.toString())
             ?: let {
                 val messages = cradle.getMessageBatch(message.id)
@@ -92,7 +92,12 @@ class MessageProducer(
 
                 rabbitMqService.decodeMessage(batch)
                     .onEach { codecCache.put(getId(it.metadata.id).toString(), it) }
-                    .first { message.id == getId(it.metadata.id) }
+                    .firstOrNull { message.id == getId(it.metadata.id) }
+
+                    ?: let {
+                        logger.error { "unable to parse message '${message.id}' using RabbitMqService - parsed message is set to 'null'" }
+                        null
+                    }
             }
     }
 
