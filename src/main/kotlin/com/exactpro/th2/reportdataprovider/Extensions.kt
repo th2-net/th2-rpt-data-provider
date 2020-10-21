@@ -18,9 +18,11 @@ package com.exactpro.th2.reportdataprovider
 
 import com.exactpro.cradle.messages.StoredMessageFilter
 import com.fasterxml.jackson.databind.ObjectMapper
+import io.grpc.util.GracefulSwitchLoadBalancer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import mu.KotlinLogging
+import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
 private val logger = KotlinLogging.logger { }
@@ -45,12 +47,14 @@ fun StoredMessageFilter.convertToString(): String {
             "indexOperation=${filter.index?.operation?.name}"
 }
 
-fun <T> logTime(methodName: String, lambda: () -> T): T? {
-    var result: T? = null
+suspend fun <T> logTime(methodName: String, lambda: suspend () -> T): T? {
+    return withContext(coroutineContext) {
+        var result: T? = null
 
-    measureTimeMillis { result = lambda.invoke() }
-        .also { logger.debug { "cradle: $methodName took ${it}ms" } }
+        measureTimeMillis { result = lambda.invoke() }
+            .also { logger.debug { "cradle: $methodName took ${it}ms" } }
 
-    return result
+        result
+    }
 }
 

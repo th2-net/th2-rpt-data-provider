@@ -31,6 +31,7 @@ import com.exactpro.th2.reportdataprovider.convertToString
 import com.exactpro.th2.reportdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.reportdataprovider.logTime
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.future.await
 import kotlinx.coroutines.withContext
 import mu.KotlinLogging
 import java.time.Instant
@@ -84,19 +85,19 @@ class CradleService(configuration: Configuration) {
     }
 
     suspend fun getEventsSuspend(from: Instant, to: Instant): Iterable<StoredTestEventMetadata> {
-        return withContext(Dispatchers.IO) {
+        return withContext(Dispatchers.Default) {
             logTime("Get events from: $from to: $to") {
-                storage.getTestEvents(from, to)
+                storage.getTestEventsAsync(from, to).await()
             }
-        }!!
+        } ?: listOf()
+
     }
 
 
     suspend fun getEventSuspend(id: StoredTestEventId): StoredTestEventWrapper? {
         return withContext(Dispatchers.IO) {
             logTime("getTestEvent (id=$id)") {
-                logger.debug { "requesting with id=${id}" }
-                storage.getTestEvent(id)
+                storage.getTestEventAsync(id).await()
             }
         }
     }
