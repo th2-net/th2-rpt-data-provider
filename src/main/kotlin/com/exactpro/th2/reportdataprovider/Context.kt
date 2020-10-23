@@ -25,7 +25,7 @@ import com.exactpro.th2.reportdataprovider.handlers.SearchMessagesHandler
 import com.exactpro.th2.reportdataprovider.producers.EventProducer
 import com.exactpro.th2.reportdataprovider.producers.MessageProducer
 import com.exactpro.th2.reportdataprovider.services.CradleService
-import com.exactpro.th2.reportdataprovider.services.RabbitMqService
+import com.exactpro.th2.reportdataprovider.services.rabbitmq.RabbitMqService
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
@@ -44,7 +44,9 @@ class Context(
 
     val cradleService: CradleService = CradleService(configuration),
 
-    val rabbitMqService: RabbitMqService = RabbitMqService(configuration),
+    val rabbitMqService: RabbitMqService = RabbitMqService(
+        configuration
+    ),
 
     val eventProducer: EventProducer = EventProducer(cradleService, jacksonMapper),
     val eventCache: EventCache = EventCache(cacheTimeout, configuration.eventCacheSize.value.toLong(), eventProducer),

@@ -25,7 +25,7 @@ import com.exactpro.th2.infra.grpc.RawMessageBatch
 import com.exactpro.th2.reportdataprovider.cache.CodecCache
 import com.exactpro.th2.reportdataprovider.entities.responses.Message
 import com.exactpro.th2.reportdataprovider.services.CradleService
-import com.exactpro.th2.reportdataprovider.services.RabbitMqService
+import com.exactpro.th2.reportdataprovider.services.rabbitmq.RabbitMqService
 import com.google.protobuf.InvalidProtocolBufferException
 import com.google.protobuf.util.JsonFormat
 import mu.KotlinLogging

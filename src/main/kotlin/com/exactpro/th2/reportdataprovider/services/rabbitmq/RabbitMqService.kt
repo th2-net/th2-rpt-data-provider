@@ -14,19 +14,34 @@
  * limitations under the License.
  ******************************************************************************/
 
-package com.exactpro.th2.reportdataprovider.services
+/*******************************************************************************
+ * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ ******************************************************************************/
+
+package com.exactpro.th2.reportdataprovider.services.rabbitmq
 
 import com.exactpro.th2.infra.grpc.Message
 import com.exactpro.th2.infra.grpc.MessageBatch
-import com.exactpro.th2.infra.grpc.MessageID
 import com.exactpro.th2.infra.grpc.RawMessageBatch
 import com.exactpro.th2.reportdataprovider.entities.configuration.Configuration
 import com.google.protobuf.InvalidProtocolBufferException
 import com.rabbitmq.client.Connection
 import com.rabbitmq.client.ConnectionFactory
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
 import mu.KotlinLogging
+import java.util.concurrent.ConcurrentSkipListSet
 
 class RabbitMqService(private val configuration: Configuration) {
 
@@ -34,7 +49,9 @@ class RabbitMqService(private val configuration: Configuration) {
         val logger = KotlinLogging.logger { }
     }
 
-    private val decodeRequests = HashSet<Pair<MessageID, Channel<Message>>>()
+    private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
+
+    private val decodeRequests = ConcurrentSkipListSet<CodecRequest>()
 
     private val connection: Connection? =
         try {
@@ -75,11 +92,11 @@ class RabbitMqService(private val configuration: Configuration) {
 
                             var needAck = false
                             decodedBatch.messagesList.forEach { message ->
-                                val match = decodeRequests.firstOrNull { it.first == message.metadata.id }
+                                val match = decodeRequests.firstOrNull { it.id == message.metadata.id }
 
                                 if (match != null) {
                                     match.let { decodeRequests.remove(it) }
-                                    GlobalScope.launch { match.second.send(message) }
+                                    GlobalScope.launch { match.channel.send(message) }
                                     needAck = true
                                 } else {
                                     logger.debug {
@@ -119,12 +136,12 @@ class RabbitMqService(private val configuration: Configuration) {
             return listOf()
         }
 
-        val requests: Set<Pair<MessageID, Channel<Message>>> = batch.messagesList
-            .map { it.metadata.id to Channel<Message>(0) }
+        val requests: Set<CodecRequest> = batch.messagesList
+            .map { CodecRequest(it.metadata.id) }
             .toSet()
 
         return withContext(Dispatchers.IO) {
-            val deferred = requests.map { async { it.second.receive() } }
+            val deferred = requests.map { async { it.channel.receive() } }
 
             decodeRequests.addAll(requests)
 
@@ -151,7 +168,14 @@ class RabbitMqService(private val configuration: Configuration) {
 
             logger.debug { "codec request published $requestDebugInfo" }
 
-            deferred.awaitAll().also { logger.debug { "codec response received $requestDebugInfo" } }
+            try {
+                withTimeout(responseTimeout) {
+                    deferred.awaitAll().also { logger.debug { "codec response received $requestDebugInfo" } }
+                }
+            } catch (e: TimeoutCancellationException) {
+                logger.error { "unable to parse messages $requestDebugInfo - timed out after $responseTimeout milliseconds" }
+                listOf<Message>()
+            }
         }
     }
 }
