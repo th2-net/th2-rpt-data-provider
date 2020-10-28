@@ -29,33 +29,29 @@ group 'com.exactpro.th2'
 version release_version
 
 repositories {
-    mavenCentral()
-
-    maven {
-        name 'Artifactory'
-        url 'http://artifactory5.exp.exactpro.com/artifactory/libs-snapshot'
-    }
-
     maven {
         name 'Artifactory release'
         url 'http://artifactory5.exp.exactpro.com/artifactory/libs-release'
     }
+    mavenCentral()
 }
 
 dependencies {
-    api platform('com.exactpro.th2:th2-bom:1.0.8')
+    api platform('com.exactpro.th2:bom:2.0.+')
+
     implementation 'org.slf4j:slf4j-api'
     implementation 'org.slf4j:slf4j-log4j12'
-    implementation 'com.exactpro.th2:th2-grpc-infra'
-    implementation 'com.exactpro.th2:th2-common'
 
-    implementation 'com.exactpro.cradle:cradle-core:1.7.0'
-    implementation 'com.exactpro.cradle:cradle-cassandra:1.7.0'
+    implementation 'com.exactpro.th2:grpc-common'
+    implementation 'com.exactpro.th2:common'
+
+    implementation 'com.exactpro.cradle:cradle-core'
+    implementation 'com.exactpro.cradle:cradle-cassandra'
 
     implementation 'io.github.microutils:kotlin-logging:1.7.+'
 
-    implementation 'com.fasterxml.jackson.core:jackson-core:2.9.+'
-    implementation 'com.fasterxml.jackson.module:jackson-module-kotlin:2.9.+'
+    implementation 'com.fasterxml.jackson.core:jackson-core'
+    implementation 'com.fasterxml.jackson.module:jackson-module-kotlin'
 
     implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8'
 
@@ -63,7 +59,10 @@ dependencies {
 
     implementation 'org.ehcache:ehcache:3.8.1'
 
-    implementation 'com.rabbitmq:amqp-client:5.9.+'
+    implementation 'com.rabbitmq:amqp-client'
+
+    implementation "io.grpc:grpc-protobuf"
+    implementation "com.google.protobuf:protobuf-java-util"
 }
 
 jar {
@@ -100,7 +99,7 @@ compileKotlin {
 }
 
 application {
-    mainClassName = "com.exactpro.th2.reportdataprovider.MainKt"
+    mainClassName = "com.exactpro.th2.rptdataprovider.MainKt"
 }
 
 configurations.all {
