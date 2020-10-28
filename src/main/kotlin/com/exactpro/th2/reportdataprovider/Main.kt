@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,22 +16,12 @@
 
 package com.exactpro.th2.reportdataprovider
 
-import com.exactpro.cradle.cassandra.CassandraCradleManager
-import com.exactpro.cradle.cassandra.connection.CassandraConnection
-import com.exactpro.cradle.cassandra.connection.CassandraConnectionSettings
-import com.exactpro.th2.reportdataprovider.cache.EventCacheManager
-import com.exactpro.th2.reportdataprovider.cache.MessageCacheManager
-import com.exactpro.th2.reportdataprovider.entities.EventSearchRequest
-import com.exactpro.th2.reportdataprovider.entities.MessageSearchRequest
-import com.exactpro.th2.reportdataprovider.handlers.searchEvents
-import com.exactpro.th2.reportdataprovider.handlers.searchMessages
-import com.fasterxml.jackson.databind.DeserializationFeature
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.exactpro.th2.reportdataprovider.entities.configuration.Configuration
+import com.exactpro.th2.reportdataprovider.entities.requests.EventSearchRequest
+import com.exactpro.th2.reportdataprovider.entities.requests.MessageSearchRequest
 import io.ktor.application.call
 import io.ktor.application.install
 import io.ktor.features.Compression
-import io.ktor.http.CacheControl
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.response.cacheControl
@@ -49,54 +39,19 @@ import kotlinx.coroutines.withTimeout
 import mu.KotlinLogging
 import java.time.LocalDateTime
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import kotlin.system.measureTimeMillis
-
-
-val formatter: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("yyyy-MM-dd'T'hh:mm:ss.nnnnnnnnn").withZone(ZoneId.of("UTC"))
-
-val jacksonMapper: ObjectMapper = jacksonObjectMapper()
-    .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
-    .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
 
 @InternalAPI
 fun main(args: Array<String>) {
     val logger = KotlinLogging.logger {}
-    val configuration = Configuration(args)
+
+    val context = Context(args)
+    val configuration = context.configuration
+    val jacksonMapper = context.jacksonMapper
+    val timeout = context.timeout
+    val cacheControl = context.cacheControl
 
     System.setProperty(IO_PARALLELISM_PROPERTY_NAME, configuration.ioDispatcherThreadPoolSize.value)
-
-    val manager = CassandraCradleManager(CassandraConnection(configuration.let {
-        val settings = CassandraConnectionSettings(
-            it.cassandraDatacenter.value,
-            it.cassandraHost.value,
-            it.cassandraPort.value.toInt(),
-            it.cassandraKeyspace.value
-        )
-
-        settings.timeout = it.cassandraQueryTimeout.value.toLong()
-        settings.username = it.cassandraUsername.value
-        settings.password = it.cassandraPassword.value
-
-        settings
-    }))
-
-    val eventCache = EventCacheManager(configuration, manager)
-    val messageCache = MessageCacheManager(configuration, manager)
-    val timeout: Long = configuration.responseTimeout.value.toLong()
-
-    val cacheControl = configuration.clientCacheTimeout.value.toInt().let {
-        CacheControl.MaxAge(
-            visibility = CacheControl.Visibility.Public,
-            maxAgeSeconds = it,
-            mustRevalidate = false,
-            proxyRevalidate = false,
-            proxyMaxAgeSeconds = it
-        )
-    }
-
-    manager.init(configuration.cassandraInstance.value)
 
     embeddedServer(Netty, configuration.port.value.toInt()) {
 
@@ -134,7 +89,7 @@ fun main(args: Array<String>) {
                                 call.response.cacheControl(cacheControl)
                                 try {
                                     call.respondText(
-                                        jacksonMapper.asStringSuspend(eventCache.getOrPut(id!!)),
+                                        jacksonMapper.asStringSuspend(context.eventCache.getOrPut(id!!)),
                                         ContentType.Application.Json
                                     )
                                 } catch (e: IllegalArgumentException) {
@@ -168,7 +123,7 @@ fun main(args: Array<String>) {
                                 call.response.cacheControl(cacheControl)
 
                                 call.respondText(
-                                    jacksonMapper.asStringSuspend(manager.storage.streams),
+                                    jacksonMapper.asStringSuspend(context.cradleService.getMessageStreams()),
                                     ContentType.Application.Json
                                 )
                             }
@@ -193,7 +148,7 @@ fun main(args: Array<String>) {
                     try {
                         call.response.cacheControl(cacheControl)
 
-                        messageCache.getOrPut(id!!).let {
+                        context.messageCache.getOrPut(id!!).let {
                             call.respondText(
                                 jacksonMapper.asStringSuspend(it),
                                 ContentType.Application.Json
@@ -218,14 +173,15 @@ fun main(args: Array<String>) {
             }
 
             get("/search/messages") {
-                val request = MessageSearchRequest(call.request.queryParameters.toMap())
+                val request =
+                    MessageSearchRequest(call.request.queryParameters.toMap())
 
                 logger.debug { "handling search messages request (query=$request)" }
 
                 measureTimeMillis {
                     try {
                         launch {
-                            searchMessages(request, manager, messageCache, timeout)
+                            context.searchMessagesHandler.searchMessages(request)
                                 .let {
                                     call.response.cacheControl(cacheControl)
                                     call.respondText(ContentType.Application.Json, HttpStatusCode.OK) {
@@ -245,7 +201,8 @@ fun main(args: Array<String>) {
             }
 
             get("search/events") {
-                val request = EventSearchRequest(call.request.queryParameters.toMap())
+                val request =
+                    EventSearchRequest(call.request.queryParameters.toMap())
 
                 logger.debug { "handling search events request with (query=$request)" }
 
@@ -256,7 +213,7 @@ fun main(args: Array<String>) {
 
                             call.respondText(
                                 jacksonMapper.asStringSuspend(
-                                    searchEvents(request, manager, timeout)
+                                    context.searchEventsHandler.searchEvents(request)
                                 ),
                                 ContentType.Application.Json
                             )

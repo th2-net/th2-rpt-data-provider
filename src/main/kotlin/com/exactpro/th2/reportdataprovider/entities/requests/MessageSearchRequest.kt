@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,17 +14,10 @@
  * limitations under the License.
  ******************************************************************************/
 
-package com.exactpro.th2.reportdataprovider.entities
+package com.exactpro.th2.reportdataprovider.entities.requests
 
 import com.exactpro.cradle.TimeRelation
 import java.time.Instant
-
-fun asCradleTimeRelation(value: String): TimeRelation {
-    if (value == "next") return TimeRelation.AFTER
-    if (value == "previous") return TimeRelation.BEFORE
-
-    throw IllegalArgumentException("'$value' is not a valid timeline direction. Use 'next' or 'previous'")
-}
 
 data class MessageSearchRequest(
     val attachedEventId: String?,
@@ -37,6 +30,16 @@ data class MessageSearchRequest(
     val messageId: String?,
     val idsOnly: Boolean
 ) {
+
+    companion object {
+        private fun asCradleTimeRelation(value: String): TimeRelation {
+            if (value == "next") return TimeRelation.AFTER
+            if (value == "previous") return TimeRelation.BEFORE
+
+            throw IllegalArgumentException("'$value' is not a valid timeline direction. Use 'next' or 'previous'")
+        }
+    }
+
     constructor(parameters: Map<String, List<String>>) : this(
         attachedEventId = parameters["attachedEventId"]?.first(),
         timestampFrom = parameters["timestampFrom"]?.first()?.let { Instant.ofEpochMilli(it.toLong()) },
@@ -45,28 +48,14 @@ data class MessageSearchRequest(
         messageType = parameters["messageType"],
         limit = parameters["limit"]?.first()?.toInt() ?: 100,
 
-        timelineDirection = parameters["timelineDirection"]?.let { asCradleTimeRelation(it.first()) }
+        timelineDirection = parameters["timelineDirection"]?.let {
+            asCradleTimeRelation(
+                it.first()
+            )
+        }
             ?: TimeRelation.AFTER,
-        
+
         messageId = parameters["messageId"]?.first(),
         idsOnly = parameters["idsOnly"]?.first()?.toBoolean() ?: true
-    )
-}
-
-data class EventSearchRequest(
-    val attachedMessageId: String?,
-    val timestampFrom: Instant,
-    val timestampTo: Instant,
-    val name: List<String>?,
-    val type: List<String>?,
-    val flat: Boolean
-) {
-    constructor(parameters: Map<String, List<String>>) : this(
-        attachedMessageId = parameters["attachedMessageId"]?.first(),
-        timestampFrom = parameters["timestampFrom"]?.first()?.let { Instant.ofEpochMilli(it.toLong()) }!!,
-        timestampTo = parameters["timestampTo"]?.first()?.let { Instant.ofEpochMilli(it.toLong()) }!!,
-        name = parameters["name"],
-        type = parameters["type"],
-        flat = parameters["flat"]?.first()?.toBoolean() ?: false
     )
 }

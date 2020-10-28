@@ -135,6 +135,7 @@ Event metadata object example:
 # Configuration
 Example of Report data provider component environment variables:
 
+Cradle:
 ```
 CRADLE_INSTANCE_NAME=instance1
 
@@ -145,14 +146,38 @@ CASSANDRA_KEYSPACE=demo
 CASSANDRA_USERNAME=guest
 CASSANDRA_PASSWORD=guest
 CASSANDRA_QUERY_TIMEOUT=30000 - defined in milliseconds
+```
 
+Codecs (via amqp):
+```
+AMQP_USERNAME=guest
+AMQP_PASSWORD=guest
+AMQP_HOST=host
+AMQP_PORT=30000
+AMQP_VHOST=vhost
+
+AMQP_CODEC_EXCHANGE_NAME=default_general_exchange
+AMQP_CODEC_ROUTING_KEY_OUT=default_general_decode_out
+AMQP_CODEC_ROUTING_KEY_IN=default_general_decode_in
+
+AMQP_PROVIDER_QUEUE_PREFIX=report-data-provider
+AMQP_PROVIDER_CONSUMER_TAG=report-data-provider
+```
+
+REST Api:
+```
 HTTP_PORT=8080
 HTTP_HOST=localhost
 HTTP_RESPONSE_TIMEOUT=60000 - defined in milliseconds
-SERVER_CACHE_TIMEOUT=60000 - defined in milliseconds; sets the cache invalidation timeout for non-batched events
-CLIENT_CACHE_TIMEOUT=60 - defined in seconds; sets max-age value in http cache control header
 
-EVENT_CACHE_SIZE=100000 - sets in-memory cache limit (item count)
-MESSAGE_CACHE_SIZE=100000 - sets in-memory cache limit (item count)
-THREAD_POOL_SIZE=100 - sets the thread pool size of IO coroutine dispatcher
+CLIENT_CACHE_TIMEOUT=60 - defined in seconds; sets max-age value in http cache control header
+```
+
+Cache & multi-threading:
+```
+SERVER_CACHE_TIMEOUT=60000 - defined in milliseconds; sets the cache invalidation timeout for non-batched events
+EVENT_CACHE_SIZE=100 - sets in-memory cache limit (item count)
+MESSAGE_CACHE_SIZE=100 - sets in-memory cache limit (item count)
+CODEC_CACHE_SIZE=100 - sets in-memory cache limit (item count)
+THREAD_POOL_SIZE=1 - sets the thread pool size of IO coroutine dispatcher
 ```

@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,30 +16,24 @@
 
 package com.exactpro.th2.reportdataprovider.cache
 
-import com.exactpro.cradle.CradleManager
-import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.reportdataprovider.Configuration
-import com.exactpro.th2.reportdataprovider.entities.Message
-import com.exactpro.th2.reportdataprovider.getMessageSuspend
-import com.exactpro.th2.reportdataprovider.getProcessedMessageSuspend
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import com.exactpro.th2.infra.grpc.Message
+import com.exactpro.th2.reportdataprovider.entities.configuration.Configuration
 import mu.KotlinLogging
 import org.ehcache.Cache
 import org.ehcache.config.builders.CacheConfigurationBuilder
 import org.ehcache.config.builders.CacheManagerBuilder
 import org.ehcache.config.builders.ResourcePoolsBuilder
 
-class MessageCacheManager(configuration: Configuration, private val cradleManager: CradleManager) {
+class CodecCache(configuration: Configuration) {
     private val manager = CacheManagerBuilder.newCacheManagerBuilder().build(true)
     private val logger = KotlinLogging.logger { }
 
     private val cache: Cache<String, Message> = manager.createCache(
-        "messages",
+        "codec",
         CacheConfigurationBuilder.newCacheConfigurationBuilder(
             String::class.java,
             Message::class.java,
-            ResourcePoolsBuilder.heap(configuration.messageCacheSize.value.toLong())
+            ResourcePoolsBuilder.heap(configuration.codecCacheSize.value.toLong())
         ).build()
     )
 
@@ -51,25 +45,5 @@ class MessageCacheManager(configuration: Configuration, private val cradleManage
 
     fun get(id: String): Message? {
         return cache.get(id)
-    }
-
-    suspend fun getOrPut(id: String): Message {
-        cache.get(id)?.let { return it }
-
-        logger.debug { "Message cache miss for id=$id" }
-
-        return withContext(Dispatchers.Default) {
-            val storedMessageId = StoredMessageId.fromString(id)
-
-            val processedMessage =
-                cradleManager.storage.getProcessedMessageSuspend(storedMessageId)
-            val message = cradleManager.storage.getMessageSuspend(storedMessageId)
-
-            if (processedMessage != null || message != null)
-                Message(processedMessage, message)
-            else
-                throw IllegalArgumentException("$storedMessageId is not a valid id")
-
-        }
     }
 }

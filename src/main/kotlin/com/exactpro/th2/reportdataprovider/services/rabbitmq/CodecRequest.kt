@@ -14,21 +14,17 @@
  * limitations under the License.
  ******************************************************************************/
 
-package com.exactpro.th2.reportdataprovider.entities
+package com.exactpro.th2.reportdataprovider.services.rabbitmq
 
-import com.exactpro.cradle.testevents.StoredTestEventId
+import com.exactpro.th2.infra.grpc.Message
+import com.exactpro.th2.infra.grpc.MessageID
+import kotlinx.coroutines.channels.Channel
+import java.time.Instant
 
-const val divider = ":"
+data class CodecRequest(val id: MessageID, val channel: Channel<Message>, val timestamp: Instant = Instant.now()): Comparable<CodecRequest> {
+    constructor(id: MessageID): this(id, Channel<Message>(0))
 
-class ProviderEventId(val batchId: StoredTestEventId?, val eventId: StoredTestEventId) {
-    constructor(id: String) : this(
-        batchId = id.split(divider).getOrNull(0)?.let { StoredTestEventId(it) }?.takeIf { id.contains(divider) },
-        eventId = id.split(divider).getOrNull(1)?.let { StoredTestEventId(it) } ?: StoredTestEventId(id)
-    )
-
-    override fun toString(): String {
-        return (batchId?.toString()?.let { it + divider } ?: "") + eventId.toString()
+    override fun compareTo(other: CodecRequest): Int {
+        return timestamp.compareTo(other.timestamp)
     }
-
-
 }
