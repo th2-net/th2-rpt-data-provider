@@ -16,10 +16,10 @@
 
 package com.exactpro.th2.rptdataprovider.services
 
-import com.exactpro.th2.infra.grpc.Message
-import com.exactpro.th2.infra.grpc.MessageBatch
-import com.exactpro.th2.infra.grpc.MessageID
-import com.exactpro.th2.infra.grpc.RawMessageBatch
+import com.exactpro.th2.common.grpc.Message
+import com.exactpro.th2.common.grpc.MessageBatch
+import com.exactpro.th2.common.grpc.MessageID
+import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.google.protobuf.InvalidProtocolBufferException
 import com.rabbitmq.client.Connection

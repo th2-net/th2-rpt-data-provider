@@ -18,10 +18,10 @@ package com.exactpro.th2.rptdataprovider.producers
 
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.infra.grpc.Direction
-import com.exactpro.th2.infra.grpc.MessageID
-import com.exactpro.th2.infra.grpc.RawMessage
-import com.exactpro.th2.infra.grpc.RawMessageBatch
+import com.exactpro.th2.common.grpc.Direction
+import com.exactpro.th2.common.grpc.MessageID
+import com.exactpro.th2.common.grpc.RawMessage
+import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.rptdataprovider.cache.CodecCache
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.services.CradleService
@@ -46,7 +46,7 @@ class MessageProducer(
 
             storedMessage.content?.let {
                 try {
-                    com.exactpro.th2.infra.grpc.Message.parseFrom(it)
+                    com.exactpro.th2.common.grpc.Message.parseFrom(it)
                 } catch (e: Exception) {
                     logger.error {
                         "unable to parse message (id=${storedMessage.id}) - invalid data (${String(storedMessage.content)})"
@@ -78,7 +78,7 @@ class MessageProducer(
         )
     }
 
-    private suspend fun parseMessage(message: StoredMessage): com.exactpro.th2.infra.grpc.Message {
+    private suspend fun parseMessage(message: StoredMessage): com.exactpro.th2.common.grpc.Message {
         return codecCache.get(message.id.toString())
             ?: let {
                 val messages = cradle.getMessageBatch(message.id)

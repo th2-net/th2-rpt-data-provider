@@ -16,7 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider.cache
 
-import com.exactpro.th2.infra.grpc.Message
+import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import mu.KotlinLogging
 import org.ehcache.Cache
