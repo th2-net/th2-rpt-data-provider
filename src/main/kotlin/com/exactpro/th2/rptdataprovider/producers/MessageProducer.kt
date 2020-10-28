@@ -25,7 +25,7 @@ import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.rptdataprovider.cache.CodecCache
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.services.CradleService
-import com.exactpro.th2.rptdataprovider.services.RabbitMqService
+import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import com.google.protobuf.InvalidProtocolBufferException
 import com.google.protobuf.util.JsonFormat
 import mu.KotlinLogging
@@ -59,7 +59,7 @@ class MessageProducer(
 
         return Message(
             rawMessage,
-            processed.let { JsonFormat.printer().print(processed) },
+            processed?.let { JsonFormat.printer().print(processed) },
 
             rawMessage.content?.let {
                 try {
@@ -74,11 +74,11 @@ class MessageProducer(
                 }
             },
 
-            processed.metadata?.messageType ?: ""
+            processed?.metadata?.messageType ?: ""
         )
     }
 
-    private suspend fun parseMessage(message: StoredMessage): com.exactpro.th2.common.grpc.Message {
+    private suspend fun parseMessage(message: StoredMessage): com.exactpro.th2.common.grpc.Message? {
         return codecCache.get(message.id.toString())
             ?: let {
                 val messages = cradle.getMessageBatch(message.id)
@@ -92,7 +92,12 @@ class MessageProducer(
 
                 rabbitMqService.decodeMessage(batch)
                     .onEach { codecCache.put(getId(it.metadata.id).toString(), it) }
-                    .first { message.id == getId(it.metadata.id) }
+                    .firstOrNull { message.id == getId(it.metadata.id) }
+
+                    ?: let {
+                        logger.error { "unable to parse message '${message.id}' using RabbitMqService - parsed message is set to 'null'" }
+                        null
+                    }
             }
     }
 

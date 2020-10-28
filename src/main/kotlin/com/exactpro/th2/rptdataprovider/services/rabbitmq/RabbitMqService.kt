@@ -14,19 +14,18 @@
  * limitations under the License.
  ******************************************************************************/
 
-package com.exactpro.th2.rptdataprovider.services
+package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
 import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.common.grpc.MessageBatch
-import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.google.protobuf.InvalidProtocolBufferException
 import com.rabbitmq.client.Connection
 import com.rabbitmq.client.ConnectionFactory
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
 import mu.KotlinLogging
+import java.util.concurrent.ConcurrentSkipListSet
 
 class RabbitMqService(private val configuration: Configuration) {
 
@@ -34,7 +33,9 @@ class RabbitMqService(private val configuration: Configuration) {
         val logger = KotlinLogging.logger { }
     }
 
-    private val decodeRequests = HashSet<Pair<MessageID, Channel<Message>>>()
+    private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
+
+    private val decodeRequests = ConcurrentSkipListSet<CodecRequest>()
 
     private val connection: Connection? =
         try {
@@ -73,16 +74,16 @@ class RabbitMqService(private val configuration: Configuration) {
                         try {
                             val decodedBatch = MessageBatch.parseFrom(delivery.body)
 
-                            var needAck:Boolean = false
+                            var needAck = false
                             decodedBatch.messagesList.forEach { message ->
-                                val match = decodeRequests.firstOrNull { it.first == message.metadata.id }
+                                val match = decodeRequests.firstOrNull { it.id == message.metadata.id }
 
                                 if (match != null) {
                                     match.let { decodeRequests.remove(it) }
-                                    GlobalScope.launch { match.second.send(message) }
+                                    GlobalScope.launch { match.channel.send(message) }
                                     needAck = true
                                 } else {
-                                    logger.warn {
+                                    logger.debug {
                                         val id = message?.metadata?.id
 
                                         val idString =
@@ -119,12 +120,12 @@ class RabbitMqService(private val configuration: Configuration) {
             return listOf()
         }
 
-        val requests: Set<Pair<MessageID, Channel<Message>>> = batch.messagesList
-            .map { it.metadata.id to Channel<Message>(0) }
+        val requests: Set<CodecRequest> = batch.messagesList
+            .map { CodecRequest(it.metadata.id) }
             .toSet()
 
         return withContext(Dispatchers.IO) {
-            val deferred = requests.map { async { it.second.receive() } }
+            val deferred = requests.map { async { it.channel.receive() } }
 
             decodeRequests.addAll(requests)
 
@@ -151,7 +152,14 @@ class RabbitMqService(private val configuration: Configuration) {
 
             logger.debug { "codec request published $requestDebugInfo" }
 
-            deferred.awaitAll().also { logger.debug { "codec response received $requestDebugInfo" } }
+            try {
+                withTimeout(responseTimeout) {
+                    deferred.awaitAll().also { logger.debug { "codec response received $requestDebugInfo" } }
+                }
+            } catch (e: TimeoutCancellationException) {
+                logger.error { "unable to parse messages $requestDebugInfo - timed out after $responseTimeout milliseconds" }
+                listOf<Message>()
+            }
         }
     }
 }

@@ -31,9 +31,11 @@ import com.exactpro.th2.rptdataprovider.convertToString
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.logTime
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.future.await
 import kotlinx.coroutines.withContext
 import mu.KotlinLogging
 import java.time.Instant
+import kotlin.coroutines.coroutineContext
 
 class CradleService(configuration: Configuration) {
 
@@ -84,19 +86,19 @@ class CradleService(configuration: Configuration) {
     }
 
     suspend fun getEventsSuspend(from: Instant, to: Instant): Iterable<StoredTestEventMetadata> {
-        return withContext(Dispatchers.IO) {
+        return withContext(coroutineContext) {
             logTime("Get events from: $from to: $to") {
-                storage.getTestEvents(from, to)
+                storage.getTestEventsAsync(from, to).await()
             }
-        }!!
+        } ?: listOf()
+
     }
 
 
     suspend fun getEventSuspend(id: StoredTestEventId): StoredTestEventWrapper? {
-        return withContext(Dispatchers.IO) {
+        return withContext(coroutineContext) {
             logTime("getTestEvent (id=$id)") {
-                logger.debug { "requesting with id=${id}" }
-                storage.getTestEvent(id)
+                storage.getTestEventAsync(id).await()
             }
         }
     }
@@ -128,7 +130,6 @@ class CradleService(configuration: Configuration) {
                 linker.getMessageIdsByTestEventId(id)
             }
         } ?: let {
-            logger.error { "unable to get attached messages of event '$id' - method returned null" }
             emptyList<StoredMessageId>()
         }
     }

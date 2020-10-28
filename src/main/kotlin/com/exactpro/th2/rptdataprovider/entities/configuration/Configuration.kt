@@ -20,6 +20,7 @@ class Configuration(
     val hostname: Variable = Variable("HTTP_HOST", "localhost"),
     val port: Variable = Variable("HTTP_PORT", "8080"),
     val responseTimeout: Variable = Variable("HTTP_RESPONSE_TIMEOUT", "60000"),
+    val codecResponseTimeout: Variable = Variable("CODEC_RESPONSE_TIMEOUT", "6000"),
     val serverCacheTimeout: Variable = Variable("SERVER_CACHE_TIMEOUT", "60000"),
     val clientCacheTimeout: Variable = Variable("CLIENT_CACHE_TIMEOUT", "60"),
 
@@ -37,18 +38,18 @@ class Configuration(
     val cassandraInstance: Variable = Variable("CRADLE_INSTANCE_NAME", "instance1"),
     val ioDispatcherThreadPoolSize: Variable = Variable("THREAD_POOL_SIZE", "1"),
 
-    val amqpUsername: Variable = Variable("AMQP_USERNAME", ""),
-    val amqpPassword: Variable = Variable("AMQP_PASSWORD", "", false),
-    val amqpHost: Variable = Variable("AMQP_HOST", ""),
-    val amqpPort: Variable = Variable("AMQP_PORT", ""),
-    val amqpVhost: Variable = Variable("AMQP_VHOST", ""),
+    val amqpUsername: Variable = Variable("RABBITMQ_USERNAME", ""),
+    val amqpPassword: Variable = Variable("RABBITMQ_PASSWORD", "", false),
+    val amqpHost: Variable = Variable("RABBITMQ_HOST", ""),
+    val amqpPort: Variable = Variable("RABBITMQ_PORT", ""),
+    val amqpVhost: Variable = Variable("RABBITMQ_VHOST", ""),
 
-    val amqpCodecExchangeName: Variable = Variable("AMQP_CODEC_EXCHANGE_NAME", "default_general_exchange"),
+    val amqpCodecExchangeName: Variable = Variable("RABBITMQ_EXCHANGE_NAME_TH2_CODEC", "default_general_exchange"),
 
     // Class fields are labeled from provider point of view. They are intentionally swapped.
-    val amqpCodecRoutingKeyIn: Variable = Variable("AMQP_CODEC_ROUTING_KEY_OUT", "default_general_decode_out"),
-    val amqpCodecRoutingKeyOut: Variable = Variable("AMQP_CODEC_ROUTING_KEY_IN", "default_general_decode_in"),
+    val amqpCodecRoutingKeyIn: Variable = Variable("RABBITMQ_CODEC_ROUTING_KEY_OUT", "default_general_decode_out"),
+    val amqpCodecRoutingKeyOut: Variable = Variable("RABBITMQ_CODEC_ROUTING_KEY_IN", "default_general_decode_in"),
 
-    val amqpProviderQueuePrefix: Variable = Variable("AMQP_PROVIDER_QUEUE_PREFIX", "report-data-provider"),
-    val amqpProviderConsumerTag: Variable = Variable("AMQP_PROVIDER_CONSUMER_TAG", "report-data-provider")
+    val amqpProviderQueuePrefix: Variable = Variable("RABBITMQ_PROVIDER_QUEUE_PREFIX", "report-data-provider"),
+    val amqpProviderConsumerTag: Variable = Variable("RABBITMQ_PROVIDER_CONSUMER_TAG", "report-data-provider")
 )

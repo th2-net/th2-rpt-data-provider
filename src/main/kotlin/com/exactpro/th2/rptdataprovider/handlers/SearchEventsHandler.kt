@@ -25,8 +25,10 @@ import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.services.CradleService
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.withTimeout
 import mu.KotlinLogging
 import java.time.Instant
@@ -37,43 +39,46 @@ class SearchEventsHandler(private val cradle: CradleService, private val timeout
     }
 
     suspend fun searchEvents(request: EventSearchRequest): List<Any> {
-        return withContext(Dispatchers.Default) {
-            withTimeout(timeout) {
+        return withTimeout(timeout) {
 
-                val baseList = cradle.getEventsSuspend(
-                    request.timestampFrom,
-                    request.timestampTo
-                ).flatMap { metadata ->
-                    if (metadata.isBatch) {
-                        metadata.batchMetadata?.testEvents
-                            ?.map { EventTreeNode(metadata.batchMetadata, it) }
+            val baseList = cradle.getEventsSuspend(
+                request.timestampFrom,
+                request.timestampTo
+            ).asFlow()
+                .map { metadata ->
+                    async {
+                        if (metadata.isBatch) {
+                            metadata.batchMetadata?.testEvents
+                                ?.map { EventTreeNode(metadata.batchMetadata, it) }
 
-                            ?: getDirectBatchedChildren(metadata.id, request.timestampFrom, request.timestampTo)
-                    } else {
-                        listOf(EventTreeNode(null, metadata))
+                                ?: getDirectBatchedChildren(metadata.id, request.timestampFrom, request.timestampTo)
+                        } else {
+                            listOf(EventTreeNode(null, metadata))
+                        }
                     }
                 }
+                .toList()
+                .flatMap { it.await() }
 
-                val filteredList = baseList
-                    .filter {
-                        (request.type == null || request.type.any { item ->
-                            it.eventType.toLowerCase().contains(item.toLowerCase())
-                        })
+            val filteredList = baseList
+                .filter {
+                    (request.type == null || request.type.any { item ->
+                        it.eventType.toLowerCase().contains(item.toLowerCase())
+                    })
 
-                                && (request.name == null || request.name.any { item ->
-                            it.eventName.toLowerCase().contains(item.toLowerCase())
-                        })
+                            && (request.name == null || request.name.any { item ->
+                        it.eventName.toLowerCase().contains(item.toLowerCase())
+                    })
 
-                                && (request.attachedMessageId == null ||
-                                cradle.getEventIdsSuspend(StoredMessageId.fromString(request.attachedMessageId))
-                                    .contains(StoredTestEventId(it.eventId)))
-                    }
+                            && (request.attachedMessageId == null ||
+                            cradle.getEventIdsSuspend(StoredMessageId.fromString(request.attachedMessageId))
+                                .contains(StoredTestEventId(it.eventId)))
+                }
 
-                if (request.flat)
-                    filteredList.map { it.eventId }
-                else
-                    buildEventTree(baseList, filteredList)
-            }
+            if (request.flat)
+                filteredList.map { it.eventId }
+            else
+                buildEventTree(baseList, filteredList)
         }
     }
 
