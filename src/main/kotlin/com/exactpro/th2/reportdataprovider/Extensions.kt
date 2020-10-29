@@ -19,9 +19,12 @@ package com.exactpro.th2.reportdataprovider
 import com.exactpro.cradle.messages.StoredMessageFilter
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.grpc.util.GracefulSwitchLoadBalancer
+import io.ktor.http.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import mu.KotlinLogging
+import java.time.Instant
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -58,3 +61,13 @@ suspend fun <T> logTime(methodName: String, lambda: suspend () -> T): T? {
     }
 }
 
+fun cachingType(to: Instant?, cacheControlTrue: CacheControl, cacheControlUntil: CacheControl): CacheControl {
+    return to?.let {
+        val timeNow = Instant.now()
+        if (to.isBefore(timeNow)) {
+            cacheControlTrue
+        } else {
+            null
+        }
+    } ?: cacheControlUntil
+}

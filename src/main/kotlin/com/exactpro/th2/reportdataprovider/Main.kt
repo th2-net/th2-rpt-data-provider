@@ -32,6 +32,7 @@ import io.ktor.server.netty.Netty
 import io.ktor.util.InternalAPI
 import io.ktor.util.rootCause
 import io.ktor.util.toMap
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.IO_PARALLELISM_PROPERTY_NAME
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
@@ -48,7 +49,7 @@ fun main() {
     val configuration = context.configuration
     val jacksonMapper = context.jacksonMapper
     val timeout = context.timeout
-    val cacheControl = context.cacheControl
+
 
     System.setProperty(IO_PARALLELISM_PROPERTY_NAME, configuration.ioDispatcherThreadPoolSize.value)
 
@@ -85,7 +86,7 @@ fun main() {
                     try {
                         launch {
                             withTimeout(timeout) {
-                                call.response.cacheControl(cacheControl)
+                                call.response.cacheControl(context.cacheControlNoModified)
                                 try {
                                     call.respondText(
                                         jacksonMapper.asStringSuspend(context.eventCache.getOrPut(id!!)),
@@ -119,7 +120,7 @@ fun main() {
                     try {
                         launch {
                             withTimeout(timeout) {
-                                call.response.cacheControl(cacheControl)
+                                call.response.cacheControl(context.cacheControlRarelyModified)
 
                                 call.respondText(
                                     jacksonMapper.asStringSuspend(context.cradleService.getMessageStreams()),
@@ -145,7 +146,7 @@ fun main() {
 
                 measureTimeMillis {
                     try {
-                        call.response.cacheControl(cacheControl)
+                        call.response.cacheControl(context.cacheControlNoModified)
 
                         context.messageCache.getOrPut(id!!).let {
                             call.respondText(
@@ -182,7 +183,17 @@ fun main() {
                         launch {
                             context.searchMessagesHandler.searchMessages(request)
                                 .let {
-                                    call.response.cacheControl(cacheControl)
+                                    val cachingType =
+                                        if (it.size == request.limit) {
+                                            context.cacheControlNoModified
+                                        } else {
+                                            cachingType(
+                                                request.timestampTo,
+                                                context.cacheControlNoModified,
+                                                context.cacheControlFrequentlyModified
+                                            )
+                                        }
+                                    call.response.cacheControl(cachingType)
                                     call.respondText(ContentType.Application.Json, HttpStatusCode.OK) {
                                         jacksonMapper.asStringSuspend(it)
                                     }
@@ -208,7 +219,13 @@ fun main() {
                 measureTimeMillis {
                     try {
                         launch {
-                            call.response.cacheControl(cacheControl)
+                            call.response.cacheControl(
+                                cachingType(
+                                    request.timestampTo,
+                                    context.cacheControlNoModified,
+                                    context.cacheControlFrequentlyModified
+                                )
+                            )
 
                             call.respondText(
                                 jacksonMapper.asStringSuspend(
