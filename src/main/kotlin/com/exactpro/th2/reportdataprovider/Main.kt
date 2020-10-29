@@ -32,7 +32,6 @@ import io.ktor.server.netty.Netty
 import io.ktor.util.InternalAPI
 import io.ktor.util.rootCause
 import io.ktor.util.toMap
-import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.IO_PARALLELISM_PROPERTY_NAME
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
@@ -86,7 +85,7 @@ fun main() {
                     try {
                         launch {
                             withTimeout(timeout) {
-                                call.response.cacheControl(context.cacheControlNoModified)
+                                call.response.cacheControl(context.cacheControlNotModified)
                                 try {
                                     call.respondText(
                                         jacksonMapper.asStringSuspend(context.eventCache.getOrPut(id!!)),
@@ -146,7 +145,7 @@ fun main() {
 
                 measureTimeMillis {
                     try {
-                        call.response.cacheControl(context.cacheControlNoModified)
+                        call.response.cacheControl(context.cacheControlNotModified)
 
                         context.messageCache.getOrPut(id!!).let {
                             call.respondText(
@@ -185,11 +184,11 @@ fun main() {
                                 .let {
                                     val cachingType =
                                         if (it.size == request.limit) {
-                                            context.cacheControlNoModified
+                                            context.cacheControlNotModified
                                         } else {
                                             cachingType(
                                                 request.timestampTo,
-                                                context.cacheControlNoModified,
+                                                context.cacheControlNotModified,
                                                 context.cacheControlFrequentlyModified
                                             )
                                         }
@@ -222,7 +221,7 @@ fun main() {
                             call.response.cacheControl(
                                 cachingType(
                                     request.timestampTo,
-                                    context.cacheControlNoModified,
+                                    context.cacheControlNotModified,
                                     context.cacheControlFrequentlyModified
                                 )
                             )

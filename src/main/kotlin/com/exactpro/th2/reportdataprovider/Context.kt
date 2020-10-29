@@ -63,20 +63,22 @@ class Context(
         timeout
     ),
 
-    val cacheControlNoModified: CacheControl = configuration.noModifiedObjectsLifetime.value.toInt().let {
-        cacheControlConfig(it, configuration.enableCaching.value.toBoolean())
+    private val enableCaching: Boolean = configuration.enableCaching.value.toBoolean(),
+
+    val cacheControlNotModified: CacheControl = configuration.noModifiedObjectsLifetime.value.toInt().let {
+        cacheControlConfig(it, enableCaching)
     },
 
     val cacheControlRarelyModified: CacheControl = configuration.rarelyModifiedObjects.value.toInt().let {
-        cacheControlConfig(it, configuration.enableCaching.value.toBoolean())
+        cacheControlConfig(it, enableCaching)
     },
 
     val cacheControlFrequentlyModified: CacheControl = configuration.frequentlyModifiedObjects.value.toInt().let {
-        cacheControlConfig(it, configuration.enableCaching.value.toBoolean())
+        cacheControlConfig(it, enableCaching)
     }
 )
 
-fun cacheControlConfig(timeout: Int, enableCaching: Boolean): CacheControl {
+private fun cacheControlConfig(timeout: Int, enableCaching: Boolean): CacheControl {
     return if (enableCaching) {
         CacheControl.MaxAge(
             visibility = CacheControl.Visibility.Public,
