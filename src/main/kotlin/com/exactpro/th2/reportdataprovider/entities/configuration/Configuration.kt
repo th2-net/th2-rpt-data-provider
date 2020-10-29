@@ -54,7 +54,7 @@ class Configuration(
 
 
     val enableCaching: Variable = Variable("ENABLE_CACHING", "true"),
-    val noModifiedObjectsLifetime: Variable = Variable("NO_MODIFIED_OBJECTS_LIFETIME", "3600"),
+    val notModifiedObjectsLifetime: Variable = Variable("NOT_MODIFIED_OBJECTS_LIFETIME", "3600"),
     val rarelyModifiedObjects: Variable = Variable("RARELY_MODIFIED_OBJECTS_LIFETIME", "500"),
     val frequentlyModifiedObjects: Variable = Variable("FREQUENTLY_MODIFIED_OBJECTS_LIFETIME", "100")
 )

@@ -65,7 +65,7 @@ class Context(
 
     private val enableCaching: Boolean = configuration.enableCaching.value.toBoolean(),
 
-    val cacheControlNotModified: CacheControl = configuration.noModifiedObjectsLifetime.value.toInt().let {
+    val cacheControlNotModified: CacheControl = configuration.notModifiedObjectsLifetime.value.toInt().let {
         cacheControlConfig(it, enableCaching)
     },
 
