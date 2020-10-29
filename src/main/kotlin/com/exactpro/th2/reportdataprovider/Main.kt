@@ -21,8 +21,7 @@ import com.exactpro.th2.reportdataprovider.entities.requests.MessageSearchReques
 import io.ktor.application.call
 import io.ktor.application.install
 import io.ktor.features.Compression
-import io.ktor.http.ContentType
-import io.ktor.http.HttpStatusCode
+import io.ktor.http.*
 import io.ktor.response.cacheControl
 import io.ktor.response.respondText
 import io.ktor.routing.get
@@ -36,9 +35,14 @@ import kotlinx.coroutines.IO_PARALLELISM_PROPERTY_NAME
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import mu.KotlinLogging
+import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 import kotlin.system.measureTimeMillis
+
+private fun inPast(rightTimeBoundary: Instant?): Boolean {
+    return rightTimeBoundary?.isBefore(Instant.now()) != false
+}
 
 @InternalAPI
 fun main() {
@@ -182,17 +186,13 @@ fun main() {
                         launch {
                             context.searchMessagesHandler.searchMessages(request)
                                 .let {
-                                    val cachingType =
-                                        if (it.size == request.limit) {
+                                    call.response.cacheControl(
+                                        if (it.size == request.limit || inPast(request.timestampTo)) {
                                             context.cacheControlNotModified
                                         } else {
-                                            cachingType(
-                                                request.timestampTo,
-                                                context.cacheControlNotModified,
-                                                context.cacheControlFrequentlyModified
-                                            )
+                                            context.cacheControlFrequentlyModified
                                         }
-                                    call.response.cacheControl(cachingType)
+                                    )
                                     call.respondText(ContentType.Application.Json, HttpStatusCode.OK) {
                                         jacksonMapper.asStringSuspend(it)
                                     }
@@ -219,11 +219,11 @@ fun main() {
                     try {
                         launch {
                             call.response.cacheControl(
-                                cachingType(
-                                    request.timestampTo,
-                                    context.cacheControlNotModified,
+                                if (inPast(request.timestampTo)) {
+                                    context.cacheControlNotModified
+                                } else {
                                     context.cacheControlFrequentlyModified
-                                )
+                                }
                             )
 
                             call.respondText(
