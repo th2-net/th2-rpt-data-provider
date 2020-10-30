@@ -21,8 +21,7 @@ import com.exactpro.th2.rptdataprovider.entities.requests.MessageSearchRequest
 import io.ktor.application.call
 import io.ktor.application.install
 import io.ktor.features.Compression
-import io.ktor.http.ContentType
-import io.ktor.http.HttpStatusCode
+import io.ktor.http.*
 import io.ktor.response.cacheControl
 import io.ktor.response.respondText
 import io.ktor.routing.get
@@ -36,9 +35,14 @@ import kotlinx.coroutines.IO_PARALLELISM_PROPERTY_NAME
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import mu.KotlinLogging
+import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 import kotlin.system.measureTimeMillis
+
+private fun inPast(rightTimeBoundary: Instant?): Boolean {
+    return rightTimeBoundary?.isBefore(Instant.now()) != false
+}
 
 @InternalAPI
 fun main() {
@@ -48,7 +52,7 @@ fun main() {
     val configuration = context.configuration
     val jacksonMapper = context.jacksonMapper
     val timeout = context.timeout
-    val cacheControl = context.cacheControl
+
 
     System.setProperty(IO_PARALLELISM_PROPERTY_NAME, configuration.ioDispatcherThreadPoolSize.value)
 
@@ -85,7 +89,7 @@ fun main() {
                     try {
                         launch {
                             withTimeout(timeout) {
-                                call.response.cacheControl(cacheControl)
+                                call.response.cacheControl(context.cacheControlNotModified)
                                 try {
                                     call.respondText(
                                         jacksonMapper.asStringSuspend(context.eventCache.getOrPut(id!!)),
@@ -119,7 +123,7 @@ fun main() {
                     try {
                         launch {
                             withTimeout(timeout) {
-                                call.response.cacheControl(cacheControl)
+                                call.response.cacheControl(context.cacheControlRarelyModified)
 
                                 call.respondText(
                                     jacksonMapper.asStringSuspend(context.cradleService.getMessageStreams()),
@@ -145,7 +149,7 @@ fun main() {
 
                 measureTimeMillis {
                     try {
-                        call.response.cacheControl(cacheControl)
+                        call.response.cacheControl(context.cacheControlNotModified)
 
                         context.messageCache.getOrPut(id!!).let {
                             call.respondText(
@@ -182,7 +186,13 @@ fun main() {
                         launch {
                             context.searchMessagesHandler.searchMessages(request)
                                 .let {
-                                    call.response.cacheControl(cacheControl)
+                                    call.response.cacheControl(
+                                        if (it.size == request.limit || inPast(request.timestampTo)) {
+                                            context.cacheControlNotModified
+                                        } else {
+                                            context.cacheControlFrequentlyModified
+                                        }
+                                    )
                                     call.respondText(ContentType.Application.Json, HttpStatusCode.OK) {
                                         jacksonMapper.asStringSuspend(it)
                                     }
@@ -208,7 +218,13 @@ fun main() {
                 measureTimeMillis {
                     try {
                         launch {
-                            call.response.cacheControl(cacheControl)
+                            call.response.cacheControl(
+                                if (inPast(request.timestampTo)) {
+                                    context.cacheControlNotModified
+                                } else {
+                                    context.cacheControlFrequentlyModified
+                                }
+                            )
 
                             call.respondText(
                                 jacksonMapper.asStringSuspend(

@@ -63,13 +63,33 @@ class Context(
         timeout
     ),
 
-    val cacheControl: CacheControl.MaxAge = configuration.clientCacheTimeout.value.toInt().let {
-        CacheControl.MaxAge(
-            visibility = CacheControl.Visibility.Public,
-            maxAgeSeconds = it,
-            mustRevalidate = false,
-            proxyRevalidate = false,
-            proxyMaxAgeSeconds = it
-        )
+    private val enableCaching: Boolean = configuration.enableCaching.value.toBoolean(),
+
+    val cacheControlNotModified: CacheControl = configuration.notModifiedObjectsLifetime.value.toInt().let {
+        cacheControlConfig(it, enableCaching)
+    },
+
+    val cacheControlRarelyModified: CacheControl = configuration.rarelyModifiedObjects.value.toInt().let {
+        cacheControlConfig(it, enableCaching)
+    },
+
+    val cacheControlFrequentlyModified: CacheControl = configuration.frequentlyModifiedObjects.value.toInt().let {
+        cacheControlConfig(it, enableCaching)
     }
 )
+
+private fun cacheControlConfig(timeout: Int, enableCaching: Boolean): CacheControl {
+    return if (enableCaching) {
+        CacheControl.MaxAge(
+            visibility = CacheControl.Visibility.Public,
+            maxAgeSeconds = timeout,
+            mustRevalidate = false,
+            proxyRevalidate = false,
+            proxyMaxAgeSeconds = timeout
+        )
+    } else {
+        CacheControl.NoCache(
+            visibility = CacheControl.Visibility.Public
+        )
+    }
+}

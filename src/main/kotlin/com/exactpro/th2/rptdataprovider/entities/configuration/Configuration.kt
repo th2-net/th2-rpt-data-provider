@@ -22,7 +22,6 @@ class Configuration(
     val responseTimeout: Variable = Variable("HTTP_RESPONSE_TIMEOUT", "60000"),
     val codecResponseTimeout: Variable = Variable("CODEC_RESPONSE_TIMEOUT", "6000"),
     val serverCacheTimeout: Variable = Variable("SERVER_CACHE_TIMEOUT", "60000"),
-    val clientCacheTimeout: Variable = Variable("CLIENT_CACHE_TIMEOUT", "60"),
 
     val eventCacheSize: Variable = Variable("EVENT_CACHE_SIZE", "100"),
     val messageCacheSize: Variable = Variable("MESSAGE_CACHE_SIZE", "100"),
@@ -51,5 +50,11 @@ class Configuration(
     val amqpCodecRoutingKeyOut: Variable = Variable("RABBITMQ_CODEC_ROUTING_KEY_IN", "default_general_decode_in"),
 
     val amqpProviderQueuePrefix: Variable = Variable("RABBITMQ_PROVIDER_QUEUE_PREFIX", "report-data-provider"),
-    val amqpProviderConsumerTag: Variable = Variable("RABBITMQ_PROVIDER_CONSUMER_TAG", "report-data-provider")
+    val amqpProviderConsumerTag: Variable = Variable("RABBITMQ_PROVIDER_CONSUMER_TAG", "report-data-provider"),
+
+
+    val enableCaching: Variable = Variable("ENABLE_CACHING", "true"),
+    val notModifiedObjectsLifetime: Variable = Variable("NOT_MODIFIED_OBJECTS_LIFETIME", "3600"),
+    val rarelyModifiedObjects: Variable = Variable("RARELY_MODIFIED_OBJECTS_LIFETIME", "500"),
+    val frequentlyModifiedObjects: Variable = Variable("FREQUENTLY_MODIFIED_OBJECTS_LIFETIME", "100")
 )

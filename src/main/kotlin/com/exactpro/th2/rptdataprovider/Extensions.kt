@@ -56,4 +56,3 @@ suspend fun <T> logTime(methodName: String, lambda: suspend () -> T): T? {
         result
     }
 }
-
