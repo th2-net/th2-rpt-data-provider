@@ -33,7 +33,8 @@ import io.ktor.http.CacheControl
 
 @Suppress("MemberVisibilityCanBePrivate")
 class Context(
-    val configuration: Configuration = Configuration(),
+    val args: Array<String>,
+    val configuration: Configuration = Configuration(args),
 
     val timeout: Long = configuration.responseTimeout.value.toLong(),
     val cacheTimeout: Long = configuration.serverCacheTimeout.value.toLong(),

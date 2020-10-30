@@ -16,45 +16,133 @@
 
 package com.exactpro.th2.rptdataprovider.entities.configuration
 
-class Configuration(
-    val hostname: Variable = Variable("HTTP_HOST", "localhost"),
-    val port: Variable = Variable("HTTP_PORT", "8080"),
-    val responseTimeout: Variable = Variable("HTTP_RESPONSE_TIMEOUT", "60000"),
-    val codecResponseTimeout: Variable = Variable("CODEC_RESPONSE_TIMEOUT", "6000"),
-    val serverCacheTimeout: Variable = Variable("SERVER_CACHE_TIMEOUT", "60000"),
+import com.exactpro.th2.common.schema.factory.CommonFactory
 
-    val eventCacheSize: Variable = Variable("EVENT_CACHE_SIZE", "100"),
-    val messageCacheSize: Variable = Variable("MESSAGE_CACHE_SIZE", "100"),
-    val codecCacheSize: Variable = Variable("CODEC_CACHE_SIZE", "100"),
+class CustomConfigurationClass {
+    var hostname: String = "localhost"
+    var port: Int = 8080
+    var responseTimeout: Int = 60000
+    var serverCacheTimeout: Int = 60000
+    var clientCacheTimeout: Int = 60
+    var eventCacheSize: Int = 100000
+    var messageCacheSize: Int = 100000
+    var ioDispatcherThreadPoolSize: Int = 1
+    var cassandraInstance: String = "instance1"
+    var cassandraQueryTimeout: Int = 30000
+    var codecResponseTimeout: Int = 6000
+    var codecCacheSize: Int = 100
+    var amqpUsername: String = ""
+    var amqpPassword: String = ""
+    var amqpHost: String = ""
+    var amqpPort: String = ""
+    var amqpVhost: String = ""
 
-    val cassandraDatacenter: Variable = Variable("CASSANDRA_DATA_CENTER", "kos"),
-    val cassandraHost: Variable = Variable("CASSANDRA_HOST", "cassandra"),
-    val cassandraPort: Variable = Variable("CASSANDRA_PORT", "9042"),
-    val cassandraKeyspace: Variable = Variable("CASSANDRA_KEYSPACE", "demo"),
-    val cassandraQueryTimeout: Variable = Variable("CASSANDRA_QUERY_TIMEOUT", "30000"),
-    val cassandraUsername: Variable = Variable("CASSANDRA_USERNAME", "guest"),
-    val cassandraPassword: Variable = Variable("CASSANDRA_PASSWORD", "guest", false),
-    val cassandraInstance: Variable = Variable("CRADLE_INSTANCE_NAME", "instance1"),
-    val ioDispatcherThreadPoolSize: Variable = Variable("THREAD_POOL_SIZE", "1"),
-
-    val amqpUsername: Variable = Variable("RABBITMQ_USERNAME", ""),
-    val amqpPassword: Variable = Variable("RABBITMQ_PASSWORD", "", false),
-    val amqpHost: Variable = Variable("RABBITMQ_HOST", ""),
-    val amqpPort: Variable = Variable("RABBITMQ_PORT", ""),
-    val amqpVhost: Variable = Variable("RABBITMQ_VHOST", ""),
-
-    val amqpCodecExchangeName: Variable = Variable("RABBITMQ_EXCHANGE_NAME_TH2_CODEC", "default_general_exchange"),
+    var amqpCodecExchangeName: String = "default_general_exchange"
 
     // Class fields are labeled from provider point of view. They are intentionally swapped.
-    val amqpCodecRoutingKeyIn: Variable = Variable("RABBITMQ_CODEC_ROUTING_KEY_OUT", "default_general_decode_out"),
-    val amqpCodecRoutingKeyOut: Variable = Variable("RABBITMQ_CODEC_ROUTING_KEY_IN", "default_general_decode_in"),
+    var amqpCodecRoutingKeyIn: String = "default_general_decode_out"
+    var amqpCodecRoutingKeyOut: String = "default_general_decode_in"
 
-    val amqpProviderQueuePrefix: Variable = Variable("RABBITMQ_PROVIDER_QUEUE_PREFIX", "report-data-provider"),
-    val amqpProviderConsumerTag: Variable = Variable("RABBITMQ_PROVIDER_CONSUMER_TAG", "report-data-provider"),
+    var amqpProviderQueuePrefix: String = "report-data-provider"
+    var amqpProviderConsumerTag: String = "report-data-provider"
 
+    val enableCaching: Boolean = true
+    val notModifiedObjectsLifetime: Int = 3600
+    val rarelyModifiedObjects: Int = 500
+    val frequentlyModifiedObjects: Int = 100
 
-    val enableCaching: Variable = Variable("ENABLE_CACHING", "true"),
-    val notModifiedObjectsLifetime: Variable = Variable("NOT_MODIFIED_OBJECTS_LIFETIME", "3600"),
-    val rarelyModifiedObjects: Variable = Variable("RARELY_MODIFIED_OBJECTS_LIFETIME", "500"),
-    val frequentlyModifiedObjects: Variable = Variable("FREQUENTLY_MODIFIED_OBJECTS_LIFETIME", "100")
-)
+    override fun toString(): String {
+        return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, clientCacheTimeout=$clientCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, cassandraInstance='$cassandraInstance', cassandraQueryTimeout=$cassandraQueryTimeout)"
+    }
+}
+
+class Configuration(args: Array<String>) {
+
+    private val configurationFactory = CommonFactory.createFromArguments(*args)
+    private val customConfiguration =
+        configurationFactory.getCustomConfiguration(CustomConfigurationClass::class.java)
+    private val cradleConfiguration = configurationFactory.cradleConfiguration
+
+    val hostname: Variable =
+        Variable("hostname", customConfiguration.hostname, "localhost")
+
+    val port: Variable =
+        Variable("port", customConfiguration.port.toString(), "8080")
+
+    val responseTimeout: Variable =
+        Variable("responseTimeout", customConfiguration.responseTimeout.toString(), "60000")
+
+    val codecResponseTimeout: Variable = Variable(
+        "codecResponseTimeout",
+        customConfiguration.codecResponseTimeout.toString(), "6000"
+    )
+
+    val serverCacheTimeout: Variable =
+        Variable("serverCacheTimeout", customConfiguration.serverCacheTimeout.toString(), "60000")
+
+    val clientCacheTimeout: Variable =
+        Variable("clientCacheTimeout", customConfiguration.clientCacheTimeout.toString(), "60")
+
+    val eventCacheSize: Variable =
+        Variable("eventCacheSize", customConfiguration.eventCacheSize.toString(), "100000")
+
+    val messageCacheSize: Variable =
+        Variable("messageCacheSize", customConfiguration.messageCacheSize.toString(), "100000")
+
+    val codecCacheSize: Variable = Variable(
+        "codecCacheSize", customConfiguration.codecCacheSize.toString(),
+        "100"
+    )
+
+    val cassandraDatacenter: Variable =
+        Variable("cradle: dataCenter", cradleConfiguration.dataCenter, "kos")
+
+    val cassandraHost: Variable =
+        Variable("cradle: host", cradleConfiguration.host, "cassandra")
+
+    val cassandraPort: Variable =
+        Variable("cradle: port", cradleConfiguration.port.toString(), "9042")
+
+    val cassandraKeyspace: Variable =
+        Variable("cradle: keyspace", cradleConfiguration.keyspace, "demo")
+
+    val cassandraUsername: Variable =
+        Variable("cradle: username", cradleConfiguration.username, "guest")
+
+    val cassandraPassword: Variable =
+        Variable("cradle: password", cradleConfiguration.password, "guest", false)
+
+    val cassandraQueryTimeout: Variable =
+        Variable("cassandraQueryTimeout", customConfiguration.cassandraQueryTimeout.toString(), "30000")
+
+    val cassandraInstance: Variable =
+        Variable("cassandraInstance", customConfiguration.cassandraInstance, "instance1")
+
+    val ioDispatcherThreadPoolSize: Variable =
+        Variable("ioDispatcherThreadPoolSize", customConfiguration.ioDispatcherThreadPoolSize.toString(), "1")
+
+    val amqpUsername: Variable = Variable("amqpUsername", customConfiguration.amqpUsername, "")
+    val amqpPassword: Variable = Variable("amqpPassword", customConfiguration.amqpPassword, "", false)
+    val amqpHost: Variable = Variable("amqpHost", customConfiguration.amqpHost, "")
+    val amqpPort: Variable = Variable("amqpPort", customConfiguration.amqpPort, "")
+    val amqpVhost: Variable = Variable("amqpVhost", customConfiguration.amqpVhost, "")
+
+    val amqpCodecExchangeName: Variable =
+        Variable("amqpCodecExchangeName", customConfiguration.amqpCodecExchangeName, "default_general_exchange")
+
+    // Class fields are labeled from provider point of view. They are intentionally swapped.
+    val amqpCodecRoutingKeyIn: Variable =
+        Variable("amqpCodecRoutingKeyIn", customConfiguration.amqpCodecRoutingKeyIn, "default_general_decode_out")
+    val amqpCodecRoutingKeyOut: Variable =
+        Variable("amqpCodecRoutingKeyOut", customConfiguration.amqpCodecRoutingKeyOut, "default_general_decode_in")
+
+    val amqpProviderQueuePrefix: Variable =
+        Variable("amqpProviderQueuePrefix", customConfiguration.amqpProviderQueuePrefix, "report-data-provider")
+    val amqpProviderConsumerTag: Variable =
+        Variable("amqpProviderConsumerTag", customConfiguration.amqpProviderConsumerTag, "report-data-provider")
+
+    val enableCaching: Variable = Variable("enableCaching", customConfiguration.enableCaching.toString(), "true")
+    val notModifiedObjectsLifetime: Variable = Variable("notModifiedObjectsLifetime", customConfiguration.notModifiedObjectsLifetime.toString(), "3600")
+    val rarelyModifiedObjects: Variable = Variable("rarelyModifiedObjects", customConfiguration.rarelyModifiedObjects.toString(), "500")
+    val frequentlyModifiedObjects: Variable = Variable("frequentlyModifiedObjects", customConfiguration.frequentlyModifiedObjects.toString(), "100")
+}

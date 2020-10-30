@@ -18,19 +18,14 @@ package com.exactpro.th2.rptdataprovider
 
 import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.MessageSearchRequest
-import io.ktor.application.call
-import io.ktor.application.install
-import io.ktor.features.Compression
+import io.ktor.application.*
+import io.ktor.features.*
 import io.ktor.http.*
-import io.ktor.response.cacheControl
-import io.ktor.response.respondText
-import io.ktor.routing.get
-import io.ktor.routing.routing
-import io.ktor.server.engine.embeddedServer
-import io.ktor.server.netty.Netty
-import io.ktor.util.InternalAPI
-import io.ktor.util.rootCause
-import io.ktor.util.toMap
+import io.ktor.response.*
+import io.ktor.routing.*
+import io.ktor.server.engine.*
+import io.ktor.server.netty.*
+import io.ktor.util.*
 import kotlinx.coroutines.IO_PARALLELISM_PROPERTY_NAME
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
@@ -45,10 +40,10 @@ private fun inPast(rightTimeBoundary: Instant?): Boolean {
 }
 
 @InternalAPI
-fun main() {
+fun main(args: Array<String>) {
     val logger = KotlinLogging.logger {}
 
-    val context = Context()
+    val context = Context(args)
     val configuration = context.configuration
     val jacksonMapper = context.jacksonMapper
     val timeout = context.timeout

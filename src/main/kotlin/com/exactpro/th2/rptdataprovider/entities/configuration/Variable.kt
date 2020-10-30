@@ -18,26 +18,24 @@ package com.exactpro.th2.rptdataprovider.entities.configuration
 
 import mu.KotlinLogging
 
+
 class Variable(
     name: String,
+    param: String?,
     defaultValue: String,
     showInLog: Boolean = true
 ) {
     private val logger = KotlinLogging.logger { }
 
-    override fun toString(): String {
-        return this.value
-    }
-
-    val value: String = System.getenv(name)
+    val value: String = param
         .also {
             logger.info {
                 val valueToLog = if (showInLog) it ?: defaultValue else "*****"
 
                 if (it == null)
-                    "environment variable '$name' is not set - defaulting to '$valueToLog'"
+                    "property '$name' is not set - defaulting to '$valueToLog'"
                 else
-                    "environment variable '$name' is set to '$valueToLog'"
+                    "property '$name' is set to '$valueToLog'"
             }
         }
         ?: defaultValue
