@@ -15,4 +15,4 @@ ENV CRADLE_INSTANCE_NAME=instance1 \
     HTTP_HOST=localhost
 WORKDIR /home
 COPY --from=build /home/gradle/build/docker .
-ENTRYPOINT ["/home/service/bin/service", "run", "com.exactpro.th2.reportdataprovider.MainKt"]
+ENTRYPOINT ["/home/service/bin/service", "run", "com.exactpro.th2.rptdataprovider.MainKt"]
