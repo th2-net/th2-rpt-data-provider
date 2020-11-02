@@ -52,14 +52,4 @@ data class Message(
         timestamp = rawStoredMessage.timestamp ?: Instant.ofEpochMilli(0),
         sessionId = rawStoredMessage.streamName ?: ""
     )
-
-    constructor(message: StoredMessage): this (
-        bodyBase64 = null,
-        body = null,
-        messageType = "",
-        id = message.id,
-        direction = Direction.fromStored(message.direction ?: com.exactpro.cradle.Direction.FIRST),
-        timestamp = message.timestamp,
-        sessionId = message.streamName
-    )
 }

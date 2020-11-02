@@ -46,6 +46,15 @@ class SearchMessagesHandler(
         private val logger = KotlinLogging.logger { }
     }
 
+    suspend fun isMessageFiltered(request: MessageSearchRequest, message: Message): Boolean {
+        return (request.messageType == null || request.messageType.any { item ->
+            message.messageType.toLowerCase().contains(item.toLowerCase())
+        }) && (request.attachedEventId == null
+                || cradle.getMessageIdsSuspend(StoredTestEventId(request.attachedEventId))
+            .contains(StoredMessageId.fromString(message.messageId)))
+    }
+
+
     suspend fun searchMessages(request: MessageSearchRequest): List<Any> {
         return withTimeout(timeout) {
 
@@ -90,32 +99,21 @@ class SearchMessagesHandler(
                 .filterNot { it.id.toString() == request.messageId }
                 .map {
                     async {
-                        if (request.attachedEventId != null || request.messageType != null || !request.idsOnly) {
+                        if ((request.attachedEventId ?: request.messageType) != null || !request.idsOnly) {
                             @Suppress("USELESS_CAST")
-                            (messageCache.get(it.id.toString())
-                                ?: messageProducer.fromRawMessage(it))
-
-                                .also { messageCache.put(it.id.toString(), it) }
+                            Pair(it, isMessageFiltered(request, messageCache.getOrPut(it)))
                         } else {
-                            Message(it)
+                            Pair(it, true)
                         }
                     }
                 }
                 .map { it.await() }
-                .filter {
-                    (request.messageType == null || request.messageType.any { item ->
-                        it.messageType.toLowerCase().contains(item.toLowerCase())
-                    })
-                    &&
-                    (request.attachedEventId == null
-                            || cradle.getMessageIdsSuspend(StoredTestEventId(request.attachedEventId))
-                                        .contains(StoredMessageId.fromString(it.messageId)))
-                }
+                .filter { it.second }
                 .map {
                     if (request.idsOnly) {
-                        it.messageId
+                        it.first.id.toString()
                     } else {
-                        it
+                        messageCache.getOrPut(it.first)
                     }
                 }
         }
