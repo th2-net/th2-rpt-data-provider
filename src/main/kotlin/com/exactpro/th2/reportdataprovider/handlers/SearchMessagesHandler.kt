@@ -21,8 +21,10 @@ import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.th2.reportdataprovider.cache.MessageCache
 import com.exactpro.th2.reportdataprovider.entities.requests.MessageSearchRequest
+import com.exactpro.th2.reportdataprovider.entities.responses.Message
 import com.exactpro.th2.reportdataprovider.producers.MessageProducer
 import com.exactpro.th2.reportdataprovider.services.CradleService
 import kotlinx.coroutines.async
@@ -88,19 +90,34 @@ class SearchMessagesHandler(
                 .filterNot { it.id.toString() == request.messageId }
                 .map {
                     async {
-                        if (request.idsOnly) {
-                            it.id.toString()
-                        } else {
-
+                        if (request.attachedEventId != null || request.messageType != null || !request.idsOnly) {
                             @Suppress("USELESS_CAST")
                             (messageCache.get(it.id.toString())
                                 ?: messageProducer.fromRawMessage(it))
 
-                                .also { messageCache.put(it.id.toString(), it) } as Any
+                                .also { messageCache.put(it.id.toString(), it) }
+                        } else {
+                            Message(it)
                         }
                     }
                 }
                 .map { it.await() }
+                .filter {
+                    (request.messageType == null || request.messageType.any { item ->
+                        it.messageType.toLowerCase().contains(item.toLowerCase())
+                    })
+                    &&
+                    (request.attachedEventId == null
+                            || cradle.getMessageIdsSuspend(StoredTestEventId(request.attachedEventId))
+                                        .contains(StoredMessageId.fromString(it.messageId)))
+                }
+                .map {
+                    if (request.idsOnly) {
+                        it.messageId
+                    } else {
+                        it
+                    }
+                }
         }
     }
 
