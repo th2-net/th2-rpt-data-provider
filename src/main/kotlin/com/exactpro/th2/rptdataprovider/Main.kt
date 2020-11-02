@@ -45,11 +45,11 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import kotlin.system.measureTimeMillis
 
-class Main {
+class Main(args: Array<String>) {
 
     private val logger = KotlinLogging.logger {}
 
-    private val context = Context()
+    private val context = Context(args)
     private val configuration = context.configuration
     private val jacksonMapper = context.jacksonMapper
     private val timeout = context.timeout
@@ -204,6 +204,6 @@ class Main {
 }
 
 @InternalAPI
-fun main() {
-    Main().run()
+fun main(args: Array<String>) {
+    Main(args).run()
 }
