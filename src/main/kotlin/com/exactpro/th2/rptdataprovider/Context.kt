@@ -24,7 +24,7 @@ import com.exactpro.th2.rptdataprovider.handlers.SearchEventsHandler
 import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
-import com.exactpro.th2.rptdataprovider.services.CradleService
+import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -43,7 +43,9 @@ class Context(
         .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
         .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES),
 
-    val cradleService: CradleService = CradleService(configuration),
+    val cradleService: CradleService = CradleService(
+        configuration
+    ),
 
     val rabbitMqService: RabbitMqService = RabbitMqService(
         configuration

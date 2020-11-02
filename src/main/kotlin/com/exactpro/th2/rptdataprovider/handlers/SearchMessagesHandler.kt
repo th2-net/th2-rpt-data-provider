@@ -24,7 +24,7 @@ import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.cache.MessageCache
 import com.exactpro.th2.rptdataprovider.entities.requests.MessageSearchRequest
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
-import com.exactpro.th2.rptdataprovider.services.CradleService
+import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.take
