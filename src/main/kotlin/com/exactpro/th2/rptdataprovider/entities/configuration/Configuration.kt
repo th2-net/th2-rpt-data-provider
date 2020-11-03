@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider.entities.configuration
 
+import com.exactpro.cradle.CradleManager
 import com.exactpro.th2.common.schema.factory.CommonFactory
 
 class CustomConfigurationClass {
@@ -27,8 +28,6 @@ class CustomConfigurationClass {
     var eventCacheSize: Int = 100000
     var messageCacheSize: Int = 100000
     var ioDispatcherThreadPoolSize: Int = 1
-    var cassandraInstance: String = "instance1"
-    var cassandraQueryTimeout: Int = 30000
     var codecResponseTimeout: Int = 6000
     var codecCacheSize: Int = 100
     var amqpUsername: String = ""
@@ -52,16 +51,19 @@ class CustomConfigurationClass {
     val frequentlyModifiedObjects: Int = 100
 
     override fun toString(): String {
-        return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, clientCacheTimeout=$clientCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, cassandraInstance='$cassandraInstance', cassandraQueryTimeout=$cassandraQueryTimeout)"
+        return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, clientCacheTimeout=$clientCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, codecResponseTimeout=$codecResponseTimeout, codecCacheSize=$codecCacheSize, amqpUsername='$amqpUsername', amqpPassword='$amqpPassword', amqpHost='$amqpHost', amqpPort='$amqpPort', amqpVhost='$amqpVhost', amqpCodecExchangeName='$amqpCodecExchangeName', amqpCodecRoutingKeyIn='$amqpCodecRoutingKeyIn', amqpCodecRoutingKeyOut='$amqpCodecRoutingKeyOut', amqpProviderQueuePrefix='$amqpProviderQueuePrefix', amqpProviderConsumerTag='$amqpProviderConsumerTag', enableCaching=$enableCaching, notModifiedObjectsLifetime=$notModifiedObjectsLifetime, rarelyModifiedObjects=$rarelyModifiedObjects, frequentlyModifiedObjects=$frequentlyModifiedObjects)"
     }
 }
 
 class Configuration(args: Array<String>) {
 
     private val configurationFactory = CommonFactory.createFromArguments(*args)
+
+    val cradleManager: CradleManager
+        get() = configurationFactory.cradleManager
+
     private val customConfiguration =
         configurationFactory.getCustomConfiguration(CustomConfigurationClass::class.java)
-    private val cradleConfiguration = configurationFactory.cradleConfiguration
 
     val hostname: Variable =
         Variable("hostname", customConfiguration.hostname, "localhost")
@@ -80,9 +82,6 @@ class Configuration(args: Array<String>) {
     val serverCacheTimeout: Variable =
         Variable("serverCacheTimeout", customConfiguration.serverCacheTimeout.toString(), "60000")
 
-    val clientCacheTimeout: Variable =
-        Variable("clientCacheTimeout", customConfiguration.clientCacheTimeout.toString(), "60")
-
     val eventCacheSize: Variable =
         Variable("eventCacheSize", customConfiguration.eventCacheSize.toString(), "100000")
 
@@ -93,30 +92,6 @@ class Configuration(args: Array<String>) {
         "codecCacheSize", customConfiguration.codecCacheSize.toString(),
         "100"
     )
-
-    val cassandraDatacenter: Variable =
-        Variable("cradle: dataCenter", cradleConfiguration.dataCenter, "kos")
-
-    val cassandraHost: Variable =
-        Variable("cradle: host", cradleConfiguration.host, "cassandra")
-
-    val cassandraPort: Variable =
-        Variable("cradle: port", cradleConfiguration.port.toString(), "9042")
-
-    val cassandraKeyspace: Variable =
-        Variable("cradle: keyspace", cradleConfiguration.keyspace, "demo")
-
-    val cassandraUsername: Variable =
-        Variable("cradle: username", cradleConfiguration.username, "guest")
-
-    val cassandraPassword: Variable =
-        Variable("cradle: password", cradleConfiguration.password, "guest", false)
-
-    val cassandraQueryTimeout: Variable =
-        Variable("cassandraQueryTimeout", customConfiguration.cassandraQueryTimeout.toString(), "30000")
-
-    val cassandraInstance: Variable =
-        Variable("cassandraInstance", customConfiguration.cassandraInstance, "instance1")
 
     val ioDispatcherThreadPoolSize: Variable =
         Variable("ioDispatcherThreadPoolSize", customConfiguration.ioDispatcherThreadPoolSize.toString(), "1")
@@ -142,7 +117,10 @@ class Configuration(args: Array<String>) {
         Variable("amqpProviderConsumerTag", customConfiguration.amqpProviderConsumerTag, "report-data-provider")
 
     val enableCaching: Variable = Variable("enableCaching", customConfiguration.enableCaching.toString(), "true")
-    val notModifiedObjectsLifetime: Variable = Variable("notModifiedObjectsLifetime", customConfiguration.notModifiedObjectsLifetime.toString(), "3600")
-    val rarelyModifiedObjects: Variable = Variable("rarelyModifiedObjects", customConfiguration.rarelyModifiedObjects.toString(), "500")
-    val frequentlyModifiedObjects: Variable = Variable("frequentlyModifiedObjects", customConfiguration.frequentlyModifiedObjects.toString(), "100")
+    val notModifiedObjectsLifetime: Variable =
+        Variable("notModifiedObjectsLifetime", customConfiguration.notModifiedObjectsLifetime.toString(), "3600")
+    val rarelyModifiedObjects: Variable =
+        Variable("rarelyModifiedObjects", customConfiguration.rarelyModifiedObjects.toString(), "500")
+    val frequentlyModifiedObjects: Variable =
+        Variable("frequentlyModifiedObjects", customConfiguration.frequentlyModifiedObjects.toString(), "100")
 }

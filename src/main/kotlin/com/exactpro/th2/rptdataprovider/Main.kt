@@ -62,9 +62,10 @@ class Main(args: Array<String>) {
         vararg parameters: Any?,
         calledFun: suspend () -> Any
     ) {
+        val stringParameters = parameters.contentDeepToString()
         coroutineScope {
             measureTimeMillis {
-                logger.debug { "handling '$requestName' request with parameters '$parameters'" }
+                logger.debug { "handling '$requestName' request with parameters '$stringParameters'" }
 
                 try {
                     try {
@@ -80,17 +81,17 @@ class Main(args: Array<String>) {
                         throw e.rootCause ?: e
                     }
                 } catch (e: CradleObjectNotFoundException) {
-                    logger.error(e) { "unable to handle request '$requestName' with parameters '$parameters' - missing cradle data" }
+                    logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - missing cradle data" }
                     call.respondText(
                         e.rootCause?.message ?: e.toString(), ContentType.Text.Plain, HttpStatusCode.NotFound
                     )
                 } catch (e: Exception) {
-                    logger.error(e) { "unable to handle request '$requestName' with parameters '$parameters' - unexpected exception" }
+                    logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - unexpected exception" }
                     call.respondText(
                         e.rootCause?.message ?: e.toString(), ContentType.Text.Plain, HttpStatusCode.InternalServerError
                     )
                 }
-            }.let { logger.debug { "request '$requestName' with parameters '$parameters' handled - time=${it}ms" } }
+            }.let { logger.debug { "request '$requestName' with parameters '$stringParameters' handled - time=${it}ms" } }
         }
     }
 
@@ -120,25 +121,6 @@ class Main(args: Array<String>) {
             install(Compression)
 
             routing {
-                get("/") {
-                    val startOfDay =
-                        LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).atZone(ZoneId.of("UTC"))
-                            .toEpochSecond() * 1000
-
-                    val currentTime = LocalDateTime.now().atZone(ZoneId.of("UTC")).toEpochSecond() * 1000
-
-                    call.respondText(
-                        """
-                        <h1>Report data provider is working.</h1>
-                        <div>Cassandra endpoint is set to <u><pre style="display: inline">${configuration.cassandraHost.value}:${configuration.cassandraPort.value}</pre></u>.</div>
-                        <div>Keyspace is set to <pre style="display: inline">${configuration.cassandraKeyspace.value}</pre></div>
-                        <a href="search/events?timestampFrom=${startOfDay}&timestampTo=${currentTime}">list of events since the start of day (json)</a>
-                        <div>Check API reference for details.</div>
-                        """.trimIndent(),
-                        ContentType.Text.Html
-                    )
-
-                }
 
                 get("/event/{id}") {
                     val id = call.parameters["id"]
