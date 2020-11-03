@@ -16,11 +16,9 @@
 
 package com.exactpro.th2.rptdataprovider.services.cradle
 
+import com.exactpro.cradle.CradleManager
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.TimeRelation
-import com.exactpro.cradle.cassandra.CassandraCradleManager
-import com.exactpro.cradle.cassandra.connection.CassandraConnection
-import com.exactpro.cradle.cassandra.connection.CassandraConnectionSettings
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageFilter
 import com.exactpro.cradle.messages.StoredMessageId
@@ -43,20 +41,7 @@ class CradleService(configuration: Configuration) {
         val logger = KotlinLogging.logger {}
     }
 
-    private val cradleManager: CassandraCradleManager = CassandraCradleManager(CassandraConnection(configuration.let {
-        val settings = CassandraConnectionSettings(
-            it.cassandraDatacenter.value,
-            it.cassandraHost.value,
-            it.cassandraPort.value.toInt(),
-            it.cassandraKeyspace.value
-        )
-
-        settings.timeout = it.cassandraQueryTimeout.value.toLong()
-        settings.username = it.cassandraUsername.value
-        settings.password = it.cassandraPassword.value
-
-        settings
-    })).also { it.init(configuration.cassandraInstance.value) }
+    private val cradleManager: CradleManager = configuration.cradleManager
 
     private val storage = cradleManager.storage
     private val linker = cradleManager.storage.testEventsMessagesLinker
