@@ -16,33 +16,23 @@
 
 package com.exactpro.th2.rptdataprovider
 
-import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.MessageSearchRequest
-import io.ktor.application.ApplicationCall
-import io.ktor.application.call
-import io.ktor.application.install
-import io.ktor.features.Compression
-import io.ktor.http.CacheControl
-import io.ktor.http.ContentType
-import io.ktor.http.HttpStatusCode
-import io.ktor.response.cacheControl
-import io.ktor.response.respondText
-import io.ktor.routing.get
-import io.ktor.routing.routing
-import io.ktor.server.engine.embeddedServer
-import io.ktor.server.netty.Netty
-import io.ktor.util.InternalAPI
-import io.ktor.util.rootCause
-import io.ktor.util.toMap
+import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
+import io.ktor.application.*
+import io.ktor.features.*
+import io.ktor.http.*
+import io.ktor.response.*
+import io.ktor.routing.*
+import io.ktor.server.engine.*
+import io.ktor.server.netty.*
+import io.ktor.util.*
 import kotlinx.coroutines.IO_PARALLELISM_PROPERTY_NAME
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import mu.KotlinLogging
 import java.time.Instant
-import java.time.LocalDateTime
-import java.time.ZoneId
 import kotlin.system.measureTimeMillis
 
 class Main(args: Array<String>) {

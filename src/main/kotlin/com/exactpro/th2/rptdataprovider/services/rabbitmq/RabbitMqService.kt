@@ -17,12 +17,9 @@
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
 import com.exactpro.th2.common.grpc.Message
-import com.exactpro.th2.common.grpc.MessageBatch
 import com.exactpro.th2.common.grpc.RawMessageBatch
+import com.exactpro.th2.common.schema.message.MessageListener
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
-import com.google.protobuf.InvalidProtocolBufferException
-import com.rabbitmq.client.Connection
-import com.rabbitmq.client.ConnectionFactory
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.util.concurrent.ConcurrentSkipListSet
@@ -37,107 +34,47 @@ class RabbitMqService(private val configuration: Configuration) {
 
     private val decodeRequests = ConcurrentSkipListSet<CodecRequest>()
 
-    private val connection: Connection? =
-        try {
-            ConnectionFactory().also {
-                it.host = configuration.amqpHost.value
-                it.port = configuration.amqpPort.value.toInt()
-                it.username = configuration.amqpUsername.value
-                it.password = configuration.amqpPassword.value
-                it.virtualHost = configuration.amqpVhost.value
-            }.newConnection()
-        } catch (e: Exception) {
-            logger.error(e) { "unable to establish amqp connection" }
-            null
-        }
+    //val queueName = configuration.amqpProviderQueuePrefix.value + "-IN" ???
 
-    private val receiveChannel: com.rabbitmq.client.Channel? =
-        try {
-            connection?.createChannel()?.also { channel ->
+    private val receiveChannel = configuration.messageRouterParsedBatch.subscribe(
+        MessageListener { _, decodedBatch ->
+            decodedBatch.messagesList.forEach { message ->
+                val match = decodeRequests.firstOrNull { it.id == message.metadata.id }
 
-                val queueName = configuration.amqpProviderQueuePrefix.value + "-IN"
+                if (match != null) {
+                    match.let { decodeRequests.remove(it) }
+                    GlobalScope.launch { match.channel.send(message) }
+                } else {
+                    logger.debug {
+                        val id = message?.metadata?.id
 
-                channel.queueDeclare(queueName, false, false, true, emptyMap())
-                channel.queueBind(
-                    queueName,
-                    configuration.amqpCodecExchangeName.value,
-                    configuration.amqpCodecRoutingKeyIn.value
-                )
+                        val idString =
+                            "(stream=${id?.connectionId?.sessionAlias}, direction=${id?.direction}, sequence=${id?.sequence})"
 
-                logger.debug { "receive queue '$queueName' is bound to routing key '${configuration.amqpCodecRoutingKeyIn.value}'" }
-
-                channel.basicConsume(
-                    queueName,
-                    false,
-                    configuration.amqpProviderConsumerTag.value,
-                    { _, delivery ->
-                        try {
-                            val decodedBatch = MessageBatch.parseFrom(delivery.body)
-
-                            var needAck = false
-                            decodedBatch.messagesList.forEach { message ->
-                                val match = decodeRequests.firstOrNull { it.id == message.metadata.id }
-
-                                if (match != null) {
-                                    match.let { decodeRequests.remove(it) }
-                                    GlobalScope.launch { match.channel.send(message) }
-                                    needAck = true
-                                } else {
-                                    logger.debug {
-                                        val id = message?.metadata?.id
-
-                                        val idString =
-                                            "(stream=${id?.connectionId?.sessionAlias}, direction=${id?.direction}, sequence=${id?.sequence})"
-
-                                        "decoded message '$idString' was received but no request was found"
-                                    }
-                                }
-                            }
-
-                            if (needAck) {
-                                channel.basicAck(delivery.envelope.deliveryTag, false)
-                            }
-
-                            if (decodeRequests.size > 0) {
-                                logger.debug { "${decodeRequests.size} decode requests remaining" }
-                            }
-
-                        } catch (e: InvalidProtocolBufferException) {
-                            logger.error { "unable to parse delivery '${delivery.envelope.deliveryTag}' data:'${delivery.body}'" }
-                        }
-
-                    },
-                    { consumerTag -> logger.error { "consumer '$consumerTag' was unexpectedly cancelled" } }
-                )
+                        "decoded message '$idString' was received but no request was found"
+                    }
+                }
             }
-        } catch (e: Exception) {
-            logger.error(e) { "unable to create a receive channel" }
-            null
-        }
+
+            if (decodeRequests.size > 0) {
+                logger.debug { "${decodeRequests.size} decode requests remaining" }
+            }
+        },
+        "-IN" // TODO(???)
+    )
 
     suspend fun decodeMessage(batch: RawMessageBatch): Collection<Message> {
-        if (connection == null) {
-            return listOf()
-        }
 
         val requests: Set<CodecRequest> = batch.messagesList
             .map { CodecRequest(it.metadata.id) }
             .toSet()
 
         return withContext(Dispatchers.IO) {
+            configuration.messageRouterRawBatch.send(batch)
+
             val deferred = requests.map { async { it.channel.receive() } }
 
             decodeRequests.addAll(requests)
-
-            connection.createChannel()
-                .use { channel ->
-                    channel.basicPublish(
-                        configuration.amqpCodecExchangeName.value,
-                        configuration.amqpCodecRoutingKeyOut.value,
-                        null,
-                        batch.toByteArray()
-                    )
-                }
 
             val requestDebugInfo = let {
                 val firstId = batch.messagesList?.first()?.metadata?.id

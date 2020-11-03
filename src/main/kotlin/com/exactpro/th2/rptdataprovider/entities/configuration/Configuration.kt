@@ -17,7 +17,10 @@
 package com.exactpro.th2.rptdataprovider.entities.configuration
 
 import com.exactpro.cradle.CradleManager
+import com.exactpro.th2.common.grpc.MessageBatch
+import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.schema.factory.CommonFactory
+import com.exactpro.th2.common.schema.message.MessageRouter
 
 class CustomConfigurationClass {
     var hostname: String = "localhost"
@@ -61,6 +64,13 @@ class Configuration(args: Array<String>) {
 
     val cradleManager: CradleManager
         get() = configurationFactory.cradleManager
+
+    val messageRouterRawBatch: MessageRouter<RawMessageBatch>
+        get() = configurationFactory.messageRouterRawBatch
+
+    val messageRouterParsedBatch: MessageRouter<MessageBatch>
+        get() = configurationFactory.messageRouterParsedBatch
+
 
     private val customConfiguration =
         configurationFactory.getCustomConfiguration(CustomConfigurationClass::class.java)
