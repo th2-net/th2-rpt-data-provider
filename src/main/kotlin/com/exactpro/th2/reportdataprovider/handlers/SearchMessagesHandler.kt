@@ -46,7 +46,7 @@ class SearchMessagesHandler(
         private val logger = KotlinLogging.logger { }
     }
 
-    suspend fun isMessageFiltered(request: MessageSearchRequest, message: Message): Boolean {
+    private suspend fun isMessageMatched(request: MessageSearchRequest, message: Message): Boolean {
         return (request.messageType == null || request.messageType.any { item ->
             message.messageType.toLowerCase().contains(item.toLowerCase())
         }) && (request.attachedEventId == null
@@ -101,7 +101,7 @@ class SearchMessagesHandler(
                     async {
                         if ((request.attachedEventId ?: request.messageType) != null || !request.idsOnly) {
                             @Suppress("USELESS_CAST")
-                            Pair(it, isMessageFiltered(request, messageCache.getOrPut(it)))
+                            Pair(it, isMessageMatched(request, messageCache.getOrPut(it)))
                         } else {
                             Pair(it, true)
                         }
