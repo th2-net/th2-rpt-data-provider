@@ -19,7 +19,7 @@ package com.exactpro.th2.reportdataprovider.services.rabbitmq
 import com.exactpro.th2.infra.grpc.Message
 import com.exactpro.th2.infra.grpc.MessageID
 import kotlinx.coroutines.channels.Channel
-import java.util.*
+import java.util.UUID
 
 data class CodecRequest(val id: MessageID, val channel: Channel<Message>, val requestId: UUID = UUID.randomUUID()): Comparable<CodecRequest> {
     constructor(id: MessageID) : this(id, Channel<Message>(0))
