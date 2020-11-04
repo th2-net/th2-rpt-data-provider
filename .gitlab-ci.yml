@@ -1,8 +1,8 @@
 variables:
-  APP_NAME: "th2-report-data-provider"
-  MAJOR_VERSION: "1"
-  MINOR_VERSION: "5"
-  MAINTENANCE_VERSION: '147'
+  APP_NAME: "th2-rpt-data-provider"
+  MAJOR_VERSION: "2"
+  MINOR_VERSION: "1"
+  MAINTENANCE_VERSION: "3"
   INSPECTION_ENABLED: 'false'
 
 include:
