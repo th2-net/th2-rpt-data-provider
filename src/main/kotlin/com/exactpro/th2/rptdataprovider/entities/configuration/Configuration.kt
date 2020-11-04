@@ -17,7 +17,10 @@
 package com.exactpro.th2.rptdataprovider.entities.configuration
 
 import com.exactpro.cradle.CradleManager
+import com.exactpro.th2.common.grpc.MessageBatch
+import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.schema.factory.CommonFactory
+import com.exactpro.th2.common.schema.message.MessageRouter
 
 class CustomConfigurationClass {
     var hostname: String = "localhost"
@@ -30,20 +33,6 @@ class CustomConfigurationClass {
     var ioDispatcherThreadPoolSize: Int = 1
     var codecResponseTimeout: Int = 6000
     var codecCacheSize: Int = 100
-    var amqpUsername: String = ""
-    var amqpPassword: String = ""
-    var amqpHost: String = ""
-    var amqpPort: String = ""
-    var amqpVhost: String = ""
-
-    var amqpCodecExchangeName: String = "default_general_exchange"
-
-    // Class fields are labeled from provider point of view. They are intentionally swapped.
-    var amqpCodecRoutingKeyIn: String = "default_general_decode_out"
-    var amqpCodecRoutingKeyOut: String = "default_general_decode_in"
-
-    var amqpProviderQueuePrefix: String = "report-data-provider"
-    var amqpProviderConsumerTag: String = "report-data-provider"
 
     val enableCaching: Boolean = true
     val notModifiedObjectsLifetime: Int = 3600
@@ -51,7 +40,7 @@ class CustomConfigurationClass {
     val frequentlyModifiedObjects: Int = 100
 
     override fun toString(): String {
-        return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, clientCacheTimeout=$clientCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, codecResponseTimeout=$codecResponseTimeout, codecCacheSize=$codecCacheSize, amqpUsername='$amqpUsername', amqpPassword='$amqpPassword', amqpHost='$amqpHost', amqpPort='$amqpPort', amqpVhost='$amqpVhost', amqpCodecExchangeName='$amqpCodecExchangeName', amqpCodecRoutingKeyIn='$amqpCodecRoutingKeyIn', amqpCodecRoutingKeyOut='$amqpCodecRoutingKeyOut', amqpProviderQueuePrefix='$amqpProviderQueuePrefix', amqpProviderConsumerTag='$amqpProviderConsumerTag', enableCaching=$enableCaching, notModifiedObjectsLifetime=$notModifiedObjectsLifetime, rarelyModifiedObjects=$rarelyModifiedObjects, frequentlyModifiedObjects=$frequentlyModifiedObjects)"
+        return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, clientCacheTimeout=$clientCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, codecResponseTimeout=$codecResponseTimeout, codecCacheSize=$codecCacheSize, enableCaching=$enableCaching, notModifiedObjectsLifetime=$notModifiedObjectsLifetime, rarelyModifiedObjects=$rarelyModifiedObjects, frequentlyModifiedObjects=$frequentlyModifiedObjects)"
     }
 }
 
@@ -61,6 +50,13 @@ class Configuration(args: Array<String>) {
 
     val cradleManager: CradleManager
         get() = configurationFactory.cradleManager
+
+    val messageRouterRawBatch: MessageRouter<RawMessageBatch>
+        get() = configurationFactory.messageRouterRawBatch
+
+    val messageRouterParsedBatch: MessageRouter<MessageBatch>
+        get() = configurationFactory.messageRouterParsedBatch
+
 
     private val customConfiguration =
         configurationFactory.getCustomConfiguration(CustomConfigurationClass::class.java)
@@ -95,26 +91,6 @@ class Configuration(args: Array<String>) {
 
     val ioDispatcherThreadPoolSize: Variable =
         Variable("ioDispatcherThreadPoolSize", customConfiguration.ioDispatcherThreadPoolSize.toString(), "1")
-
-    val amqpUsername: Variable = Variable("amqpUsername", customConfiguration.amqpUsername, "")
-    val amqpPassword: Variable = Variable("amqpPassword", customConfiguration.amqpPassword, "", false)
-    val amqpHost: Variable = Variable("amqpHost", customConfiguration.amqpHost, "")
-    val amqpPort: Variable = Variable("amqpPort", customConfiguration.amqpPort, "")
-    val amqpVhost: Variable = Variable("amqpVhost", customConfiguration.amqpVhost, "")
-
-    val amqpCodecExchangeName: Variable =
-        Variable("amqpCodecExchangeName", customConfiguration.amqpCodecExchangeName, "default_general_exchange")
-
-    // Class fields are labeled from provider point of view. They are intentionally swapped.
-    val amqpCodecRoutingKeyIn: Variable =
-        Variable("amqpCodecRoutingKeyIn", customConfiguration.amqpCodecRoutingKeyIn, "default_general_decode_out")
-    val amqpCodecRoutingKeyOut: Variable =
-        Variable("amqpCodecRoutingKeyOut", customConfiguration.amqpCodecRoutingKeyOut, "default_general_decode_in")
-
-    val amqpProviderQueuePrefix: Variable =
-        Variable("amqpProviderQueuePrefix", customConfiguration.amqpProviderQueuePrefix, "report-data-provider")
-    val amqpProviderConsumerTag: Variable =
-        Variable("amqpProviderConsumerTag", customConfiguration.amqpProviderConsumerTag, "report-data-provider")
 
     val enableCaching: Variable = Variable("enableCaching", customConfiguration.enableCaching.toString(), "true")
     val notModifiedObjectsLifetime: Variable =
