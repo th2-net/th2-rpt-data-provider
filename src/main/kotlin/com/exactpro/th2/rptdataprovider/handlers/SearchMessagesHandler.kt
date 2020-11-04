@@ -21,8 +21,10 @@ import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.th2.rptdataprovider.cache.MessageCache
 import com.exactpro.th2.rptdataprovider.entities.requests.MessageSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import kotlinx.coroutines.async
@@ -43,6 +45,15 @@ class SearchMessagesHandler(
     companion object {
         private val logger = KotlinLogging.logger { }
     }
+
+    private suspend fun isMessageMatched(request: MessageSearchRequest, message: Message): Boolean {
+        return (request.messageType == null || request.messageType.any { item ->
+            message.messageType.toLowerCase().contains(item.toLowerCase())
+        }) && (request.attachedEventId == null
+                || cradle.getMessageIdsSuspend(StoredTestEventId(request.attachedEventId))
+            .contains(StoredMessageId.fromString(message.messageId)))
+    }
+
 
     suspend fun searchMessages(request: MessageSearchRequest): List<Any> {
         return withTimeout(timeout) {
@@ -88,19 +99,23 @@ class SearchMessagesHandler(
                 .filterNot { it.id.toString() == request.messageId }
                 .map {
                     async {
-                        if (request.idsOnly) {
-                            it.id.toString()
-                        } else {
-
+                        if ((request.attachedEventId ?: request.messageType) != null || !request.idsOnly) {
                             @Suppress("USELESS_CAST")
-                            (messageCache.get(it.id.toString())
-                                ?: messageProducer.fromRawMessage(it))
-
-                                .also { messageCache.put(it.id.toString(), it) } as Any
+                            Pair(it, isMessageMatched(request, messageCache.getOrPut(it)))
+                        } else {
+                            Pair(it, true)
                         }
                     }
                 }
                 .map { it.await() }
+                .filter { it.second }
+                .map {
+                    if (request.idsOnly) {
+                        it.first.id.toString()
+                    } else {
+                        messageCache.getOrPut(it.first)
+                    }
+                }
         }
     }
 
