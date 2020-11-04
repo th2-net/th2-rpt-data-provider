@@ -34,6 +34,7 @@ package com.exactpro.th2.reportdataprovider.services.rabbitmq
 
 import com.exactpro.th2.infra.grpc.Message
 import com.exactpro.th2.infra.grpc.MessageBatch
+import com.exactpro.th2.infra.grpc.MessageID
 import com.exactpro.th2.infra.grpc.RawMessageBatch
 import com.exactpro.th2.reportdataprovider.entities.configuration.Configuration
 import com.google.protobuf.InvalidProtocolBufferException
@@ -41,6 +42,7 @@ import com.rabbitmq.client.Connection
 import com.rabbitmq.client.ConnectionFactory
 import kotlinx.coroutines.*
 import mu.KotlinLogging
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentSkipListSet
 
 class RabbitMqService(private val configuration: Configuration) {
@@ -51,7 +53,7 @@ class RabbitMqService(private val configuration: Configuration) {
 
     private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
 
-    private val decodeRequests = ConcurrentSkipListSet<CodecRequest>()
+    private val decodeRequests = ConcurrentHashMap<MessageID, ConcurrentSkipListSet<CodecRequest>>()
 
     private val connection: Connection? =
         try {
@@ -92,20 +94,13 @@ class RabbitMqService(private val configuration: Configuration) {
 
                             var needAck = false
                             decodedBatch.messagesList.forEach { message ->
-                                val match = decodeRequests.firstOrNull { it.id == message.metadata.id }
+                                val messageId = message.metadata.id
 
-                                if (match != null) {
-                                    match.let { decodeRequests.remove(it) }
-                                    GlobalScope.launch { match.channel.send(message) }
+                                decodeRequests.remove(messageId)?.let { match ->
                                     needAck = true
-                                } else {
-                                    logger.debug {
-                                        val id = message?.metadata?.id
 
-                                        val idString =
-                                            "(stream=${id?.connectionId?.sessionAlias}, direction=${id?.direction}, sequence=${id?.sequence})"
-
-                                        "decoded message '$idString' was received but no request was found"
+                                    match.forEach {
+                                        GlobalScope.launch { it.channel.send(message) }
                                     }
                                 }
                             }
@@ -114,9 +109,7 @@ class RabbitMqService(private val configuration: Configuration) {
                                 channel.basicAck(delivery.envelope.deliveryTag, false)
                             }
 
-                            if (decodeRequests.size > 0) {
-                                logger.debug { "${decodeRequests.size} decode requests remaining" }
-                            }
+                            logger.debug { "${decodeRequests.size} decode requests remaining" }
 
                         } catch (e: InvalidProtocolBufferException) {
                             logger.error { "unable to parse delivery '${delivery.envelope.deliveryTag}' data:'${delivery.body}'" }
@@ -136,24 +129,31 @@ class RabbitMqService(private val configuration: Configuration) {
             return listOf()
         }
 
-        val requests: Set<CodecRequest> = batch.messagesList
-            .map { CodecRequest(it.metadata.id) }
-            .toSet()
+        val requests: Map<MessageID, CodecRequest> = batch.messagesList
+            .associate { it.metadata.id to CodecRequest(it.metadata.id) }
 
         return withContext(Dispatchers.IO) {
-            val deferred = requests.map { async { it.channel.receive() } }
+            val deferred = requests.map { async { it.value.channel.receive() } }
 
-            decodeRequests.addAll(requests)
+            var alreadyRequested = true
 
-            connection.createChannel()
-                .use { channel ->
-                    channel.basicPublish(
-                        configuration.amqpCodecExchangeName.value,
-                        configuration.amqpCodecRoutingKeyOut.value,
-                        null,
-                        batch.toByteArray()
-                    )
-                }
+            requests.forEach {
+                decodeRequests.computeIfAbsent(it.key) {
+                    ConcurrentSkipListSet<CodecRequest>().also { alreadyRequested = false }
+                }.add(it.value)
+            }
+
+            if (!alreadyRequested) {
+                connection.createChannel()
+                    .use { channel ->
+                        channel.basicPublish(
+                            configuration.amqpCodecExchangeName.value,
+                            configuration.amqpCodecRoutingKeyOut.value,
+                            null,
+                            batch.toByteArray()
+                        )
+                    }
+            }
 
             val requestDebugInfo = let {
                 val firstId = batch.messagesList?.first()?.metadata?.id

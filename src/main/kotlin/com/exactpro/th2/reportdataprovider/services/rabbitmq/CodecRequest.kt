@@ -19,12 +19,28 @@ package com.exactpro.th2.reportdataprovider.services.rabbitmq
 import com.exactpro.th2.infra.grpc.Message
 import com.exactpro.th2.infra.grpc.MessageID
 import kotlinx.coroutines.channels.Channel
-import java.time.Instant
+import java.util.*
 
-data class CodecRequest(val id: MessageID, val channel: Channel<Message>, val timestamp: Instant = Instant.now()): Comparable<CodecRequest> {
-    constructor(id: MessageID): this(id, Channel<Message>(0))
+data class CodecRequest(val id: MessageID, val channel: Channel<Message>, val requestId: UUID = UUID.randomUUID()): Comparable<CodecRequest> {
+    constructor(id: MessageID) : this(id, Channel<Message>(0))
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as CodecRequest
+
+        if (requestId != other.requestId) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        return requestId.hashCode()
+    }
 
     override fun compareTo(other: CodecRequest): Int {
-        return timestamp.compareTo(other.timestamp)
+        return requestId.compareTo(other.requestId)
     }
+
 }
