@@ -71,7 +71,7 @@ class RabbitMqService(private val configuration: Configuration) {
             }
 
             if (!alreadyRequested) {
-                configuration.messageRouterRawBatch.send(batch)
+                configuration.messageRouterRawBatch.send(batch, "to_codec")
             }
 
             val requestDebugInfo = let {
