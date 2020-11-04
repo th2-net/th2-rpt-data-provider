@@ -34,7 +34,7 @@ class RabbitMqService(private val configuration: Configuration) {
 
     private val decodeRequests = ConcurrentSkipListSet<CodecRequest>()
 
-    private val receiveChannel = configuration.messageRouterParsedBatch.subscribe(
+    private val receiveChannel = configuration.messageRouterParsedBatch.subscribeAll(
         MessageListener { _, decodedBatch ->
             decodedBatch.messagesList.forEach { message ->
                 val match = decodeRequests.firstOrNull { it.id == message.metadata.id }
@@ -57,7 +57,8 @@ class RabbitMqService(private val configuration: Configuration) {
             if (decodeRequests.size > 0) {
                 logger.debug { "${decodeRequests.size} decode requests remaining" }
             }
-        }
+        },
+   "from_codec"
     )
 
     suspend fun decodeMessage(batch: RawMessageBatch): Collection<Message> {
@@ -67,8 +68,8 @@ class RabbitMqService(private val configuration: Configuration) {
             .toSet()
 
         return withContext(Dispatchers.IO) {
-            
-            configuration.messageRouterRawBatch.send(batch)
+
+            configuration.messageRouterRawBatch.send(batch, "to_codec")
 
             val deferred = requests.map { async { it.channel.receive() } }
 
