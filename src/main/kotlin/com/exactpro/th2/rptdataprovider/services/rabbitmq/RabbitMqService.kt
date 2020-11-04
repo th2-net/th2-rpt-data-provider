@@ -17,11 +17,13 @@
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
 import com.exactpro.th2.common.grpc.Message
+import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.schema.message.MessageListener
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import kotlinx.coroutines.*
 import mu.KotlinLogging
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentSkipListSet
 
 class RabbitMqService(private val configuration: Configuration) {
@@ -32,48 +34,45 @@ class RabbitMqService(private val configuration: Configuration) {
 
     private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
 
-    private val decodeRequests = ConcurrentSkipListSet<CodecRequest>()
+    private val decodeRequests = ConcurrentHashMap<MessageID, ConcurrentSkipListSet<CodecRequest>>()
 
     private val receiveChannel = configuration.messageRouterParsedBatch.subscribeAll(
         MessageListener { _, decodedBatch ->
             decodedBatch.messagesList.forEach { message ->
-                val match = decodeRequests.firstOrNull { it.id == message.metadata.id }
+                val messageId = message.metadata.id
 
-                if (match != null) {
-                    match.let { decodeRequests.remove(it) }
-                    GlobalScope.launch { match.channel.send(message) }
-                } else {
-                    logger.debug {
-                        val id = message?.metadata?.id
+                decodeRequests.remove(messageId)?.let { match ->
 
-                        val idString =
-                            "(stream=${id?.connectionId?.sessionAlias}, direction=${id?.direction}, sequence=${id?.sequence})"
-
-                        "decoded message '$idString' was received but no request was found"
+                    match.forEach {
+                        GlobalScope.launch { it.channel.send(message) }
                     }
                 }
             }
 
-            if (decodeRequests.size > 0) {
-                logger.debug { "${decodeRequests.size} decode requests remaining" }
-            }
+            logger.debug { "${decodeRequests.size} decode requests remaining" }
         },
-   "from_codec"
+        "from_codec"
     )
 
     suspend fun decodeMessage(batch: RawMessageBatch): Collection<Message> {
 
-        val requests: Set<CodecRequest> = batch.messagesList
-            .map { CodecRequest(it.metadata.id) }
-            .toSet()
+        val requests: Map<MessageID, CodecRequest> = batch.messagesList
+            .associate { it.metadata.id to CodecRequest(it.metadata.id) }
 
         return withContext(Dispatchers.IO) {
+            val deferred = requests.map { async { it.value.channel.receive() } }
 
-            configuration.messageRouterRawBatch.send(batch, "to_codec")
+            var alreadyRequested = true
 
-            val deferred = requests.map { async { it.channel.receive() } }
+            requests.forEach {
+                decodeRequests.computeIfAbsent(it.key) {
+                    ConcurrentSkipListSet<CodecRequest>().also { alreadyRequested = false }
+                }.add(it.value)
+            }
 
-            decodeRequests.addAll(requests)
+            if (!alreadyRequested) {
+                configuration.messageRouterRawBatch.send(batch)
+            }
 
             val requestDebugInfo = let {
                 val firstId = batch.messagesList?.first()?.metadata?.id
