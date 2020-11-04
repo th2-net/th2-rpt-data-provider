@@ -34,8 +34,6 @@ class RabbitMqService(private val configuration: Configuration) {
 
     private val decodeRequests = ConcurrentSkipListSet<CodecRequest>()
 
-    //val queueName = configuration.amqpProviderQueuePrefix.value + "-IN" ???
-
     private val receiveChannel = configuration.messageRouterParsedBatch.subscribe(
         MessageListener { _, decodedBatch ->
             decodedBatch.messagesList.forEach { message ->
@@ -59,8 +57,7 @@ class RabbitMqService(private val configuration: Configuration) {
             if (decodeRequests.size > 0) {
                 logger.debug { "${decodeRequests.size} decode requests remaining" }
             }
-        },
-        "-IN" // TODO(???)
+        }
     )
 
     suspend fun decodeMessage(batch: RawMessageBatch): Collection<Message> {
@@ -70,6 +67,7 @@ class RabbitMqService(private val configuration: Configuration) {
             .toSet()
 
         return withContext(Dispatchers.IO) {
+            
             configuration.messageRouterRawBatch.send(batch)
 
             val deferred = requests.map { async { it.channel.receive() } }
