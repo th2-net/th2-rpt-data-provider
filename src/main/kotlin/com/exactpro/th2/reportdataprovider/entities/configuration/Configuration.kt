@@ -51,5 +51,7 @@ class Configuration(
     val amqpCodecRoutingKeyOut: Variable = Variable("RABBITMQ_CODEC_ROUTING_KEY_IN", "default_general_decode_in"),
 
     val amqpProviderQueuePrefix: Variable = Variable("RABBITMQ_PROVIDER_QUEUE_PREFIX", "report-data-provider"),
-    val amqpProviderConsumerTag: Variable = Variable("RABBITMQ_PROVIDER_CONSUMER_TAG", "report-data-provider")
+    val amqpProviderConsumerTag: Variable = Variable("RABBITMQ_PROVIDER_CONSUMER_TAG", "report-data-provider"),
+
+    val checkRequestsAliveDelay: Variable = Variable("CHECK_REQUEST_ALIVE_DELAY", "2000")
 )

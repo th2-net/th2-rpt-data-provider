@@ -24,7 +24,7 @@ import com.exactpro.th2.reportdataprovider.handlers.SearchEventsHandler
 import com.exactpro.th2.reportdataprovider.handlers.SearchMessagesHandler
 import com.exactpro.th2.reportdataprovider.producers.EventProducer
 import com.exactpro.th2.reportdataprovider.producers.MessageProducer
-import com.exactpro.th2.reportdataprovider.services.CradleService
+import com.exactpro.th2.reportdataprovider.services.cradle.CradleService
 import com.exactpro.th2.reportdataprovider.services.rabbitmq.RabbitMqService
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper

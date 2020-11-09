@@ -14,7 +14,7 @@
  * limitations under the License.
  ******************************************************************************/
 
-package com.exactpro.th2.reportdataprovider.services
+package com.exactpro.th2.reportdataprovider.services.cradle
 
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.TimeRelation

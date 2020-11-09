@@ -26,7 +26,7 @@ import com.exactpro.th2.reportdataprovider.cache.MessageCache
 import com.exactpro.th2.reportdataprovider.entities.requests.MessageSearchRequest
 import com.exactpro.th2.reportdataprovider.entities.responses.Message
 import com.exactpro.th2.reportdataprovider.producers.MessageProducer
-import com.exactpro.th2.reportdataprovider.services.CradleService
+import com.exactpro.th2.reportdataprovider.services.cradle.CradleService
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.take

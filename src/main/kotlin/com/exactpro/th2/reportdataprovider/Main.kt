@@ -16,220 +16,194 @@
 
 package com.exactpro.th2.reportdataprovider
 
+import com.exactpro.th2.reportdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.reportdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.reportdataprovider.entities.requests.MessageSearchRequest
-import io.ktor.application.call
-import io.ktor.application.install
-import io.ktor.features.Compression
-import io.ktor.http.ContentType
-import io.ktor.http.HttpStatusCode
-import io.ktor.response.cacheControl
-import io.ktor.response.respondText
-import io.ktor.routing.get
-import io.ktor.routing.routing
-import io.ktor.server.engine.embeddedServer
-import io.ktor.server.netty.Netty
-import io.ktor.util.InternalAPI
-import io.ktor.util.rootCause
-import io.ktor.util.toMap
-import kotlinx.coroutines.IO_PARALLELISM_PROPERTY_NAME
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeout
+import com.exactpro.th2.reportdataprovider.services.cradle.CradleObjectNotFoundException
+import io.ktor.application.*
+import io.ktor.features.*
+import io.ktor.http.*
+import io.ktor.response.*
+import io.ktor.routing.*
+import io.ktor.server.engine.*
+import io.ktor.server.netty.*
+import io.ktor.util.*
+import kotlinx.coroutines.*
 import mu.KotlinLogging
-import java.time.LocalDateTime
-import java.time.ZoneId
+import java.time.Instant
+import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
-@InternalAPI
-fun main() {
-    val logger = KotlinLogging.logger {}
 
-    val context = Context()
-    val configuration = context.configuration
-    val jacksonMapper = context.jacksonMapper
-    val timeout = context.timeout
-    val cacheControl = context.cacheControl
+class Main {
 
-    System.setProperty(IO_PARALLELISM_PROPERTY_NAME, configuration.ioDispatcherThreadPoolSize.value)
+    private val logger = KotlinLogging.logger {}
 
-    embeddedServer(Netty, configuration.port.value.toInt()) {
+    private val context = Context()
+    private val jacksonMapper = context.jacksonMapper
+    private val checkRequestAliveDelay = context.configuration.checkRequestsAliveDelay.value.toLong()
 
-        install(Compression)
+    private class Timeouts {
+        class Config(var requestTimeout: Long = 5000L)
 
-        routing {
-            get("/") {
-                val startOfDay =
-                    LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).atZone(ZoneId.of("UTC"))
-                        .toEpochSecond() * 1000
-                val currentTime = LocalDateTime.now().atZone(ZoneId.of("UTC")).toEpochSecond() * 1000
+        companion object : ApplicationFeature<ApplicationCallPipeline, Config, Unit> {
+            override val key: AttributeKey<Unit> = AttributeKey("Timeouts")
 
-                call.respondText(
-                    """
-                        <h1>Report data provider is working.</h1>
-                        <div>Cassandra endpoint is set to <u><pre style="display: inline">${configuration.cassandraHost.value}:${configuration.cassandraPort.value}</pre></u>.</div>
-                        <div>Keyspace is set to <pre style="display: inline">${configuration.cassandraKeyspace.value}</pre></div>
-                        <a href="search/events?timestampFrom=${startOfDay}&timestampTo=${currentTime}">list of events since the start of day (json)</a>
-                        <div>Check API reference for details.</div>
-                    """.trimIndent(),
-                    ContentType.Text.Html
-                )
+            override fun install(pipeline: ApplicationCallPipeline, configure: Config.() -> Unit) {
+                val timeout = Config().apply(configure).requestTimeout
+                if (timeout <= 0) return
 
-            }
-
-            get("/event/{id}") {
-                val id = call.parameters["id"]
-
-                logger.debug { "handling get event request with id=$id" }
-
-                measureTimeMillis {
-                    try {
-                        launch {
-                            withTimeout(timeout) {
-                                call.response.cacheControl(cacheControl)
-                                try {
-                                    call.respondText(
-                                        jacksonMapper.asStringSuspend(context.eventCache.getOrPut(id!!)),
-                                        ContentType.Application.Json
-                                    )
-                                } catch (e: IllegalArgumentException) {
-                                    logger.error(e) { "Event id=$id not found" }
-                                    call.respondText(
-                                        e.rootCause?.message ?: e.toString(),
-                                        ContentType.Text.Plain,
-                                        HttpStatusCode.NotFound
-                                    )
-                                } catch (e: Exception) {
-                                    throw e
-                                }
-                            }
-                        }.join()
-                    } catch (e: Exception) {
-                        logger.error(e) { "unable to retrieve event with id=$id" }
-                        call.respondText(
-                            e.rootCause?.message ?: e.toString(),
-                            ContentType.Text.Plain,
-                            HttpStatusCode.InternalServerError
-                        )
+                pipeline.intercept(ApplicationCallPipeline.Features) {
+                    withTimeout(timeout) {
+                        proceed()
                     }
-                }.let { logger.debug { "get event handled - time=${it}ms id=$id" } }
-            }
-
-            get("/messageStreams") {
-                measureTimeMillis {
-                    try {
-                        launch {
-                            withTimeout(timeout) {
-                                call.response.cacheControl(cacheControl)
-
-                                call.respondText(
-                                    jacksonMapper.asStringSuspend(context.cradleService.getMessageStreams()),
-                                    ContentType.Application.Json
-                                )
-                            }
-                        }.join()
-                    } catch (e: Exception) {
-                        logger.error(e) { "unable to retrieve message streams" }
-                        call.respondText(
-                            e.rootCause?.message ?: e.toString(),
-                            ContentType.Text.Plain,
-                            HttpStatusCode.InternalServerError
-                        )
-                    }
-                }.let { logger.debug { "get message streams handled - time=${it}ms" } }
-            }
-
-            get("/message/{id}") {
-                val id = call.parameters["id"]
-
-                logger.debug { "handling get message request with id=$id" }
-
-                measureTimeMillis {
-                    try {
-                        call.response.cacheControl(cacheControl)
-
-                        context.messageCache.getOrPut(id!!).let {
-                            call.respondText(
-                                jacksonMapper.asStringSuspend(it),
-                                ContentType.Application.Json
-                            )
-                        }
-                    } catch (e: IllegalArgumentException) {
-                        logger.error(e) { "Message id=$id not found" }
-                        call.respondText(
-                            e.rootCause?.message ?: e.toString(),
-                            ContentType.Text.Plain,
-                            HttpStatusCode.NotFound
-                        )
-                    } catch (e: Exception) {
-                        logger.error(e) { "unable to retrieve message with id=$id" }
-                        call.respondText(
-                            e.rootCause?.message ?: e.toString(),
-                            ContentType.Text.Plain,
-                            HttpStatusCode.InternalServerError
-                        )
-                    }
-                }.let { logger.debug { "get message handled - time=${it}ms id=$id" } }
-            }
-
-            get("/search/messages") {
-                val request =
-                    MessageSearchRequest(call.request.queryParameters.toMap())
-
-                logger.debug { "handling search messages request (query=$request)" }
-
-                measureTimeMillis {
-                    try {
-                        launch {
-                            context.searchMessagesHandler.searchMessages(request)
-                                .let {
-                                    call.response.cacheControl(cacheControl)
-                                    call.respondText(ContentType.Application.Json, HttpStatusCode.OK) {
-                                        jacksonMapper.asStringSuspend(it)
-                                    }
-                                }
-                        }.join()
-                    } catch (e: Exception) {
-                        logger.error(e) { "unable to search messages - unexpected exception" }
-                        call.respondText(
-                            e.rootCause?.message ?: e.toString(),
-                            ContentType.Text.Plain,
-                            HttpStatusCode.InternalServerError
-                        )
-                    }
-                }.let { logger.debug { "message search handled - time=${it}ms request=$request" } }
-            }
-
-            get("search/events") {
-                val request =
-                    EventSearchRequest(call.request.queryParameters.toMap())
-
-                logger.debug { "handling search events request with (query=$request)" }
-
-                measureTimeMillis {
-                    try {
-                        launch {
-                            call.response.cacheControl(cacheControl)
-
-                            call.respondText(
-                                jacksonMapper.asStringSuspend(
-                                    context.searchEventsHandler.searchEvents(request)
-                                ),
-                                ContentType.Application.Json
-                            )
-                        }.join()
-                    } catch (e: Exception) {
-                        logger.error(e) { "unable to search events with request=$request" }
-                        call.respondText(
-                            e.rootCause?.message ?: e.toString(),
-                            ContentType.Text.Plain,
-                            HttpStatusCode.InternalServerError
-                        )
-                    }
-                }.let { logger.debug { "search events handled - time=${it}ms request=$request" } }
+                }
             }
         }
-    }.start(false)
+    }
 
-    logger.info { "serving on: http://${configuration.hostname.value}:${configuration.port.value}" }
+    @EngineAPI
+    @InternalAPI
+    suspend fun checkContext(context: ApplicationCall) {
+        context.javaClass.getDeclaredField("call").also {
+            it.trySetAccessible()
+            val nettyApplicationRequest = it.get(context) as NettyApplicationCall
 
+            while (coroutineContext.isActive) {
+                if (nettyApplicationRequest.context.isRemoved)
+                    throw ChannelClosedException("Channel is closed")
+
+                delay(checkRequestAliveDelay)
+            }
+        }
+    }
+
+    @EngineAPI
+    @InternalAPI
+    private suspend fun handleRequest(
+        call: ApplicationCall,
+        context: ApplicationCall,
+        requestName: String,
+        cacheControl: CacheControl?,
+        vararg parameters: Any?,
+        calledFun: suspend () -> Any
+    ) {
+        val stringParameters = parameters.contentDeepToString()
+        coroutineScope {
+            measureTimeMillis {
+                logger.debug { "handling '$requestName' request with parameters '$stringParameters'" }
+
+                try {
+                    try {
+                        launch {
+                            launch {
+                                checkContext(context)
+                            }
+                            cacheControl?.let { call.response.cacheControl(it) }
+                            call.respondText(
+                                jacksonMapper.asStringSuspend(calledFun.invoke()), ContentType.Application.Json
+                            )
+                            coroutineContext.cancelChildren()
+                        }.join()
+                    } catch (e: Exception) {
+                        throw e.rootCause ?: e
+                    }
+                } catch (e: CradleObjectNotFoundException) {
+                    logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - missing cradle data" }
+                    call.respondText(
+                        e.rootCause?.message ?: e.toString(), ContentType.Text.Plain, HttpStatusCode.NotFound
+                    )
+                } catch (e: ChannelClosedException) {
+                    logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - request closer" }
+                    call.respondText(
+                        e.rootCause?.message ?: e.toString(), ContentType.Text.Plain, HttpStatusCode.RequestTimeout
+                    )
+                } catch (e: Exception) {
+                    logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - unexpected exception" }
+                    call.respondText(
+                        e.rootCause?.message ?: e.toString(), ContentType.Text.Plain, HttpStatusCode.InternalServerError
+                    )
+                }
+            }.let { logger.debug { "request '$requestName' with parameters '$stringParameters' handled - time=${it}ms" } }
+        }
+    }
+
+    private fun inPast(rightTimeBoundary: Instant?): Boolean {
+        return rightTimeBoundary?.isBefore(Instant.now()) != false
+    }
+
+    @EngineAPI
+    @InternalAPI
+    fun run() {
+
+        val cradleService = this.context.cradleService
+        val configuration = this.context.configuration
+        val cacheControl = this.context.cacheControl
+        val eventCache = this.context.eventCache
+        val messageCache = this.context.messageCache
+
+        val searchEventsHandler = this.context.searchEventsHandler
+        val searchMessagesHandler = this.context.searchMessagesHandler
+
+        System.setProperty(IO_PARALLELISM_PROPERTY_NAME, configuration.ioDispatcherThreadPoolSize.value)
+
+        embeddedServer(Netty, configuration.port.value.toInt()) {
+
+            install(Compression)
+
+            install(Timeouts) {
+                requestTimeout = context.timeout
+            }
+
+            routing {
+
+                get("/event/{id}") {
+                    val id = call.parameters["id"]
+
+                    handleRequest(call, context, "get single event", cacheControl, id) {
+                        eventCache.getOrPut(id!!)
+                    }
+                }
+
+                get("/messageStreams") {
+                    handleRequest(call, context, "get message streams", cacheControl) {
+                        cradleService.getMessageStreams()
+                    }
+                }
+
+                get("/message/{id}") {
+                    val id = call.parameters["id"]
+
+                    handleRequest(call, context, "get single message", cacheControl, id) {
+                        messageCache.getOrPut(id!!)
+                    }
+                }
+
+                get("/search/messages") {
+                    val request = MessageSearchRequest(call.request.queryParameters.toMap())
+
+                    handleRequest(call, context, "search messages", cacheControl, request) {
+                        searchMessagesHandler.searchMessages(request)
+                    }
+                }
+
+                get("search/events") {
+                    val request = EventSearchRequest(call.request.queryParameters.toMap())
+
+                    handleRequest(call, context, "search events", cacheControl, request) {
+                        searchEventsHandler.searchEvents(request)
+                    }
+                }
+            }
+        }.start(false)
+
+        logger.info { "serving on: http://${configuration.hostname.value}:${configuration.port.value}" }
+
+    }
+}
+
+@EngineAPI
+@InternalAPI
+fun main(args: Array<String>) {
+    Main().run()
 }

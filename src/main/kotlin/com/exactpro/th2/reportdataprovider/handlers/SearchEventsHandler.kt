@@ -24,7 +24,7 @@ import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.reportdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.reportdataprovider.entities.responses.EventTreeNode
-import com.exactpro.th2.reportdataprovider.services.CradleService
+import com.exactpro.th2.reportdataprovider.services.cradle.CradleService
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.map

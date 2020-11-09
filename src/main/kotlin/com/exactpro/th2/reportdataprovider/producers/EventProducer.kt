@@ -20,7 +20,7 @@ import com.exactpro.cradle.testevents.StoredTestEventBatch
 import com.exactpro.cradle.testevents.StoredTestEventWithContent
 import com.exactpro.th2.reportdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.reportdataprovider.entities.responses.Event
-import com.exactpro.th2.reportdataprovider.services.CradleService
+import com.exactpro.th2.reportdataprovider.services.cradle.CradleService
 import com.fasterxml.jackson.databind.ObjectMapper
 import mu.KotlinLogging
 import java.util.*
