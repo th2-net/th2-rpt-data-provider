@@ -124,11 +124,11 @@ class SearchMessagesHandler(
         val utcTimestamp = timestamp.atOffset(ZoneOffset.UTC)
         return if (timelineDirection == TimeRelation.AFTER) {
             utcTimestamp.plusDays(1)
-                .with(LocalTime.of(0, 0, 0, 0)).toInstant()
+                .with(LocalTime.of(0, 0, 0, 0))
         } else {
             utcTimestamp.with(LocalTime.of(0, 0, 0, 0))
-                .toInstant().minusSeconds(1)
-        }
+                .minusNanos(1)
+        }.toInstant()
     }
 
     private suspend fun pullMore(
