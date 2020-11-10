@@ -1,5 +1,5 @@
 variables:
-  APP_NAME: "th2-report-data-provider"
+  APP_NAME: "th2-rpt-data-provider"
   MAJOR_VERSION: "2"
   MINOR_VERSION: "1"
   MAINTENANCE_VERSION: '5'
