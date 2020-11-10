@@ -27,11 +27,10 @@ import org.ehcache.config.builders.ResourcePoolsBuilder
 import java.time.Duration
 import java.time.Instant
 
-class EventCache(timeout: Long, size: Long, private val eventProducer: EventProducer) {
+class EventCache(private val timeout: Long, size: Long, private val eventProducer: EventProducer) {
 
     private val cacheManager = CacheManagerBuilder.newCacheManagerBuilder().build(true)
     private val logger = KotlinLogging.logger { }
-    private val timeout = timeout
 
     data class CachedEvent(val event: Event, val isBatched: Boolean, val cachedAt: Instant)
 

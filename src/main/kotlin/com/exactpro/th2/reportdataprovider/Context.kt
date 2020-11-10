@@ -50,7 +50,7 @@ class Context(
 
     val eventProducer: EventProducer = EventProducer(cradleService, jacksonMapper),
     val eventCache: EventCache = EventCache(cacheTimeout, configuration.eventCacheSize.value.toLong(), eventProducer),
-    val searchEventsHandler: SearchEventsHandler = SearchEventsHandler(cradleService, timeout),
+    val searchEventsHandler: SearchEventsHandler = SearchEventsHandler(cradleService),
 
     val codecCache: CodecCache = CodecCache(configuration),
 
@@ -59,8 +59,7 @@ class Context(
     val searchMessagesHandler: SearchMessagesHandler = SearchMessagesHandler(
         cradleService,
         messageCache,
-        messageProducer,
-        timeout
+        messageProducer
     ),
 
     val cacheControl: CacheControl.MaxAge = configuration.clientCacheTimeout.value.toInt().let {
