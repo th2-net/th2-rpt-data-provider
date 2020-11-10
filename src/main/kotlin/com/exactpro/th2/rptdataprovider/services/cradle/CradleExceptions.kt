@@ -1,11 +1,11 @@
 /*******************************************************************************
- * Copyright 2009-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,5 +14,10 @@
  * limitations under the License.
  ******************************************************************************/
 
-rootProject.name = 'rpt-data-provider'
+package com.exactpro.th2.rptdataprovider.services.cradle
 
+open class CradleObjectNotFoundException(type: String, id: String) : Exception("unable to find $type with id '$id'")
+
+class CradleEventNotFoundException(id: String) : CradleObjectNotFoundException("event", id)
+
+class CradleMessageNotFoundException(id: String) : CradleObjectNotFoundException("message", id)
