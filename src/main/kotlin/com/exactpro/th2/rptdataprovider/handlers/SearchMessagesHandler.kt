@@ -35,6 +35,8 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.withTimeout
 import mu.KotlinLogging
 import java.time.Instant
+import java.time.LocalTime
+import java.time.ZoneOffset
 
 class SearchMessagesHandler(
     private val cradle: CradleService,
@@ -53,7 +55,6 @@ class SearchMessagesHandler(
                 || cradle.getMessageIdsSuspend(StoredTestEventId(request.attachedEventId))
             .contains(StoredMessageId.fromString(message.messageId)))
     }
-
 
     suspend fun searchMessages(request: MessageSearchRequest): List<Any> {
         return withTimeout(timeout) {
@@ -119,6 +120,17 @@ class SearchMessagesHandler(
         }
     }
 
+    private fun nextDay(timestamp: Instant, timelineDirection: TimeRelation): Instant {
+        val utcTimestamp = timestamp.atOffset(ZoneOffset.UTC)
+        return if (timelineDirection == TimeRelation.AFTER) {
+            utcTimestamp.plusDays(1)
+                .with(LocalTime.of(0, 0, 0, 0)).toInstant()
+        } else {
+            utcTimestamp.with(LocalTime.of(0, 0, 0, 0))
+                .toInstant().minusSeconds(1)
+        }
+    }
+
     private suspend fun pullMore(
         startId: StoredMessageId?,
         limit: Int,
@@ -140,7 +152,6 @@ class SearchMessagesHandler(
                 }
                 .build()
         )
-
             .let { list ->
                 if (timelineDirection == TimeRelation.AFTER) {
                     list.sortedBy { it.timestamp }
@@ -151,6 +162,36 @@ class SearchMessagesHandler(
             .toList()
     }
 
+    private suspend fun pullFullLimit(
+        stream: String,
+        startTimestamp: Instant,
+        timelineDirection: TimeRelation,
+        perStreamLimit: Int
+    ): List<StoredMessage> {
+        return mutableListOf<StoredMessage>().apply {
+            var timestamp = startTimestamp
+            var daysChecking = 2
+            do {
+                for (direction in Direction.values()) {
+                    addAll(
+                        pullMore(
+                            cradle.getFirstMessageIdSuspend(
+                                timestamp,
+                                stream,
+                                direction,
+                                timelineDirection
+                            ),
+                            perStreamLimit,
+                            timelineDirection
+                        )
+                    )
+                }
+                daysChecking -= 1
+                timestamp = nextDay(timestamp, timelineDirection)
+            } while (this.size <= perStreamLimit && daysChecking > 0)
+        }
+    }
+
     private suspend fun pullMoreMerged(
         startTimestamp: Instant,
         streams: List<String>,
@@ -158,21 +199,10 @@ class SearchMessagesHandler(
         perStreamLimit: Int
     ): List<StoredMessage> {
         logger.debug { "pulling more messages (timestamp=$startTimestamp streams=$streams direction=$timelineDirection perStreamLimit=$perStreamLimit)" }
-
         return streams
             .distinct()
-            .flatMap { listOf(it to Direction.FIRST, it to Direction.SECOND) }
-            .flatMap { pair ->
-                pullMore(
-                    cradle.getFirstMessageIdSuspend(
-                        startTimestamp,
-                        pair.first,
-                        pair.second,
-                        timelineDirection
-                    ),
-                    perStreamLimit,
-                    timelineDirection
-                )
+            .flatMap { stream ->
+                pullFullLimit(stream, startTimestamp, timelineDirection, perStreamLimit)
             }
             .let { list ->
                 if (timelineDirection == TimeRelation.AFTER) {
@@ -182,7 +212,5 @@ class SearchMessagesHandler(
                 }
             }
     }
-
-
 }
 
