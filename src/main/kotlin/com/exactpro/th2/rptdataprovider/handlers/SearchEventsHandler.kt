@@ -25,11 +25,13 @@ import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.isActive
 import mu.KotlinLogging
 import java.time.Instant
 
@@ -55,10 +57,17 @@ class SearchEventsHandler(private val cradle: CradleService) {
                         } else {
                             listOf(EventTreeNode(null, metadata))
                         }
-                    }
+                    }.also { if (!coroutineContext.isActive) throw CancellationException() }
                 }
                 .toList()
-                .flatMap { it.await() }
+                .flatMap {
+                    if (coroutineContext.isActive) {
+                        it.await()
+                    } else {
+                        throw CancellationException()
+                    }
+                }
+
 
             val filteredList = baseList
                 .filter {
