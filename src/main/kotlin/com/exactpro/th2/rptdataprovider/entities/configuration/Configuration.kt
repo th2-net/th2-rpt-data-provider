@@ -34,14 +34,17 @@ class CustomConfigurationClass {
     var codecResponseTimeout: Int = 6000
     var codecCacheSize: Int = 100
 
+    var checkRequestsAliveDelay: Long = 2000
+
     val enableCaching: Boolean = true
     val notModifiedObjectsLifetime: Int = 3600
     val rarelyModifiedObjects: Int = 500
     val frequentlyModifiedObjects: Int = 100
 
     override fun toString(): String {
-        return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, clientCacheTimeout=$clientCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, codecResponseTimeout=$codecResponseTimeout, codecCacheSize=$codecCacheSize, enableCaching=$enableCaching, notModifiedObjectsLifetime=$notModifiedObjectsLifetime, rarelyModifiedObjects=$rarelyModifiedObjects, frequentlyModifiedObjects=$frequentlyModifiedObjects)"
+        return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, clientCacheTimeout=$clientCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, codecResponseTimeout=$codecResponseTimeout, codecCacheSize=$codecCacheSize, checkRequestsAliveDelay=$checkRequestsAliveDelay, enableCaching=$enableCaching, notModifiedObjectsLifetime=$notModifiedObjectsLifetime, rarelyModifiedObjects=$rarelyModifiedObjects, frequentlyModifiedObjects=$frequentlyModifiedObjects)"
     }
+
 }
 
 class Configuration(args: Array<String>) {
@@ -99,4 +102,7 @@ class Configuration(args: Array<String>) {
         Variable("rarelyModifiedObjects", customConfiguration.rarelyModifiedObjects.toString(), "500")
     val frequentlyModifiedObjects: Variable =
         Variable("frequentlyModifiedObjects", customConfiguration.frequentlyModifiedObjects.toString(), "100")
+
+    val checkRequestsAliveDelay: Variable =
+        Variable("checkRequestsAliveDelay", customConfiguration.checkRequestsAliveDelay.toString(), "2000")
 }

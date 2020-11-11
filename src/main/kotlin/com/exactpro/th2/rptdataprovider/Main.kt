@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider
 
+import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.MessageSearchRequest
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
@@ -27,12 +28,10 @@ import io.ktor.routing.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.util.*
-import kotlinx.coroutines.IO_PARALLELISM_PROPERTY_NAME
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.time.Instant
+import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
 class Main(args: Array<String>) {
@@ -40,13 +39,50 @@ class Main(args: Array<String>) {
     private val logger = KotlinLogging.logger {}
 
     private val context = Context(args)
-    private val configuration = context.configuration
     private val jacksonMapper = context.jacksonMapper
-    private val timeout = context.timeout
+    private val checkRequestAliveDelay = context.configuration.checkRequestsAliveDelay.value.toLong()
+    private val configuration = context.configuration
 
+    private class Timeouts {
+        class Config(var requestTimeout: Long = 5000L)
+
+        companion object : ApplicationFeature<ApplicationCallPipeline, Config, Unit> {
+            override val key: AttributeKey<Unit> = AttributeKey("Timeouts")
+
+            override fun install(pipeline: ApplicationCallPipeline, configure: Config.() -> Unit) {
+                val timeout = Config().apply(configure).requestTimeout
+                if (timeout <= 0) return
+
+                pipeline.intercept(ApplicationCallPipeline.Features) {
+                    withTimeout(timeout) {
+                        proceed()
+                    }
+                }
+            }
+        }
+    }
+
+    @EngineAPI
+    @InternalAPI
+    suspend fun checkContext(context: ApplicationCall) {
+        context.javaClass.getDeclaredField("call").also {
+            it.trySetAccessible()
+            val nettyApplicationRequest = it.get(context) as NettyApplicationCall
+
+            while (coroutineContext.isActive) {
+                if (nettyApplicationRequest.context.isRemoved)
+                    throw ChannelClosedException("Channel is closed")
+
+                delay(checkRequestAliveDelay)
+            }
+        }
+    }
+
+    @EngineAPI
     @InternalAPI
     private suspend fun handleRequest(
         call: ApplicationCall,
+        context: ApplicationCall,
         requestName: String,
         cacheControl: CacheControl?,
         vararg parameters: Any?,
@@ -60,12 +96,14 @@ class Main(args: Array<String>) {
                 try {
                     try {
                         launch {
-                            withTimeout(timeout) {
-                                cacheControl?.let { call.response.cacheControl(it) }
-                                call.respondText(
-                                    jacksonMapper.asStringSuspend(calledFun.invoke()), ContentType.Application.Json
-                                )
+                            launch {
+                                checkContext(context)
                             }
+                            cacheControl?.let { call.response.cacheControl(it) }
+                            call.respondText(
+                                jacksonMapper.asStringSuspend(calledFun.invoke()), ContentType.Application.Json
+                            )
+                            coroutineContext.cancelChildren()
                         }.join()
                     } catch (e: Exception) {
                         throw e.rootCause ?: e
@@ -74,6 +112,11 @@ class Main(args: Array<String>) {
                     logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - missing cradle data" }
                     call.respondText(
                         e.rootCause?.message ?: e.toString(), ContentType.Text.Plain, HttpStatusCode.NotFound
+                    )
+                } catch (e: ChannelClosedException) {
+                    logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - request closer" }
+                    call.respondText(
+                        e.rootCause?.message ?: e.toString(), ContentType.Text.Plain, HttpStatusCode.RequestTimeout
                     )
                 } catch (e: Exception) {
                     logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - unexpected exception" }
@@ -89,6 +132,7 @@ class Main(args: Array<String>) {
         return rightTimeBoundary?.isBefore(Instant.now()) != false
     }
 
+    @EngineAPI
     @InternalAPI
     fun run() {
 
@@ -109,19 +153,22 @@ class Main(args: Array<String>) {
         embeddedServer(Netty, configuration.port.value.toInt()) {
 
             install(Compression)
+            install(Timeouts) {
+                requestTimeout = context.timeout
+            }
 
             routing {
 
                 get("/event/{id}") {
                     val id = call.parameters["id"]
 
-                    handleRequest(call, "get single event", notModifiedCacheControl, id) {
+                    handleRequest(call, context, "get single event", notModifiedCacheControl, id) {
                         eventCache.getOrPut(id!!)
                     }
                 }
 
                 get("/messageStreams") {
-                    handleRequest(call, "get message streams", rarelyModifiedCacheControl) {
+                    handleRequest(call, context, "get message streams", rarelyModifiedCacheControl) {
                         cradleService.getMessageStreams()
                     }
                 }
@@ -129,7 +176,7 @@ class Main(args: Array<String>) {
                 get("/message/{id}") {
                     val id = call.parameters["id"]
 
-                    handleRequest(call, "get single message", notModifiedCacheControl, id) {
+                    handleRequest(call, context,"get single message", notModifiedCacheControl, id) {
                         messageCache.getOrPut(id!!)
                     }
                 }
@@ -137,7 +184,7 @@ class Main(args: Array<String>) {
                 get("/search/messages") {
                     val request = MessageSearchRequest(call.request.queryParameters.toMap())
 
-                    handleRequest(call, "search messages", null, request) {
+                    handleRequest(call, context,"search messages", null, request) {
                         searchMessagesHandler.searchMessages(request)
                             .also {
                                 call.response.cacheControl(
@@ -154,7 +201,7 @@ class Main(args: Array<String>) {
                 get("search/events") {
                     val request = EventSearchRequest(call.request.queryParameters.toMap())
 
-                    handleRequest(call, "search events", null, request) {
+                    handleRequest(call, context,"search events", null, request) {
                         searchEventsHandler.searchEvents(request)
                             .also {
                                 call.response.cacheControl(
@@ -175,6 +222,7 @@ class Main(args: Array<String>) {
     }
 }
 
+@EngineAPI
 @InternalAPI
 fun main(args: Array<String>) {
     Main(args).run()

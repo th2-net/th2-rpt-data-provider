@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider
 
+
 import com.exactpro.th2.rptdataprovider.cache.CodecCache
 import com.exactpro.th2.rptdataprovider.cache.EventCache
 import com.exactpro.th2.rptdataprovider.cache.MessageCache
@@ -53,7 +54,7 @@ class Context(
 
     val eventProducer: EventProducer = EventProducer(cradleService, jacksonMapper),
     val eventCache: EventCache = EventCache(cacheTimeout, configuration.eventCacheSize.value.toLong(), eventProducer),
-    val searchEventsHandler: SearchEventsHandler = SearchEventsHandler(cradleService, timeout),
+    val searchEventsHandler: SearchEventsHandler = SearchEventsHandler(cradleService),
 
     val codecCache: CodecCache = CodecCache(configuration),
 
@@ -62,8 +63,7 @@ class Context(
     val searchMessagesHandler: SearchMessagesHandler = SearchMessagesHandler(
         cradleService,
         messageCache,
-        messageProducer,
-        timeout
+        messageProducer
     ),
 
     private val enableCaching: Boolean = configuration.enableCaching.value.toBoolean(),

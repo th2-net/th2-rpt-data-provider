@@ -26,20 +26,20 @@ import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
-import kotlinx.coroutines.withTimeout
 import mu.KotlinLogging
 import java.time.Instant
 
-class SearchEventsHandler(private val cradle: CradleService, private val timeout: Long) {
+class SearchEventsHandler(private val cradle: CradleService) {
     companion object {
         private val logger = KotlinLogging.logger { }
     }
 
     suspend fun searchEvents(request: EventSearchRequest): List<Any> {
-        return withTimeout(timeout) {
+        return coroutineScope {
 
             val baseList = cradle.getEventsSuspend(
                 request.timestampFrom,

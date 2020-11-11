@@ -28,11 +28,11 @@ import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.toList
-import kotlinx.coroutines.withTimeout
 import mu.KotlinLogging
 import java.time.Instant
 import java.time.LocalTime
@@ -41,8 +41,7 @@ import java.time.ZoneOffset
 class SearchMessagesHandler(
     private val cradle: CradleService,
     private val messageCache: MessageCache,
-    private val messageProducer: MessageProducer,
-    private val timeout: Long
+    private val messageProducer: MessageProducer
 ) {
     companion object {
         private val logger = KotlinLogging.logger { }
@@ -57,8 +56,7 @@ class SearchMessagesHandler(
     }
 
     suspend fun searchMessages(request: MessageSearchRequest): List<Any> {
-        return withTimeout(timeout) {
-
+        return coroutineScope {
             flow {
                 do {
                     val data = pullMoreMerged(
