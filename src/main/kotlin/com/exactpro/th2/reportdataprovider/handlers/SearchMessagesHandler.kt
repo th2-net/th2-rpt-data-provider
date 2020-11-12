@@ -118,14 +118,18 @@ class SearchMessagesHandler(
             StoredMessageFilterBuilder()
                 .let {
                     if (timelineDirection == TimeRelation.AFTER) {
-                        it.next(startId, limit)
+                        it.streamName().isEqualTo(startId.streamName)
+                            .direction().isEqualTo(startId.direction)
+                            .index().isGreaterThanOrEqualTo(startId.index)
+                            .limit(limit)
                     } else {
-                        it.previous(startId, limit)
+                        it.streamName().isEqualTo(startId.streamName)
+                            .direction().isEqualTo(startId.direction)
+                            .index().isLessThanOrEqualTo(startId.index)
+                            .limit(limit)
                     }
-                }
-                .build()
+                }.build()
         )
-
             .let { list ->
                 if (timelineDirection == TimeRelation.AFTER) {
                     list.sortedBy { it.timestamp }
