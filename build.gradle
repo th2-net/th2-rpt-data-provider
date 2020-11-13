@@ -34,6 +34,11 @@ repositories {
         url 'http://artifactory5.exp.exactpro.com/artifactory/libs-release'
     }
     mavenCentral()
+
+    maven {
+        name 'Bintray'
+        url 'https://dl.bintray.com/exactpro/th2'
+    }
 }
 
 dependencies {
@@ -44,6 +49,9 @@ dependencies {
 
     implementation 'com.exactpro.th2:grpc-common'
     implementation 'com.exactpro.th2:common'
+
+    implementation 'com.exactpro.th2:cradle-core:2.1.1'
+    implementation 'com.exactpro.th2:cradle-cassandra:2.1.1'
 
     implementation 'io.github.microutils:kotlin-logging:1.7.+'
 
@@ -65,13 +73,13 @@ dependencies {
 jar {
     manifest {
         attributes(
-                'Created-By':               "${System.getProperty('java.version')} (${System.getProperty('java.vendor')})",
-                'Specification-Title':      '',
-                'Specification-Vendor':     'Exactpro Systems LLC',
-                'Implementation-Title':     project.archivesBaseName,
-                'Implementation-Vendor':    'Exactpro Systems LLC',
+                'Created-By': "${System.getProperty('java.version')} (${System.getProperty('java.vendor')})",
+                'Specification-Title': '',
+                'Specification-Vendor': 'Exactpro Systems LLC',
+                'Implementation-Title': project.archivesBaseName,
+                'Implementation-Vendor': 'Exactpro Systems LLC',
                 'Implementation-Vendor-Id': 'com.exactpro',
-                'Implementation-Version':   project.version
+                'Implementation-Version': project.version
         )
     }
 }
