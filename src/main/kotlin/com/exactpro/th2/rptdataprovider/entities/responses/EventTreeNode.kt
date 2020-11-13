@@ -19,6 +19,7 @@ package com.exactpro.th2.rptdataprovider.entities.responses
 import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventBatchMetadata
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
+import com.exactpro.th2.rptdataprovider.entities.exceptions.ParseEventTreeNodeException
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.fasterxml.jackson.annotation.JsonIgnore
@@ -72,7 +73,7 @@ data class EventTreeNode(
         filtered = filtered,
 
         providerEventId = ProviderEventId(
-            batch?.id, nonBatchedEvent?.id ?: batchedEvent?.id ?: throw CradleEventNotFoundException(error)
+            batch?.id, nonBatchedEvent?.id ?: batchedEvent?.id ?: throw ParseEventTreeNodeException(error)
         ),
 
         parentEventId = (nonBatchedEvent?.parentId ?: batchedEvent?.parentId)?.let { ProviderEventId(batch?.id, it) }
@@ -93,10 +94,10 @@ data class EventTreeNode(
         eventType = batchedEvent?.type ?: nonBatchedEvent?.type ?: "",
 
         successful = batchedEvent?.isSuccess ?: nonBatchedEvent?.isSuccess
-        ?: throw CradleEventNotFoundException(error),
+        ?: throw ParseEventTreeNodeException(error),
 
         startTimestamp = batchedEvent?.startTimestamp ?: nonBatchedEvent?.startTimestamp
-        ?: throw CradleEventNotFoundException(error),
+        ?: throw ParseEventTreeNodeException(error),
 
         childList = mutableSetOf<EventTreeNode>(),
         filtered = filtered,

@@ -17,6 +17,7 @@
 package com.exactpro.th2.rptdataprovider.entities.requests
 
 import com.exactpro.cradle.TimeRelation
+import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import java.time.Instant
 
 data class MessageSearchRequest(
@@ -36,7 +37,7 @@ data class MessageSearchRequest(
             if (value == "next") return TimeRelation.AFTER
             if (value == "previous") return TimeRelation.BEFORE
 
-            throw IllegalArgumentException("'$value' is not a valid timeline direction. Use 'next' or 'previous'")
+            throw InvalidRequestException("'$value' is not a valid timeline direction. Use 'next' or 'previous'")
         }
     }
 
