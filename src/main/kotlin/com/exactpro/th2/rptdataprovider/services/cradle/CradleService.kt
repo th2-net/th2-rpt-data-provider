@@ -80,6 +80,14 @@ class CradleService(configuration: Configuration) {
 
     }
 
+    suspend fun getEventsSuspend(parentId: StoredTestEventId, from: Instant, to: Instant): Iterable<StoredTestEventMetadata> {
+        return withContext(coroutineContext) {
+            logTime("Get events parent: $parentId from: $from to: $to") {
+                storage.getTestEventsAsync(parentId, from, to).await()
+            }
+        } ?: listOf()
+
+    }
 
     suspend fun getEventSuspend(id: StoredTestEventId): StoredTestEventWrapper? {
         return withContext(coroutineContext) {
