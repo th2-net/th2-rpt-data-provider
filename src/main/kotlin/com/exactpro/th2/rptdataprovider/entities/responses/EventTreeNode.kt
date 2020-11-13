@@ -20,6 +20,7 @@ import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventBatchMetadata
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
+import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.fasterxml.jackson.annotation.JsonIgnore
 import java.time.Instant
 
@@ -71,7 +72,7 @@ data class EventTreeNode(
         filtered = filtered,
 
         providerEventId = ProviderEventId(
-            batch?.id, nonBatchedEvent?.id ?: batchedEvent?.id ?: throw IllegalArgumentException(error)
+            batch?.id, nonBatchedEvent?.id ?: batchedEvent?.id ?: throw CradleEventNotFoundException(error)
         ),
 
         parentEventId = (nonBatchedEvent?.parentId ?: batchedEvent?.parentId)?.let { ProviderEventId(batch?.id, it) }
@@ -92,10 +93,10 @@ data class EventTreeNode(
         eventType = batchedEvent?.type ?: nonBatchedEvent?.type ?: "",
 
         successful = batchedEvent?.isSuccess ?: nonBatchedEvent?.isSuccess
-        ?: throw IllegalArgumentException(error),
+        ?: throw CradleEventNotFoundException(error),
 
         startTimestamp = batchedEvent?.startTimestamp ?: nonBatchedEvent?.startTimestamp
-        ?: throw IllegalArgumentException(error),
+        ?: throw CradleEventNotFoundException(error),
 
         childList = mutableSetOf<EventTreeNode>(),
         filtered = filtered,

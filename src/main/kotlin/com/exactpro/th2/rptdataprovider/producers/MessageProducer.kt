@@ -24,6 +24,7 @@ import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.rptdataprovider.cache.CodecCache
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
+import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import com.google.protobuf.InvalidProtocolBufferException
@@ -112,7 +113,7 @@ class MessageProducer(
 
         return fromRawMessage(
             cradle.getMessageSuspend(id)
-                ?: throw IllegalArgumentException("message '${id}' does not exist in cradle")
+                ?: throw CradleMessageNotFoundException("message '${id}' does not exist in cradle")
         )
     }
 }

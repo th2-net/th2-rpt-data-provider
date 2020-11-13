@@ -24,6 +24,7 @@ import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
+import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
@@ -167,7 +168,7 @@ class SearchEventsHandler(private val cradle: CradleService) {
         val batch = cradle.getEventSuspend(batchId)?.asBatch()
 
         return (batch?.testEvents
-            ?: throw IllegalArgumentException("unable to get test events of batch '$batchId'"))
+            ?: throw CradleEventNotFoundException("unable to get test events of batch '$batchId'"))
             .filter { it.startTimestamp.isAfter(timestampFrom) && it.startTimestamp.isBefore(timestampTo) }
             .map {
                 val batchMetadata = StoredTestEventBatchMetadata(batch)
