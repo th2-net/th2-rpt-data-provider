@@ -20,6 +20,7 @@ import com.exactpro.cradle.testevents.StoredTestEventBatch
 import com.exactpro.cradle.testevents.StoredTestEventWithContent
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
+import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.fasterxml.jackson.databind.ObjectMapper
 import mu.KotlinLogging
@@ -42,7 +43,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
 
         if (storedEvent == null) {
             logger.error { "unable to find event '${id.eventId}'" }
-            throw IllegalArgumentException("${id.eventId} is not a valid id")
+            throw CradleEventNotFoundException("${id.eventId} is not a valid id")
         }
 
         return fromStoredEvent(storedEvent, batch)

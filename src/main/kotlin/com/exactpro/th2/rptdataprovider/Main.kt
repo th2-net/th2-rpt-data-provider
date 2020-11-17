@@ -17,6 +17,7 @@
 package com.exactpro.th2.rptdataprovider
 
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
+import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.MessageSearchRequest
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
@@ -108,6 +109,11 @@ class Main(args: Array<String>) {
                     } catch (e: Exception) {
                         throw e.rootCause ?: e
                     }
+                } catch (e: InvalidRequestException) {
+                    logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - invalid request" }
+                    call.respondText(
+                        e.rootCause?.message ?: e.toString(), ContentType.Text.Plain, HttpStatusCode.BadRequest
+                    )
                 } catch (e: CradleObjectNotFoundException) {
                     logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - missing cradle data" }
                     call.respondText(
@@ -176,7 +182,7 @@ class Main(args: Array<String>) {
                 get("/message/{id}") {
                     val id = call.parameters["id"]
 
-                    handleRequest(call, context,"get single message", notModifiedCacheControl, id) {
+                    handleRequest(call, context, "get single message", notModifiedCacheControl, id) {
                         messageCache.getOrPut(id!!)
                     }
                 }
@@ -184,7 +190,7 @@ class Main(args: Array<String>) {
                 get("/search/messages") {
                     val request = MessageSearchRequest(call.request.queryParameters.toMap())
 
-                    handleRequest(call, context,"search messages", null, request) {
+                    handleRequest(call, context, "search messages", null, request) {
                         searchMessagesHandler.searchMessages(request)
                             .also {
                                 call.response.cacheControl(
@@ -201,7 +207,7 @@ class Main(args: Array<String>) {
                 get("search/events") {
                     val request = EventSearchRequest(call.request.queryParameters.toMap())
 
-                    handleRequest(call, context,"search events", null, request) {
+                    handleRequest(call, context, "search events", null, request) {
                         searchEventsHandler.searchEvents(request)
                             .also {
                                 call.response.cacheControl(
