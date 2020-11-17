@@ -22,6 +22,7 @@ import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventBatchMetadata
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
+import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
@@ -41,13 +42,26 @@ class SearchEventsHandler(private val cradle: CradleService) {
         private val logger = KotlinLogging.logger { }
     }
 
+    private suspend fun getEventsSuspend(request: EventSearchRequest): Iterable<StoredTestEventMetadata> {
+        return request.parentEvent?.let {
+            cradle.getEventsSuspend(
+                ProviderEventId(it).eventId,
+                request.timestampFrom,
+                request.timestampTo
+            )
+        } ?: run {
+            cradle.getEventsSuspend(
+                request.timestampFrom,
+                request.timestampTo
+            )
+        }
+    }
+
     suspend fun searchEvents(request: EventSearchRequest): List<Any> {
         return coroutineScope {
 
-            val baseList = cradle.getEventsSuspend(
-                request.timestampFrom,
-                request.timestampTo
-            ).asFlow()
+            val baseList = getEventsSuspend(request)
+                .asFlow()
                 .map { metadata ->
                     async {
                         if (metadata.isBatch) {
