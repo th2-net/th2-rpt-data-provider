@@ -29,6 +29,7 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import com.google.protobuf.InvalidProtocolBufferException
 import com.google.protobuf.util.JsonFormat
+import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import mu.KotlinLogging
 import java.util.*
 
@@ -91,14 +92,17 @@ class MessageProducer(
                         .toList()
                 ).build()
 
-                rabbitMqService.decodeMessage(batch)
-                    .onEach { codecCache.put(getId(it.metadata.id).toString(), it) }
-                    .firstOrNull { message.id == getId(it.metadata.id) }
+                try {
+                    rabbitMqService.decodeMessage(batch)
+                        .onEach { codecCache.put(getId(it.metadata.id).toString(), it) }
+                        .firstOrNull { message.id == getId(it.metadata.id) }
 
-                    ?: let {
-                        logger.error { "unable to parse message '${message.id}' using RabbitMqService - parsed message is set to 'null'" }
-                        null
-                    }
+                } catch (e: ClosedReceiveChannelException) {
+                    null
+                } ?: let {
+                    logger.error { "unable to parse message '${message.id}' using RabbitMqService - parsed message is set to 'null'" }
+                    null
+                }
             }
     }
 
