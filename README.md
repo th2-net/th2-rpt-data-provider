@@ -1,4 +1,4 @@
-# Report data provider 2.1
+# Report data provider 2.2
 
 # Overview
 This component serves as a backend for report-viewer. It will connect to the configured cassandra database via cradle api and expose the data stored in there as REST resources.
