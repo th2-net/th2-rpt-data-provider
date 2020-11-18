@@ -29,10 +29,6 @@ group 'com.exactpro.th2'
 version release_version
 
 repositories {
-    maven {
-        name 'Artifactory release'
-        url 'http://artifactory5.exp.exactpro.com/artifactory/libs-release'
-    }
     mavenCentral()
 
     maven {
