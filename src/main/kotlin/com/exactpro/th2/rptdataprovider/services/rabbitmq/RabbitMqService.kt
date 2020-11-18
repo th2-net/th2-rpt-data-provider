@@ -22,6 +22,7 @@ import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.schema.message.MessageListener
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import mu.KotlinLogging
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentSkipListSet
@@ -54,6 +55,7 @@ class RabbitMqService(private val configuration: Configuration) {
         "from_codec"
     )
 
+    @Throws(ClosedReceiveChannelException::class)
     suspend fun decodeMessage(batch: RawMessageBatch): Collection<Message> {
 
         val requests: Map<MessageID, CodecRequest> = batch.messagesList
@@ -93,6 +95,13 @@ class RabbitMqService(private val configuration: Configuration) {
                 }
             } catch (e: TimeoutCancellationException) {
                 logger.error { "unable to parse messages $requestDebugInfo - timed out after $responseTimeout milliseconds" }
+
+                requests.map { request ->
+                    decodeRequests.remove(request.key)?.let {
+                        request.value
+                    }
+                }.filterNotNull().forEach { it.channel.close() }
+
                 listOf<Message>()
             }
         }
