@@ -209,15 +209,7 @@ class Main(args: Array<String>) {
 
                     handleRequest(call, context, "search events", null, request) {
                         searchEventsHandler.searchEvents(request)
-                            .also {
-                                call.response.cacheControl(
-                                    if (inPast(request.timestampTo)) {
-                                        notModifiedCacheControl
-                                    } else {
-                                        frequentlyModifiedCacheControl
-                                    }
-                                )
-                            }
+                            .also { call.response.cacheControl(frequentlyModifiedCacheControl) }
                     }
                 }
             }
