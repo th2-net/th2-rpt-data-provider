@@ -41,8 +41,8 @@ class Context(
     val cacheTimeout: Long = configuration.serverCacheTimeout.value.toLong(),
 
     val jacksonMapper: ObjectMapper = jacksonObjectMapper()
-        .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
-        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES),
+            .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
+            .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES),
 
     val cradleService: CradleService = CradleService(
         configuration
@@ -63,7 +63,8 @@ class Context(
     val searchMessagesHandler: SearchMessagesHandler = SearchMessagesHandler(
         cradleService,
         messageCache,
-        messageProducer
+        messageProducer,
+        configuration.maxMessagesLimit.value.toInt()
     ),
 
     private val enableCaching: Boolean = configuration.enableCaching.value.toBoolean(),
