@@ -64,7 +64,8 @@ class Context(
         cradleService,
         messageCache,
         messageProducer,
-        configuration.maxMessagesLimit.value.toInt()
+        configuration.maxMessagesLimit.value.toInt(),
+        configuration.messageSearchPipelineBuffer.value.toInt()
     ),
 
     private val enableCaching: Boolean = configuration.enableCaching.value.toBoolean(),

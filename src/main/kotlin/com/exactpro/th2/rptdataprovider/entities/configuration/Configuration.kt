@@ -43,8 +43,10 @@ class CustomConfigurationClass {
 
     val maxMessagesLimit: Int = 100
 
+    val messageSearchPipelineBuffer: Int = 500
+
     override fun toString(): String {
-        return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, clientCacheTimeout=$clientCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, codecResponseTimeout=$codecResponseTimeout, codecCacheSize=$codecCacheSize, checkRequestsAliveDelay=$checkRequestsAliveDelay, enableCaching=$enableCaching, notModifiedObjectsLifetime=$notModifiedObjectsLifetime, rarelyModifiedObjects=$rarelyModifiedObjects, frequentlyModifiedObjects=$frequentlyModifiedObjects, maxMessagesLimit=$maxMessagesLimit)"
+        return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, clientCacheTimeout=$clientCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, codecResponseTimeout=$codecResponseTimeout, codecCacheSize=$codecCacheSize, checkRequestsAliveDelay=$checkRequestsAliveDelay, enableCaching=$enableCaching, notModifiedObjectsLifetime=$notModifiedObjectsLifetime, rarelyModifiedObjects=$rarelyModifiedObjects, frequentlyModifiedObjects=$frequentlyModifiedObjects, maxMessagesLimit=$maxMessagesLimit, messageSearchPipelineBuffer=$messageSearchPipelineBuffer)"
     }
 }
 
@@ -107,5 +109,9 @@ class Configuration(args: Array<String>) {
     val checkRequestsAliveDelay: Variable =
         Variable("checkRequestsAliveDelay", customConfiguration.checkRequestsAliveDelay.toString(), "2000")
 
-    val maxMessagesLimit: Variable = Variable("maxMessagesLimit", customConfiguration.maxMessagesLimit.toString(), "150")
+    val maxMessagesLimit: Variable =
+        Variable("maxMessagesLimit", customConfiguration.maxMessagesLimit.toString(), "150")
+
+    val messageSearchPipelineBuffer: Variable =
+        Variable("messageSearchPipelineBuffer", customConfiguration.messageSearchPipelineBuffer.toString(), "500")
 }
