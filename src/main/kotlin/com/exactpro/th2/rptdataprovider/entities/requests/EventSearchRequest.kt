@@ -25,7 +25,8 @@ data class EventSearchRequest(
     val name: List<String>?,
     val type: List<String>?,
     val flat: Boolean,
-    val parentEvent: String?
+    val parentEvent: String?,
+    val probe: Boolean
 ) {
     constructor(parameters: Map<String, List<String>>) : this(
         attachedMessageId = parameters["attachedMessageId"]?.first(),
@@ -34,6 +35,7 @@ data class EventSearchRequest(
         name = parameters["name"],
         type = parameters["type"],
         flat = parameters["flat"]?.first()?.toBoolean() ?: false,
-        parentEvent = parameters["parentEvent"]?.first()
+        parentEvent = parameters["parentEvent"]?.first(),
+        probe = parameters["probe"]?.first()?.toBoolean() ?: false
     )
 }

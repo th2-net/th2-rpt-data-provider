@@ -29,7 +29,8 @@ data class MessageSearchRequest(
     val limit: Int,
     val timelineDirection: TimeRelation,
     val messageId: String?,
-    val idsOnly: Boolean
+    val idsOnly: Boolean,
+    val probe: Boolean
 ) {
 
     companion object {
@@ -57,6 +58,7 @@ data class MessageSearchRequest(
             ?: TimeRelation.AFTER,
 
         messageId = parameters["messageId"]?.first(),
-        idsOnly = parameters["idsOnly"]?.first()?.toBoolean() ?: true
+        idsOnly = parameters["idsOnly"]?.first()?.toBoolean() ?: true,
+        probe = parameters["probe"]?.first()?.toBoolean() ?: false
     )
 }
