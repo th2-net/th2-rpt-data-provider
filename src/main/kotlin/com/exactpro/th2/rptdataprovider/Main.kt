@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider
 
+import com.exactpro.cradle.utils.CradleIdException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
@@ -79,6 +80,25 @@ class Main(args: Array<String>) {
         }
     }
 
+    @InternalAPI
+    private suspend fun sendErrorCodeOrEmptyJson(
+        probe: Boolean,
+        call: ApplicationCall,
+        e: Exception,
+        code: HttpStatusCode
+    ) {
+        if (probe) {
+            call.respondText(
+                jacksonMapper.writeValueAsString(null), ContentType.Application.Json
+            )
+        } else {
+            call.respondText(
+                e.rootCause?.message ?: e.toString(), ContentType.Text.Plain, code
+            )
+        }
+    }
+
+
     @EngineAPI
     @InternalAPI
     private suspend fun handleRequest(
@@ -86,6 +106,7 @@ class Main(args: Array<String>) {
         context: ApplicationCall,
         requestName: String,
         cacheControl: CacheControl?,
+        probe: Boolean,
         vararg parameters: Any?,
         calledFun: suspend () -> Any
     ) {
@@ -116,9 +137,7 @@ class Main(args: Array<String>) {
                     )
                 } catch (e: CradleObjectNotFoundException) {
                     logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - missing cradle data" }
-                    call.respondText(
-                        e.rootCause?.message ?: e.toString(), ContentType.Text.Plain, HttpStatusCode.NotFound
-                    )
+                    sendErrorCodeOrEmptyJson(probe, call, e, HttpStatusCode.NotFound)
                 } catch (e: ChannelClosedException) {
                     logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - request closer" }
                     call.respondText(
@@ -126,9 +145,16 @@ class Main(args: Array<String>) {
                     )
                 } catch (e: Exception) {
                     logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - unexpected exception" }
-                    call.respondText(
-                        e.rootCause?.message ?: e.toString(), ContentType.Text.Plain, HttpStatusCode.InternalServerError
-                    )
+                    when (e) {
+                        is CradleIdException -> {
+                            sendErrorCodeOrEmptyJson(probe, call, e, HttpStatusCode.InternalServerError)
+                        }
+                        else -> call.respondText(
+                            e.rootCause?.message ?: e.toString(),
+                            ContentType.Text.Plain,
+                            HttpStatusCode.InternalServerError
+                        )
+                    }
                 }
             }.let { logger.debug { "request '$requestName' with parameters '$stringParameters' handled - time=${it}ms" } }
         }
@@ -167,22 +193,24 @@ class Main(args: Array<String>) {
 
                 get("/event/{id}") {
                     val id = call.parameters["id"]
+                    val probe = call.parameters["probe"]?.toBoolean() ?: false
 
-                    handleRequest(call, context, "get single event", notModifiedCacheControl, id) {
+                    handleRequest(call, context, "get single event", notModifiedCacheControl, probe, id) {
                         eventCache.getOrPut(id!!)
                     }
                 }
 
                 get("/messageStreams") {
-                    handleRequest(call, context, "get message streams", rarelyModifiedCacheControl) {
+                    handleRequest(call, context, "get message streams", rarelyModifiedCacheControl, false) {
                         cradleService.getMessageStreams()
                     }
                 }
 
                 get("/message/{id}") {
                     val id = call.parameters["id"]
+                    val probe = call.parameters["probe"]?.toBoolean() ?: false
 
-                    handleRequest(call, context, "get single message", notModifiedCacheControl, id) {
+                    handleRequest(call, context, "get single message", notModifiedCacheControl, probe, id) {
                         messageCache.getOrPut(id!!)
                     }
                 }
@@ -190,7 +218,7 @@ class Main(args: Array<String>) {
                 get("/search/messages") {
                     val request = MessageSearchRequest(call.request.queryParameters.toMap())
 
-                    handleRequest(call, context, "search messages", null, request) {
+                    handleRequest(call, context, "search messages", null, request.probe, request) {
                         searchMessagesHandler.searchMessages(request)
                             .also {
                                 call.response.cacheControl(
@@ -207,7 +235,7 @@ class Main(args: Array<String>) {
                 get("search/events") {
                     val request = EventSearchRequest(call.request.queryParameters.toMap())
 
-                    handleRequest(call, context, "search events", null, request) {
+                    handleRequest(call, context, "search events", null, request.probe, request) {
                         searchEventsHandler.searchEvents(request)
                             .also { call.response.cacheControl(frequentlyModifiedCacheControl) }
                     }
