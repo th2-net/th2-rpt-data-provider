@@ -97,10 +97,9 @@ class RabbitMqService(private val configuration: Configuration) {
                 logger.error { "unable to parse messages $requestDebugInfo - timed out after $responseTimeout milliseconds" }
 
                 requests.map { request ->
-                    decodeRequests.remove(request.key)?.let {
-                        request.value
-                    }
-                }.filterNotNull().forEach { it.channel.close() }
+                    decodeRequests.remove(request.key)
+                    request.value
+                }.forEach { it.channel.close() }
 
                 listOf<Message>()
             }

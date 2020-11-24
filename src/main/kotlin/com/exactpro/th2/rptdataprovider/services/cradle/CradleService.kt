@@ -80,7 +80,11 @@ class CradleService(configuration: Configuration) {
 
     }
 
-    suspend fun getEventsSuspend(parentId: StoredTestEventId, from: Instant, to: Instant): Iterable<StoredTestEventMetadata> {
+    suspend fun getEventsSuspend(
+        parentId: StoredTestEventId,
+        from: Instant,
+        to: Instant
+    ): Iterable<StoredTestEventMetadata> {
         return withContext(coroutineContext) {
             logTime("Get events parent: $parentId from: $from to: $to") {
                 storage.getTestEventsAsync(parentId, from, to).await()
@@ -108,6 +112,14 @@ class CradleService(configuration: Configuration) {
                 storage.getNearestMessageId(stream, direction, timestamp, timelineDirection)
             }
         }
+    }
+
+    suspend fun getMessageBatchSuspend(id: StoredMessageId): Collection<StoredMessage> {
+        return withContext(Dispatchers.IO) {
+            logTime("getTestEventIdsByMessageId (id=$id)") {
+                storage.getMessageBatch(id)
+            }
+        }!!
     }
 
     suspend fun getEventIdsSuspend(id: StoredMessageId): Collection<StoredTestEventId> {
