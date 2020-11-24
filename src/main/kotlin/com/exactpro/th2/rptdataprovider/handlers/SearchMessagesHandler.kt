@@ -27,7 +27,9 @@ import com.exactpro.th2.rptdataprovider.entities.requests.MessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.*
 import mu.KotlinLogging
@@ -37,10 +39,11 @@ import java.time.LocalTime
 import java.time.ZoneOffset
 
 class SearchMessagesHandler(
-        private val cradle: CradleService,
-        private val messageCache: MessageCache,
-        private val messageProducer: MessageProducer,
-        private val maxMessagesLimit: Int
+    private val cradle: CradleService,
+    private val messageCache: MessageCache,
+    private val messageProducer: MessageProducer,
+    private val maxMessagesLimit: Int,
+    private val messageSearchPipelineBuffer: Int
 ) {
     companion object {
         private val logger = KotlinLogging.logger { }
@@ -54,37 +57,44 @@ class SearchMessagesHandler(
                 .contains(StoredMessageId.fromString(message.messageId)))
     }
 
+    private fun chooseBufferSize(request: MessageSearchRequest): Int {
+        return if ((request.attachedEventId ?: request.messageType) == null)
+            request.limit
+        else
+            messageSearchPipelineBuffer
+    }
+
+    private suspend fun chooseStartTimestamp(request: MessageSearchRequest): Instant {
+        return request.messageId?.let {
+            cradle.getMessageSuspend(StoredMessageId.fromString(it))?.timestamp
+        } ?: (
+                if (request.timelineDirection == TimeRelation.AFTER) {
+                    request.timestampFrom
+                } else {
+                    request.timestampTo
+                }) ?: Instant.now()
+    }
+
     suspend fun searchMessages(request: MessageSearchRequest): List<Any> {
         return coroutineScope {
+            val bufferSize = chooseBufferSize(request)
             flow {
-                var timestamp = request.messageId?.let {
-                    cradle.getMessageSuspend(StoredMessageId.fromString(it))?.timestamp
-                } ?: (
-                        if (request.timelineDirection == TimeRelation.AFTER) {
-                            request.timestampFrom
-                        } else {
-                            request.timestampTo
-                        }) ?: Instant.now()
-
+                var timestamp = chooseStartTimestamp(request)
                 var limit = request.limit
-
                 do {
                     val data = pullMoreMerged(
-                            timestamp,
-                            request.stream ?: emptyList(),
-                            request.timelineDirection,
-                            request.limit
+                        timestamp,
+                        request.stream ?: emptyList(),
+                        request.timelineDirection,
+                        limit
                     )
-
                     for (item in data) {
                         emit(item)
                     }
-
                     if (data.isNotEmpty())
                         timestamp = data.last().timestamp
 
                     limit = min(maxMessagesLimit, limit * 2)
-
                 } while (data.isNotEmpty())
             }
                     .filterNot { it.id.toString() == request.messageId }
@@ -110,6 +120,7 @@ class SearchMessagesHandler(
                             }
                         }
                     }
+                    .buffer(bufferSize)
                     .map { it.await() }
                     .filter { it.second }
                     .map {
@@ -136,9 +147,9 @@ class SearchMessagesHandler(
     }
 
     private suspend fun pullMore(
-            startId: StoredMessageId?,
-            limit: Int,
-            timelineDirection: TimeRelation
+        startId: StoredMessageId?,
+        limit: Int,
+        timelineDirection: TimeRelation
     ): List<StoredMessage> {
 
         logger.debug { "pulling more messages (id=$startId limit=$limit direction=$timelineDirection)" }
@@ -146,20 +157,20 @@ class SearchMessagesHandler(
         if (startId == null) return emptyList()
 
         return cradle.getMessagesSuspend(
-                StoredMessageFilterBuilder()
-                        .let {
-                            if (timelineDirection == TimeRelation.AFTER) {
-                                it.streamName().isEqualTo(startId.streamName)
-                                        .direction().isEqualTo(startId.direction)
-                                        .index().isGreaterThanOrEqualTo(startId.index)
-                                        .limit(limit)
-                            } else {
-                                it.streamName().isEqualTo(startId.streamName)
-                                        .direction().isEqualTo(startId.direction)
-                                        .index().isLessThanOrEqualTo(startId.index)
-                                        .limit(limit)
-                            }
-                        }.build()
+            StoredMessageFilterBuilder()
+                    .let {
+                        if (timelineDirection == TimeRelation.AFTER) {
+                            it.streamName().isEqualTo(startId.streamName)
+                                    .direction().isEqualTo(startId.direction)
+                                    .index().isGreaterThanOrEqualTo(startId.index)
+                                    .limit(limit)
+                        } else {
+                            it.streamName().isEqualTo(startId.streamName)
+                                    .direction().isEqualTo(startId.direction)
+                                    .index().isLessThanOrEqualTo(startId.index)
+                                    .limit(limit)
+                        }
+                    }.build()
         )
                 .let { list ->
                     if (timelineDirection == TimeRelation.AFTER) {
@@ -172,10 +183,10 @@ class SearchMessagesHandler(
     }
 
     private suspend fun pullFullLimit(
-            stream: String,
-            startTimestamp: Instant,
-            timelineDirection: TimeRelation,
-            perStreamLimit: Int
+        stream: String,
+        startTimestamp: Instant,
+        timelineDirection: TimeRelation,
+        perStreamLimit: Int
     ): List<StoredMessage> {
         return mutableListOf<StoredMessage>().apply {
             var timestamp = startTimestamp
@@ -183,16 +194,16 @@ class SearchMessagesHandler(
             do {
                 for (direction in Direction.values()) {
                     addAll(
-                            pullMore(
-                                    cradle.getFirstMessageIdSuspend(
-                                            timestamp,
-                                            stream,
-                                            direction,
-                                            timelineDirection
-                                    ),
-                                    perStreamLimit,
-                                    timelineDirection
-                            )
+                        pullMore(
+                            cradle.getFirstMessageIdSuspend(
+                                timestamp,
+                                stream,
+                                direction,
+                                timelineDirection
+                            ),
+                            perStreamLimit,
+                            timelineDirection
+                        )
                     )
                 }
                 daysChecking -= 1
@@ -202,10 +213,10 @@ class SearchMessagesHandler(
     }
 
     private suspend fun pullMoreMerged(
-            startTimestamp: Instant,
-            streams: List<String>,
-            timelineDirection: TimeRelation,
-            perStreamLimit: Int
+        startTimestamp: Instant,
+        streams: List<String>,
+        timelineDirection: TimeRelation,
+        perStreamLimit: Int
     ): List<StoredMessage> {
         logger.debug { "pulling more messages (timestamp=$startTimestamp streams=$streams direction=$timelineDirection perStreamLimit=$perStreamLimit)" }
         return streams
