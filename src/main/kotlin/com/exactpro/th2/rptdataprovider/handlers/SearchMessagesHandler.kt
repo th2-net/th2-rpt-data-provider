@@ -104,6 +104,7 @@ class SearchMessagesHandler(
         timelineDirection: TimeRelation
     ): StoredMessageId? {
         var daysChecking = 2
+        var isCurrentDay = true
         var timestamp = startTimestamp
         var messageId: StoredMessageId? = null
         while (messageId == null && daysChecking >= 0) {
@@ -111,9 +112,14 @@ class SearchMessagesHandler(
                 timestamp,
                 stream,
                 direction,
-                timelineDirection
+                // with TimeRelation.BEFORE we always select current batch
+                if (isCurrentDay)
+                    TimeRelation.BEFORE
+                else
+                    timelineDirection
             )
             daysChecking -= 1
+            isCurrentDay = false
             timestamp = nextDay(timestamp, timelineDirection)
         }
         return messageId
@@ -121,7 +127,7 @@ class SearchMessagesHandler(
 
     private suspend fun initStreamMessageIdMap(request: MessageSearchRequest):
             MutableMap<Pair<String, Direction>, StoredMessageId?> {
-        var timestamp = chooseStartTimestamp(request)
+        val timestamp = chooseStartTimestamp(request)
 
         return mutableMapOf<Pair<String, Direction>, StoredMessageId?>().apply {
             for (stream in request.stream ?: emptyList()) {
@@ -235,18 +241,6 @@ class SearchMessagesHandler(
             .toList()
     }
 
-    private suspend fun getNewStartId(
-        messages: List<StoredMessage>,
-        timelineDirection: TimeRelation
-    ): StoredMessageId? {
-        if (messages.isEmpty()) return null
-        return if (timelineDirection == TimeRelation.AFTER) {
-            messages.last()
-        } else {
-            messages.first()
-        }.id
-    }
-
     private suspend fun pullMoreMerged(
         streamMessageIndexMap: MutableMap<Pair<String, Direction>, StoredMessageId?>,
         timelineDirection: TimeRelation,
@@ -260,7 +254,7 @@ class SearchMessagesHandler(
                     perStreamLimit,
                     timelineDirection
                 ).let {
-                    streamMessageIndexMap[stream] = getNewStartId(it, timelineDirection)
+                    streamMessageIndexMap[stream] = if (it.isNotEmpty()) it.last().id else null
                     it
                 }
             }
