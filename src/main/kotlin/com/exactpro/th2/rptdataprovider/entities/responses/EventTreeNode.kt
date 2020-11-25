@@ -21,8 +21,8 @@ import com.exactpro.cradle.testevents.StoredTestEventBatchMetadata
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ParseEventTreeNodeException
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
-import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.fasterxml.jackson.annotation.JsonIgnore
+import mu.KotlinLogging
 import java.time.Instant
 
 data class EventTreeNode(
@@ -30,7 +30,7 @@ data class EventTreeNode(
 
     val eventName: String,
     val eventType: String,
-    val successful: Boolean,
+    var successful: Boolean,
     val startTimestamp: Instant,
     val childList: MutableSet<EventTreeNode>,
     var filtered: Boolean,
@@ -58,7 +58,8 @@ data class EventTreeNode(
         get() = parentEventId.toString()
 
     companion object {
-        const val error = "field is null in both batched and non-batched event metadata"
+        private const val error = "field is null in both batched and non-batched event metadata"
+        private val logger = KotlinLogging.logger { }
     }
 
     constructor(
@@ -123,6 +124,13 @@ data class EventTreeNode(
     )
 
     fun addChild(child: EventTreeNode) {
+
+        // this is a dirty hack to fail the parent if it didn't already happen properly
+        if (this.successful && !child.successful) {
+            logger.error { "inconsistent cradle data - parent event '${this.id}' is not failed, but it has at least one failed child '${child.id}'" }
+            this.successful = false
+        }
+
         childList.add(child)
     }
 
