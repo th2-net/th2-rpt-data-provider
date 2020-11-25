@@ -47,7 +47,7 @@ dependencies {
     implementation 'com.exactpro.th2:common'
 
     implementation 'com.exactpro.th2:cradle-core:2.1.1'
-    implementation 'com.exactpro.th2:cradle-cassandra:2.1.1'
+    implementation 'com.exactpro.th2:cradle-cassandra:2.2.2'
 
     implementation 'io.github.microutils:kotlin-logging:1.7.+'
 
