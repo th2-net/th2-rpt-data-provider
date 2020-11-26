@@ -27,13 +27,12 @@ import com.exactpro.th2.rptdataprovider.entities.requests.MessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.*
 import mu.KotlinLogging
 import java.lang.Integer.min
+import java.sql.Time
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneOffset
@@ -54,7 +53,7 @@ class SearchMessagesHandler(
             message.messageType.toLowerCase().contains(item.toLowerCase())
         }) && (request.attachedEventId == null
                 || cradle.getMessageIdsSuspend(StoredTestEventId(request.attachedEventId))
-                .contains(StoredMessageId.fromString(message.messageId)))
+            .contains(StoredMessageId.fromString(message.messageId)))
     }
 
     private fun chooseBufferSize(request: MessageSearchRequest): Int {
@@ -62,6 +61,17 @@ class SearchMessagesHandler(
             request.limit
         else
             messageSearchPipelineBuffer
+    }
+
+    private fun nextDay(timestamp: Instant, timelineDirection: TimeRelation): Instant {
+        val utcTimestamp = timestamp.atOffset(ZoneOffset.UTC)
+        return if (timelineDirection == TimeRelation.AFTER) {
+            utcTimestamp.plusDays(1)
+                .with(LocalTime.of(0, 0, 0, 0))
+        } else {
+            utcTimestamp.with(LocalTime.of(0, 0, 0, 0))
+                .minusNanos(1)
+        }.toInstant()
     }
 
     private suspend fun chooseStartTimestamp(request: MessageSearchRequest): Instant {
@@ -75,75 +85,142 @@ class SearchMessagesHandler(
                 }) ?: Instant.now()
     }
 
+    private suspend fun getNearestMessage(
+        messageBatch: Collection<StoredMessage>,
+        request: MessageSearchRequest,
+        timestamp: Instant
+    ): StoredMessage? {
+        if (messageBatch.isEmpty()) return null
+        return if (request.timelineDirection == TimeRelation.AFTER)
+            messageBatch.find { it.timestamp.isAfter(timestamp) } ?: messageBatch.last()
+        else
+            messageBatch.findLast { it.timestamp.isBefore(timestamp) } ?: messageBatch.first()
+
+    }
+
+    private suspend fun getFirstMessageCurrentDay(
+        timestamp: Instant,
+        stream: String,
+        direction: Direction
+    ): StoredMessageId? {
+        for (timeRelation in listOf(TimeRelation.BEFORE, TimeRelation.AFTER)) {
+            cradle.getFirstMessageIdSuspend(
+                timestamp,
+                stream,
+                direction,
+                timeRelation
+            )?.let { return it }
+        }
+        return null
+    }
+
+    private suspend fun getFirstMessageIdDifferentDays(
+        startTimestamp: Instant,
+        stream: String,
+        direction: Direction,
+        timelineDirection: TimeRelation
+    ): StoredMessageId? {
+        var daysChecking = 2
+        var isCurrentDay = true
+        var timestamp = startTimestamp
+        var messageId: StoredMessageId? = null
+        while (messageId == null && daysChecking >= 0) {
+            messageId =
+                if (isCurrentDay) {
+                    getFirstMessageCurrentDay(timestamp, stream, direction)
+                } else {
+                    cradle.getFirstMessageIdSuspend(
+                        timestamp,
+                        stream,
+                        direction,
+                        timelineDirection
+                    )
+                }
+            daysChecking -= 1
+            isCurrentDay = false
+            timestamp = nextDay(timestamp, timelineDirection)
+        }
+        return messageId
+    }
+
+    private suspend fun initStreamMessageIdMap(request: MessageSearchRequest):
+            MutableMap<Pair<String, Direction>, StoredMessageId?> {
+        val timestamp = chooseStartTimestamp(request)
+
+        return mutableMapOf<Pair<String, Direction>, StoredMessageId?>().apply {
+            for (stream in request.stream ?: emptyList()) {
+                for (direction in Direction.values()) {
+                    val storedMessageId =
+                        getFirstMessageIdDifferentDays(timestamp, stream, direction, request.timelineDirection)
+                    if (storedMessageId != null) {
+                        val messageBatch = cradle.getMessageBatchSuspend(storedMessageId)
+
+                        put(
+                            Pair(stream, direction),
+                            getNearestMessage(messageBatch, request, timestamp)?.id
+                        )
+                    } else {
+                        put(Pair(stream, direction), null)
+                    }
+                }
+            }
+        }
+    }
+
     suspend fun searchMessages(request: MessageSearchRequest): List<Any> {
         return coroutineScope {
             val bufferSize = chooseBufferSize(request)
+            val streamMessageIndexMap = initStreamMessageIdMap(request)
             flow {
-                var timestamp = chooseStartTimestamp(request)
                 var limit = request.limit
                 do {
                     val data = pullMoreMerged(
-                        timestamp,
-                        request.stream ?: emptyList(),
+                        streamMessageIndexMap,
                         request.timelineDirection,
                         limit
                     )
                     for (item in data) {
                         emit(item)
                     }
-                    if (data.isNotEmpty())
-                        timestamp = data.last().timestamp
-
                     limit = min(maxMessagesLimit, limit * 2)
-                } while (data.isNotEmpty())
+                } while (data.size >= limit)
             }
-                    .filterNot { it.id.toString() == request.messageId }
-                    .distinctUntilChanged { old, new -> old.id == new.id }
-                    .takeWhile {
-                        it.timestamp.let { timestamp ->
-                            if (request.timelineDirection == TimeRelation.AFTER) {
-                                request.timestampTo == null
-                                        || timestamp.isBefore(request.timestampTo) || timestamp == request.timestampTo
-                            } else {
-                                request.timestampFrom == null
-                                        || timestamp.isAfter(request.timestampFrom) || timestamp == request.timestampFrom
-                            }
-                        }
-                    }
-                    .map {
-                        async {
-                            if ((request.attachedEventId ?: request.messageType) != null || !request.idsOnly) {
-                                @Suppress("USELESS_CAST")
-                                Pair(it, isMessageMatched(request, messageCache.getOrPut(it)))
-                            } else {
-                                Pair(it, true)
-                            }
-                        }
-                    }
-                    .buffer(bufferSize)
-                    .map { it.await() }
-                    .filter { it.second }
-                    .map {
-                        if (request.idsOnly) {
-                            it.first.id.toString()
+                .filterNot { it.id.toString() == request.messageId }
+                .distinctUntilChanged { old, new -> old.id == new.id }
+                .takeWhile {
+                    it.timestamp.let { timestamp ->
+                        if (request.timelineDirection == TimeRelation.AFTER) {
+                            request.timestampTo == null
+                                    || timestamp.isBefore(request.timestampTo) || timestamp == request.timestampTo
                         } else {
-                            messageCache.getOrPut(it.first)
+                            request.timestampFrom == null
+                                    || timestamp.isAfter(request.timestampFrom) || timestamp == request.timestampFrom
                         }
                     }
-                    .take(request.limit)
-                    .toList()
+                }
+                .map {
+                    async {
+                        if ((request.attachedEventId ?: request.messageType) != null || !request.idsOnly) {
+                            @Suppress("USELESS_CAST")
+                            Pair(it, isMessageMatched(request, messageCache.getOrPut(it)))
+                        } else {
+                            Pair(it, true)
+                        }
+                    }
+                }
+                .buffer(bufferSize)
+                .map { it.await() }
+                .filter { it.second }
+                .map {
+                    if (request.idsOnly) {
+                        it.first.id.toString()
+                    } else {
+                        messageCache.getOrPut(it.first)
+                    }
+                }
+                .take(request.limit)
+                .toList()
         }
-    }
-
-    private fun nextDay(timestamp: Instant, timelineDirection: TimeRelation): Instant {
-        val utcTimestamp = timestamp.atOffset(ZoneOffset.UTC)
-        return if (timelineDirection == TimeRelation.AFTER) {
-            utcTimestamp.plusDays(1)
-                    .with(LocalTime.of(0, 0, 0, 0))
-        } else {
-            utcTimestamp.with(LocalTime.of(0, 0, 0, 0))
-                    .minusNanos(1)
-        }.toInstant()
     }
 
     private suspend fun pullMore(
@@ -158,79 +235,54 @@ class SearchMessagesHandler(
 
         return cradle.getMessagesSuspend(
             StoredMessageFilterBuilder()
-                    .let {
-                        if (timelineDirection == TimeRelation.AFTER) {
-                            it.streamName().isEqualTo(startId.streamName)
-                                    .direction().isEqualTo(startId.direction)
-                                    .index().isGreaterThanOrEqualTo(startId.index)
-                                    .limit(limit)
-                        } else {
-                            it.streamName().isEqualTo(startId.streamName)
-                                    .direction().isEqualTo(startId.direction)
-                                    .index().isLessThanOrEqualTo(startId.index)
-                                    .limit(limit)
-                        }
-                    }.build()
-        )
-                .let { list ->
+                .let {
                     if (timelineDirection == TimeRelation.AFTER) {
-                        list.sortedBy { it.timestamp }
+                        it.streamName().isEqualTo(startId.streamName)
+                            .direction().isEqualTo(startId.direction)
+                            .index().isGreaterThanOrEqualTo(startId.index)
+                            .limit(limit)
                     } else {
-                        list.sortedByDescending { it.timestamp }
+                        it.streamName().isEqualTo(startId.streamName)
+                            .direction().isEqualTo(startId.direction)
+                            .index().isLessThanOrEqualTo(startId.index)
+                            .limit(limit)
                     }
+                }.build()
+        )
+            .let { list ->
+                if (timelineDirection == TimeRelation.AFTER) {
+                    list.sortedBy { it.timestamp }
+                } else {
+                    list.sortedByDescending { it.timestamp }
                 }
-                .toList()
-    }
-
-    private suspend fun pullFullLimit(
-        stream: String,
-        startTimestamp: Instant,
-        timelineDirection: TimeRelation,
-        perStreamLimit: Int
-    ): List<StoredMessage> {
-        return mutableListOf<StoredMessage>().apply {
-            var timestamp = startTimestamp
-            var daysChecking = 2
-            do {
-                for (direction in Direction.values()) {
-                    addAll(
-                        pullMore(
-                            cradle.getFirstMessageIdSuspend(
-                                timestamp,
-                                stream,
-                                direction,
-                                timelineDirection
-                            ),
-                            perStreamLimit,
-                            timelineDirection
-                        )
-                    )
-                }
-                daysChecking -= 1
-                timestamp = nextDay(timestamp, timelineDirection)
-            } while (this.size <= perStreamLimit && daysChecking > 0)
-        }
+            }
+            .toList()
     }
 
     private suspend fun pullMoreMerged(
-        startTimestamp: Instant,
-        streams: List<String>,
+        streamMessageIndexMap: MutableMap<Pair<String, Direction>, StoredMessageId?>,
         timelineDirection: TimeRelation,
         perStreamLimit: Int
     ): List<StoredMessage> {
-        logger.debug { "pulling more messages (timestamp=$startTimestamp streams=$streams direction=$timelineDirection perStreamLimit=$perStreamLimit)" }
-        return streams
-                .distinct()
-                .flatMap { stream ->
-                    pullFullLimit(stream, startTimestamp, timelineDirection, perStreamLimit)
+        logger.debug { "pulling more messages (streams=${streamMessageIndexMap.keys} direction=$timelineDirection perStreamLimit=$perStreamLimit)" }
+        return streamMessageIndexMap.keys
+            .flatMap { stream ->
+                pullMore(
+                    streamMessageIndexMap[stream],
+                    perStreamLimit,
+                    timelineDirection
+                ).let {
+                    streamMessageIndexMap[stream] = if (it.isNotEmpty()) it.last().id else null
+                    it
                 }
-                .let { list ->
-                    if (timelineDirection == TimeRelation.AFTER) {
-                        list.sortedBy { it.timestamp }
-                    } else {
-                        list.sortedByDescending { it.timestamp }
-                    }
+            }
+            .let { list ->
+                if (timelineDirection == TimeRelation.AFTER) {
+                    list.sortedBy { it.timestamp }
+                } else {
+                    list.sortedByDescending { it.timestamp }
                 }
+            }
     }
 }
 
