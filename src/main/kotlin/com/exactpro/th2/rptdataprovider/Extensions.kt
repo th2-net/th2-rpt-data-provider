@@ -16,11 +16,23 @@
 
 package com.exactpro.th2.rptdataprovider
 
+import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageFilter
+import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
+import com.exactpro.th2.rptdataprovider.handlers.SearchEventsHandler
 import com.fasterxml.jackson.databind.ObjectMapper
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import io.ktor.application.*
+import io.ktor.http.*
+import io.ktor.response.*
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.*
+import kotlinx.coroutines.flow.*
 import mu.KotlinLogging
+import java.io.Writer
+import java.time.Instant
+import java.time.LocalTime
+import java.time.ZoneOffset
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -54,5 +66,39 @@ suspend fun <T> logTime(methodName: String, lambda: suspend () -> T): T? {
             .also { logger.debug { "cradle: $methodName took ${it}ms" } }
 
         result
+    }
+}
+
+@ExperimentalCoroutinesApi
+suspend fun ApplicationCall.respondSse(events: ReceiveChannel<SseEvent>) {
+    response.cacheControl(CacheControl.NoCache(null))
+    withContext(Dispatchers.IO) {
+        respondTextWriter(contentType = ContentType.Text.EventStream) {
+            events.consumeEach { event ->
+                eventWrite(event)
+            }
+        }
+    }
+}
+
+suspend fun Writer.eventWrite(event: SseEvent) {
+    if (event.id != null) {
+        write("id: ${event.id}\n")
+    }
+    if (event.event != null) {
+        write("event: ${event.event}\n")
+    }
+    for (dataLine in event.data.lines()) {
+        write("data: $dataLine\n")
+    }
+    write("\n")
+    flush()
+}
+
+fun Instant.min(other: Instant): Instant {
+    return if (this.isBefore(other)) {
+        this
+    } else {
+        other
     }
 }

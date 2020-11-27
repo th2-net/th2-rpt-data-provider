@@ -21,17 +21,24 @@ import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedExcepti
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.MessageSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
+import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import io.ktor.application.*
 import io.ktor.features.*
 import io.ktor.http.*
+import io.ktor.request.*
 import io.ktor.response.*
 import io.ktor.routing.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.util.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.*
+import kotlinx.coroutines.flow.*
 import mu.KotlinLogging
+import java.nio.channels.ClosedChannelException
 import java.time.Instant
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
@@ -46,19 +53,23 @@ class Main(args: Array<String>) {
     private val configuration = context.configuration
 
     private class Timeouts {
-        class Config(var requestTimeout: Long = 5000L)
+        class Config(var requestTimeout: Long = 5000L, var excludes: List<String> = listOf("sse"))
 
         companion object : ApplicationFeature<ApplicationCallPipeline, Config, Unit> {
             override val key: AttributeKey<Unit> = AttributeKey("Timeouts")
 
             override fun install(pipeline: ApplicationCallPipeline, configure: Config.() -> Unit) {
                 val timeout = Config().apply(configure).requestTimeout
+                val excludes = Config().apply(configure).excludes
+
                 if (timeout <= 0) return
 
                 pipeline.intercept(ApplicationCallPipeline.Features) {
+                    if (excludes.any { call.request.uri.contains(it) }) return@intercept
                     withTimeout(timeout) {
                         proceed()
                     }
+
                 }
             }
         }
@@ -99,6 +110,7 @@ class Main(args: Array<String>) {
     }
 
 
+    @ExperimentalCoroutinesApi
     @EngineAPI
     @InternalAPI
     private suspend fun handleRequest(
@@ -107,6 +119,7 @@ class Main(args: Array<String>) {
         requestName: String,
         cacheControl: CacheControl?,
         probe: Boolean,
+        useSse: Boolean,
         vararg parameters: Any?,
         calledFun: suspend () -> Any
     ) {
@@ -114,21 +127,26 @@ class Main(args: Array<String>) {
         coroutineScope {
             measureTimeMillis {
                 logger.debug { "handling '$requestName' request with parameters '$stringParameters'" }
-
                 try {
                     try {
                         launch {
-                            launch {
-                                checkContext(context)
+                            if (useSse) {
+                                calledFun.invoke()
+                            } else {
+                                launch {
+                                    checkContext(context)
+                                }
+                                cacheControl?.let { call.response.cacheControl(it) }
+                                call.respondText(
+                                    jacksonMapper.asStringSuspend(calledFun.invoke()),
+                                    ContentType.Application.Json
+                                )
                             }
-                            cacheControl?.let { call.response.cacheControl(it) }
-                            call.respondText(
-                                jacksonMapper.asStringSuspend(calledFun.invoke()), ContentType.Application.Json
-                            )
-                            coroutineContext.cancelChildren()
                         }.join()
                     } catch (e: Exception) {
                         throw e.rootCause ?: e
+                    } finally {
+                        coroutineContext.cancelChildren()
                     }
                 } catch (e: InvalidRequestException) {
                     logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - invalid request" }
@@ -164,6 +182,8 @@ class Main(args: Array<String>) {
         return rightTimeBoundary?.isBefore(Instant.now()) != false
     }
 
+    @FlowPreview
+    @ExperimentalCoroutinesApi
     @EngineAPI
     @InternalAPI
     fun run() {
@@ -180,6 +200,9 @@ class Main(args: Array<String>) {
         val searchEventsHandler = this.context.searchEventsHandler
         val searchMessagesHandler = this.context.searchMessagesHandler
 
+
+        val sseEventSearchStep = this.context.sseEventSearchStep
+
         System.setProperty(IO_PARALLELISM_PROPERTY_NAME, configuration.ioDispatcherThreadPoolSize.value)
 
         embeddedServer(Netty, configuration.port.value.toInt()) {
@@ -195,13 +218,17 @@ class Main(args: Array<String>) {
                     val id = call.parameters["id"]
                     val probe = call.parameters["probe"]?.toBoolean() ?: false
 
-                    handleRequest(call, context, "get single event", notModifiedCacheControl, probe, id) {
+                    handleRequest(call, context, "get single event", notModifiedCacheControl, probe, false, id) {
                         eventCache.getOrPut(id!!)
                     }
                 }
 
                 get("/messageStreams") {
-                    handleRequest(call, context, "get message streams", rarelyModifiedCacheControl, false) {
+                    handleRequest(
+                        call, context, "get message streams", rarelyModifiedCacheControl,
+                        probe = false,
+                        useSse = false
+                    ) {
                         cradleService.getMessageStreams()
                     }
                 }
@@ -210,7 +237,7 @@ class Main(args: Array<String>) {
                     val id = call.parameters["id"]
                     val probe = call.parameters["probe"]?.toBoolean() ?: false
 
-                    handleRequest(call, context, "get single message", notModifiedCacheControl, probe, id) {
+                    handleRequest(call, context, "get single message", notModifiedCacheControl, probe, false, id) {
                         messageCache.getOrPut(id!!)
                     }
                 }
@@ -218,7 +245,7 @@ class Main(args: Array<String>) {
                 get("/search/messages") {
                     val request = MessageSearchRequest(call.request.queryParameters.toMap())
 
-                    handleRequest(call, context, "search messages", null, request.probe, request) {
+                    handleRequest(call, context, "search messages", null, request.probe, false, request) {
                         searchMessagesHandler.searchMessages(request)
                             .also {
                                 call.response.cacheControl(
@@ -235,9 +262,19 @@ class Main(args: Array<String>) {
                 get("search/events") {
                     val request = EventSearchRequest(call.request.queryParameters.toMap())
 
-                    handleRequest(call, context, "search events", null, request.probe, request) {
+                    handleRequest(call, context, "search events", null, request.probe, false, request) {
                         searchEventsHandler.searchEvents(request)
                             .also { call.response.cacheControl(frequentlyModifiedCacheControl) }
+                    }
+                }
+
+                get("search/sse/events") {
+                    call.response.header("Access-Control-Allow-Origin", "*")
+                    val request = SseEventSearchRequest(call.request.queryParameters.toMap())
+                    handleRequest(call, context, "search events sse", null, false, true, request) {
+                        searchEventsHandler.searchEventsSse(request, call, jacksonMapper, sseEventSearchStep).also {
+                            call.response.cacheControl(CacheControl.NoCache(null))
+                        }
                     }
                 }
             }
@@ -248,8 +285,10 @@ class Main(args: Array<String>) {
     }
 }
 
+@FlowPreview
 @EngineAPI
 @InternalAPI
+@ExperimentalCoroutinesApi
 fun main(args: Array<String>) {
     Main(args).run()
 }

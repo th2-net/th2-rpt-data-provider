@@ -40,6 +40,8 @@ class Context(
     val timeout: Long = configuration.responseTimeout.value.toLong(),
     val cacheTimeout: Long = configuration.serverCacheTimeout.value.toLong(),
 
+    val sseEventSearchStep: Long = configuration.sseEventSearchStep.value.toLong(),
+
     val jacksonMapper: ObjectMapper = jacksonObjectMapper()
             .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES),
