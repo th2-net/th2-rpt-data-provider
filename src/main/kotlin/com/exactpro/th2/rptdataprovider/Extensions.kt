@@ -83,14 +83,16 @@ suspend fun ApplicationCall.respondSse(events: ReceiveChannel<SseEvent>) {
 
 suspend fun Writer.eventWrite(event: SseEvent) {
     withContext(Dispatchers.IO) {
-        if (event.id != null) {
-            write("id: ${event.id}\n")
-        }
         if (event.event != null) {
             write("event: ${event.event}\n")
         }
+
         for (dataLine in event.data.lines()) {
             write("data: $dataLine\n")
+        }
+
+        if (event.id != null) {
+            write("id: ${event.id}\n")
         }
         write("\n")
         flush()
