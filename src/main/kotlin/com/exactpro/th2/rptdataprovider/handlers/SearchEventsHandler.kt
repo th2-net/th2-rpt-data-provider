@@ -38,6 +38,8 @@ import io.ktor.application.*
 import io.ktor.http.*
 import io.ktor.response.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel.Factory.BUFFERED
+import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.flow.*
 import mu.KotlinLogging
 import java.time.Instant
@@ -74,7 +76,8 @@ class SearchEventsHandler(private val cradle: CradleService) {
         parentEvent: String?,
         timestampFrom: Instant,
         timestampTo: Instant,
-        parentContext: CoroutineContext
+        parentContext: CoroutineContext,
+        bufferSize: Int
     ): Flow<Deferred<List<EventTreeNode>>> {
         return coroutineScope {
             flow {
@@ -94,10 +97,10 @@ class SearchEventsHandler(private val cradle: CradleService) {
                         }
                     }.also { parentContext.ensureActive() }
                 }
-              .buffer()
+                .buffer(bufferSize)
         }
     }
-    
+
     private suspend fun isEventMatched(
         event: EventTreeNode,
         type: List<String>?,
@@ -117,12 +120,14 @@ class SearchEventsHandler(private val cradle: CradleService) {
         return coroutineScope {
             val baseList = getEventTreeNodeFlow(
                 request.parentEvent, request.timestampFrom,
-                request.timestampTo, coroutineContext
-            ).toList()
-                .flatMap {
-                    coroutineContext.ensureActive()
-                    it.await()
-                }
+                request.timestampTo, coroutineContext,
+                UNLIMITED
+            ).map {
+                coroutineContext.ensureActive()
+                it.await()
+            }
+                .toList()
+                .flatten()
 
             val filteredList =
                 baseList.filter { isEventMatched(it, request.type, request.name, request.attachedMessageId) }
@@ -182,14 +187,13 @@ class SearchEventsHandler(private val cradle: CradleService) {
         withContext(coroutineContext) {
             call.respondTextWriter(contentType = ContentType.Text.EventStream) {
                 val timeIntervals = getTimeIntervals(request, sseEventSearchStep)
-                //val timestamp = timeIntervals.first()
                 flow {
                     for (timestamp in timeIntervals) {
                         getEventTreeNodeFlow(
                             request.parentEvent, timestamp.first,
-                            timestamp.second, coroutineContext
+                            timestamp.second, coroutineContext,
+                            BUFFERED
                         ).collect { emit(it) }
-
                     }
                 }
                     .map { it.await() }
