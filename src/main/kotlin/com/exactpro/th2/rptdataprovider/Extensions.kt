@@ -82,17 +82,25 @@ suspend fun ApplicationCall.respondSse(events: ReceiveChannel<SseEvent>) {
 }
 
 suspend fun Writer.eventWrite(event: SseEvent) {
-    if (event.id != null) {
-        write("id: ${event.id}\n")
+    withContext(Dispatchers.IO) {
+        if (event.id != null) {
+            write("id: ${event.id}\n")
+        }
+        if (event.event != null) {
+            write("event: ${event.event}\n")
+        }
+        for (dataLine in event.data.lines()) {
+            write("data: $dataLine\n")
+        }
+        write("\n")
+        flush()
     }
-    if (event.event != null) {
-        write("event: ${event.event}\n")
+}
+
+suspend fun Writer.asyncClose() {
+    withContext(Dispatchers.IO) {
+        close()
     }
-    for (dataLine in event.data.lines()) {
-        write("data: $dataLine\n")
-    }
-    write("\n")
-    flush()
 }
 
 fun Instant.min(other: Instant): Instant {

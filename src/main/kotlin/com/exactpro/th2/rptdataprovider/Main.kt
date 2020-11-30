@@ -272,9 +272,8 @@ class Main(args: Array<String>) {
                     call.response.header("Access-Control-Allow-Origin", "*")
                     val request = SseEventSearchRequest(call.request.queryParameters.toMap())
                     handleRequest(call, context, "search events sse", null, false, true, request) {
-                        searchEventsHandler.searchEventsSse(request, call, jacksonMapper, sseEventSearchStep).also {
-                            call.response.cacheControl(CacheControl.NoCache(null))
-                        }
+                        call.response.cacheControl(CacheControl.NoCache(null))
+                        searchEventsHandler.searchEventsSse(request, call, jacksonMapper, sseEventSearchStep)
                     }
                 }
             }

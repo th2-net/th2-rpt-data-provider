@@ -23,11 +23,14 @@ import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventBatchMetadata
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
+import com.exactpro.th2.common.message.message
 import com.exactpro.th2.rptdataprovider.asStringSuspend
+import com.exactpro.th2.rptdataprovider.asyncClose
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
+import com.exactpro.th2.rptdataprovider.entities.sse.EventType
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.eventWrite
 import com.exactpro.th2.rptdataprovider.min
@@ -86,7 +89,6 @@ class SearchEventsHandler(private val cradle: CradleService) {
             }.cancellable()
                 .map { metadata ->
                     async(parentContext) {
-                        delay(1000)
                         if (metadata.isBatch) {
                             metadata.batchMetadata?.testEvents
                                 ?.map { EventTreeNode(metadata.batchMetadata, it) }
@@ -201,12 +203,13 @@ class SearchEventsHandler(private val cradle: CradleService) {
                     .filter { isEventMatched(it, request.type, request.name, request.attachedMessageId) }
                     .take(request.resultCountLimit)
                     .catch { throw it }
-                    .onCompletion { throw CancellationException() }
-                    .map { async { jacksonMapper.asStringSuspend(it) } }
-                    .buffer()
+                    .onCompletion {
+                        eventWrite(SseEvent(event = EventType.CLOSE))
+                        asyncClose()
+                    }
                     .collect {
                         coroutineContext.ensureActive()
-                        eventWrite(SseEvent(it.await()))
+                        eventWrite(SseEvent(jacksonMapper.asStringSuspend(it), EventType.EVENT, it.eventId))
                     }
             }
         }

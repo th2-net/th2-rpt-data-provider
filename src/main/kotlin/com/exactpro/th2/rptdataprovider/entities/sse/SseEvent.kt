@@ -16,9 +16,14 @@
 
 package com.exactpro.th2.rptdataprovider.entities.sse
 
+enum class EventType {
+    MESSAGE, EVENT, CLOSE
+}
+
 /**
  * The data class representing a SSE Event that will be sent to the client.
  */
-data class SseEvent(val data: String, val event: String? = null, val id: String? = null)
+
+data class SseEvent(val data: String = "empty data", val event: EventType? = null, val id: String? = null)
 
 
