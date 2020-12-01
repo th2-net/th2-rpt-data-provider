@@ -32,6 +32,7 @@ import com.exactpro.th2.rptdataprovider.entities.sse.EventType
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.eventWrite
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
+import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.ktor.application.*
@@ -333,7 +334,10 @@ class SearchMessagesHandler(
                     .filter { it.second }
                     .map { it.first }
                     .take(request.resultCountLimit)
-                    .catch { throw it }
+                    .catch {
+                        eventWrite(SseEvent(it.toString(), event = EventType.ERROR))
+                        throw it
+                    }
                     .onCompletion {
                         eventWrite(SseEvent(event = EventType.CLOSE))
                         asyncClose()

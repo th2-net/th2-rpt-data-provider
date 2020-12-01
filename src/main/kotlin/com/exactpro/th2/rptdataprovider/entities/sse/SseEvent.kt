@@ -17,7 +17,7 @@
 package com.exactpro.th2.rptdataprovider.entities.sse
 
 enum class EventType {
-    MESSAGE, EVENT, CLOSE
+    MESSAGE, EVENT, CLOSE, ERROR
 }
 
 /**
