@@ -23,7 +23,6 @@ import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventBatchMetadata
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
-import com.exactpro.th2.common.message.message
 import com.exactpro.th2.rptdataprovider.asStringSuspend
 import com.exactpro.th2.rptdataprovider.asyncClose
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
@@ -202,7 +201,10 @@ class SearchEventsHandler(private val cradle: CradleService) {
                     .flatMapMerge { it.asFlow() }
                     .filter { isEventMatched(it, request.type, request.name, request.attachedMessageId) }
                     .take(request.resultCountLimit)
-                    .catch { throw it }
+                    .catch {
+                        eventWrite(SseEvent(it.toString(), event = EventType.ERROR))
+                        throw it
+                    }
                     .onCompletion {
                         eventWrite(SseEvent(event = EventType.CLOSE))
                         asyncClose()

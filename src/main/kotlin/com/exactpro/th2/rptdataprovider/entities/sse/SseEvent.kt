@@ -17,7 +17,11 @@
 package com.exactpro.th2.rptdataprovider.entities.sse
 
 enum class EventType {
-    MESSAGE, EVENT, CLOSE
+    MESSAGE, EVENT, CLOSE, ERROR;
+
+    override fun toString(): String {
+        return super.toString().toLowerCase()
+    }
 }
 
 /**
@@ -25,5 +29,4 @@ enum class EventType {
  */
 
 data class SseEvent(val data: String = "empty data", val event: EventType? = null, val id: String? = null)
-
 
