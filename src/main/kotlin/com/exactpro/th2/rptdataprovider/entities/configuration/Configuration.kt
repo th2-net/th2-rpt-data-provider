@@ -113,5 +113,5 @@ class Configuration(args: Array<String>) {
         Variable("maxMessagesLimit", customConfiguration.maxMessagesLimit.toString(), "150")
 
     val messageSearchPipelineBuffer: Variable =
-        Variable("messageSearchPipelineBuffer", customConfiguration.messageSearchPipelineBuffer.toString(), "500")
+        Variable("messageSearchPipelineBuffer", customConfiguration.messageSearchPipelineBuffer.toString(), "25")
 }

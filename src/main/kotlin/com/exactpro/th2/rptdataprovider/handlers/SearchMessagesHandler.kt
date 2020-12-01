@@ -340,7 +340,13 @@ class SearchMessagesHandler(
                     }
                     .collect {
                         coroutineContext.ensureActive()
-                        eventWrite(SseEvent(jacksonMapper.asStringSuspend(it), EventType.MESSAGE, it.id.toString()))
+                        eventWrite(
+                            SseEvent(
+                                jacksonMapper.asStringSuspend(messageCache.getOrPut(it)),
+                                EventType.MESSAGE,
+                                it.id.toString()
+                            )
+                        )
                     }
             }
         }
