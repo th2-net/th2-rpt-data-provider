@@ -130,12 +130,12 @@ class Main(args: Array<String>) {
                 try {
                     try {
                         launch {
+                            launch {
+                                checkContext(context)
+                            }
                             if (useSse) {
                                 calledFun.invoke()
                             } else {
-                                launch {
-                                    checkContext(context)
-                                }
                                 cacheControl?.let { call.response.cacheControl(it) }
                                 call.respondText(
                                     jacksonMapper.asStringSuspend(calledFun.invoke()),
