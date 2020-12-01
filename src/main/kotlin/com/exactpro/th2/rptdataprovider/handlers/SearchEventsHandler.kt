@@ -159,9 +159,9 @@ class SearchEventsHandler(private val cradle: CradleService) {
         return mutableListOf<Pair<Instant, Instant>>().apply {
             val timePair =
                 if (request.searchDirection == TimeRelation.AFTER) {
-                    Pair(request.startTimestamp.minusMillis(request.timeLimit), request.startTimestamp)
-                } else {
                     Pair(request.startTimestamp, request.startTimestamp.plusMillis(request.timeLimit))
+                } else {
+                    Pair(request.startTimestamp.minusMillis(request.timeLimit), request.startTimestamp)
                 }
 
             var timestamp = timePair.first
