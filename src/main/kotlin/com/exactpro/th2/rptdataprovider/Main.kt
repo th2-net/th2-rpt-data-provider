@@ -125,12 +125,12 @@ class Main(args: Array<String>) {
                 try {
                     try {
                         launch {
+                            launch {
+                                checkContext(context)
+                            }
                             if (useSse) {
                                 calledFun.invoke()
                             } else {
-                                launch {
-                                    checkContext(context)
-                                }
                                 cacheControl?.let { call.response.cacheControl(it) }
                                 call.respondText(
                                     jacksonMapper.asStringSuspend(calledFun.invoke()),
@@ -254,7 +254,7 @@ class Main(args: Array<String>) {
                     val request = SseMessageSearchRequest(call.request.queryParameters.toMap())
                     handleRequest(call, context, "search messages sse", null, false, true, request) {
                         call.response.cacheControl(CacheControl.NoCache(null))
-                            searchMessagesHandler.searchMessagesSse(request, call, jacksonMapper)
+                        searchMessagesHandler.searchMessagesSse(request, call, jacksonMapper)
                     }
                 }
 
@@ -274,6 +274,7 @@ class Main(args: Array<String>) {
     }
 }
 
+@ExperimentalCoroutinesApi
 @EngineAPI
 @InternalAPI
 fun main(args: Array<String>) {

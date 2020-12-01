@@ -326,7 +326,7 @@ class SearchMessagesHandler(
                                 messageCache.getOrPut(it), request.negativeTypeFilter
                             )
                         )
-                    }
+                    }.also { coroutineContext.ensureActive() }
                 }
                     .buffer(messageSearchPipelineBuffer)
                     .map { it.await() }
