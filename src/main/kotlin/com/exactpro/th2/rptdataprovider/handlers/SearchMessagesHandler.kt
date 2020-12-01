@@ -22,20 +22,29 @@ import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.testevents.StoredTestEventId
+import com.exactpro.th2.rptdataprovider.asStringSuspend
+import com.exactpro.th2.rptdataprovider.asyncClose
 import com.exactpro.th2.rptdataprovider.cache.MessageCache
 import com.exactpro.th2.rptdataprovider.entities.requests.MessageSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
+import com.exactpro.th2.rptdataprovider.entities.sse.EventType
+import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
+import com.exactpro.th2.rptdataprovider.eventWrite
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
+import com.fasterxml.jackson.databind.ObjectMapper
+import io.ktor.application.*
+import io.ktor.http.*
+import io.ktor.response.*
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import mu.KotlinLogging
 import java.lang.Integer.min
-import java.sql.Time
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneOffset
+import kotlin.coroutines.coroutineContext
 
 class SearchMessagesHandler(
     private val cradle: CradleService,
@@ -48,13 +57,19 @@ class SearchMessagesHandler(
         private val logger = KotlinLogging.logger { }
     }
 
-    private suspend fun isMessageMatched(request: MessageSearchRequest, message: Message): Boolean {
-        return (request.messageType == null || request.messageType.any { item ->
+    private suspend fun isMessageMatched(
+        messageType: List<String>?,
+        messagesFromAttachedId: Collection<StoredMessageId>?,
+        message: Message
+    ): Boolean {
+        return (messageType == null || messageType.any { item ->
             message.messageType.toLowerCase().contains(item.toLowerCase())
-        }) && (request.attachedEventId == null
-                || cradle.getMessageIdsSuspend(StoredTestEventId(request.attachedEventId))
-            .contains(StoredMessageId.fromString(message.messageId)))
+        }) && (messagesFromAttachedId == null || messagesFromAttachedId.let {
+            val messageId = StoredMessageId.fromString(message.messageId)
+            it.contains(messageId)
+        })
     }
+
 
     private fun chooseBufferSize(request: MessageSearchRequest): Int {
         return if ((request.attachedEventId ?: request.messageType) == null)
@@ -74,24 +89,29 @@ class SearchMessagesHandler(
         }.toInstant()
     }
 
-    private suspend fun chooseStartTimestamp(request: MessageSearchRequest): Instant {
-        return request.messageId?.let {
+    private suspend fun chooseStartTimestamp(
+        messageId: String?,
+        timelineDirection: TimeRelation,
+        timestampFrom: Instant?,
+        timestampTo: Instant?
+    ): Instant {
+        return messageId?.let {
             cradle.getMessageSuspend(StoredMessageId.fromString(it))?.timestamp
         } ?: (
-                if (request.timelineDirection == TimeRelation.AFTER) {
-                    request.timestampFrom
+                if (timelineDirection == TimeRelation.AFTER) {
+                    timestampFrom
                 } else {
-                    request.timestampTo
+                    timestampTo
                 }) ?: Instant.now()
     }
 
     private suspend fun getNearestMessage(
         messageBatch: Collection<StoredMessage>,
-        request: MessageSearchRequest,
+        timelineDirection: TimeRelation,
         timestamp: Instant
     ): StoredMessage? {
         if (messageBatch.isEmpty()) return null
-        return if (request.timelineDirection == TimeRelation.AFTER)
+        return if (timelineDirection == TimeRelation.AFTER)
             messageBatch.find { it.timestamp.isAfter(timestamp) } ?: messageBatch.last()
         else
             messageBatch.findLast { it.timestamp.isBefore(timestamp) } ?: messageBatch.first()
@@ -104,12 +124,8 @@ class SearchMessagesHandler(
         direction: Direction
     ): StoredMessageId? {
         for (timeRelation in listOf(TimeRelation.BEFORE, TimeRelation.AFTER)) {
-            cradle.getFirstMessageIdSuspend(
-                timestamp,
-                stream,
-                direction,
-                timeRelation
-            )?.let { return it }
+            cradle.getFirstMessageIdSuspend(timestamp, stream, direction, timeRelation)
+                ?.let { return it }
         }
         return null
     }
@@ -118,9 +134,10 @@ class SearchMessagesHandler(
         startTimestamp: Instant,
         stream: String,
         direction: Direction,
-        timelineDirection: TimeRelation
+        timelineDirection: TimeRelation,
+        daysInterval: Int = 2
     ): StoredMessageId? {
-        var daysChecking = 2
+        var daysChecking = daysInterval
         var isCurrentDay = true
         var timestamp = startTimestamp
         var messageId: StoredMessageId? = null
@@ -129,12 +146,7 @@ class SearchMessagesHandler(
                 if (isCurrentDay) {
                     getFirstMessageCurrentDay(timestamp, stream, direction)
                 } else {
-                    cradle.getFirstMessageIdSuspend(
-                        timestamp,
-                        stream,
-                        direction,
-                        timelineDirection
-                    )
+                    cradle.getFirstMessageIdSuspend(timestamp, stream, direction, timelineDirection)
                 }
             daysChecking -= 1
             isCurrentDay = false
@@ -143,21 +155,25 @@ class SearchMessagesHandler(
         return messageId
     }
 
-    private suspend fun initStreamMessageIdMap(request: MessageSearchRequest):
-            MutableMap<Pair<String, Direction>, StoredMessageId?> {
-        val timestamp = chooseStartTimestamp(request)
+    private suspend fun initStreamMessageIdMap(
+        timelineDirection: TimeRelation,
+        streamList: List<String>?,
+        messageId: String?,
+        timestampFrom: Instant?,
+        timestampTo: Instant?
+    ): MutableMap<Pair<String, Direction>, StoredMessageId?> {
+        val timestamp = chooseStartTimestamp(messageId, timelineDirection, timestampFrom, timestampTo)
 
         return mutableMapOf<Pair<String, Direction>, StoredMessageId?>().apply {
-            for (stream in request.stream ?: emptyList()) {
+            for (stream in streamList ?: emptyList()) {
                 for (direction in Direction.values()) {
                     val storedMessageId =
-                        getFirstMessageIdDifferentDays(timestamp, stream, direction, request.timelineDirection)
+                        getFirstMessageIdDifferentDays(timestamp, stream, direction, timelineDirection)
                     if (storedMessageId != null) {
                         val messageBatch = cradle.getMessageBatchSuspend(storedMessageId)
-
                         put(
                             Pair(stream, direction),
-                            getNearestMessage(messageBatch, request, timestamp)?.id
+                            getNearestMessage(messageBatch, timelineDirection, timestamp)?.id
                         )
                     } else {
                         put(Pair(stream, direction), null)
@@ -167,16 +183,21 @@ class SearchMessagesHandler(
         }
     }
 
-    suspend fun searchMessages(request: MessageSearchRequest): List<Any> {
+    private suspend fun getMessageStream(
+        streamMessageIndexMap: MutableMap<Pair<String, Direction>, StoredMessageId?>,
+        timelineDirection: TimeRelation,
+        initLimit: Int,
+        messageId: String?,
+        timestampFrom: Instant?,
+        timestampTo: Instant?
+    ): Flow<StoredMessage> {
         return coroutineScope {
-            val bufferSize = chooseBufferSize(request)
-            val streamMessageIndexMap = initStreamMessageIdMap(request)
             flow {
-                var limit = request.limit
+                var limit = initLimit
                 do {
                     val data = pullMoreMerged(
                         streamMessageIndexMap,
-                        request.timelineDirection,
+                        timelineDirection,
                         limit
                     )
                     for (item in data) {
@@ -185,24 +206,48 @@ class SearchMessagesHandler(
                     limit = min(maxMessagesLimit, limit * 2)
                 } while (data.size >= limit)
             }
-                .filterNot { it.id.toString() == request.messageId }
+                .filterNot { it.id.toString() == messageId }
                 .distinctUntilChanged { old, new -> old.id == new.id }
                 .takeWhile {
                     it.timestamp.let { timestamp ->
-                        if (request.timelineDirection == TimeRelation.AFTER) {
-                            request.timestampTo == null
-                                    || timestamp.isBefore(request.timestampTo) || timestamp == request.timestampTo
+                        if (timelineDirection == TimeRelation.AFTER) {
+                            timestampTo == null
+                                    || timestamp.isBefore(timestampTo) || timestamp == timestampTo
                         } else {
-                            request.timestampFrom == null
-                                    || timestamp.isAfter(request.timestampFrom) || timestamp == request.timestampFrom
+                            timestampFrom == null
+                                    || timestamp.isAfter(timestampFrom) || timestamp == timestampFrom
                         }
                     }
                 }
+        }
+    }
+
+    suspend fun searchMessages(request: MessageSearchRequest): List<Any> {
+        return coroutineScope {
+            val bufferSize = chooseBufferSize(request)
+            // Small optimization
+            val messagesFromAttachedId =
+                request.attachedEventId?.let { cradle.getMessageIdsSuspend(StoredTestEventId(it)) }
+
+            val streamMessageIndexMap = initStreamMessageIdMap(
+                request.timelineDirection, request.stream,
+                request.messageId, request.timestampFrom, request.timestampTo
+            )
+            getMessageStream(
+                streamMessageIndexMap, request.timelineDirection, request.limit,
+                request.messageId, request.timestampFrom, request.timestampTo
+            )
                 .map {
                     async {
                         if ((request.attachedEventId ?: request.messageType) != null || !request.idsOnly) {
                             @Suppress("USELESS_CAST")
-                            Pair(it, isMessageMatched(request, messageCache.getOrPut(it)))
+                            Pair(
+                                it, isMessageMatched(
+                                    request.messageType,
+                                    messagesFromAttachedId,
+                                    messageCache.getOrPut(it)
+                                )
+                            )
                         } else {
                             Pair(it, true)
                         }
@@ -220,6 +265,84 @@ class SearchMessagesHandler(
                 }
                 .take(request.limit)
                 .toList()
+        }
+    }
+
+    private suspend fun getTimePair(
+        searchDirection: TimeRelation,
+        startTimestamp: Instant,
+        timeLimit: Long
+    ): Pair<Instant, Instant> {
+        return if (searchDirection == TimeRelation.AFTER) {
+            Pair(startTimestamp, startTimestamp.plusMillis(timeLimit))
+        } else {
+            Pair(startTimestamp.minusMillis(timeLimit), startTimestamp)
+        }
+    }
+
+    private suspend fun isSseMessageMatched(
+        type: List<String>?,
+        messagesFromAttachedId: Collection<Collection<StoredMessageId>>?,
+        message: Message,
+        negativeTypeFilter: Boolean
+    ): Boolean {
+        return (type == null || negativeTypeFilter.xor(type.any { item ->
+            message.messageType.toLowerCase().contains(item.toLowerCase())
+        })) && (messagesFromAttachedId == null || messagesFromAttachedId.let { messagesFromEventId ->
+            val messageId = StoredMessageId.fromString(message.messageId)
+            messagesFromEventId.any { it.contains(messageId) }
+        })
+    }
+
+    @ExperimentalCoroutinesApi
+    suspend fun searchMessagesSse(
+        request: SseMessageSearchRequest,
+        call: ApplicationCall,
+        jacksonMapper: ObjectMapper
+    ) {
+        withContext(coroutineContext) {
+            call.respondTextWriter(contentType = ContentType.Text.EventStream) {
+                val messageId = null
+                val timePair = getTimePair(request.searchDirection, request.startTimestamp, request.timeLimit)
+
+                val streamMessageIndexMap = initStreamMessageIdMap(
+                    request.searchDirection, request.stream,
+                    messageId, timePair.first, timePair.second
+                )
+                val messagesFromAttachedId =
+                    request.attachedEventIds?.let { ids ->
+                        ids.map { cradle.getMessageIdsSuspend(StoredTestEventId(it)) }
+                    }
+
+                getMessageStream(
+                    streamMessageIndexMap, request.searchDirection, request.resultCountLimit,
+                    messageId, timePair.first, timePair.second
+                ).map {
+                    async {
+                        @Suppress("USELESS_CAST")
+                        Pair(
+                            it, isSseMessageMatched(
+                                request.type, messagesFromAttachedId,
+                                messageCache.getOrPut(it), request.negativeTypeFilter
+                            )
+                        )
+                    }
+                }
+                    .buffer(messageSearchPipelineBuffer)
+                    .map { it.await() }
+                    .filter { it.second }
+                    .map { it.first }
+                    .take(request.resultCountLimit)
+                    .catch { throw it }
+                    .onCompletion {
+                        eventWrite(SseEvent(event = EventType.CLOSE))
+                        asyncClose()
+                    }
+                    .collect {
+                        coroutineContext.ensureActive()
+                        eventWrite(SseEvent(jacksonMapper.asStringSuspend(it), EventType.MESSAGE, it.id.toString()))
+                    }
+            }
         }
     }
 

@@ -17,10 +17,13 @@
 package com.exactpro.th2.rptdataprovider
 
 import com.exactpro.cradle.messages.StoredMessageFilter
+import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.fasterxml.jackson.databind.ObjectMapper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import mu.KotlinLogging
+import java.io.Writer
+import java.time.Instant
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -54,5 +57,29 @@ suspend fun <T> logTime(methodName: String, lambda: suspend () -> T): T? {
             .also { logger.debug { "cradle: $methodName took ${it}ms" } }
 
         result
+    }
+}
+
+suspend fun Writer.eventWrite(event: SseEvent) {
+    withContext(Dispatchers.IO) {
+        if (event.event != null) {
+            write("event: ${event.event}\n")
+        }
+
+        for (dataLine in event.data.lines()) {
+            write("data: $dataLine\n")
+        }
+
+        if (event.id != null) {
+            write("id: ${event.id}\n")
+        }
+        write("\n")
+        flush()
+    }
+}
+
+suspend fun Writer.asyncClose() {
+    withContext(Dispatchers.IO) {
+        close()
     }
 }
