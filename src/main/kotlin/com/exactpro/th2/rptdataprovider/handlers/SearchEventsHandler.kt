@@ -183,7 +183,8 @@ class SearchEventsHandler(private val cradle: CradleService) {
         request: SseEventSearchRequest,
         call: ApplicationCall,
         jacksonMapper: ObjectMapper,
-        sseEventSearchStep: Long
+        sseEventSearchStep: Long,
+        exceptionConverter: (Exception) -> String
     ) {
         withContext(coroutineContext) {
             call.respondTextWriter(contentType = ContentType.Text.EventStream) {
@@ -201,13 +202,11 @@ class SearchEventsHandler(private val cradle: CradleService) {
                     .flatMapMerge { it.asFlow() }
                     .filter { isEventMatched(it, request.type, request.name, request.attachedMessageId) }
                     .take(request.resultCountLimit)
-                    .catch {
-                        eventWrite(SseEvent(it.toString(), event = EventType.ERROR))
-                        throw it
-                    }
+                    .catch { eventWrite(SseEvent(exceptionConverter.invoke(it as Exception), event = EventType.ERROR)) }
                     .onCompletion {
                         eventWrite(SseEvent(event = EventType.CLOSE))
                         asyncClose()
+                        it?.let { throwable -> throw throwable }
                     }
                     .collect {
                         coroutineContext.ensureActive()

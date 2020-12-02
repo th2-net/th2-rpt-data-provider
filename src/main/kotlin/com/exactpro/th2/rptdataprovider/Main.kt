@@ -79,12 +79,18 @@ class Main(args: Array<String>) {
             val nettyApplicationRequest = it.get(context) as NettyApplicationCall
 
             while (coroutineContext.isActive) {
+                println("aaaaaaaaaaaaaaaaa")
                 if (nettyApplicationRequest.context.isRemoved)
                     throw ChannelClosedException("Channel is closed")
 
                 delay(checkRequestAliveDelay)
             }
         }
+    }
+
+    @InternalAPI
+    private suspend fun sendErrorCode(call: ApplicationCall, e: Exception, code: HttpStatusCode) {
+        call.respondText(e.rootCause?.message ?: e.toString(), ContentType.Text.Plain, code)
     }
 
     @InternalAPI
@@ -99,9 +105,7 @@ class Main(args: Array<String>) {
                 jacksonMapper.writeValueAsString(null), ContentType.Application.Json
             )
         } else {
-            call.respondText(
-                e.rootCause?.message ?: e.toString(), ContentType.Text.Plain, code
-            )
+            sendErrorCode(call, e, code)
         }
     }
 
@@ -125,57 +129,99 @@ class Main(args: Array<String>) {
                 logger.debug { "handling '$requestName' request with parameters '$stringParameters'" }
                 try {
                     try {
-                        launch {
-                            launch {
-                                checkContext(context)
-                            }
-                            if (useSse) {
-                                calledFun.invoke()
-                            } else {
-                                cacheControl?.let { call.response.cacheControl(it) }
-                                call.respondText(
-                                    jacksonMapper.asStringSuspend(calledFun.invoke()),
-                                    ContentType.Application.Json
-                                )
-                            }
-                        }.join()
-                    } catch (e: Exception) {
-                        when (e.rootCause ?: e) {
-                            is ChannelClosedException -> if (!useSse) throw e.rootCause ?: e
-                            else -> throw e.rootCause ?: e
+                        if (useSse) {
+                            handleSseRequest(context, calledFun)
+                        } else {
+                            handleRestApiRequest(call, context, cacheControl, probe, calledFun)
                         }
-                    } finally {
-                        coroutineContext.cancelChildren()
+                    } catch (e: Exception) {
+                        throw e.rootCause ?: e
                     }
                 } catch (e: InvalidRequestException) {
                     logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - invalid request" }
-                    call.respondText(
-                        e.rootCause?.message ?: e.toString(), ContentType.Text.Plain, HttpStatusCode.BadRequest
-                    )
                 } catch (e: CradleObjectNotFoundException) {
                     logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - missing cradle data" }
-                    sendErrorCodeOrEmptyJson(probe, call, e, HttpStatusCode.NotFound)
                 } catch (e: ChannelClosedException) {
                     logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - request closer" }
-                    call.respondText(
-                        e.rootCause?.message ?: e.toString(), ContentType.Text.Plain, HttpStatusCode.RequestTimeout
-                    )
                 } catch (e: Exception) {
                     logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - unexpected exception" }
-                    when (e) {
-                        is CradleIdException -> {
-                            sendErrorCodeOrEmptyJson(probe, call, e, HttpStatusCode.InternalServerError)
-                        }
-                        else -> call.respondText(
-                            e.rootCause?.message ?: e.toString(),
-                            ContentType.Text.Plain,
-                            HttpStatusCode.InternalServerError
-                        )
-                    }
                 }
             }.let { logger.debug { "request '$requestName' with parameters '$stringParameters' handled - time=${it}ms" } }
         }
     }
+
+    private fun convertExceptionIntoHttpCode(e: Exception): String {
+        return when (e) {
+            is InvalidRequestException -> HttpStatusCode.BadRequest
+            is CradleObjectNotFoundException -> HttpStatusCode.NotFound
+            is ChannelClosedException -> HttpStatusCode.RequestTimeout
+            else -> HttpStatusCode.InternalServerError
+        }.toString()
+    }
+
+    @ExperimentalCoroutinesApi
+    @EngineAPI
+    @InternalAPI
+    private suspend fun handleSseRequest(
+        context: ApplicationCall,
+        calledFun: suspend () -> Any
+    ) {
+        coroutineScope {
+            try {
+                launch {
+                    launch {
+                        checkContext(context)
+                    }
+                    calledFun.invoke()
+                }.join()
+            } catch (e: ChannelClosedException) {
+                logger.debug { "sse channel closed" }
+            } finally {
+                coroutineContext.cancelChildren()
+            }
+        }
+    }
+
+
+    @ExperimentalCoroutinesApi
+    @EngineAPI
+    @InternalAPI
+    private suspend fun handleRestApiRequest(
+        call: ApplicationCall,
+        context: ApplicationCall,
+        cacheControl: CacheControl?,
+        probe: Boolean,
+        calledFun: suspend () -> Any
+    ) {
+        coroutineScope {
+            try {
+                launch {
+                    launch {
+                        checkContext(context)
+                    }
+                    cacheControl?.let { call.response.cacheControl(it) }
+                    call.respondText(
+                        jacksonMapper.asStringSuspend(calledFun.invoke()),
+                        ContentType.Application.Json
+                    )
+                }.join()
+            } catch (e: Exception) {
+                when (val exception = e.rootCause ?: e) {
+                    is InvalidRequestException -> sendErrorCode(call, exception, HttpStatusCode.BadRequest)
+                    is CradleObjectNotFoundException -> sendErrorCodeOrEmptyJson(
+                        probe, call, exception, HttpStatusCode.NotFound
+                    )
+                    is ChannelClosedException -> sendErrorCode(call, exception, HttpStatusCode.RequestTimeout)
+                    is CradleIdException -> sendErrorCodeOrEmptyJson(probe, call, e, HttpStatusCode.InternalServerError)
+                    else -> sendErrorCode(call, exception as Exception, HttpStatusCode.InternalServerError)
+                }
+                throw e
+            } finally {
+                coroutineContext.cancelChildren()
+            }
+        }
+    }
+
 
     private fun inPast(rightTimeBoundary: Instant?): Boolean {
         return rightTimeBoundary?.isBefore(Instant.now()) != false
@@ -262,7 +308,9 @@ class Main(args: Array<String>) {
                     val request = SseMessageSearchRequest(call.request.queryParameters.toMap())
                     handleRequest(call, context, "search messages sse", null, false, true, request) {
                         call.response.cacheControl(CacheControl.NoCache(null))
-                        searchMessagesHandler.searchMessagesSse(request, call, jacksonMapper)
+                        searchMessagesHandler.searchMessagesSse(request, call, jacksonMapper) { e: Exception ->
+                            convertExceptionIntoHttpCode(e)
+                        }
                     }
                 }
 
@@ -278,8 +326,9 @@ class Main(args: Array<String>) {
                 get("search/sse/events") {
                     val request = SseEventSearchRequest(call.request.queryParameters.toMap())
                     handleRequest(call, context, "search events sse", null, false, true, request) {
-                        call.response.cacheControl(CacheControl.NoCache(null))
-                        searchEventsHandler.searchEventsSse(request, call, jacksonMapper, sseEventSearchStep)
+                        searchEventsHandler.searchEventsSse(request, call, jacksonMapper, sseEventSearchStep) { e: Exception ->
+                            convertExceptionIntoHttpCode(e)
+                        }
                     }
                 }
             }

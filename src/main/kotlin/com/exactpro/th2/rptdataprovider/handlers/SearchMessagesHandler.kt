@@ -32,7 +32,6 @@ import com.exactpro.th2.rptdataprovider.entities.sse.EventType
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.eventWrite
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
-import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.ktor.application.*
@@ -46,6 +45,7 @@ import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneOffset
 import kotlin.coroutines.coroutineContext
+import kotlin.reflect.KSuspendFunction1
 
 class SearchMessagesHandler(
     private val cradle: CradleService,
@@ -299,13 +299,13 @@ class SearchMessagesHandler(
     suspend fun searchMessagesSse(
         request: SseMessageSearchRequest,
         call: ApplicationCall,
-        jacksonMapper: ObjectMapper
+        jacksonMapper: ObjectMapper,
+        exceptionConverter: (Exception) -> String
     ) {
         withContext(coroutineContext) {
             call.respondTextWriter(contentType = ContentType.Text.EventStream) {
                 val messageId = null
                 val timePair = getTimePair(request.searchDirection, request.startTimestamp, request.timeLimit)
-
                 val streamMessageIndexMap = initStreamMessageIdMap(
                     request.searchDirection, request.stream,
                     messageId, timePair.first, timePair.second
@@ -314,7 +314,6 @@ class SearchMessagesHandler(
                     request.attachedEventIds?.let { ids ->
                         ids.map { cradle.getMessageIdsSuspend(StoredTestEventId(it)) }
                     }
-
                 getMessageStream(
                     streamMessageIndexMap, request.searchDirection, request.resultCountLimit,
                     messageId, timePair.first, timePair.second
@@ -334,13 +333,11 @@ class SearchMessagesHandler(
                     .filter { it.second }
                     .map { it.first }
                     .take(request.resultCountLimit)
-                    .catch {
-                        eventWrite(SseEvent(it.toString(), event = EventType.ERROR))
-                        throw it
-                    }
+                    .catch { eventWrite(SseEvent(exceptionConverter.invoke(it as Exception), event = EventType.ERROR)) }
                     .onCompletion {
                         eventWrite(SseEvent(event = EventType.CLOSE))
                         asyncClose()
+                        it?.let { throwable -> throw throwable }
                     }
                     .collect {
                         coroutineContext.ensureActive()
@@ -418,4 +415,3 @@ class SearchMessagesHandler(
             }
     }
 }
-
