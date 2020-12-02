@@ -139,7 +139,10 @@ class Main(args: Array<String>) {
                             }
                         }.join()
                     } catch (e: Exception) {
-                        throw e.rootCause ?: e
+                        when (e.rootCause ?: e) {
+                            is ChannelClosedException -> if (!useSse) throw e.rootCause ?: e
+                            else -> throw e.rootCause ?: e
+                        }
                     } finally {
                         coroutineContext.cancelChildren()
                     }
