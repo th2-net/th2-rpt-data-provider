@@ -21,6 +21,7 @@ import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedExcepti
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.MessageSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import io.ktor.application.*
@@ -180,6 +181,7 @@ class Main(args: Array<String>) {
         return rightTimeBoundary?.isBefore(Instant.now()) != false
     }
 
+    @FlowPreview
     @ExperimentalCoroutinesApi
     @EngineAPI
     @InternalAPI
@@ -196,6 +198,9 @@ class Main(args: Array<String>) {
 
         val searchEventsHandler = this.context.searchEventsHandler
         val searchMessagesHandler = this.context.searchMessagesHandler
+
+
+        val sseEventSearchStep = this.context.sseEventSearchStep
 
         System.setProperty(IO_PARALLELISM_PROPERTY_NAME, configuration.ioDispatcherThreadPoolSize.value)
 
@@ -269,6 +274,14 @@ class Main(args: Array<String>) {
                             .also { call.response.cacheControl(frequentlyModifiedCacheControl) }
                     }
                 }
+
+                get("search/sse/events") {
+                    val request = SseEventSearchRequest(call.request.queryParameters.toMap())
+                    handleRequest(call, context, "search events sse", null, false, true, request) {
+                        call.response.cacheControl(CacheControl.NoCache(null))
+                        searchEventsHandler.searchEventsSse(request, call, jacksonMapper, sseEventSearchStep)
+                    }
+                }
             }
         }.start(false)
 
@@ -277,9 +290,11 @@ class Main(args: Array<String>) {
     }
 }
 
-@ExperimentalCoroutinesApi
+
+@FlowPreview
 @EngineAPI
 @InternalAPI
+@ExperimentalCoroutinesApi
 fun main(args: Array<String>) {
     Main(args).run()
 }

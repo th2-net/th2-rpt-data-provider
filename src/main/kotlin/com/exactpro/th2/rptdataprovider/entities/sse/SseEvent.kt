@@ -29,3 +29,5 @@ enum class EventType {
  */
 
 data class SseEvent(val data: String = "empty data", val event: EventType? = null, val id: String? = null)
+
+

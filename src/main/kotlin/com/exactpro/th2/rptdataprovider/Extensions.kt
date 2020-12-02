@@ -83,3 +83,12 @@ suspend fun Writer.asyncClose() {
         close()
     }
 }
+
+fun Instant.min(other: Instant): Instant {
+    return if (this.isBefore(other)) {
+        this
+    } else {
+        other
+    }
+}
+
