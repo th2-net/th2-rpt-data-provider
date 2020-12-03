@@ -166,7 +166,6 @@ class Main(args: Array<String>) {
                 launch {
                     checkContext(context)
                 }
-                call.response.header("Access-Control-Allow-Origin", "*")
                 call.response.cacheControl(CacheControl.NoCache(null))
                 call.respondTextWriter(contentType = ContentType.Text.EventStream) {
                     try {
