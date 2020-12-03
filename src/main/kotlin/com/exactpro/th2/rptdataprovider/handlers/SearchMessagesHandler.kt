@@ -40,6 +40,7 @@ import io.ktor.response.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import mu.KotlinLogging
+import java.io.Writer
 import java.lang.Integer.min
 import java.time.Instant
 import java.time.LocalTime
@@ -298,58 +299,52 @@ class SearchMessagesHandler(
     @ExperimentalCoroutinesApi
     suspend fun searchMessagesSse(
         request: SseMessageSearchRequest,
-        call: ApplicationCall,
         jacksonMapper: ObjectMapper,
-        exceptionConverter: (Exception) -> String
+        writer: Writer
     ) {
         withContext(coroutineContext) {
-            call.respondTextWriter(contentType = ContentType.Text.EventStream) {
-                val messageId = null
-                val timePair = getTimePair(request.searchDirection, request.startTimestamp, request.timeLimit)
-                val streamMessageIndexMap = initStreamMessageIdMap(
-                    request.searchDirection, request.stream,
-                    messageId, timePair.first, timePair.second
-                )
-                val messagesFromAttachedId =
-                    request.attachedEventIds?.let { ids ->
-                        ids.map { cradle.getMessageIdsSuspend(StoredTestEventId(it)) }
-                    }
-                getMessageStream(
-                    streamMessageIndexMap, request.searchDirection, request.resultCountLimit,
-                    messageId, timePair.first, timePair.second
-                ).map {
-                    async {
-                        @Suppress("USELESS_CAST")
-                        Pair(
-                            it, isSseMessageMatched(
-                                request.type, messagesFromAttachedId,
-                                messageCache.getOrPut(it), request.negativeTypeFilter
-                            )
-                        )
-                    }.also { coroutineContext.ensureActive() }
+            val messageId = null
+            val timePair = getTimePair(request.searchDirection, request.startTimestamp, request.timeLimit)
+            val streamMessageIndexMap = initStreamMessageIdMap(
+                request.searchDirection, request.stream,
+                messageId, timePair.first, timePair.second
+            )
+            val messagesFromAttachedId =
+                request.attachedEventIds?.let { ids ->
+                    ids.map { cradle.getMessageIdsSuspend(StoredTestEventId(it)) }
                 }
-                    .buffer(messageSearchPipelineBuffer)
-                    .map { it.await() }
-                    .filter { it.second }
-                    .map { it.first }
-                    .take(request.resultCountLimit)
-                    .catch { eventWrite(SseEvent(exceptionConverter.invoke(it as Exception), event = EventType.ERROR)) }
-                    .onCompletion {
-                        eventWrite(SseEvent(event = EventType.CLOSE))
-                        asyncClose()
-                        it?.let { throwable -> throw throwable }
-                    }
-                    .collect {
-                        coroutineContext.ensureActive()
-                        eventWrite(
-                            SseEvent(
-                                jacksonMapper.asStringSuspend(messageCache.getOrPut(it)),
-                                EventType.MESSAGE,
-                                it.id.toString()
-                            )
+            getMessageStream(
+                streamMessageIndexMap, request.searchDirection, request.resultCountLimit,
+                messageId, timePair.first, timePair.second
+            ).map {
+                async {
+                    @Suppress("USELESS_CAST")
+                    Pair(
+                        it, isSseMessageMatched(
+                            request.type, messagesFromAttachedId,
+                            messageCache.getOrPut(it), request.negativeTypeFilter
                         )
-                    }
+                    )
+                }.also { coroutineContext.ensureActive() }
             }
+                .buffer(messageSearchPipelineBuffer)
+                .map { it.await() }
+                .filter { it.second }
+                .map { it.first }
+                .take(request.resultCountLimit)
+                .onCompletion {
+                    it?.let { throwable -> throw throwable }
+                }
+                .collect {
+                    coroutineContext.ensureActive()
+                    writer.eventWrite(
+                        SseEvent(
+                            jacksonMapper.asStringSuspend(messageCache.getOrPut(it)),
+                            EventType.MESSAGE,
+                            it.id.toString()
+                        )
+                    )
+                }
         }
     }
 

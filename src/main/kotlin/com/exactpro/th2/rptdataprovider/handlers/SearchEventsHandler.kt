@@ -44,6 +44,7 @@ import kotlinx.coroutines.channels.Channel.Factory.BUFFERED
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.flow.*
 import mu.KotlinLogging
+import java.io.Writer
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneOffset
@@ -181,38 +182,32 @@ class SearchEventsHandler(private val cradle: CradleService) {
     @FlowPreview
     suspend fun searchEventsSse(
         request: SseEventSearchRequest,
-        call: ApplicationCall,
         jacksonMapper: ObjectMapper,
         sseEventSearchStep: Long,
-        exceptionConverter: (Exception) -> String
+        writer: Writer
     ) {
         withContext(coroutineContext) {
-            call.respondTextWriter(contentType = ContentType.Text.EventStream) {
-                val timeIntervals = getTimeIntervals(request, sseEventSearchStep)
-                flow {
-                    for (timestamp in timeIntervals) {
-                        getEventTreeNodeFlow(
-                            request.parentEvent, timestamp.first,
-                            timestamp.second, coroutineContext,
-                            BUFFERED
-                        ).collect { emit(it) }
-                    }
+            val timeIntervals = getTimeIntervals(request, sseEventSearchStep)
+            flow {
+                for (timestamp in timeIntervals) {
+                    getEventTreeNodeFlow(
+                        request.parentEvent, timestamp.first,
+                        timestamp.second, coroutineContext,
+                        BUFFERED
+                    ).collect { emit(it) }
                 }
-                    .map { it.await() }
-                    .flatMapMerge { it.asFlow() }
-                    .filter { isEventMatched(it, request.type, request.name, request.attachedMessageId) }
-                    .take(request.resultCountLimit)
-                    .catch { eventWrite(SseEvent(exceptionConverter.invoke(it as Exception), event = EventType.ERROR)) }
-                    .onCompletion {
-                        eventWrite(SseEvent(event = EventType.CLOSE))
-                        asyncClose()
-                        it?.let { throwable -> throw throwable }
-                    }
-                    .collect {
-                        coroutineContext.ensureActive()
-                        eventWrite(SseEvent(jacksonMapper.asStringSuspend(it), EventType.EVENT, it.eventId))
-                    }
             }
+                .map { it.await() }
+                .flatMapMerge { it.asFlow() }
+                .filter { isEventMatched(it, request.type, request.name, request.attachedMessageId) }
+                .take(request.resultCountLimit)
+                .onCompletion {
+                    it?.let { throwable -> throw throwable }
+                }
+                .collect {
+                    coroutineContext.ensureActive()
+                    writer.eventWrite(SseEvent(jacksonMapper.asStringSuspend(it), EventType.EVENT, it.eventId))
+                }
         }
     }
 

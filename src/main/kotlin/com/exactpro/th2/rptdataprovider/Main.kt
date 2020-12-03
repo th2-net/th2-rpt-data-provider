@@ -23,6 +23,8 @@ import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.MessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.sse.EventType
+import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import io.ktor.application.*
 import io.ktor.features.*
@@ -35,6 +37,7 @@ import io.ktor.server.netty.*
 import io.ktor.util.*
 import kotlinx.coroutines.*
 import mu.KotlinLogging
+import java.io.Writer
 import java.time.Instant
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
@@ -55,8 +58,9 @@ class Main(args: Array<String>) {
             override val key: AttributeKey<Unit> = AttributeKey("Timeouts")
 
             override fun install(pipeline: ApplicationCallPipeline, configure: Config.() -> Unit) {
-                val timeout = Config().apply(configure).requestTimeout
-                val excludes = Config().apply(configure).excludes
+                val config = Config().apply(configure)
+                val timeout = config.requestTimeout
+                val excludes = config.excludes
 
                 if (timeout <= 0) return
 
@@ -65,7 +69,6 @@ class Main(args: Array<String>) {
                     withTimeout(timeout) {
                         proceed()
                     }
-
                 }
             }
         }
@@ -79,7 +82,6 @@ class Main(args: Array<String>) {
             val nettyApplicationRequest = it.get(context) as NettyApplicationCall
 
             while (coroutineContext.isActive) {
-                println("aaaaaaaaaaaaaaaaa")
                 if (nettyApplicationRequest.context.isRemoved)
                     throw ChannelClosedException("Channel is closed")
 
@@ -109,7 +111,6 @@ class Main(args: Array<String>) {
         }
     }
 
-
     @ExperimentalCoroutinesApi
     @EngineAPI
     @InternalAPI
@@ -130,7 +131,9 @@ class Main(args: Array<String>) {
                 try {
                     try {
                         if (useSse) {
-                            handleSseRequest(context, calledFun)
+                            val function = calledFun.invoke()
+                            @Suppress("UNCHECKED_CAST")
+                            handleSseRequest(call, context, function as suspend (Writer) -> Unit)
                         } else {
                             handleRestApiRequest(call, context, cacheControl, probe, calledFun)
                         }
@@ -142,7 +145,7 @@ class Main(args: Array<String>) {
                 } catch (e: CradleObjectNotFoundException) {
                     logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - missing cradle data" }
                 } catch (e: ChannelClosedException) {
-                    logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - request closer" }
+                    logger.debug { "unable to handle request '$requestName' with parameters '$stringParameters' - channel closed" }
                 } catch (e: Exception) {
                     logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - unexpected exception" }
                 }
@@ -150,35 +153,40 @@ class Main(args: Array<String>) {
         }
     }
 
-    private fun convertExceptionIntoHttpCode(e: Exception): String {
-        return when (e) {
-            is InvalidRequestException -> HttpStatusCode.BadRequest
-            is CradleObjectNotFoundException -> HttpStatusCode.NotFound
-            is ChannelClosedException -> HttpStatusCode.RequestTimeout
-            else -> HttpStatusCode.InternalServerError
-        }.toString()
-    }
-
     @ExperimentalCoroutinesApi
     @EngineAPI
     @InternalAPI
     private suspend fun handleSseRequest(
+        call: ApplicationCall,
         context: ApplicationCall,
-        calledFun: suspend () -> Any
+        calledFun: suspend (Writer) -> Unit
     ) {
         coroutineScope {
-            try {
+            launch {
                 launch {
-                    launch {
-                        checkContext(context)
+                    checkContext(context)
+                }
+                call.response.header("Access-Control-Allow-Origin", "*")
+                call.response.cacheControl(CacheControl.NoCache(null))
+                call.respondTextWriter(contentType = ContentType.Text.EventStream) {
+                    try {
+                        calledFun.invoke(this)
+                    } catch (e: Exception) {
+                        val errorCode = when (e) {
+                            is InvalidRequestException -> HttpStatusCode.BadRequest
+                            is CradleObjectNotFoundException -> HttpStatusCode.NotFound
+                            is ChannelClosedException -> HttpStatusCode.RequestTimeout
+                            else -> HttpStatusCode.InternalServerError
+                        }.toString()
+                        eventWrite(SseEvent(errorCode, event = EventType.ERROR))
+                        throw e
+                    } finally {
+                        eventWrite(SseEvent(event = EventType.CLOSE))
+                        asyncClose()
                     }
-                    calledFun.invoke()
-                }.join()
-            } catch (e: ChannelClosedException) {
-                logger.debug { "sse channel closed" }
-            } finally {
+                }
                 coroutineContext.cancelChildren()
-            }
+            }.join()
         }
     }
 
@@ -204,6 +212,7 @@ class Main(args: Array<String>) {
                         jacksonMapper.asStringSuspend(calledFun.invoke()),
                         ContentType.Application.Json
                     )
+                    coroutineContext.cancelChildren()
                 }.join()
             } catch (e: Exception) {
                 when (val exception = e.rootCause ?: e) {
@@ -216,12 +225,9 @@ class Main(args: Array<String>) {
                     else -> sendErrorCode(call, exception as Exception, HttpStatusCode.InternalServerError)
                 }
                 throw e
-            } finally {
-                coroutineContext.cancelChildren()
             }
         }
     }
-
 
     private fun inPast(rightTimeBoundary: Instant?): Boolean {
         return rightTimeBoundary?.isBefore(Instant.now()) != false
@@ -260,37 +266,39 @@ class Main(args: Array<String>) {
             routing {
 
                 get("/event/{id}") {
-                    val id = call.parameters["id"]
                     val probe = call.parameters["probe"]?.toBoolean() ?: false
-
-                    handleRequest(call, context, "get single event", notModifiedCacheControl, probe, false, id) {
-                        eventCache.getOrPut(id!!)
+                    handleRequest(
+                        call, context, "get single event", notModifiedCacheControl, probe,
+                        false, call.parameters.toMap()
+                    ) {
+                        eventCache.getOrPut(call.parameters["id"]!!)
                     }
                 }
 
                 get("/messageStreams") {
                     handleRequest(
                         call, context, "get message streams", rarelyModifiedCacheControl,
-                        probe = false,
-                        useSse = false
+                        probe = false, useSse = false
                     ) {
                         cradleService.getMessageStreams()
                     }
                 }
 
                 get("/message/{id}") {
-                    val id = call.parameters["id"]
                     val probe = call.parameters["probe"]?.toBoolean() ?: false
-
-                    handleRequest(call, context, "get single message", notModifiedCacheControl, probe, false, id) {
-                        messageCache.getOrPut(id!!)
+                    handleRequest(
+                        call, context, "get single message",
+                        notModifiedCacheControl, probe, false, call.parameters.toMap()
+                    ) {
+                        messageCache.getOrPut(call.parameters["id"]!!)
                     }
                 }
 
                 get("/search/messages") {
-                    val request = MessageSearchRequest(call.request.queryParameters.toMap())
-
-                    handleRequest(call, context, "search messages", null, request.probe, false, request) {
+                    val queryParametersMap = call.request.queryParameters.toMap()
+                    val probe = call.parameters["probe"]?.toBoolean() ?: false
+                    handleRequest(call, context, "search messages", null, probe, false, queryParametersMap) {
+                        val request = MessageSearchRequest(queryParametersMap)
                         searchMessagesHandler.searchMessages(request)
                             .also {
                                 call.response.cacheControl(
@@ -305,29 +313,31 @@ class Main(args: Array<String>) {
                 }
 
                 get("search/sse/messages") {
-                    val request = SseMessageSearchRequest(call.request.queryParameters.toMap())
-                    handleRequest(call, context, "search messages sse", null, false, true, request) {
-                        call.response.cacheControl(CacheControl.NoCache(null))
-                        searchMessagesHandler.searchMessagesSse(request, call, jacksonMapper) { e: Exception ->
-                            convertExceptionIntoHttpCode(e)
+                    val queryParametersMap = call.request.queryParameters.toMap()
+                    handleRequest(call, context, "search messages sse", null, false, true, queryParametersMap) {
+                        suspend fun(w: Writer) {
+                            val request = SseMessageSearchRequest(queryParametersMap)
+                            searchMessagesHandler.searchMessagesSse(request, jacksonMapper, w)
                         }
                     }
                 }
 
                 get("search/events") {
-                    val request = EventSearchRequest(call.request.queryParameters.toMap())
-
-                    handleRequest(call, context, "search events", null, request.probe, false, request) {
+                    val queryParametersMap = call.request.queryParameters.toMap()
+                    val probe = call.parameters["probe"]?.toBoolean() ?: false
+                    handleRequest(call, context, "search events", null, probe, false, queryParametersMap) {
+                        val request = EventSearchRequest(queryParametersMap)
                         searchEventsHandler.searchEvents(request)
                             .also { call.response.cacheControl(frequentlyModifiedCacheControl) }
                     }
                 }
 
                 get("search/sse/events") {
-                    val request = SseEventSearchRequest(call.request.queryParameters.toMap())
-                    handleRequest(call, context, "search events sse", null, false, true, request) {
-                        searchEventsHandler.searchEventsSse(request, call, jacksonMapper, sseEventSearchStep) { e: Exception ->
-                            convertExceptionIntoHttpCode(e)
+                    val queryParametersMap = call.request.queryParameters.toMap()
+                    handleRequest(call, context, "search events sse", null, false, true, queryParametersMap) {
+                        suspend fun(w: Writer) {
+                            val request = SseEventSearchRequest(queryParametersMap)
+                            searchEventsHandler.searchEventsSse(request, jacksonMapper, sseEventSearchStep, w)
                         }
                     }
                 }
@@ -335,7 +345,6 @@ class Main(args: Array<String>) {
         }.start(false)
 
         logger.info { "serving on: http://${configuration.hostname.value}:${configuration.port.value}" }
-
     }
 }
 
