@@ -186,7 +186,7 @@ class SearchEventsHandler(private val cradle: CradleService) {
         sseEventSearchStep: Long,
         writer: Writer
     ) {
-        withContext(coroutineContext) {
+        coroutineScope {
             val timeIntervals = getTimeIntervals(request, sseEventSearchStep)
             flow {
                 for (timestamp in timeIntervals) {
