@@ -18,6 +18,7 @@ package com.exactpro.th2.rptdataprovider.entities.requests
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import java.time.Instant
+import java.util.concurrent.TimeUnit
 
 data class SseMessageSearchRequest(
     val attachedEventIds: List<String>?,
@@ -51,6 +52,6 @@ data class SseMessageSearchRequest(
             )
         } ?: TimeRelation.AFTER,
         resultCountLimit = parameters["resultCountLimit"]?.first()?.toInt() ?: 100,
-        timeLimit = parameters["timeLimit"]?.first()?.toLong() ?: 5000L
+        timeLimit = parameters["timeLimit"]?.first()?.toLong() ?: TimeUnit.MINUTES.toMillis(100)
     )
 }

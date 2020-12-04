@@ -38,6 +38,7 @@ Example of config files:
 ```
 
 # API
+### REST
 `http://localhost:8080/` - a test page showing the configured cassandra keyspace and host
 
 
@@ -102,6 +103,7 @@ Message object example:
 - `type` - text, accepts multiple values - Will match the events which type contains one of the given substrings. Case-insensitive.
 - `flat` - boolean - If `true`, returns the result as a flat list of event ids. If `false`, returns them as a list of event metadata object trees. Metadata tree will contain parent event objects as long as at least one of their direct or indirect children matches the filter. So, the resulting tree will preserve the hierarchy without the irrelevant branches.
 
+
 Event metadata object example:
 ```
 {
@@ -118,8 +120,6 @@ Event metadata object example:
 }
 ```
 
-
-
 `http://localhost:8080/search/messages` - returns an array of message ids that match the filter. Accepts following query parameters:
 - `attachedEventId` - text - Filters the messages that are linked to the specified event id.
 - `timestampFrom` - number, unix timestamp in milliseconds - Sets the lower limit of the time window. **Required**.
@@ -130,6 +130,35 @@ Event metadata object example:
 - `timelineDirection` - `next`/`previous` - Sets the lookup direction. Can be used for pagination. Defaults to `next`.
 - `messageId` - text - Sets the message id to start the lookup from. Can be used for pagination.
 
+### SSE
+`http://localhost:8080/search/sse/events` - create a sse channel of event metadata that matches the filter. Accepts following query parameters:
+- `startTimestamp` - number, unix timestamp in milliseconds - Sets the search starting point. **Required**.
+- `attachedMessageId` - text - Filters the events that are linked to the specified message id.
+- `name` - text, accepts multiple values - Will match the events which name contains one of the given substrings. Case-insensitive.
+- `type` - text, accepts multiple values - Will match the events which type contains one of the given substrings. Case-insensitive.
+- `parentEvent` - text - Will match events with the specified parent element.
+- `searchDirection` - `next`/`previous` - Sets the lookup direction. Can be used for pagination. Defaults to `next`.
+- `resultCountLimit` - number - Sets the maximum amount of events to return. Defaults to `100`.
+- `timeLimit` - number, unix timestamp in milliseconds - Sets the maximum time offset from startTimestamp to which the search will be performed. Defaults to `6000000` (100 minutes).
+
+
+`http://localhost:8080/search/sse/messages` - create a sse channel of messages that matches the filter. Accepts following query parameters:
+- `startTimestamp` - number, unix timestamp in milliseconds - Sets the search starting point. **Required**.
+- `attachedEventIds` - text, accepts multiple values - Filters the messages that are linked to the specified event id.
+- `stream` - text, accepts multiple values - Sets the stream ids to search in. Case-sensitive. **Required**.
+- `type` - text, accepts multiple values - Will match the messages by their full type name. Case-sensitive. Is very slow at the moment.
+- `negativeTypeFilter` - boolean - If `true`, will match messages that do not match those specified in `type`. If `false`, will match the messages by their full type name.
+- `searchDirection` - `next`/`previous` - Sets the lookup direction. Can be used for pagination. Defaults to `next`.
+- `resultCountLimit` - number - Sets the maximum amount of messages to return. Defaults to `100`.
+- `timeLimit` - number, unix timestamp in milliseconds - Sets the maximum time offset from startTimestamp to which the search will be performed. Defaults to `6000000` (100 minutes).
+
+
+Elements in channel match the format sse: 
+```
+event: 'event' / 'message' | 'close' | 'error'
+data: 'Event metadata object' / 'message' | 'Empty body' | 'HTTP Error code'
+id: last event / message id | null | null
+```
 
 
 # Configuration
