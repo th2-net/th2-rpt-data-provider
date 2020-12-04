@@ -147,7 +147,7 @@ Event metadata object example:
 - `attachedEventIds` - text, accepts multiple values - Filters the messages that are linked to the specified event id.
 - `stream` - text, accepts multiple values - Sets the stream ids to search in. Case-sensitive. **Required**.
 - `type` - text, accepts multiple values - Will match the messages by their full type name. Case-sensitive. Is very slow at the moment.
-- `negativeTypeFilter` - boolean - If `true`, will match messages that do not match those specified in `type`. If `false`, will match the messages by their full type name.
+- `negativeTypeFilter` - boolean - If `true`, will match messages that do not match those specified in `type`. If `false`, will match the messages by their full type name. Defaults to `false`.
 - `searchDirection` - `next`/`previous` - Sets the lookup direction. Can be used for pagination. Defaults to `next`.
 - `resultCountLimit` - number - Sets the maximum amount of messages to return. Defaults to `100`.
 - `timeLimit` - number, unix timestamp in milliseconds - Sets the maximum time offset from startTimestamp to which the search will be performed. Defaults to `6000000` (100 minutes).
