@@ -27,6 +27,7 @@ import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
+import io.ktor.utils.io.errors.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -65,8 +66,12 @@ class SearchEventsHandler(private val cradle: CradleService) {
                 .map { metadata ->
                     async {
                         if (metadata.isBatch) {
-                            metadata.batchMetadata?.testEvents
-                                ?.map { EventTreeNode(metadata.batchMetadata, it) }
+                            try {
+                                metadata.batchMetadata
+                            } catch (e: IOException) {
+                                null
+                            }
+                                ?.testEvents?.map { EventTreeNode(metadata.batchMetadata, it) }
 
                                 ?: getDirectBatchedChildren(metadata.id, request.timestampFrom, request.timestampTo)
                         } else {
