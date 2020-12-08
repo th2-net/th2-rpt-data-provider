@@ -54,8 +54,7 @@ data class MessageSearchRequest(
             asCradleTimeRelation(
                 it.first()
             )
-        }
-            ?: TimeRelation.AFTER,
+        } ?: TimeRelation.AFTER,
 
         messageId = parameters["messageId"]?.first(),
         idsOnly = parameters["idsOnly"]?.first()?.toBoolean() ?: true,

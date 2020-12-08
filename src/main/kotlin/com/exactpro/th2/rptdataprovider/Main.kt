@@ -19,6 +19,8 @@ package com.exactpro.th2.rptdataprovider
 import com.exactpro.cradle.utils.CradleIdException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
+import com.exactpro.th2.rptdataprovider.entities.filters.EventPredicateBuilder
+import com.exactpro.th2.rptdataprovider.entities.filters.MessagePredicateBuilder
 import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.MessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
@@ -315,7 +317,9 @@ class Main(args: Array<String>) {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "search messages sse", null, false, true, queryParametersMap) {
                         suspend fun(w: Writer) {
-                            val request = SseMessageSearchRequest(queryParametersMap)
+                            val filterPredicate =
+                                MessagePredicateBuilder(queryParametersMap, cradleService).build()
+                            val request = SseMessageSearchRequest(queryParametersMap, filterPredicate)
                             searchMessagesHandler.searchMessagesSse(request, jacksonMapper, w)
                         }
                     }
@@ -335,9 +339,41 @@ class Main(args: Array<String>) {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "search events sse", null, false, true, queryParametersMap) {
                         suspend fun(w: Writer) {
-                            val request = SseEventSearchRequest(queryParametersMap)
+                            val filterPredicate =
+                                EventPredicateBuilder(queryParametersMap, cradleService).build()
+                            val request = SseEventSearchRequest(queryParametersMap, filterPredicate)
                             searchEventsHandler.searchEventsSse(request, jacksonMapper, sseEventSearchStep, w)
                         }
+                    }
+                }
+
+                get("filters/sse-messages") {
+                    val queryParametersMap = call.request.queryParameters.toMap()
+                    handleRequest(call, context, "get message filters", null, false, false, queryParametersMap) {
+                        MessagePredicateBuilder(queryParametersMap, cradleService).getFiltersNames()
+                    }
+                }
+
+                get("filters/sse-events") {
+                    val queryParametersMap = call.request.queryParameters.toMap()
+                    handleRequest(call, context, "get event filters", null, false, false, queryParametersMap) {
+                        EventPredicateBuilder(queryParametersMap, cradleService).getFiltersNames()
+                    }
+                }
+
+                get("filters/sse-messages/{name}") {
+                    val queryParametersMap = call.request.queryParameters.toMap()
+                    handleRequest(call, context, "get message filters", null, false, false, queryParametersMap) {
+                        MessagePredicateBuilder(queryParametersMap, cradleService)
+                            .getFilterInfo(call.parameters["name"]!!)
+                    }
+                }
+
+                get("filters/sse-events/{name}") {
+                    val queryParametersMap = call.request.queryParameters.toMap()
+                    handleRequest(call, context, "get event filters", null, false, false, queryParametersMap) {
+                        EventPredicateBuilder(queryParametersMap, cradleService)
+                            .getFilterInfo(call.parameters["name"]!!)
                     }
                 }
             }

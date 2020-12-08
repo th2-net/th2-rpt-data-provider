@@ -24,7 +24,6 @@ import com.exactpro.cradle.testevents.StoredTestEventBatchMetadata
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.rptdataprovider.asStringSuspend
-import com.exactpro.th2.rptdataprovider.asyncClose
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
@@ -36,9 +35,6 @@ import com.exactpro.th2.rptdataprovider.min
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.fasterxml.jackson.databind.ObjectMapper
-import io.ktor.application.*
-import io.ktor.http.*
-import io.ktor.response.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel.Factory.BUFFERED
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
@@ -49,7 +45,6 @@ import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneOffset
 import kotlin.coroutines.CoroutineContext
-import kotlin.coroutines.coroutineContext
 
 class SearchEventsHandler(private val cradle: CradleService) {
     companion object {
@@ -75,6 +70,7 @@ class SearchEventsHandler(private val cradle: CradleService) {
     }
 
 
+    @ExperimentalCoroutinesApi
     private suspend fun getEventTreeNodeFlow(
         parentEvent: String?,
         timestampFrom: Instant,
@@ -86,7 +82,7 @@ class SearchEventsHandler(private val cradle: CradleService) {
             flow {
                 for (event in getEventsSuspend(parentEvent, timestampFrom, timestampTo))
                     emit(event)
-            }.cancellable()
+            }
                 .map { metadata ->
                     async(parentContext) {
                         if (metadata.isBatch) {
@@ -118,6 +114,7 @@ class SearchEventsHandler(private val cradle: CradleService) {
                     .contains(StoredTestEventId(event.eventId)))
     }
 
+    @ExperimentalCoroutinesApi
     suspend fun searchEvents(request: EventSearchRequest): List<Any> {
         return coroutineScope {
             val baseList = getEventTreeNodeFlow(
@@ -133,6 +130,7 @@ class SearchEventsHandler(private val cradle: CradleService) {
 
             val filteredList =
                 baseList.filter { isEventMatched(it, request.type, request.name, request.attachedMessageId) }
+
 
             if (request.flat)
                 filteredList.map { it.eventId }
@@ -199,7 +197,7 @@ class SearchEventsHandler(private val cradle: CradleService) {
             }
                 .map { it.await() }
                 .flatMapMerge { it.asFlow() }
-                .filter { isEventMatched(it, request.type, request.name, request.attachedMessageId) }
+                .filter { request.filterPredicate.apply(it) }//isEventMatched(it, request.type, request.name, request.attachedMessageId) }
                 .take(request.resultCountLimit)
                 .onCompletion {
                     it?.let { throwable -> throw throwable }

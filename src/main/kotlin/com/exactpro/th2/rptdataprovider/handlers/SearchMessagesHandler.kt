@@ -185,6 +185,8 @@ class SearchMessagesHandler(
         }
     }
 
+    @ExperimentalCoroutinesApi
+    @FlowPreview
     private suspend fun getMessageStream(
         streamMessageIndexMap: MutableMap<Pair<String, Direction>, StoredMessageId?>,
         timelineDirection: TimeRelation,
@@ -224,6 +226,8 @@ class SearchMessagesHandler(
         }
     }
 
+    @FlowPreview
+    @ExperimentalCoroutinesApi
     suspend fun searchMessages(request: MessageSearchRequest): List<Any> {
         return coroutineScope {
             val bufferSize = chooseBufferSize(request)
@@ -244,7 +248,8 @@ class SearchMessagesHandler(
                         if ((request.attachedEventId ?: request.messageType) != null || !request.idsOnly) {
                             @Suppress("USELESS_CAST")
                             Pair(
-                                it, isMessageMatched(
+                                it,
+                                isMessageMatched(
                                     request.messageType,
                                     messagesFromAttachedId,
                                     messageCache.getOrPut(it)
@@ -282,20 +287,8 @@ class SearchMessagesHandler(
         }
     }
 
-    private suspend fun isSseMessageMatched(
-        type: List<String>?,
-        messagesFromAttachedId: Collection<Collection<StoredMessageId>>?,
-        message: Message,
-        negativeTypeFilter: Boolean
-    ): Boolean {
-        return (type == null || negativeTypeFilter.xor(type.any { item ->
-            message.messageType.toLowerCase().contains(item.toLowerCase())
-        })) && (messagesFromAttachedId == null || messagesFromAttachedId.let { messagesFromEventId ->
-            val messageId = StoredMessageId.fromString(message.messageId)
-            messagesFromEventId.any { it.contains(messageId) }
-        })
-    }
 
+    @FlowPreview
     @ExperimentalCoroutinesApi
     suspend fun searchMessagesSse(
         request: SseMessageSearchRequest,
@@ -309,22 +302,14 @@ class SearchMessagesHandler(
                 request.searchDirection, request.stream,
                 messageId, timePair.first, timePair.second
             )
-            val messagesFromAttachedId =
-                request.attachedEventIds?.let { ids ->
-                    ids.map { cradle.getMessageIdsSuspend(StoredTestEventId(it)) }
-                }
+
             getMessageStream(
                 streamMessageIndexMap, request.searchDirection, request.resultCountLimit,
                 messageId, timePair.first, timePair.second
             ).map {
                 async {
                     @Suppress("USELESS_CAST")
-                    Pair(
-                        it, isSseMessageMatched(
-                            request.type, messagesFromAttachedId,
-                            messageCache.getOrPut(it), request.negativeTypeFilter
-                        )
-                    )
+                    Pair(it, request.filterPredicate.apply(messageCache.getOrPut(it)))
                 }.also { coroutineContext.ensureActive() }
             }
                 .buffer(messageSearchPipelineBuffer)

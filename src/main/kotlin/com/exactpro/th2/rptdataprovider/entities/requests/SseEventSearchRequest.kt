@@ -18,14 +18,14 @@ package com.exactpro.th2.rptdataprovider.entities.requests
 
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
+import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
+import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 
 data class SseEventSearchRequest(
+    val filterPredicate: FilterPredicate<EventTreeNode>,
     val startTimestamp: Instant,
-    val attachedMessageId: String?,
-    val name: List<String>?,
-    val type: List<String>?,
     val parentEvent: String?,
     val searchDirection: TimeRelation,
     val resultCountLimit: Int,
@@ -40,14 +40,13 @@ data class SseEventSearchRequest(
         }
     }
 
-    constructor(parameters: Map<String, List<String>>) : this(
-        attachedMessageId = parameters["attachedMessageId"]?.first(),
+    constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<EventTreeNode>) : this(
+        filterPredicate = filterPredicate,
         startTimestamp = parameters["startTimestamp"]?.first()?.let { Instant.ofEpochMilli(it.toLong()) }!!,
-        name = parameters["name"],
-        type = parameters["type"],
         parentEvent = parameters["parentEvent"]?.first(),
-        searchDirection = parameters["searchDirection"]?.let { asCradleTimeRelation(it.first()) }
-            ?: TimeRelation.AFTER,
+        searchDirection = parameters["searchDirection"]?.let {
+            asCradleTimeRelation(it.first())
+        } ?: TimeRelation.AFTER,
         resultCountLimit = parameters["resultCountLimit"]?.first()?.toInt() ?: 100,
         timeLimit = parameters["timeLimit"]?.first()?.toLong() ?: TimeUnit.MINUTES.toMillis(100)
     )

@@ -17,15 +17,15 @@ package com.exactpro.th2.rptdataprovider.entities.requests
 
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
+import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
+import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 
 data class SseMessageSearchRequest(
-    val attachedEventIds: List<String>?,
+    val filterPredicate: FilterPredicate<Message>,
     val startTimestamp: Instant,
     val stream: List<String>?,
-    val type: List<String>?,
-    val negativeTypeFilter: Boolean,
     val searchDirection: TimeRelation,
     val resultCountLimit: Int,
     val timeLimit: Long
@@ -40,12 +40,10 @@ data class SseMessageSearchRequest(
         }
     }
 
-    constructor(parameters: Map<String, List<String>>) : this(
-        attachedEventIds = parameters["attachedEventIds"],
+    constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<Message>) : this(
+        filterPredicate = filterPredicate,
         startTimestamp = parameters["startTimestamp"]?.first()?.let { Instant.ofEpochMilli(it.toLong()) }!! ,
         stream = parameters["stream"],
-        type = parameters["type"],
-        negativeTypeFilter = parameters["negativeTypeFilter"]?.first()?.toBoolean() ?: false,
         searchDirection = parameters["searchDirection"]?.let {
             asCradleTimeRelation(
                 it.first()
