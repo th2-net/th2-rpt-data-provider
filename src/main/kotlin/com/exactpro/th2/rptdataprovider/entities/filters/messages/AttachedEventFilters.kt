@@ -19,12 +19,12 @@ package com.exactpro.th2.rptdataprovider.entities.filters.messages
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.th2.rptdataprovider.entities.filters.Filter
-import com.exactpro.th2.rptdataprovider.entities.filters.events.AttachedMessageFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
+import kotlinx.coroutines.runBlocking
 
 class AttachedEventFilters(
     requestMap: Map<String, List<String>>,
@@ -36,7 +36,7 @@ class AttachedEventFilters(
 
     init {
         negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false
-        suspend {
+        runBlocking {
             messagesFromAttachedId = requestMap["${filterInfo.name}-values"]
                 ?.map { cradleService.getMessageIdsSuspend(StoredTestEventId(it)) }!!
         }

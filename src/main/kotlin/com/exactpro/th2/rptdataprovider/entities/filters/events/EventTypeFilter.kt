@@ -28,13 +28,12 @@ class EventTypeFilter(
     cradleService: CradleService
 ) : Filter<EventTreeNode>(requestMap, cradleService) {
 
-    private lateinit var type: List<String>
+    private var type: List<String>
     override var negative: Boolean = false
+
     init {
         negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false
-        suspend {
-            type = requestMap["${filterInfo.name}-values"]!!
-        }
+        type = requestMap["${filterInfo.name}-values"]!!
     }
 
     companion object {

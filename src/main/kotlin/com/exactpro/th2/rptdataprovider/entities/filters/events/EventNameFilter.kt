@@ -16,8 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider.entities.filters.events
 
-import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.th2.rptdataprovider.entities.filters.Filter
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
@@ -30,14 +28,12 @@ class EventNameFilter(
     cradleService: CradleService
 ) : Filter<EventTreeNode>(requestMap, cradleService) {
 
-    private lateinit var name: List<String>
+    private var name: List<String>
     override var negative: Boolean = false
 
     init {
         negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false
-        suspend {
-            name = requestMap["${filterInfo.name}-values"]!!
-        }
+        name = requestMap["${filterInfo.name}-values"]!!
     }
 
     companion object {

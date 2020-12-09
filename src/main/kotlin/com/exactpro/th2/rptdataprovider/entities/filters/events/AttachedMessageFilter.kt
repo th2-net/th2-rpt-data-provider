@@ -24,7 +24,10 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterTyp
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
-import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType.*
+import kotlinx.coroutines.DisposableHandle
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 
 class AttachedMessageFilter(
     requestMap: Map<String, List<String>>,
@@ -36,7 +39,7 @@ class AttachedMessageFilter(
 
     init {
         negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false
-        suspend {
+        runBlocking {
             eventIds = requestMap["${filterInfo.name}-values"]?.first()
                 ?.let { cradleService.getEventIdsSuspend(StoredMessageId.fromString(it)) }!!
         }
