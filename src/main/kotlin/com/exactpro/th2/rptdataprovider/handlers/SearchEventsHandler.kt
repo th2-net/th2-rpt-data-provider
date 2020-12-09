@@ -197,7 +197,7 @@ class SearchEventsHandler(private val cradle: CradleService) {
             }
                 .map { it.await() }
                 .flatMapMerge { it.asFlow() }
-                .filter { request.filterPredicate.apply(it) }//isEventMatched(it, request.type, request.name, request.attachedMessageId) }
+                .filter { request.filterPredicate.apply(it) }
                 .take(request.resultCountLimit)
                 .onCompletion {
                     it?.let { throwable -> throw throwable }

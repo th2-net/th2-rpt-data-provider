@@ -16,17 +16,31 @@
 
 package com.exactpro.th2.rptdataprovider.entities.filters.events
 
+import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.testevents.StoredTestEventId
-import com.exactpro.th2.rptdataprovider.entities.filters.SimpleFilter
+import com.exactpro.th2.rptdataprovider.entities.filters.Filter
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
+import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
+import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType.*
 
 class AttachedMessageFilter(
-    private val eventIds: Collection<StoredTestEventId>,
-    override val negative: Boolean
-) : SimpleFilter<EventTreeNode> {
+    requestMap: Map<String, List<String>>,
+    cradleService: CradleService
+) : Filter<EventTreeNode>(requestMap, cradleService) {
+
+    private lateinit var eventIds: Collection<StoredTestEventId>
+    override var negative: Boolean = false
+
+    init {
+        negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false
+        suspend {
+            eventIds = requestMap["${filterInfo.name}-values"]?.first()
+                ?.let { cradleService.getEventIdsSuspend(StoredMessageId.fromString(it)) }!!
+        }
+    }
 
     companion object {
         val filterInfo = FilterInfo(
@@ -34,10 +48,16 @@ class AttachedMessageFilter(
             "matches events by one of the attached message id",
             mutableListOf<Parameter>().apply {
                 add(Parameter("invert", FilterParameterType.BOOLEAN, false, null))
-                add(Parameter("values", FilterParameterType.STRING_LIST, null, "arfq01fix01:second:1604492791034943949, ..."))
+                add(
+                    Parameter(
+                        "values", FilterParameterType.STRING_LIST, null,
+                        "arfq01fix01:second:1604492791034943949, ..."
+                    )
+                )
             }
         )
     }
+
 
     override fun match(element: EventTreeNode): Boolean {
         return negative.xor(eventIds.contains(StoredTestEventId(element.eventId)))

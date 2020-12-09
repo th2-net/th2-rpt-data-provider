@@ -16,16 +16,27 @@
 
 package com.exactpro.th2.rptdataprovider.entities.filters.messages
 
-import com.exactpro.th2.rptdataprovider.entities.filters.SimpleFilter
+import com.exactpro.th2.rptdataprovider.entities.filters.Filter
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
+import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
 class MessageTypeFilter(
-    private val type: List<String>,
-    override val negative: Boolean
-) : SimpleFilter<Message> {
+    requestMap: Map<String, List<String>>,
+    cradleService: CradleService
+) : Filter<Message>(requestMap, cradleService) {
+
+    private lateinit var type: List<String>
+    override var negative: Boolean = false
+
+    init {
+        negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false
+        suspend {
+            type = requestMap["${filterInfo.name}-values"]!!
+        }
+    }
 
     companion object {
         val filterInfo = FilterInfo(

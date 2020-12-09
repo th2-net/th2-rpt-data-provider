@@ -16,16 +16,29 @@
 
 package com.exactpro.th2.rptdataprovider.entities.filters.events
 
-import com.exactpro.th2.rptdataprovider.entities.filters.SimpleFilter
+import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.cradle.testevents.StoredTestEventId
+import com.exactpro.th2.rptdataprovider.entities.filters.Filter
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
+import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
 class EventNameFilter(
-    private val name: List<String>,
-    override val negative: Boolean
-) : SimpleFilter<EventTreeNode> {
+    requestMap: Map<String, List<String>>,
+    cradleService: CradleService
+) : Filter<EventTreeNode>(requestMap, cradleService) {
+
+    private lateinit var name: List<String>
+    override var negative: Boolean = false
+
+    init {
+        negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false
+        suspend {
+            name = requestMap["${filterInfo.name}-values"]!!
+        }
+    }
 
     companion object {
         val filterInfo = FilterInfo(

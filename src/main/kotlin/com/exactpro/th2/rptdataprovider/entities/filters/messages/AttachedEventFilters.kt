@@ -17,16 +17,31 @@
 package com.exactpro.th2.rptdataprovider.entities.filters.messages
 
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.rptdataprovider.entities.filters.SimpleFilter
+import com.exactpro.cradle.testevents.StoredTestEventId
+import com.exactpro.th2.rptdataprovider.entities.filters.Filter
+import com.exactpro.th2.rptdataprovider.entities.filters.events.AttachedMessageFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
+import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
 class AttachedEventFilters(
-    private val messagesFromAttachedId: Collection<Collection<StoredMessageId>>,
-    override val negative: Boolean
-) : SimpleFilter<Message> {
+    requestMap: Map<String, List<String>>,
+    cradleService: CradleService
+) : Filter<Message>(requestMap, cradleService) {
+
+    private lateinit var messagesFromAttachedId: Collection<Collection<StoredMessageId>>
+    override var negative: Boolean = false
+
+    init {
+        negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false
+        suspend {
+            messagesFromAttachedId = requestMap["${filterInfo.name}-values"]
+                ?.map { cradleService.getMessageIdsSuspend(StoredTestEventId(it)) }!!
+        }
+    }
+
     companion object {
         val filterInfo = FilterInfo(
             "attachedEventIds",
