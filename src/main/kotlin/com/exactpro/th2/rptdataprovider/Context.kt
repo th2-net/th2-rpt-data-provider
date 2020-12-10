@@ -26,6 +26,7 @@ import com.exactpro.th2.rptdataprovider.entities.filters.events.AttachedMessageF
 import com.exactpro.th2.rptdataprovider.entities.filters.events.EventNameFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.events.EventTypeFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.AttachedEventFilters
+import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageTypeFilter
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
@@ -89,7 +90,8 @@ class Context(
     val messageFiltersPredicateFactory: PredicateFactory<Message> = PredicateFactory(
         mapOf(
             AttachedEventFilters.filterInfo to ::AttachedEventFilters,
-            MessageTypeFilter.filterInfo to ::MessageTypeFilter
+            MessageTypeFilter.filterInfo to ::MessageTypeFilter,
+            MessageBodyFilter.filterInfo to ::MessageBodyFilter
         ), cradleService
     ),
 
