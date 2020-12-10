@@ -63,6 +63,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
                 }
             },
             batch?.id?.toString(),
+            ProviderEventId(batch?.id, storedEvent.parentId).toString(),
             storedEvent.content.let {
                 try {
                     val data = String(it).takeUnless(String::isEmpty) ?: "{}"
