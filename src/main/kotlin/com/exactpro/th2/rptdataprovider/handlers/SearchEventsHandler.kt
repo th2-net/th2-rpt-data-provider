@@ -39,6 +39,12 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel.Factory.BUFFERED
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.flow.*
+import io.ktor.utils.io.errors.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.toList
 import mu.KotlinLogging
 import java.io.Writer
 import java.time.Instant
@@ -86,8 +92,12 @@ class SearchEventsHandler(private val cradle: CradleService) {
                 .map { metadata ->
                     async(parentContext) {
                         if (metadata.isBatch) {
-                            metadata.batchMetadata?.testEvents
-                                ?.map { EventTreeNode(metadata.batchMetadata, it) }
+                            try {
+                                metadata.batchMetadata
+                            } catch (e: IOException) {
+                                null
+                            }
+                                ?.testEvents?.map { EventTreeNode(metadata.batchMetadata, it) }
 
                                 ?: getDirectBatchedChildren(metadata.id, timestampFrom, timestampTo)
                         } else {
@@ -211,10 +221,10 @@ class SearchEventsHandler(private val cradle: CradleService) {
 
     private suspend fun recursiveParentSearch(
         event: EventTreeNode,
-        result: MutableMap<StoredTestEventId, EventTreeNode>
+        result: MutableMap<ProviderEventId, EventTreeNode>
     ) {
 
-        result.computeIfAbsent(event.id.eventId) { event }
+        result.computeIfAbsent(event.id) { event }
 
         val parentEventId = event.parentEventId?.eventId ?: return
         val batch = event.batch
@@ -239,15 +249,15 @@ class SearchEventsHandler(private val cradle: CradleService) {
         filteredList: List<EventTreeNode>
     ): List<EventTreeNode> {
 
-        val eventTreeMap: MutableMap<StoredTestEventId, EventTreeNode> =
-            filteredList.associateBy({ it.id.eventId }, { it }) as MutableMap
+        val eventTreeMap: MutableMap<ProviderEventId, EventTreeNode> =
+            filteredList.associateBy({ it.id }, { it }) as MutableMap
 
-        val unfilteredEventMap: MutableMap<StoredTestEventId, EventTreeNode> =
-            unfilteredList.associateBy({ it.id.eventId }, { it }) as MutableMap
+        val unfilteredEventMap: MutableMap<ProviderEventId, EventTreeNode> =
+            unfilteredList.associateBy({ it.id }, { it }) as MutableMap
 
         // add all parents not included in the filter
         for (event in filteredList) {
-            if (event.parentEventId?.let { !eventTreeMap.containsKey(it.eventId) } == true) {
+            if (event.parentEventId?.let { !eventTreeMap.containsKey(it) } == true) {
                 recursiveParentSearch(event, eventTreeMap)
             }
         }
@@ -256,19 +266,19 @@ class SearchEventsHandler(private val cradle: CradleService) {
         // for each element in unfiltered events (except for the root ones) indicate its parent
         // building tree from unfiltered elements
         unfilteredEventMap.values.forEach { event ->
-            event.parentEventId?.also { unfilteredEventMap[it.eventId]?.addChild(event) }
+            event.parentEventId?.also { unfilteredEventMap[it]?.addChild(event) }
         }
 
         // building a tree from filtered elements. In recursiveParentSearch we have added
         // new items to eventTreeMap and now we need to insert them into the tree
         eventTreeMap.values.forEach { event ->
-            event.parentEventId?.also { eventTreeMap[it.eventId]?.addChild(event) }
+            event.parentEventId?.also { eventTreeMap[it]?.addChild(event) }
         }
 
         // New elements found in the previous step could be absent among the
         // unfiltered elements, but have children among them
         unfilteredEventMap.values.forEach { event ->
-            event.parentEventId?.also { eventTreeMap[it.eventId]?.addChild(event) }
+            event.parentEventId?.also { eventTreeMap[it]?.addChild(event) }
         }
 
         // take only root elements

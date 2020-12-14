@@ -1,51 +1,13 @@
-# Report data provider 2.2
+# Report data provider
 
 # Overview
-This component serves as a backend for report-viewer. It will connect to the configured cassandra database via cradle api and expose the data stored in there as REST resources.
-
-Report data provider requires two configuration files to start.
-Configuration directory can be specified with an argument `-c "config_dir"`
-
-Example of config files:
-
-`config_dir/cradle.json`
-```
-{
-  "host": "host",
-  "port": 9042,
-  "dataCenter": "datacenter",
-  "keyspace": "keyspace",
-  "username": "username",
-  "password": "password"
-}
-```
-
-`config_dir/custom.json`
-```
-{
-  "hostname": "localhost",
-  "port": 8888,
-
-  "responseTimeout": 60000,
-  "serverCacheTimeout": 60000,
-  "clientCacheTimeout": 60,
-  "eventCacheSize": 100000,
-  "messageCacheSize": 100000,
-  "ioDispatcherThreadPoolSize": 1,
-  "cassandraInstance": "instance1",
-  "cassandraQueryTimeout": 30000
-}
-```
+This component serves as a backend for rpt-viewer. It will connect to the cassandra database via cradle api and expose the data stored in there as REST resources.
 
 # API
+
 ### REST
-`http://localhost:8080/` - a test page showing the configured cassandra keyspace and host
-
-
 
 `http://localhost:8080/messageStreams` - returns a list of message stream names
-
-
 
 `http://localhost:8080/event/{id}` - returns a single event with the specified id
 
@@ -122,8 +84,8 @@ Event metadata object example:
 
 `http://localhost:8080/search/messages` - returns an array of message ids that match the filter. Accepts following query parameters:
 - `attachedEventId` - text - Filters the messages that are linked to the specified event id.
-- `timestampFrom` - number, unix timestamp in milliseconds - Sets the lower limit of the time window. **Required**.
-- `timestampTo` - number, unix timestamp in milliseconds - Sets the upper limit of the time window. **Required**.
+- `timestampFrom` - number, unix timestamp in milliseconds - Sets the lower limit of the time window.
+- `timestampTo` - number, unix timestamp in milliseconds - Sets the upper limit of the time window..
 - `stream` - text, accepts multiple values - Sets the stream ids to search in. Case-sensitive. **Required**.
 - `messageType` - text, accepts multiple values - Will match the messages by their full type name. Case-sensitive. Is very slow at the moment.
 - `limit` - number - Sets the maximum amount of messages to return. Can be used for pagination. Defaults to `100`.
@@ -210,51 +172,65 @@ id: last event / message id | null | null
 
 
 # Configuration
-Example of Report data provider component environment variables:
-
-Cradle:
+schema component description example (rpt-data-provider.yml):
 ```
-CRADLE_INSTANCE_NAME=instance1
+apiVersion: th2.exactpro.com/v1
+kind: Th2CoreBox
+metadata:
+  name: rpt-data-provider
+spec:
+  image-name: ghcr.io/th2-net/th2-rpt-data-provider
+  image-version: 2.2.5 // change this line if you want to use a newer version
+  type: th2-rpt-data-provider
+  custom-config:
+    hostname: localhost
+    port: 8080
+    responseTimeout: 60000 // maximum request processing time in milliseconds
+    
+    eventCacheSize: 1000 // internal event cache size
+    messageCacheSize: 1000 // internal message cache size
+    serverCacheTimeout: 60000 // cached event lifetime in milliseconds
 
-CASSANDRA_DATA_CENTER=kos
-CASSANDRA_HOST=cassandra
-CASSANDRA_PORT=9042
-CASSANDRA_KEYSPACE=demo
-CASSANDRA_USERNAME=guest
-CASSANDRA_PASSWORD=guest
-CASSANDRA_QUERY_TIMEOUT=30000 - defined in milliseconds
-```
+    ioDispatcherThreadPoolSize: 10 // thread pool size for blocking database calls
+    codecResponseTimeout: 6000 // if a codec doesn't respond in time, requested message is returned with a 'null' body
+    codecCacheSize: 100 // size of the internal cache for parsed messages
+    checkRequestsAliveDelay: 2000 // response channel check interval in milliseconds
+    
+    enableCaching: true // enables proxy and client cache (Cache-control response headers)
+    notModifiedObjectsLifetime: 3600 // max-age in seconds
+    rarelyModifiedObjects: 500 // max-age in seconds
+    frequentlyModifiedObjects: 100 // max-age in seconds
+    
+    maxMessagesLimit: 100 // limits how many messages can be requested from cradle per query
+    messageSearchPipelineBuffer: 500 // search/messages pipeline buffer size (defines how many messages could be processed concurrently)
+  pins: // pins are used to communicate with codec components to parse message data
+    - name: to_codec
+      connection-type: mq
+      attributes:
+        - to_codec
+        - raw
+        - publish
+    - name: from_codec
+      connection-type: mq
+      attributes:
+        - from_codec
+        - parsed
+        - subscribe
+  extended-settings:
+    chart-cfg:
+      ref: schema-stable
+      path: custom-component
+    service:
+      enabled: false
+      nodePort: '31275'
+    envVariables:
+      JAVA_TOOL_OPTIONS: "-XX:+ExitOnOutOfMemoryError -Ddatastax-java-driver.advanced.connection.init-query-timeout=\"5000 milliseconds\""
+    resources:
+      limits:
+        memory: 2000Mi
+        cpu: 600m
+      requests:
+        memory: 300Mi
+        cpu: 50m
 
-Codecs (via amqp):
-```
-AMQP_USERNAME=guest
-AMQP_PASSWORD=guest
-AMQP_HOST=host
-AMQP_PORT=30000
-AMQP_VHOST=vhost
-
-AMQP_CODEC_EXCHANGE_NAME=default_general_exchange
-AMQP_CODEC_ROUTING_KEY_OUT=default_general_decode_out
-AMQP_CODEC_ROUTING_KEY_IN=default_general_decode_in
-
-AMQP_PROVIDER_QUEUE_PREFIX=report-data-provider
-AMQP_PROVIDER_CONSUMER_TAG=report-data-provider
-```
-
-REST Api:
-```
-HTTP_PORT=8080
-HTTP_HOST=localhost
-HTTP_RESPONSE_TIMEOUT=60000 - defined in milliseconds
-
-CLIENT_CACHE_TIMEOUT=60 - defined in seconds; sets max-age value in http cache control header
-```
-
-Cache & multi-threading:
-```
-SERVER_CACHE_TIMEOUT=60000 - defined in milliseconds; sets the cache invalidation timeout for non-batched events
-EVENT_CACHE_SIZE=100 - sets in-memory cache limit (item count)
-MESSAGE_CACHE_SIZE=100 - sets in-memory cache limit (item count)
-CODEC_CACHE_SIZE=100 - sets in-memory cache limit (item count)
-THREAD_POOL_SIZE=1 - sets the thread pool size of IO coroutine dispatcher
 ```

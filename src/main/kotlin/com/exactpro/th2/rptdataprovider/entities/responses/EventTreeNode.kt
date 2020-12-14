@@ -77,7 +77,13 @@ data class EventTreeNode(
             batch?.id, nonBatchedEvent?.id ?: batchedEvent?.id ?: throw ParseEventTreeNodeException(error)
         ),
 
-        parentEventId = (nonBatchedEvent?.parentId ?: batchedEvent?.parentId)?.let { ProviderEventId(batch?.id, it) }
+        parentEventId = (nonBatchedEvent?.parentId ?: batchedEvent?.parentId)?.let {
+            if (batch?.getTestEvent(it) != null) {
+                ProviderEventId(batch?.id, it)
+            } else {
+                ProviderEventId(null, it)
+            }
+        }
     )
 
     constructor(

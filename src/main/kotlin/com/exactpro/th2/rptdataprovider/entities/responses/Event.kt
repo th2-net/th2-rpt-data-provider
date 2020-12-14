@@ -17,6 +17,7 @@
 package com.exactpro.th2.rptdataprovider.entities.responses
 
 import com.exactpro.cradle.testevents.StoredTestEventWithContent
+import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.fasterxml.jackson.annotation.JsonRawValue
 import java.time.Instant
 
@@ -41,6 +42,7 @@ data class Event(
         stored: StoredTestEventWithContent,
         messages: Set<String>,
         batchId: String?,
+        parentEventId: String?,
         body: String?
     ) : this(
         batchId = batchId,
@@ -50,7 +52,7 @@ data class Event(
         eventType = stored.type ?: "",
         startTimestamp = stored.startTimestamp,
         endTimestamp = stored.endTimestamp,
-        parentEventId = stored.parentId?.toString(),
+        parentEventId = parentEventId,
         successful = stored.isSuccess,
         attachedMessageIds = messages,
         body = body
