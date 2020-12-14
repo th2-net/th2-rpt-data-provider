@@ -131,26 +131,74 @@ Event metadata object example:
 - `messageId` - text - Sets the message id to start the lookup from. Can be used for pagination.
 
 ### SSE
+
+##### Filters API
+
+Filters are formed as follows:
+- `filters={filter name}` - you must register the filter by specifying its name.  
+- `{filter name}-{parameter}={parameter value}` - each filter parameter
+```
+As example:
+/search/sse/events/?startTimestamp=1605872487277&filters=name&filters=type&name-values=Checkpoint&type-values=session&type-negative=true
+```
+
+`http://localhost:8080/filters/sse-messages` - get all names of sse message filters
+
+`http://localhost:8080/filters/sse-events` - get all names of sse event filters
+
+`http://localhost:8080/filters/sse-messages/{filter name}` - get filter info
+
+`http://localhost:8080/filters/sse-events/{filter name}` - get filter info
+
+```Filter info example
+  {
+    name: "type", // non-nullable
+    hint: "matches messages by one of the specified types" // nullable
+    parameters: [
+      {
+        name: "invert", // non-nullable string
+        type: "boolean", // possible values are "number", "boolean", "string", "string[]"
+        defaultValue: false, // nullable, should match the type
+        hint: null // nullable string
+      },
+      {
+        name: "values",
+        type: "string[]",
+        defaultValue: null,
+        hint: "NewOrderSingle, ..."
+      },
+    ]
+  } 
+```
+
+
+##### SSE requests API
 `http://localhost:8080/search/sse/events` - create a sse channel of event metadata that matches the filter. Accepts following query parameters:
 - `startTimestamp` - number, unix timestamp in milliseconds - Sets the search starting point. **Required**.
-- `attachedMessageId` - text - Filters the events that are linked to the specified message id.
-- `name` - text, accepts multiple values - Will match the events which name contains one of the given substrings. Case-insensitive.
-- `type` - text, accepts multiple values - Will match the events which type contains one of the given substrings. Case-insensitive.
 - `parentEvent` - text - Will match events with the specified parent element.
 - `searchDirection` - `next`/`previous` - Sets the lookup direction. Can be used for pagination. Defaults to `next`.
 - `resultCountLimit` - number - Sets the maximum amount of events to return. Defaults to `100`.
 - `timeLimit` - number, unix timestamp in milliseconds - Sets the maximum time offset from startTimestamp to which the search will be performed. Defaults to `6000000` (100 minutes).
 
+- `FILTERS`:
+- `attachedMessageId` - Filters the events that are linked to the specified message id. Parameters: `values` - text, `negative` - boolean 
+- `name` - Will match the events which name contains one of the given substrings. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean.
+- `type` - Will match the events which type contains one of the given substrings. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean.
+
 
 `http://localhost:8080/search/sse/messages` - create a sse channel of messages that matches the filter. Accepts following query parameters:
 - `startTimestamp` - number, unix timestamp in milliseconds - Sets the search starting point. **Required**.
-- `attachedEventIds` - text, accepts multiple values - Filters the messages that are linked to the specified event id.
 - `stream` - text, accepts multiple values - Sets the stream ids to search in. Case-sensitive. **Required**.
-- `type` - text, accepts multiple values - Will match the messages by their full type name. Case-sensitive. Is very slow at the moment.
 - `negativeTypeFilter` - boolean - If `true`, will match messages that do not match those specified in `type`. If `false`, will match the messages by their full type name. Defaults to `false`.
 - `searchDirection` - `next`/`previous` - Sets the lookup direction. Can be used for pagination. Defaults to `next`.
 - `resultCountLimit` - number - Sets the maximum amount of messages to return. Defaults to `100`.
 - `timeLimit` - number, unix timestamp in milliseconds - Sets the maximum time offset from startTimestamp to which the search will be performed. Defaults to `6000000` (100 minutes).
+
+- `FILTERS`:
+
+- `attachedEventIds` - Filters the messages that are linked to the specified event id. Parameters: `values` - text, accepts multiple values, `negative` - boolean. 
+- `type` - Will match the messages by their full type name. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean.
+- `body` - Will match the messages by their parsed body. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean.
 
 
 Elements in channel match the format sse: 
