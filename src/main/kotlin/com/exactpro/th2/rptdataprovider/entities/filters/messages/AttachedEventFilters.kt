@@ -18,6 +18,7 @@ package com.exactpro.th2.rptdataprovider.entities.filters.messages
 
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.testevents.StoredTestEventId
+import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.Filter
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
@@ -38,7 +39,8 @@ class AttachedEventFilters(
         negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false
         runBlocking {
             messagesFromAttachedId = requestMap["${filterInfo.name}-values"]
-                ?.map { cradleService.getMessageIdsSuspend(StoredTestEventId(it)) }!!
+                ?.map { cradleService.getMessageIdsSuspend(StoredTestEventId(it)) }
+                ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
         }
     }
 
@@ -48,7 +50,14 @@ class AttachedEventFilters(
             "matches messages by one of the attached event id",
             mutableListOf<Parameter>().apply {
                 add(Parameter("invert", FilterParameterType.BOOLEAN, false, null))
-                add(Parameter("values", FilterParameterType.STRING_LIST, null, "aae36f85-e638-482d-b996-b4bf710048b8, ..."))
+                add(
+                    Parameter(
+                        "values",
+                        FilterParameterType.STRING_LIST,
+                        null,
+                        "aae36f85-e638-482d-b996-b4bf710048b8, ..."
+                    )
+                )
             }
         )
     }

@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider.entities.filters.messages
 
+import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.Filter
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
@@ -33,7 +34,8 @@ class MessageBodyFilter(
 
     init {
         negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false
-        body = requestMap["${filterInfo.name}-values"]!!
+        body = requestMap["${filterInfo.name}-values"]
+            ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
     }
 
     companion object {
