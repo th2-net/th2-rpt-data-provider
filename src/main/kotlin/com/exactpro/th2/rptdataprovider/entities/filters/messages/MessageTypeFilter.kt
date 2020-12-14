@@ -43,7 +43,7 @@ class MessageTypeFilter(
             "type",
             "matches messages by one of the specified types",
             mutableListOf<Parameter>().apply {
-                add(Parameter("invert", FilterParameterType.BOOLEAN, false, null))
+                add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("values", FilterParameterType.STRING_LIST, null, "Heartbeat, ..."))
             }
         )

@@ -43,7 +43,7 @@ class MessageBodyFilter(
             "body",
             "matches messages whose body contains one of the specified tokens",
             mutableListOf<Parameter>().apply {
-                add(Parameter("invert", FilterParameterType.BOOLEAN, false, null))
+                add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("values", FilterParameterType.STRING_LIST, null, "FGW, ..."))
             }
         )

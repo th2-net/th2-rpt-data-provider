@@ -43,7 +43,7 @@ class EventNameFilter(
             "name",
             "matches events by one of the specified names",
             mutableListOf<Parameter>().apply {
-                add(Parameter("invert", FilterParameterType.BOOLEAN, false, null))
+                add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("values", FilterParameterType.STRING_LIST, null, "NewOrderSingle, ..."))
             }
         )

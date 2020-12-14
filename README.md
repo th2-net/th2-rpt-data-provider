@@ -118,7 +118,7 @@ As example:
     hint: "matches messages by one of the specified types" // nullable
     parameters: [
       {
-        name: "invert", // non-nullable string
+        name: "negative", // non-nullable string
         type: "boolean", // possible values are "number", "boolean", "string", "string[]"
         defaultValue: false, // nullable, should match the type
         hint: null // nullable string

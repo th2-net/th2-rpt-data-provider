@@ -53,7 +53,7 @@ class AttachedMessageFilter(
             "attachedMessageId",
             "matches events by one of the attached message id",
             mutableListOf<Parameter>().apply {
-                add(Parameter("invert", FilterParameterType.BOOLEAN, false, null))
+                add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
                 add(
                     Parameter(
                         "values", FilterParameterType.STRING_LIST, null,
