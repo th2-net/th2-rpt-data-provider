@@ -56,8 +56,8 @@ class AttachedMessageFilter(
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
                 add(
                     Parameter(
-                        "values", FilterParameterType.STRING_LIST, null,
-                        "arfq01fix01:second:1604492791034943949, ..."
+                        "values", FilterParameterType.STRING, null,
+                        "arfq01fix01:second:1604492791034943949"
                     )
                 )
             }
