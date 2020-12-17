@@ -259,7 +259,7 @@ class SearchMessagesHandler(
             .toList()
     }
 
-    private fun dropIfTimestamp(
+    private fun dropUntilInRangeInOppositeDirection(
         startTimestamp: Instant,
         storedMessages: List<StoredMessage>,
         timelineDirection: TimeRelation
@@ -285,9 +285,9 @@ class SearchMessagesHandler(
                     perStreamLimit,
                     timelineDirection
                 ).let {
-                    val filteredIdsList = dropIfTimestamp(startTimestamp, it, timelineDirection)
-                    streamMessageIndexMap[stream] =
-                        if (filteredIdsList.isNotEmpty()) filteredIdsList.last().id else null
+                    val streamIsEmpty = it.size < perStreamLimit
+                    val filteredIdsList = dropUntilInRangeInOppositeDirection(startTimestamp, it, timelineDirection)
+                    streamMessageIndexMap[stream] = if (streamIsEmpty) null else filteredIdsList.last().id
                     filteredIdsList
                 }
             }
