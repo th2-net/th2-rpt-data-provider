@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import mu.KotlinLogging
+import java.time.Instant
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -55,4 +56,12 @@ suspend fun <T> logTime(methodName: String, lambda: suspend () -> T): T? {
 
         result
     }
+}
+
+fun Instant.isBeforeOrEqual(other: Instant): Boolean {
+    return this.isBefore(other) || this == other
+}
+
+fun Instant.isAfterOrEqual(other: Instant): Boolean {
+    return this.isAfter(other) || this == other
 }
