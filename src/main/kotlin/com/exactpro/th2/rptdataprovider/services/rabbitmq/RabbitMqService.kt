@@ -37,6 +37,8 @@ class RabbitMqService(private val configuration: Configuration) {
 
     private val decodeRequests = ConcurrentHashMap<MessageID, ConcurrentSkipListSet<CodecRequest>>()
 
+    private val sessionToPinConverter = SessionToPinConverter(configuration.codecPinMapping)
+
     private val receiveChannel = configuration.messageRouterParsedBatch.subscribeAll(
         MessageListener { _, decodedBatch ->
             decodedBatch.messagesList.forEach { message ->
@@ -72,7 +74,10 @@ class RabbitMqService(private val configuration: Configuration) {
             }
 
             if (!alreadyRequested) {
-                configuration.messageRouterRawBatch.send(batch, "to_codec")
+                configuration.messageRouterRawBatch.send(
+                    batch,
+                    sessionToPinConverter.getPin(requests.keys.firstOrNull()?.connectionId?.sessionAlias)
+                )
             }
 
             val requestDebugInfo = let {

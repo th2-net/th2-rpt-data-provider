@@ -45,8 +45,10 @@ class CustomConfigurationClass {
 
     val messageSearchPipelineBuffer: Int = 500
 
+    val codecPinMapping: Map<String, List<String>> = emptyMap()
+
     override fun toString(): String {
-        return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, clientCacheTimeout=$clientCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, codecResponseTimeout=$codecResponseTimeout, codecCacheSize=$codecCacheSize, checkRequestsAliveDelay=$checkRequestsAliveDelay, enableCaching=$enableCaching, notModifiedObjectsLifetime=$notModifiedObjectsLifetime, rarelyModifiedObjects=$rarelyModifiedObjects, frequentlyModifiedObjects=$frequentlyModifiedObjects, maxMessagesLimit=$maxMessagesLimit, messageSearchPipelineBuffer=$messageSearchPipelineBuffer)"
+        return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, clientCacheTimeout=$clientCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, codecResponseTimeout=$codecResponseTimeout, codecCacheSize=$codecCacheSize, checkRequestsAliveDelay=$checkRequestsAliveDelay, enableCaching=$enableCaching, notModifiedObjectsLifetime=$notModifiedObjectsLifetime, rarelyModifiedObjects=$rarelyModifiedObjects, frequentlyModifiedObjects=$frequentlyModifiedObjects, maxMessagesLimit=$maxMessagesLimit, messageSearchPipelineBuffer=$messageSearchPipelineBuffer, codecPinMapping=$codecPinMapping)"
     }
 }
 
@@ -114,4 +116,12 @@ class Configuration(args: Array<String>) {
 
     val messageSearchPipelineBuffer: Variable =
         Variable("messageSearchPipelineBuffer", customConfiguration.messageSearchPipelineBuffer.toString(), "500")
+
+    val codecPinMapping: Map<String, List<String>> = customConfiguration.codecPinMapping.also {
+        Variable(
+            "codecPinMapping",
+            customConfiguration.codecPinMapping.toString(),
+            emptyMap<String, List<String>>().toString()
+        )
+    }
 }
