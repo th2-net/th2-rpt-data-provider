@@ -17,16 +17,11 @@
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
 class SessionToPinConverter(initMap: Map<String, List<String>>) {
-    private val sessionToPinMap: MutableMap<String, String> = mutableMapOf()
-    private val DEFAULT_PIN = "to_codec"
+    private val sessionToPinMap: Map<String, String> = initMap.flatMap { entity ->
+        entity.value.map { it to entity.key }
+    }.associate { it }
 
-    init {
-        sessionToPinMap.apply {
-            for (entity in initMap) {
-                entity.value.forEach { put(it, entity.key) }
-            }
-        }
-    }
+    private val DEFAULT_PIN = "to_codec"
 
     fun getPin(sessionName: String?): String {
         return sessionName?.let { sessionToPinMap[sessionName] } ?: DEFAULT_PIN
