@@ -37,6 +37,8 @@ class RabbitMqService(private val configuration: Configuration) {
 
     private val decodeRequests = ConcurrentHashMap<MessageID, ConcurrentSkipListSet<CodecRequest>>()
 
+    private val sessionToPinConverter = SessionToPinConverter(configuration.codecPinMapping)
+
     private val receiveChannel = configuration.messageRouterParsedBatch.subscribeAll(
         MessageListener { _, decodedBatch ->
             decodedBatch.messagesList.forEach { message ->
@@ -55,7 +57,6 @@ class RabbitMqService(private val configuration: Configuration) {
         "from_codec"
     )
 
-    @Throws(ClosedReceiveChannelException::class)
     suspend fun decodeMessage(batch: RawMessageBatch): Collection<Message> {
 
         val requests: Map<MessageID, CodecRequest> = batch.messagesList
@@ -73,7 +74,10 @@ class RabbitMqService(private val configuration: Configuration) {
             }
 
             if (!alreadyRequested) {
-                configuration.messageRouterRawBatch.send(batch, "to_codec")
+                configuration.messageRouterRawBatch.send(
+                    batch,
+                    sessionToPinConverter.getPin(requests.keys.firstOrNull()?.connectionId?.sessionAlias)
+                )
             }
 
             val requestDebugInfo = let {
@@ -95,13 +99,17 @@ class RabbitMqService(private val configuration: Configuration) {
                 }
             } catch (e: TimeoutCancellationException) {
                 logger.error { "unable to parse messages $requestDebugInfo - timed out after $responseTimeout milliseconds" }
-
                 requests.map { request ->
                     decodeRequests.remove(request.key)
                     request.value
-                }.forEach { it.channel.close() }
-
-                listOf<Message>()
+                }.forEach {
+                    try {
+                        it.channel.cancel()
+                    } catch (e: CancellationException) {
+                        logger.error { "cancelled channel from message: '${it.id}'" }
+                    }
+                }
+                deferred.mapNotNull { if (it.isCompleted) it.await() else null }
             }
         }
     }

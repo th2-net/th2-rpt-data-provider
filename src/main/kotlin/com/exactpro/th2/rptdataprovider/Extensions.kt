@@ -60,6 +60,7 @@ suspend fun <T> logTime(methodName: String, lambda: suspend () -> T): T? {
     }
 }
 
+
 suspend fun Writer.eventWrite(event: SseEvent) {
     withContext(Dispatchers.IO) {
         if (event.event != null) {
@@ -90,5 +91,14 @@ fun Instant.min(other: Instant): Instant {
     } else {
         other
     }
+}
+
+
+fun Instant.isBeforeOrEqual(other: Instant): Boolean {
+    return this.isBefore(other) || this == other
+}
+
+fun Instant.isAfterOrEqual(other: Instant): Boolean {
+    return this.isAfter(other) || this == other
 }
 
