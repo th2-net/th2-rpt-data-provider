@@ -20,6 +20,7 @@ import com.exactpro.cradle.messages.StoredMessageFilter
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.fasterxml.jackson.databind.ObjectMapper
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import mu.KotlinLogging
 import java.io.Writer
@@ -62,7 +63,7 @@ suspend fun <T> logTime(methodName: String, lambda: suspend () -> T): T? {
 
 
 suspend fun Writer.eventWrite(event: SseEvent) {
-    withContext(Dispatchers.IO) {
+    withContext(Dispatchers.Default) {
         if (event.event != null) {
             write("event: ${event.event}\n")
         }

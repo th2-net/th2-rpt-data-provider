@@ -17,7 +17,7 @@
 package com.exactpro.th2.rptdataprovider.entities.sse
 
 enum class EventType {
-    MESSAGE, EVENT, CLOSE, ERROR;
+    MESSAGE, EVENT, CLOSE, ERROR, KEEP_ALIVE;
 
     override fun toString(): String {
         return super.toString().toLowerCase()

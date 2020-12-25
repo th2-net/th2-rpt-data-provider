@@ -49,6 +49,7 @@ class Main(args: Array<String>) {
     private val context = Context(args)
     private val jacksonMapper = context.jacksonMapper
     private val checkRequestAliveDelay = context.configuration.checkRequestsAliveDelay.value.toLong()
+    private val keepAliveTimeout = context.configuration.keepAliveTimeout.value.toLong()
     private val configuration = context.configuration
 
     private class Timeouts {
@@ -87,6 +88,13 @@ class Main(args: Array<String>) {
 
                 delay(checkRequestAliveDelay)
             }
+        }
+    }
+
+    private suspend fun keepAlive(writer: Writer) {
+        while (coroutineContext.isActive) {
+            writer.eventWrite(SseEvent(data = "It's alive!", event = EventType.KEEP_ALIVE))
+            delay(keepAliveTimeout)
         }
     }
 
@@ -169,6 +177,9 @@ class Main(args: Array<String>) {
                 call.response.cacheControl(CacheControl.NoCache(null))
                 call.respondTextWriter(contentType = ContentType.Text.EventStream) {
                     try {
+                        launch {
+                            keepAlive(this@respondTextWriter)
+                        }
                         calledFun.invoke(this)
                     } catch (e: Exception) {
                         val errorCode = when (e) {
