@@ -31,8 +31,8 @@ suspend fun <T> databaseRequestRetry(dbRetryDelay: Long, request: suspend () -> 
             goodRequest = true
         } catch (e: DriverTimeoutException) {
             logger.debug { "try to reconnect" }
+            delay(dbRetryDelay)
         }
-        delay(dbRetryDelay)
     }
     return result
 }
