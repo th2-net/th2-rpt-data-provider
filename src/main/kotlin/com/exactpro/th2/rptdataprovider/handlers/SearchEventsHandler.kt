@@ -26,14 +26,17 @@ import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.rptdataprovider.asStringSuspend
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.requests.RequestType
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.sse.EventType
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.eventWrite
+import com.exactpro.th2.rptdataprovider.max
 import com.exactpro.th2.rptdataprovider.min
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
+import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
 import com.fasterxml.jackson.databind.ObjectMapper
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel.Factory.BUFFERED
@@ -52,7 +55,7 @@ import java.time.LocalTime
 import java.time.ZoneOffset
 import kotlin.coroutines.CoroutineContext
 
-class SearchEventsHandler(private val cradle: CradleService) {
+class SearchEventsHandler(private val cradle: CradleService, private val dbRetryDelay: Long) {
     companion object {
         private val logger = KotlinLogging.logger { }
     }
@@ -82,11 +85,17 @@ class SearchEventsHandler(private val cradle: CradleService) {
         timestampFrom: Instant,
         timestampTo: Instant,
         parentContext: CoroutineContext,
-        bufferSize: Int
+        bufferSize: Int,
+        requestType: RequestType
     ): Flow<Deferred<List<EventTreeNode>>> {
         return coroutineScope {
             flow {
-                for (event in getEventsSuspend(parentEvent, timestampFrom, timestampTo))
+                val eventsCollection = if (requestType == RequestType.SSE)
+                    databaseRequestRetry(dbRetryDelay) { getEventsSuspend(parentEvent, timestampFrom, timestampTo) }
+                else
+                    getEventsSuspend(parentEvent, timestampFrom, timestampTo)
+
+                for (event in eventsCollection)
                     emit(event)
             }
                 .map { metadata ->
@@ -130,17 +139,15 @@ class SearchEventsHandler(private val cradle: CradleService) {
             val baseList = getEventTreeNodeFlow(
                 request.parentEvent, request.timestampFrom,
                 request.timestampTo, coroutineContext,
-                UNLIMITED
+                UNLIMITED,
+                RequestType.REST
             ).map {
                 coroutineContext.ensureActive()
                 it.await()
-            }
-                .toList()
-                .flatten()
+            }.toList().flatten()
 
             val filteredList =
                 baseList.filter { isEventMatched(it, request.type, request.name, request.attachedMessageId) }
-
 
             if (request.flat)
                 filteredList.map { it.eventId }
@@ -149,7 +156,7 @@ class SearchEventsHandler(private val cradle: CradleService) {
         }
     }
 
-    private suspend fun changeOfDayProcessing(from: Instant, to: Instant): Iterable<Pair<Instant, Instant>> {
+    private fun changeOfDayProcessing(from: Instant, to: Instant): Iterable<Pair<Instant, Instant>> {
         return if (from.atOffset(ZoneOffset.UTC).dayOfYear != to.atOffset(ZoneOffset.UTC).dayOfYear) {
             val pivot = from.atOffset(ZoneOffset.UTC)
                 .plusDays(1).with(LocalTime.of(0, 0, 0, 0))
@@ -163,27 +170,22 @@ class SearchEventsHandler(private val cradle: CradleService) {
     private suspend fun getTimeIntervals(
         request: SseEventSearchRequest,
         sseEventSearchStep: Long
-    ): Iterable<Pair<Instant, Instant>> {
-        return mutableListOf<Pair<Instant, Instant>>().apply {
-            val timePair =
-                if (request.searchDirection == TimeRelation.AFTER) {
-                    Pair(request.startTimestamp, request.startTimestamp.plusMillis(request.timeLimit))
-                } else {
-                    Pair(request.startTimestamp.minusMillis(request.timeLimit), request.startTimestamp)
-                }
-
-            var timestamp = timePair.first
-            while (timestamp.isBefore(timePair.second)) {
-                addAll(
-                    changeOfDayProcessing(
-                        timestamp,
-                        timestamp.plusSeconds(sseEventSearchStep)
-                            .min(timePair.second).also { timestamp = it }
-                    )
+    ): Iterator<Pair<Instant, Instant>> {
+        return sequence {
+            var timestamp = request.startTimestamp
+            while (timestamp.isAfter(Instant.MIN) && timestamp.isBefore(Instant.MAX)) {
+                yieldAll(
+                    if (request.searchDirection == TimeRelation.AFTER) {
+                        val toTimestamp = timestamp.plusSeconds(sseEventSearchStep).min(Instant.MAX)
+                        changeOfDayProcessing(timestamp, toTimestamp).also { timestamp = toTimestamp }
+                    } else {
+                        val fromTimestamp = timestamp.minusSeconds(sseEventSearchStep).max(Instant.MIN)
+                        changeOfDayProcessing(fromTimestamp, timestamp).reversed()
+                            .also { timestamp = fromTimestamp }
+                    }
                 )
             }
-            if (request.searchDirection == TimeRelation.BEFORE) reverse()
-        }
+        }.iterator()
     }
 
     @ExperimentalCoroutinesApi
@@ -201,7 +203,7 @@ class SearchEventsHandler(private val cradle: CradleService) {
                     getEventTreeNodeFlow(
                         request.parentEvent, timestamp.first,
                         timestamp.second, coroutineContext,
-                        BUFFERED
+                        BUFFERED, RequestType.SSE
                     ).collect { emit(it) }
                 }
             }

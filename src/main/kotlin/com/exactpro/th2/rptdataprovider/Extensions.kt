@@ -94,6 +94,14 @@ fun Instant.min(other: Instant): Instant {
     }
 }
 
+fun Instant.max(other: Instant): Instant {
+    return if (this.isAfter(other)) {
+        this
+    } else {
+        other
+    }
+}
+
 
 fun Instant.isBeforeOrEqual(other: Instant): Boolean {
     return this.isBefore(other) || this == other
@@ -102,4 +110,3 @@ fun Instant.isBeforeOrEqual(other: Instant): Boolean {
 fun Instant.isAfterOrEqual(other: Instant): Boolean {
     return this.isAfter(other) || this == other
 }
-

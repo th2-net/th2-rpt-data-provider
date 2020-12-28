@@ -28,8 +28,7 @@ data class SseEventSearchRequest(
     val startTimestamp: Instant,
     val parentEvent: String?,
     val searchDirection: TimeRelation,
-    val resultCountLimit: Int,
-    val timeLimit: Long
+    val resultCountLimit: Int
 ) {
     companion object {
         private fun asCradleTimeRelation(value: String): TimeRelation {
@@ -47,7 +46,6 @@ data class SseEventSearchRequest(
         searchDirection = parameters["searchDirection"]?.let {
             asCradleTimeRelation(it.first())
         } ?: TimeRelation.AFTER,
-        resultCountLimit = parameters["resultCountLimit"]?.first()?.toInt() ?: 100,
-        timeLimit = parameters["timeLimit"]?.first()?.toLong() ?: TimeUnit.MINUTES.toMillis(100)
+        resultCountLimit = parameters["resultCountLimit"]?.first()?.toInt() ?: 100
     )
 }

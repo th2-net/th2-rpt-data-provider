@@ -65,7 +65,10 @@ class Context(
 
     val eventProducer: EventProducer = EventProducer(cradleService, jacksonMapper),
     val eventCache: EventCache = EventCache(cacheTimeout, configuration.eventCacheSize.value.toLong(), eventProducer),
-    val searchEventsHandler: SearchEventsHandler = SearchEventsHandler(cradleService),
+    val searchEventsHandler: SearchEventsHandler = SearchEventsHandler(
+        cradleService,
+        configuration.dbRetryDelay.value.toLong()
+    ),
 
     val codecCache: CodecCache = CodecCache(configuration),
 
@@ -74,9 +77,9 @@ class Context(
     val searchMessagesHandler: SearchMessagesHandler = SearchMessagesHandler(
         cradleService,
         messageCache,
-        messageProducer,
         configuration.maxMessagesLimit.value.toInt(),
-        configuration.messageSearchPipelineBuffer.value.toInt()
+        configuration.messageSearchPipelineBuffer.value.toInt(),
+        configuration.dbRetryDelay.value.toLong()
     ),
 
     val eventFiltersPredicateFactory: PredicateFactory<EventTreeNode> = PredicateFactory(

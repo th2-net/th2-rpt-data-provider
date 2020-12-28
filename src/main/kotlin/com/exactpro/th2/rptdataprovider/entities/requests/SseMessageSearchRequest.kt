@@ -27,8 +27,7 @@ data class SseMessageSearchRequest(
     val startTimestamp: Instant,
     val stream: List<String>?,
     val searchDirection: TimeRelation,
-    val resultCountLimit: Int,
-    val timeLimit: Long
+    val resultCountLimit: Int
 ) {
 
     companion object {
@@ -49,7 +48,6 @@ data class SseMessageSearchRequest(
                 it.first()
             )
         } ?: TimeRelation.AFTER,
-        resultCountLimit = parameters["resultCountLimit"]?.first()?.toInt() ?: 100,
-        timeLimit = parameters["timeLimit"]?.first()?.toLong() ?: TimeUnit.MINUTES.toMillis(100)
+        resultCountLimit = parameters["resultCountLimit"]?.first()?.toInt() ?: 100
     )
 }
