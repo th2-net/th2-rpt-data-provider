@@ -175,6 +175,7 @@ class Main(args: Array<String>) {
                     checkContext(context)
                 }
                 call.response.cacheControl(CacheControl.NoCache(null))
+                call.response.header("Cache-Control", "no-transform")
                 call.respondTextWriter(contentType = ContentType.Text.EventStream) {
                     try {
                         launch {
