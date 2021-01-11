@@ -75,7 +75,7 @@ suspend fun Writer.eventWrite(event: SseEvent) {
         }
 
         if (event.metadata != null) {
-            write("metadata: ${event.metadata}\n")
+            write("id: ${event.metadata}\n")
         }
 
         write("\n")
