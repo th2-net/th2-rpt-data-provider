@@ -93,7 +93,7 @@ class Main(args: Array<String>) {
 
     private suspend fun keepAlive(writer: Writer) {
         while (coroutineContext.isActive) {
-            writer.eventWrite(SseEvent(data = "It's alive!", event = EventType.KEEP_ALIVE))
+            writer.eventWrite(SseEvent(event = EventType.KEEP_ALIVE))
             delay(keepAliveTimeout)
         }
     }

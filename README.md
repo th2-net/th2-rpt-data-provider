@@ -140,7 +140,6 @@ As example:
 - `parentEvent` - text - Will match events with the specified parent element.
 - `searchDirection` - `next`/`previous` - Sets the lookup direction. Can be used for pagination. Defaults to `next`.
 - `resultCountLimit` - number - Sets the maximum amount of events to return. Defaults to `100`.
-- `timeLimit` - number, unix timestamp in milliseconds - Sets the maximum time offset from startTimestamp to which the search will be performed. Defaults to `6000000` (100 minutes).
 
 - `FILTERS`:
 - `attachedMessageId` - Filters the events that are linked to the specified message id. Parameters: `values` - text, `negative` - boolean. If `true`, will match events that do not match those specified attached message id. If `false`, will match the events by their attached message id. Defaults to `false`.  
@@ -153,7 +152,6 @@ As example:
 - `stream` - text, accepts multiple values - Sets the stream ids to search in. Case-sensitive. **Required**. 
 - `searchDirection` - `next`/`previous` - Sets the lookup direction. Can be used for pagination. Defaults to `next`.
 - `resultCountLimit` - number - Sets the maximum amount of messages to return. Defaults to `100`.
-- `timeLimit` - number, unix timestamp in milliseconds - Sets the maximum time offset from startTimestamp to which the search will be performed. Defaults to `6000000` (100 minutes).
 
 - `FILTERS`:
 
@@ -164,9 +162,9 @@ As example:
 
 Elements in channel match the format sse: 
 ```
-event: 'event' / 'message' | 'close' | 'error'
-data: 'Event metadata object' / 'message' | 'Empty body' | 'HTTP Error code'
-id: last event / message id | null | null
+event: 'event' / 'message' | 'close' | 'error' | 'keep_alive'
+data: 'Event metadata object' / 'message' | 'Empty data' | 'HTTP Error code' | 'Empty data'
+id: event / message id | null | null | null
 ```
 
 
