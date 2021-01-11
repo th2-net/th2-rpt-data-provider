@@ -216,7 +216,7 @@ class SearchEventsHandler(private val cradle: CradleService, private val dbRetry
                 }
                 .collect {
                     coroutineContext.ensureActive()
-                    writer.eventWrite(SseEvent(jacksonMapper.asStringSuspend(it), EventType.EVENT, it.eventId))
+                    writer.eventWrite(SseEvent.build(jacksonMapper, it))
                 }
         }
     }

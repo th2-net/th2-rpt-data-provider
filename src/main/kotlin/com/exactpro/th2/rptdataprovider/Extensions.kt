@@ -21,7 +21,6 @@ import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.fasterxml.jackson.databind.ObjectMapper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import mu.KotlinLogging
 import java.io.Writer
@@ -75,9 +74,10 @@ suspend fun Writer.eventWrite(event: SseEvent) {
             write("data: $dataLine\n")
         }
 
-        if (event.id != null) {
-            write("id: ${event.id}\n")
+        if (event.metadata != null) {
+            write("metadata: ${event.metadata}\n")
         }
+
         write("\n")
         flush()
     }
