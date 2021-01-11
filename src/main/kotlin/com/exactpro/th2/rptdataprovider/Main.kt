@@ -193,7 +193,7 @@ class Main(args: Array<String>) {
                         throw e
                     } finally {
                         eventWrite(SseEvent(event = EventType.CLOSE))
-                        asyncClose()
+                        closeWriter()
                     }
                 }
                 coroutineContext.cancelChildren()

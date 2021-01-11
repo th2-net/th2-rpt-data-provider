@@ -20,11 +20,13 @@ import com.exactpro.cradle.messages.StoredMessageFilter
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.fasterxml.jackson.databind.ObjectMapper
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import mu.KotlinLogging
 import java.io.Writer
 import java.time.Instant
+import java.util.concurrent.Executors
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -61,9 +63,10 @@ suspend fun <T> logTime(methodName: String, lambda: suspend () -> T): T? {
     }
 }
 
+private val writerDispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
 
 suspend fun Writer.eventWrite(event: SseEvent) {
-    withContext(Dispatchers.Default) {
+    withContext(writerDispatcher) {
         if (event.event != null) {
             write("event: ${event.event}\n")
         }
@@ -80,25 +83,25 @@ suspend fun Writer.eventWrite(event: SseEvent) {
     }
 }
 
-suspend fun Writer.asyncClose() {
-    withContext(Dispatchers.IO) {
+suspend fun Writer.closeWriter() {
+    withContext(writerDispatcher) {
         close()
     }
 }
 
-fun Instant.min(other: Instant): Instant {
-    return if (this.isBefore(other)) {
-        this
+fun minInstant(first: Instant, second: Instant): Instant {
+    return if (first.isBefore(second)) {
+        first
     } else {
-        other
+        second
     }
 }
 
-fun Instant.max(other: Instant): Instant {
-    return if (this.isAfter(other)) {
-        this
+fun maxInstant(first: Instant, second: Instant): Instant {
+    return if (first.isAfter(second)) {
+        first
     } else {
-        other
+        second
     }
 }
 

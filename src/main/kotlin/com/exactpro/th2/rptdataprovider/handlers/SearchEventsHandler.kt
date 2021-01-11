@@ -32,8 +32,8 @@ import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.sse.EventType
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.eventWrite
-import com.exactpro.th2.rptdataprovider.max
-import com.exactpro.th2.rptdataprovider.min
+import com.exactpro.th2.rptdataprovider.maxInstant
+import com.exactpro.th2.rptdataprovider.minInstant
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
@@ -176,10 +176,10 @@ class SearchEventsHandler(private val cradle: CradleService, private val dbRetry
             while (timestamp.isAfter(Instant.MIN) && timestamp.isBefore(Instant.MAX)) {
                 yieldAll(
                     if (request.searchDirection == TimeRelation.AFTER) {
-                        val toTimestamp = timestamp.plusSeconds(sseEventSearchStep).min(Instant.MAX)
+                        val toTimestamp = minInstant(timestamp.plusSeconds(sseEventSearchStep), Instant.MAX)
                         changeOfDayProcessing(timestamp, toTimestamp).also { timestamp = toTimestamp }
                     } else {
-                        val fromTimestamp = timestamp.minusSeconds(sseEventSearchStep).max(Instant.MIN)
+                        val fromTimestamp = maxInstant(timestamp.minusSeconds(sseEventSearchStep), Instant.MIN)
                         changeOfDayProcessing(fromTimestamp, timestamp).reversed()
                             .also { timestamp = fromTimestamp }
                     }
