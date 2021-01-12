@@ -50,17 +50,16 @@ data class SseEventSearchRequest(
         resultCountLimit = parameters["resultCountLimit"]?.first()?.toInt() ?: 100,
         endTimestamp = parameters["endTimestamp"]?.first()?.let { Instant.ofEpochMilli(it.toLong()) }
     )
-}
 
+    fun checkEndTimestamp() {
+        if (endTimestamp == null) return
 
-fun SseEventSearchRequest.checkEndTimestamp() {
-    if (endTimestamp == null) return
-
-    if (searchDirection == TimeRelation.AFTER) {
-        if (startTimestamp.isAfter(endTimestamp))
-            throw InvalidRequestException("startTimestamp: $startTimestamp > endTimestamp: $endTimestamp")
-    } else {
-        if (startTimestamp.isBefore(endTimestamp))
-            throw InvalidRequestException("startTimestamp: $startTimestamp < endTimestamp: $endTimestamp")
+        if (searchDirection == TimeRelation.AFTER) {
+            if (startTimestamp.isAfter(endTimestamp))
+                throw InvalidRequestException("startTimestamp: $startTimestamp > endTimestamp: $endTimestamp")
+        } else {
+            if (startTimestamp.isBefore(endTimestamp))
+                throw InvalidRequestException("startTimestamp: $startTimestamp < endTimestamp: $endTimestamp")
+        }
     }
 }
