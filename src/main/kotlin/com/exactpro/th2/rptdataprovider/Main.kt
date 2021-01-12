@@ -19,10 +19,7 @@ package com.exactpro.th2.rptdataprovider
 import com.exactpro.cradle.utils.CradleIdException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
-import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.requests.MessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.requests.*
 import com.exactpro.th2.rptdataprovider.entities.sse.EventType
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
@@ -331,6 +328,7 @@ class Main(args: Array<String>) {
                         suspend fun(w: Writer) {
                             val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
                             val request = SseMessageSearchRequest(queryParametersMap, filterPredicate)
+                            request.checkEndTimestamp()
                             searchMessagesHandler.searchMessagesSse(request, jacksonMapper, w)
                         }
                     }
@@ -353,6 +351,7 @@ class Main(args: Array<String>) {
                             val filterPredicate =
                                 eventFiltersPredicateFactory.build(queryParametersMap)
                             val request = SseEventSearchRequest(queryParametersMap, filterPredicate)
+                            request.checkEndTimestamp()
                             searchEventsHandler.searchEventsSse(request, jacksonMapper, sseEventSearchStep, w)
                         }
                     }

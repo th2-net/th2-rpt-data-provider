@@ -50,6 +50,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
 import mu.KotlinLogging
 import java.io.Writer
+import java.security.Timestamp
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneOffset
@@ -167,13 +168,22 @@ class SearchEventsHandler(private val cradle: CradleService, private val dbRetry
         }
     }
 
+    private fun getComparator(searchDirection: TimeRelation, endTimestamp: Instant?): (Instant) -> Boolean {
+        return if (searchDirection == TimeRelation.AFTER) {
+            { timestamp: Instant -> timestamp.isBefore(endTimestamp ?: Instant.MAX) }
+        } else {
+            { timestamp: Instant -> timestamp.isAfter(endTimestamp ?: Instant.MIN) }
+        }
+    }
+
     private suspend fun getTimeIntervals(
         request: SseEventSearchRequest,
         sseEventSearchStep: Long
     ): Iterator<Pair<Instant, Instant>> {
         return sequence {
             var timestamp = request.startTimestamp
-            while (timestamp.isAfter(Instant.MIN) && timestamp.isBefore(Instant.MAX)) {
+            val comparator = getComparator(request.searchDirection, request.endTimestamp)
+            while (comparator.invoke(timestamp)) {
                 yieldAll(
                     if (request.searchDirection == TimeRelation.AFTER) {
                         val toTimestamp = minInstant(timestamp.plusSeconds(sseEventSearchStep), Instant.MAX)

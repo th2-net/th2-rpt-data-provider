@@ -19,6 +19,7 @@ import com.exactpro.cradle.TimeRelation
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
+import java.security.Timestamp
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 
@@ -27,7 +28,8 @@ data class SseMessageSearchRequest(
     val startTimestamp: Instant,
     val stream: List<String>?,
     val searchDirection: TimeRelation,
-    val resultCountLimit: Int
+    val resultCountLimit: Int,
+    val endTimestamp: Instant?
 ) {
 
     companion object {
@@ -41,13 +43,26 @@ data class SseMessageSearchRequest(
 
     constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<Message>) : this(
         filterPredicate = filterPredicate,
-        startTimestamp = parameters["startTimestamp"]?.first()?.let { Instant.ofEpochMilli(it.toLong()) }!! ,
+        startTimestamp = parameters["startTimestamp"]?.first()?.let { Instant.ofEpochMilli(it.toLong()) }!!,
         stream = parameters["stream"],
         searchDirection = parameters["searchDirection"]?.let {
             asCradleTimeRelation(
                 it.first()
             )
         } ?: TimeRelation.AFTER,
-        resultCountLimit = parameters["resultCountLimit"]?.first()?.toInt() ?: 100
+        resultCountLimit = parameters["resultCountLimit"]?.first()?.toInt() ?: 100,
+        endTimestamp = parameters["endTimestamp"]?.first()?.let { Instant.ofEpochMilli(it.toLong()) }
     )
+}
+
+fun SseMessageSearchRequest.checkEndTimestamp() {
+    if (endTimestamp == null) return
+
+    if (searchDirection == TimeRelation.AFTER) {
+        if (startTimestamp.isAfter(endTimestamp))
+            throw InvalidRequestException("startTimestamp: $startTimestamp > endTimestamp: $endTimestamp")
+    } else {
+        if (endTimestamp.isBefore(startTimestamp))
+            throw InvalidRequestException("startTimestamp: $startTimestamp < endTimestamp: $endTimestamp")
+    }
 }

@@ -305,7 +305,7 @@ class SearchMessagesHandler(
 
             getMessageStream(
                 streamMessageIndexMap, request.searchDirection, request.resultCountLimit,
-                messageId, startTimestamp, null, null, RequestType.SSE
+                messageId, startTimestamp, request.endTimestamp, request.endTimestamp, RequestType.SSE
             ).map {
                 async {
                     @Suppress("USELESS_CAST")
