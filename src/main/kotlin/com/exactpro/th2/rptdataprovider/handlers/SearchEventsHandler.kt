@@ -23,7 +23,7 @@ import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventBatchMetadata
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
-import com.exactpro.th2.rptdataprovider.asStringSuspend
+import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.RequestType
@@ -31,9 +31,6 @@ import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.sse.EventType
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
-import com.exactpro.th2.rptdataprovider.eventWrite
-import com.exactpro.th2.rptdataprovider.maxInstant
-import com.exactpro.th2.rptdataprovider.minInstant
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
@@ -219,6 +216,15 @@ class SearchEventsHandler(private val cradle: CradleService, private val dbRetry
             }
                 .map { it.await() }
                 .flatMapMerge { it.asFlow() }
+                .takeWhile { event ->
+                    request.endTimestamp?.let {
+                        if (request.searchDirection == TimeRelation.AFTER) {
+                            event.startTimestamp.isBeforeOrEqual(it)
+                        } else {
+                            event.startTimestamp.isAfterOrEqual(it)
+                        }
+                    } ?: true
+                }
                 .filter { request.filterPredicate.apply(it) }
                 .take(request.resultCountLimit)
                 .onCompletion {

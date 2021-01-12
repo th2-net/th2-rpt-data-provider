@@ -140,6 +140,7 @@ As example:
 - `parentEvent` - text - Will match events with the specified parent element.
 - `searchDirection` - `next`/`previous` - Sets the lookup direction. Can be used for pagination. Defaults to `next`.
 - `resultCountLimit` - number - Sets the maximum amount of events to return. Defaults to `100`.
+- `endTimestamp` - number, unix timestamp in milliseconds - Sets the timestamp to which the search will be performed, starting with `startTimestamp`. When `searchDirection` is `previous`, `endTimestamp` must be less then `startTimestamp`. Defaults to `null` (the search is carried out endlessly into the past or the future).
 
 - `FILTERS`:
 - `attachedMessageId` - Filters the events that are linked to the specified message id. Parameters: `values` - text, `negative` - boolean. If `true`, will match events that do not match those specified attached message id. If `false`, will match the events by their attached message id. Defaults to `false`.  
@@ -152,6 +153,7 @@ As example:
 - `stream` - text, accepts multiple values - Sets the stream ids to search in. Case-sensitive. **Required**. 
 - `searchDirection` - `next`/`previous` - Sets the lookup direction. Can be used for pagination. Defaults to `next`.
 - `resultCountLimit` - number - Sets the maximum amount of messages to return. Defaults to `100`.
+- `endTimestamp` - number, unix timestamp in milliseconds - Sets the timestamp to which the search will be performed, starting with `startTimestamp`. When `searchDirection` is `previous`, `endTimestamp` must be less then `startTimestamp`. Defaults to `null` (the search is carried out endlessly into the past or the future).
 
 - `FILTERS`:
 
