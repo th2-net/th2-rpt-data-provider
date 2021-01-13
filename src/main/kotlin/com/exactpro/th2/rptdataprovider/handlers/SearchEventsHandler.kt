@@ -17,54 +17,87 @@
 package com.exactpro.th2.rptdataprovider.handlers
 
 
+import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventBatchMetadata
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
+import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.requests.RequestType
+import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
+import com.exactpro.th2.rptdataprovider.entities.sse.EventType
+import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
+import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
+import com.fasterxml.jackson.databind.ObjectMapper
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel.Factory.BUFFERED
+import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
+import kotlinx.coroutines.flow.*
 import io.ktor.utils.io.errors.*
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
-import kotlinx.coroutines.isActive
 import mu.KotlinLogging
+import java.io.Writer
+import java.security.Timestamp
 import java.time.Instant
+import java.time.LocalTime
+import java.time.ZoneOffset
+import kotlin.coroutines.CoroutineContext
 
-class SearchEventsHandler(private val cradle: CradleService) {
+class SearchEventsHandler(private val cradle: CradleService, private val dbRetryDelay: Long) {
     companion object {
         private val logger = KotlinLogging.logger { }
     }
 
-    private suspend fun getEventsSuspend(request: EventSearchRequest): Iterable<StoredTestEventMetadata> {
-        return request.parentEvent?.let {
-            cradle.getEventsSuspend(
-                ProviderEventId(it).eventId,
-                request.timestampFrom,
-                request.timestampTo
-            )
-        } ?: run {
-            cradle.getEventsSuspend(
-                request.timestampFrom,
-                request.timestampTo
-            )
+    private suspend fun getEventsSuspend(
+        parentEvent: String?,
+        timestampFrom: Instant,
+        timestampTo: Instant
+    ): Iterable<StoredTestEventMetadata> {
+        return coroutineScope {
+            if (parentEvent != null) {
+                cradle.getEventsSuspend(
+                    ProviderEventId(parentEvent).eventId,
+                    timestampFrom,
+                    timestampTo
+                )
+            } else {
+                cradle.getEventsSuspend(timestampFrom, timestampTo)
+            }
         }
     }
 
-    suspend fun searchEvents(request: EventSearchRequest): List<Any> {
-        return coroutineScope {
 
-            val baseList = getEventsSuspend(request)
-                .asFlow()
+    @ExperimentalCoroutinesApi
+    private suspend fun getEventTreeNodeFlow(
+        parentEvent: String?,
+        timestampFrom: Instant,
+        timestampTo: Instant,
+        parentContext: CoroutineContext,
+        bufferSize: Int,
+        requestType: RequestType
+    ): Flow<Deferred<List<EventTreeNode>>> {
+        return coroutineScope {
+            flow {
+                val eventsCollection = if (requestType == RequestType.SSE)
+                    databaseRequestRetry(dbRetryDelay) { getEventsSuspend(parentEvent, timestampFrom, timestampTo) }
+                else
+                    getEventsSuspend(parentEvent, timestampFrom, timestampTo)
+
+                for (event in eventsCollection)
+                    emit(event)
+            }
                 .map { metadata ->
-                    async {
+                    async(parentContext) {
                         if (metadata.isBatch) {
                             try {
                                 metadata.batchMetadata
@@ -73,41 +106,134 @@ class SearchEventsHandler(private val cradle: CradleService) {
                             }
                                 ?.testEvents?.map { EventTreeNode(metadata.batchMetadata, it) }
 
-                                ?: getDirectBatchedChildren(metadata.id, request.timestampFrom, request.timestampTo)
+                                ?: getDirectBatchedChildren(metadata.id, timestampFrom, timestampTo)
                         } else {
                             listOf(EventTreeNode(null, metadata))
                         }
-                    }.also { if (!coroutineContext.isActive) throw CancellationException() }
+                    }.also { parentContext.ensureActive() }
                 }
-                .toList()
-                .flatMap {
-                    if (coroutineContext.isActive) {
-                        it.await()
-                    } else {
-                        throw CancellationException()
-                    }
-                }
+                .buffer(bufferSize)
+        }
+    }
 
+    private suspend fun isEventMatched(
+        event: EventTreeNode,
+        type: List<String>?,
+        name: List<String>?,
+        attachedMessageId: String?
+    ): Boolean {
+        return (type == null || type.any { item ->
+            event.eventType.toLowerCase().contains(item.toLowerCase())
+        }) && (name == null || name.any { item ->
+            event.eventName.toLowerCase().contains(item.toLowerCase())
+        }) && (attachedMessageId == null ||
+                cradle.getEventIdsSuspend(StoredMessageId.fromString(attachedMessageId))
+                    .contains(StoredTestEventId(event.eventId)))
+    }
 
-            val filteredList = baseList
-                .filter {
-                    (request.type == null || request.type.any { item ->
-                        it.eventType.toLowerCase().contains(item.toLowerCase())
-                    })
+    @ExperimentalCoroutinesApi
+    suspend fun searchEvents(request: EventSearchRequest): List<Any> {
+        return coroutineScope {
+            val baseList = getEventTreeNodeFlow(
+                request.parentEvent, request.timestampFrom,
+                request.timestampTo, coroutineContext,
+                UNLIMITED,
+                RequestType.REST
+            ).map {
+                coroutineContext.ensureActive()
+                it.await()
+            }.toList().flatten()
 
-                            && (request.name == null || request.name.any { item ->
-                        it.eventName.toLowerCase().contains(item.toLowerCase())
-                    })
-
-                            && (request.attachedMessageId == null ||
-                            cradle.getEventIdsSuspend(StoredMessageId.fromString(request.attachedMessageId))
-                                .contains(StoredTestEventId(it.eventId)))
-                }
+            val filteredList =
+                baseList.filter { isEventMatched(it, request.type, request.name, request.attachedMessageId) }
 
             if (request.flat)
                 filteredList.map { it.eventId }
             else
                 buildEventTree(baseList, filteredList)
+        }
+    }
+
+    private fun changeOfDayProcessing(from: Instant, to: Instant): Iterable<Pair<Instant, Instant>> {
+        return if (from.atOffset(ZoneOffset.UTC).dayOfYear != to.atOffset(ZoneOffset.UTC).dayOfYear) {
+            val pivot = from.atOffset(ZoneOffset.UTC)
+                .plusDays(1).with(LocalTime.of(0, 0, 0, 0))
+                .toInstant()
+            listOf(Pair(from, pivot.minusNanos(1)), Pair(pivot, to))
+        } else {
+            listOf(Pair(from, to))
+        }
+    }
+
+    private fun getComparator(searchDirection: TimeRelation, endTimestamp: Instant?): (Instant) -> Boolean {
+        return if (searchDirection == TimeRelation.AFTER) {
+            { timestamp: Instant -> timestamp.isBefore(endTimestamp ?: Instant.MAX) }
+        } else {
+            { timestamp: Instant -> timestamp.isAfter(endTimestamp ?: Instant.MIN) }
+        }
+    }
+
+    private suspend fun getTimeIntervals(
+        request: SseEventSearchRequest,
+        sseEventSearchStep: Long
+    ): Iterator<Pair<Instant, Instant>> {
+        return sequence {
+            var timestamp = request.startTimestamp
+            val comparator = getComparator(request.searchDirection, request.endTimestamp)
+            while (comparator.invoke(timestamp)) {
+                yieldAll(
+                    if (request.searchDirection == TimeRelation.AFTER) {
+                        val toTimestamp = minInstant(timestamp.plusSeconds(sseEventSearchStep), Instant.MAX)
+                        changeOfDayProcessing(timestamp, toTimestamp).also { timestamp = toTimestamp }
+                    } else {
+                        val fromTimestamp = maxInstant(timestamp.minusSeconds(sseEventSearchStep), Instant.MIN)
+                        changeOfDayProcessing(fromTimestamp, timestamp).reversed()
+                            .also { timestamp = fromTimestamp }
+                    }
+                )
+            }
+        }.iterator()
+    }
+
+    @ExperimentalCoroutinesApi
+    @FlowPreview
+    suspend fun searchEventsSse(
+        request: SseEventSearchRequest,
+        jacksonMapper: ObjectMapper,
+        sseEventSearchStep: Long,
+        writer: Writer
+    ) {
+        coroutineScope {
+            val timeIntervals = getTimeIntervals(request, sseEventSearchStep)
+            flow {
+                for (timestamp in timeIntervals) {
+                    getEventTreeNodeFlow(
+                        request.parentEvent, timestamp.first,
+                        timestamp.second, coroutineContext,
+                        BUFFERED, RequestType.SSE
+                    ).collect { emit(it) }
+                }
+            }
+                .map { it.await() }
+                .flatMapMerge { it.asFlow() }
+                .takeWhile { event ->
+                    request.endTimestamp?.let {
+                        if (request.searchDirection == TimeRelation.AFTER) {
+                            event.startTimestamp.isBeforeOrEqual(it)
+                        } else {
+                            event.startTimestamp.isAfterOrEqual(it)
+                        }
+                    } ?: true
+                }
+                .filter { request.filterPredicate.apply(it) }
+                .take(request.resultCountLimit)
+                .onCompletion {
+                    it?.let { throwable -> throw throwable }
+                }
+                .collect {
+                    coroutineContext.ensureActive()
+                    writer.eventWrite(SseEvent.build(jacksonMapper, it))
+                }
         }
     }
 

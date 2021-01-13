@@ -4,6 +4,9 @@
 This component serves as a backend for rpt-viewer. It will connect to the cassandra database via cradle api and expose the data stored in there as REST resources.
 
 # API
+
+### REST
+
 `http://localhost:8080/messageStreams` - returns a list of message stream names
 
 `http://localhost:8080/event/{id}` - returns a single event with the specified id
@@ -62,6 +65,7 @@ Message object example:
 - `type` - text, accepts multiple values - Will match the events which type contains one of the given substrings. Case-insensitive.
 - `flat` - boolean - If `true`, returns the result as a flat list of event ids. If `false`, returns them as a list of event metadata object trees. Metadata tree will contain parent event objects as long as at least one of their direct or indirect children matches the filter. So, the resulting tree will preserve the hierarchy without the irrelevant branches.
 
+
 Event metadata object example:
 ```
 {
@@ -78,8 +82,6 @@ Event metadata object example:
 }
 ```
 
-
-
 `http://localhost:8080/search/messages` - returns an array of message ids that match the filter. Accepts following query parameters:
 - `attachedEventId` - text - Filters the messages that are linked to the specified event id.
 - `timestampFrom` - number, unix timestamp in milliseconds - Sets the lower limit of the time window.
@@ -90,6 +92,82 @@ Event metadata object example:
 - `timelineDirection` - `next`/`previous` - Sets the lookup direction. Can be used for pagination. Defaults to `next`.
 - `messageId` - text - Sets the message id to start the lookup from. Can be used for pagination.
 
+### SSE
+
+##### Filters API
+
+Filters are formed as follows:
+- `filters={filter name}` - you must register the filter by specifying its name.  
+- `{filter name}-{parameter}={parameter value}` - each filter parameter
+```
+As example:
+/search/sse/events/?startTimestamp=1605872487277&filters=name&filters=type&name-values=Checkpoint&type-values=session&type-negative=true
+```
+
+`http://localhost:8080/filters/sse-messages` - get all names of sse message filters
+
+`http://localhost:8080/filters/sse-events` - get all names of sse event filters
+
+`http://localhost:8080/filters/sse-messages/{filter name}` - get filter info
+
+`http://localhost:8080/filters/sse-events/{filter name}` - get filter info
+
+```Filter info example
+  {
+    name: "type", // non-nullable
+    hint: "matches messages by one of the specified types" // nullable
+    parameters: [
+      {
+        name: "negative", // non-nullable string
+        type: "boolean", // possible values are "number", "boolean", "string", "string[]"
+        defaultValue: false, // nullable, should match the type
+        hint: null // nullable string
+      },
+      {
+        name: "values",
+        type: "string[]",
+        defaultValue: null,
+        hint: "NewOrderSingle, ..."
+      },
+    ]
+  } 
+```
+
+
+##### SSE requests API
+`http://localhost:8080/search/sse/events` - create a sse channel of event metadata that matches the filter. Accepts following query parameters:
+- `startTimestamp` - number, unix timestamp in milliseconds - Sets the search starting point. **Required**.
+- `parentEvent` - text - Will match events with the specified parent element.
+- `searchDirection` - `next`/`previous` - Sets the lookup direction. Can be used for pagination. Defaults to `next`.
+- `resultCountLimit` - number - Sets the maximum amount of events to return. Defaults to `100`.
+- `endTimestamp` - number, unix timestamp in milliseconds - Sets the timestamp to which the search will be performed, starting with `startTimestamp`. When `searchDirection` is `previous`, `endTimestamp` must be less then `startTimestamp`. Defaults to `null` (the search is carried out endlessly into the past or the future).
+
+- `FILTERS`:
+- `attachedMessageId` - Filters the events that are linked to the specified message id. Parameters: `values` - text, `negative` - boolean. If `true`, will match events that do not match those specified attached message id. If `false`, will match the events by their attached message id. Defaults to `false`.  
+- `name` - Will match the events which name contains one of the given substrings. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean - If `true`, will match events that do not match those specified `name`. If `false`, will match the events by their `name`. Defaults to `false`. 
+- `type` - Will match the events which type contains one of the given substrings. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean - If `true`, will match events that do not match those specified `type`. If `false`, will match the events by their `type`. Defaults to `false`.
+
+
+`http://localhost:8080/search/sse/messages` - create a sse channel of messages that matches the filter. Accepts following query parameters:
+- `startTimestamp` - number, unix timestamp in milliseconds - Sets the search starting point. **Required**.
+- `stream` - text, accepts multiple values - Sets the stream ids to search in. Case-sensitive. **Required**. 
+- `searchDirection` - `next`/`previous` - Sets the lookup direction. Can be used for pagination. Defaults to `next`.
+- `resultCountLimit` - number - Sets the maximum amount of messages to return. Defaults to `100`.
+- `endTimestamp` - number, unix timestamp in milliseconds - Sets the timestamp to which the search will be performed, starting with `startTimestamp`. When `searchDirection` is `previous`, `endTimestamp` must be less then `startTimestamp`. Defaults to `null` (the search is carried out endlessly into the past or the future).
+
+- `FILTERS`:
+
+- `attachedEventIds` - Filters the messages that are linked to the specified event id. Parameters: `values` - text, accepts multiple values, `negative` - boolean. If `true`, will match messages that do not match those specified attached event id. If `false`, will match the messages by their attached event id. Defaults to `false`. 
+- `type` - Will match the messages by their full type name. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean - If `true`, will match messages that do not match those specified `type`. If `false`, will match the messages by their `type`. Defaults to `false`.
+- `body` - Will match the messages by their parsed body. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean - If `true`, will match messages that do not match those specified `body`. If `false`, will match the messages by their `body`. Defaults to `false`.
+
+
+Elements in channel match the format sse: 
+```
+event: 'event' / 'message' | 'close' | 'error' | 'keep_alive'
+data: 'Event metadata object' / 'message' | 'Empty data' | 'HTTP Error code' | 'Empty data'
+id: event / message id | null | null | null
+```
 
 
 # Configuration

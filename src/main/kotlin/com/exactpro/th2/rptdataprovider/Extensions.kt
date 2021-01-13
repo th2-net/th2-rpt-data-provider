@@ -17,11 +17,15 @@
 package com.exactpro.th2.rptdataprovider
 
 import com.exactpro.cradle.messages.StoredMessageFilter
+import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.fasterxml.jackson.databind.ObjectMapper
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
 import mu.KotlinLogging
+import java.io.Writer
 import java.time.Instant
+import java.util.concurrent.Executors
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -57,6 +61,50 @@ suspend fun <T> logTime(methodName: String, lambda: suspend () -> T): T? {
         result
     }
 }
+
+private val writerDispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+
+suspend fun Writer.eventWrite(event: SseEvent) {
+    withContext(writerDispatcher) {
+        if (event.event != null) {
+            write("event: ${event.event}\n")
+        }
+
+        for (dataLine in event.data.lines()) {
+            write("data: $dataLine\n")
+        }
+
+        if (event.metadata != null) {
+            write("id: ${event.metadata}\n")
+        }
+
+        write("\n")
+        flush()
+    }
+}
+
+suspend fun Writer.closeWriter() {
+    withContext(writerDispatcher) {
+        close()
+    }
+}
+
+fun minInstant(first: Instant, second: Instant): Instant {
+    return if (first.isBefore(second)) {
+        first
+    } else {
+        second
+    }
+}
+
+fun maxInstant(first: Instant, second: Instant): Instant {
+    return if (first.isAfter(second)) {
+        first
+    } else {
+        second
+    }
+}
+
 
 fun Instant.isBeforeOrEqual(other: Instant): Boolean {
     return this.isBefore(other) || this == other
