@@ -24,6 +24,7 @@ import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import mu.KotlinLogging
+import java.lang.IllegalStateException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentSkipListSet
 
@@ -57,6 +58,7 @@ class RabbitMqService(private val configuration: Configuration) {
         "from_codec"
     )
 
+    @Throws(IllegalStateException::class)
     suspend fun decodeMessage(batch: RawMessageBatch): Collection<Message> {
 
         val requests: Map<MessageID, CodecRequest> = batch.messagesList
