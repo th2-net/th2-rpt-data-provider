@@ -21,6 +21,7 @@ import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.schema.message.MessageListener
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
+import io.ktor.utils.io.errors.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import mu.KotlinLogging
@@ -37,8 +38,6 @@ class RabbitMqService(private val configuration: Configuration) {
     private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
 
     private val decodeRequests = ConcurrentHashMap<MessageID, ConcurrentSkipListSet<CodecRequest>>()
-
-    private val sessionToPinConverter = SessionToPinConverter(configuration.codecPinMapping)
 
     private val receiveChannel = configuration.messageRouterParsedBatch.subscribeAll(
         MessageListener { _, decodedBatch ->
@@ -75,15 +74,8 @@ class RabbitMqService(private val configuration: Configuration) {
                 }.add(it.value)
             }
 
-            if (!alreadyRequested) {
-                configuration.messageRouterRawBatch.send(
-                    batch,
-                    sessionToPinConverter.getPin(requests.keys.firstOrNull()?.connectionId?.sessionAlias)
-                )
-            }
-
+            val firstId = batch.messagesList?.first()?.metadata?.id
             val requestDebugInfo = let {
-                val firstId = batch.messagesList?.first()?.metadata?.id
                 val session = firstId?.connectionId?.sessionAlias
                 val direction = firstId?.direction?.name
                 val firstSeqNum = firstId?.sequence
@@ -93,8 +85,15 @@ class RabbitMqService(private val configuration: Configuration) {
                 "(session=$session direction=$direction firstSeqNum=$firstSeqNum lastSeqNum=$lastSeqNum count=$count)"
             }
 
-            logger.debug { "codec request published $requestDebugInfo" }
-
+            if (!alreadyRequested) {
+                try {
+                    configuration.messageRouterRawBatch.sendAll(batch, firstId?.connectionId?.sessionAlias)
+                    logger.debug { "codec request published $requestDebugInfo" }
+                } catch (e: IOException) {
+                    logger.error(e) { "cannot send message $requestDebugInfo" }
+                }
+            }
+            
             try {
                 withTimeout(responseTimeout) {
                     deferred.awaitAll().also { logger.debug { "codec response received $requestDebugInfo" } }
