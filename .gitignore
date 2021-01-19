@@ -1,6 +1,9 @@
 *.bin
 .gradle
 
+#th2 config files
+/config
+
 #elcipse files
 .metadata
 .recommenders
