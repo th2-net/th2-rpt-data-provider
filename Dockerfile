@@ -3,7 +3,7 @@ ARG app_version=0.0.0
 COPY ./ .
 RUN gradle dockerPrepare -Prelease_version=${app_version}
 
-FROM adoptopenjdk/openjdk12:jdk-12.0.2_10-slim
+FROM adoptopenjdk/openjdk11:alpine
 ENV CRADLE_INSTANCE_NAME=instance1 \
     CASSANDRA_DATA_CENTER=kos \
     CASSANDRA_HOST=cassandra \
