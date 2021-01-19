@@ -29,8 +29,10 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import com.google.protobuf.InvalidProtocolBufferException
 import com.google.protobuf.util.JsonFormat
+import io.ktor.util.*
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import mu.KotlinLogging
+import java.lang.IllegalStateException
 import java.util.*
 
 class MessageProducer(
@@ -92,13 +94,17 @@ class MessageProducer(
                         .toList()
                 ).build()
 
-                rabbitMqService.decodeMessage(batch)
-                    .onEach { codecCache.put(getId(it.metadata.id).toString(), it) }
-                    .firstOrNull { message.id == getId(it.metadata.id) }
-                    ?: let {
-                        logger.error { "unable to parse message '${message.id}' using RabbitMqService - parsed message is set to 'null'" }
-                        null
-                    }
+                try {
+                    rabbitMqService.decodeMessage(batch)
+                        .onEach { codecCache.put(getId(it.metadata.id).toString(), it) }
+                        .firstOrNull { message.id == getId(it.metadata.id) }
+                } catch (e: IllegalStateException) {
+                    logger.error(e) { "unable to parse message '${message.id}' using RabbitMqService" }
+                    null
+                } ?: let {
+                    logger.error { "unable to parse message '${message.id}' using RabbitMqService - parsed message is set to 'null'" }
+                    null
+                }
             }
     }
 
