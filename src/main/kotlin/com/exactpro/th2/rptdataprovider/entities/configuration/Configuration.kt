@@ -42,11 +42,10 @@ class CustomConfigurationClass {
     val messageSearchPipelineBuffer: Int = 25
     val sseEventSearchStep: Long = 200
     val keepAliveTimeout: Long = 5000
-    val codecPinMapping: Map<String, List<String>> = emptyMap()
     val dbRetryDelay: Long = 5000
 
     override fun toString(): String {
-        return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, clientCacheTimeout=$clientCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, codecResponseTimeout=$codecResponseTimeout, codecCacheSize=$codecCacheSize, checkRequestsAliveDelay=$checkRequestsAliveDelay, enableCaching=$enableCaching, notModifiedObjectsLifetime=$notModifiedObjectsLifetime, rarelyModifiedObjects=$rarelyModifiedObjects, frequentlyModifiedObjects=$frequentlyModifiedObjects, maxMessagesLimit=$maxMessagesLimit, messageSearchPipelineBuffer=$messageSearchPipelineBuffer, sseEventSearchStep=$sseEventSearchStep, keepAliveTimeout=$keepAliveTimeout, codecPinMapping=$codecPinMapping, dbRetryDelay=$dbRetryDelay)"
+        return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, clientCacheTimeout=$clientCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, codecResponseTimeout=$codecResponseTimeout, codecCacheSize=$codecCacheSize, checkRequestsAliveDelay=$checkRequestsAliveDelay, enableCaching=$enableCaching, notModifiedObjectsLifetime=$notModifiedObjectsLifetime, rarelyModifiedObjects=$rarelyModifiedObjects, frequentlyModifiedObjects=$frequentlyModifiedObjects, maxMessagesLimit=$maxMessagesLimit, messageSearchPipelineBuffer=$messageSearchPipelineBuffer, sseEventSearchStep=$sseEventSearchStep, keepAliveTimeout=$keepAliveTimeout, dbRetryDelay=$dbRetryDelay)"
     }
 }
 
@@ -117,14 +116,6 @@ class Configuration(args: Array<String>) {
 
     val sseEventSearchStep: Variable =
         Variable("sseEventSearchStep", customConfiguration.sseEventSearchStep.toString(), "200")
-
-    val codecPinMapping: Map<String, List<String>> = customConfiguration.codecPinMapping.also {
-        Variable(
-            "codecPinMapping",
-            customConfiguration.codecPinMapping.toString(),
-            emptyMap<String, List<String>>().toString()
-        )
-    }
 
     val keepAliveTimeout: Variable =
         Variable("keepAliveTimeout", customConfiguration.keepAliveTimeout.toString(), "5000")
