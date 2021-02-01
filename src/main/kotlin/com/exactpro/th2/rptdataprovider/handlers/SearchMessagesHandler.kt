@@ -31,6 +31,7 @@ import com.exactpro.th2.rptdataprovider.entities.requests.RequestType
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.entities.sse.EventType
+import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.eventWrite
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
@@ -289,6 +290,7 @@ class SearchMessagesHandler(
     suspend fun searchMessagesSse(
         request: SseMessageSearchRequest,
         jacksonMapper: ObjectMapper,
+        keepAlive: suspend (Writer, LastScannedObjectInfo) -> Unit,
         writer: Writer
     ) {
         withContext(coroutineContext) {
@@ -303,6 +305,8 @@ class SearchMessagesHandler(
                 startTimestamp
             )
 
+            var lastMessageId: LastScannedObjectInfo = LastScannedObjectInfo()
+
             getMessageStream(
                 streamMessageIndexMap, request.searchDirection, request.resultCountLimit,
                 messageId, startTimestamp, request.endTimestamp, request.endTimestamp, RequestType.SSE
@@ -314,10 +318,19 @@ class SearchMessagesHandler(
             }
                 .buffer(messageSearchPipelineBuffer)
                 .map { it.await() }
+                .onEach {
+                    lastMessageId.apply { id = it.first.id.toString(); timestamp = it.first.timestamp.toEpochMilli() }
+                }
                 .filter { it.second }
                 .map { it.first }
                 .take(request.resultCountLimit)
+                .onStart {
+                    launch {
+                        keepAlive.invoke(writer, lastMessageId)
+                    }
+                }
                 .onCompletion {
+                    coroutineContext.cancelChildren()
                     it?.let { throwable -> throw throwable }
                 }
                 .collect {

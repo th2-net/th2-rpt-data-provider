@@ -31,7 +31,7 @@ enum class EventType {
     }
 }
 
-data class LastScannedObjectInfo(val id: String, val timestamp: Long)
+data class LastScannedObjectInfo(var id: String = "", var timestamp: Long = 0)
 
 /**
  * The data class representing a SSE Event that will be sent to the client.

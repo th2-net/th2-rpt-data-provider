@@ -30,6 +30,7 @@ import com.exactpro.th2.rptdataprovider.entities.requests.RequestType
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.sse.EventType
+import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
@@ -201,9 +202,12 @@ class SearchEventsHandler(private val cradle: CradleService, private val dbRetry
         request: SseEventSearchRequest,
         jacksonMapper: ObjectMapper,
         sseEventSearchStep: Long,
+        keepAlive: suspend (Writer, LastScannedObjectInfo) -> Unit,
         writer: Writer
     ) {
         coroutineScope {
+            var lastEventId: LastScannedObjectInfo = LastScannedObjectInfo()
+
             val timeIntervals = getTimeIntervals(request, sseEventSearchStep)
             flow {
                 for (timestamp in timeIntervals) {
@@ -225,9 +229,16 @@ class SearchEventsHandler(private val cradle: CradleService, private val dbRetry
                         }
                     } ?: true
                 }
+                .onEach { lastEventId.apply { id = it.eventId; timestamp = it.startTimestamp.toEpochMilli() } }
                 .filter { request.filterPredicate.apply(it) }
                 .take(request.resultCountLimit)
+                .onStart {
+                    launch {
+                        keepAlive.invoke(writer, lastEventId)
+                    }
+                }
                 .onCompletion {
+                    coroutineContext.cancelChildren()
                     it?.let { throwable -> throw throwable }
                 }
                 .collect {
