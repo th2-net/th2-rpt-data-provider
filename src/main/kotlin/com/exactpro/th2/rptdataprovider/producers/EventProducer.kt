@@ -52,6 +52,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
     private suspend fun fromStoredEvent(storedEvent: StoredTestEventWithContent, batch: StoredTestEventBatch?): Event {
         return Event(
             storedEvent,
+            ProviderEventId(batch?.id, storedEvent.id).toString(),
             storedEvent.id.let {
                 try {
                     cradle.getMessageIdsSuspend(it).map(Any::toString).toSet()

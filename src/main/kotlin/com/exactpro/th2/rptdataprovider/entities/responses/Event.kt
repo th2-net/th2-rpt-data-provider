@@ -40,6 +40,7 @@ data class Event(
 ) {
     constructor(
         stored: StoredTestEventWithContent,
+        eventId: String,
         messages: Set<String>,
         batchId: String?,
         parentEventId: String?,
@@ -47,7 +48,7 @@ data class Event(
     ) : this(
         batchId = batchId,
         isBatched = batchId != null,
-        eventId = stored.id.toString(),
+        eventId = eventId,
         eventName = stored.name ?: "",
         eventType = stored.type ?: "",
         startTimestamp = stored.startTimestamp,
