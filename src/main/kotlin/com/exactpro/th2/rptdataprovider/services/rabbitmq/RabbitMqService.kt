@@ -32,6 +32,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import mu.KotlinLogging
+import java.lang.Exception
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentSkipListSet
 
@@ -48,16 +49,8 @@ class RabbitMqService(private val configuration: Configuration) {
     private val receiveChannel = configuration.messageRouterParsedBatch.subscribeAll(
         MessageListener { _, decodedBatch ->
             decodedBatch.messagesList.groupBy { it.metadata.id.sequence }.forEach { (_, messages) ->
-                val message = when (messages.size) {
-                    1 -> messages[0]
-                    else -> messages[0].toBuilder().run {
-                        messages.drop(1).forEach { mergeFrom(it) }
-                        metadataBuilder.messageType = messages.joinToString("/") { it.metadata.messageType }
-                        build()
-                    }
-                }
 
-                val messageId = message.metadata.id.run {
+                val messageId = messages.first().metadata.id.run {
                     when (subsequenceCount) {
                         0 -> this
                         else -> toBuilder().clearSubsequence().build()
@@ -66,7 +59,17 @@ class RabbitMqService(private val configuration: Configuration) {
 
                 decodeRequests.remove(messageId)?.let { match ->
                     match.forEach {
-                        GlobalScope.launch { it.channel.send(message) }
+                        GlobalScope.launch {
+                            val message = when (messages.size) {
+                                1 -> messages[0]
+                                else -> messages[0].toBuilder().run {
+                                    messages.drop(1).forEach { mergeFrom(it) }
+                                    metadataBuilder.messageType = messages.joinToString("/") { it.metadata.messageType }
+                                    build()
+                                }
+                            }
+                            it.channel.send(message)
+                        }
                     }
                 }
             }
@@ -112,7 +115,7 @@ class RabbitMqService(private val configuration: Configuration) {
                     logger.error(e) { "cannot send message $requestDebugInfo" }
                 }
             }
-            
+
             try {
                 withTimeout(responseTimeout) {
                     deferred.awaitAll().also { logger.debug { "codec response received $requestDebugInfo" } }
