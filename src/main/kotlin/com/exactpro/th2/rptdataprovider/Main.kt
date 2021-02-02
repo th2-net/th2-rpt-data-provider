@@ -21,6 +21,7 @@ import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedExcepti
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.requests.*
 import com.exactpro.th2.rptdataprovider.entities.sse.EventType
+import com.exactpro.th2.rptdataprovider.entities.sse.ExceptionInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import io.ktor.application.*
@@ -180,13 +181,7 @@ class Main(args: Array<String>) {
                         }
                         calledFun.invoke(this)
                     } catch (e: Exception) {
-                        val errorCode = when (e) {
-                            is InvalidRequestException -> HttpStatusCode.BadRequest
-                            is CradleObjectNotFoundException -> HttpStatusCode.NotFound
-                            is ChannelClosedException -> HttpStatusCode.RequestTimeout
-                            else -> HttpStatusCode.InternalServerError
-                        }.toString()
-                        eventWrite(SseEvent(errorCode, event = EventType.ERROR))
+                        eventWrite(SseEvent.build(jacksonMapper, e))
                         throw e
                     } finally {
                         eventWrite(SseEvent(event = EventType.CLOSE))
