@@ -21,11 +21,18 @@ import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.schema.message.MessageListener
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
-import io.ktor.utils.io.errors.*
-import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.ClosedReceiveChannelException
+import io.ktor.utils.io.errors.IOException
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import mu.KotlinLogging
-import java.lang.IllegalStateException
+import java.lang.Exception
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentSkipListSet
 
@@ -41,13 +48,28 @@ class RabbitMqService(private val configuration: Configuration) {
 
     private val receiveChannel = configuration.messageRouterParsedBatch.subscribeAll(
         MessageListener { _, decodedBatch ->
-            decodedBatch.messagesList.forEach { message ->
-                val messageId = message.metadata.id
+            decodedBatch.messagesList.groupBy { it.metadata.id.sequence }.forEach { (_, messages) ->
+
+                val messageId = messages.first().metadata.id.run {
+                    when (subsequenceCount) {
+                        0 -> this
+                        else -> toBuilder().clearSubsequence().build()
+                    }
+                }
 
                 decodeRequests.remove(messageId)?.let { match ->
-
                     match.forEach {
-                        GlobalScope.launch { it.channel.send(message) }
+                        GlobalScope.launch {
+                            val message = when (messages.size) {
+                                1 -> messages[0]
+                                else -> messages[0].toBuilder().run {
+                                    messages.drop(1).forEach { mergeFrom(it) }
+                                    metadataBuilder.messageType = messages.joinToString("/") { it.metadata.messageType }
+                                    build()
+                                }
+                            }
+                            it.channel.send(message)
+                        }
                     }
                 }
             }
@@ -93,7 +115,7 @@ class RabbitMqService(private val configuration: Configuration) {
                     logger.error(e) { "cannot send message $requestDebugInfo" }
                 }
             }
-            
+
             try {
                 withTimeout(responseTimeout) {
                     deferred.awaitAll().also { logger.debug { "codec response received $requestDebugInfo" } }
