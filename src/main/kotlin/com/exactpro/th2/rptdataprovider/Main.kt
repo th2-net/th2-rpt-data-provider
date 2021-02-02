@@ -339,6 +339,7 @@ class Main(args: Array<String>) {
                     val probe = call.parameters["probe"]?.toBoolean() ?: false
                     handleRequest(call, context, "search events", null, probe, false, queryParametersMap) {
                         val request = EventSearchRequest(queryParametersMap)
+                        request.checkTimestamps()
                         searchEventsHandler.searchEvents(request)
                             .also { call.response.cacheControl(frequentlyModifiedCacheControl) }
                     }

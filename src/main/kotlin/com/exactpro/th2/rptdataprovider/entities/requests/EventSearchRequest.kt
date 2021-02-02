@@ -16,7 +16,13 @@
 
 package com.exactpro.th2.rptdataprovider.entities.requests
 
+import com.exactpro.cradle.TimeRelation
+import com.exactpro.th2.common.message.toTimestamp
+import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import java.time.Instant
+import java.time.ZoneOffset
+import java.util.concurrent.TimeUnit
+import kotlin.math.max
 
 data class EventSearchRequest(
     val attachedMessageId: String?,
@@ -38,4 +44,11 @@ data class EventSearchRequest(
         parentEvent = parameters["parentEvent"]?.first(),
         probe = parameters["probe"]?.first()?.toBoolean() ?: false
     )
+
+    fun checkTimestamps() {
+        val timeDistance = timestampTo.minusMillis(timestampFrom.toEpochMilli()).toEpochMilli()
+        val maxTimeDistance = TimeUnit.HOURS.toMillis(24)
+        if (timeDistance >= maxTimeDistance)
+            throw InvalidRequestException("Distance between timestampFrom: $timestampFrom and timestampTo: $timestampTo must be less 24 hours")
+    }
 }
