@@ -37,6 +37,8 @@ import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.io.Writer
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicLong
+import javax.management.monitor.CounterMonitor
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -89,13 +91,10 @@ class Main(args: Array<String>) {
         }
     }
 
-    private suspend fun keepAlive(writer: Writer, lastId: LastScannedObjectInfo) {
+    private suspend fun keepAlive(writer: Writer, lastId: LastScannedObjectInfo, counter: AtomicLong) {
         while (coroutineContext.isActive) {
             writer.eventWrite(
-                SseEvent(
-                    metadata = jacksonMapper.asStringSuspend(lastId),
-                    event = EventType.KEEP_ALIVE
-                )
+                SseEvent.build(jacksonMapper, lastId, counter)
             )
             delay(keepAliveTimeout)
         }
@@ -147,7 +146,7 @@ class Main(args: Array<String>) {
                             handleSseRequest(
                                 call,
                                 context,
-                                function as suspend (Writer, suspend (Writer, LastScannedObjectInfo) -> Unit) -> Unit
+                                function as suspend (Writer, suspend (Writer,  LastScannedObjectInfo, AtomicLong) -> Unit) -> Unit
                             )
                         } else {
                             handleRestApiRequest(call, context, cacheControl, probe, calledFun)
@@ -174,7 +173,7 @@ class Main(args: Array<String>) {
     private suspend fun handleSseRequest(
         call: ApplicationCall,
         context: ApplicationCall,
-        calledFun: suspend (Writer, suspend (Writer, LastScannedObjectInfo) -> Unit) -> Unit
+        calledFun: suspend (Writer, suspend (Writer,  LastScannedObjectInfo, AtomicLong) -> Unit) -> Unit
     ) {
         coroutineScope {
             launch {
@@ -332,7 +331,7 @@ class Main(args: Array<String>) {
                 get("search/sse/messages") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "search messages sse", null, false, true, queryParametersMap) {
-                        suspend fun(w: Writer, keepAlive: suspend (Writer, LastScannedObjectInfo) -> Unit) {
+                        suspend fun(w: Writer, keepAlive: suspend (Writer,  LastScannedObjectInfo, AtomicLong) -> Unit) {
                             val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
                             val request = SseMessageSearchRequest(queryParametersMap, filterPredicate)
                             request.checkEndTimestamp()
@@ -354,7 +353,7 @@ class Main(args: Array<String>) {
                 get("search/sse/events") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "search events sse", null, false, true, queryParametersMap) {
-                        suspend fun(w: Writer, keepAlive: suspend (Writer, LastScannedObjectInfo) -> Unit) {
+                        suspend fun(w: Writer, keepAlive: suspend (Writer,  LastScannedObjectInfo, AtomicLong) -> Unit) {
                             val filterPredicate =
                                 eventFiltersPredicateFactory.build(queryParametersMap)
                             val request = SseEventSearchRequest(queryParametersMap, filterPredicate)

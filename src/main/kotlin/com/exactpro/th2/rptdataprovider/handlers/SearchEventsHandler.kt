@@ -29,7 +29,6 @@ import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.RequestType
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
-import com.exactpro.th2.rptdataprovider.entities.sse.EventType
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
@@ -48,10 +47,10 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
 import mu.KotlinLogging
 import java.io.Writer
-import java.security.Timestamp
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneOffset
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.CoroutineContext
 
 class SearchEventsHandler(private val cradle: CradleService, private val dbRetryDelay: Long) {
@@ -202,11 +201,12 @@ class SearchEventsHandler(private val cradle: CradleService, private val dbRetry
         request: SseEventSearchRequest,
         jacksonMapper: ObjectMapper,
         sseEventSearchStep: Long,
-        keepAlive: suspend (Writer, LastScannedObjectInfo) -> Unit,
+        keepAlive: suspend (Writer, LastScannedObjectInfo, AtomicLong) -> Unit,
         writer: Writer
     ) {
         coroutineScope {
-            var lastEventId: LastScannedObjectInfo = LastScannedObjectInfo()
+            val lastScannedObject = LastScannedObjectInfo()
+            val lastEventId = AtomicLong(0)
 
             val timeIntervals = getTimeIntervals(request, sseEventSearchStep)
             flow {
@@ -229,12 +229,12 @@ class SearchEventsHandler(private val cradle: CradleService, private val dbRetry
                         }
                     } ?: true
                 }
-                .onEach { lastEventId.apply { id = it.eventId; timestamp = it.startTimestamp.toEpochMilli() } }
+                .onEach { lastScannedObject.apply { id = it.eventId; timestamp = it.startTimestamp.toEpochMilli() } }
                 .filter { request.filterPredicate.apply(it) }
                 .take(request.resultCountLimit)
                 .onStart {
                     launch {
-                        keepAlive.invoke(writer, lastEventId)
+                        keepAlive.invoke(writer, lastScannedObject, lastEventId)
                     }
                 }
                 .onCompletion {
@@ -243,7 +243,7 @@ class SearchEventsHandler(private val cradle: CradleService, private val dbRetry
                 }
                 .collect {
                     coroutineContext.ensureActive()
-                    writer.eventWrite(SseEvent.build(jacksonMapper, it))
+                    writer.eventWrite(SseEvent.build(jacksonMapper, it, lastEventId))
                 }
         }
     }
