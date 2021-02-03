@@ -49,6 +49,6 @@ data class EventSearchRequest(
         val timeDistance = timestampTo.minusMillis(timestampFrom.toEpochMilli()).toEpochMilli()
         val maxTimeDistance = TimeUnit.HOURS.toMillis(24)
         if (timeDistance >= maxTimeDistance)
-            throw InvalidRequestException("Distance between timestampFrom: $timestampFrom and timestampTo: $timestampTo must be less 24 hours")
+            throw InvalidRequestException("Distance between timestampFrom: $timestampFrom and timestampTo: $timestampTo must be less then 24 hours")
     }
 }
