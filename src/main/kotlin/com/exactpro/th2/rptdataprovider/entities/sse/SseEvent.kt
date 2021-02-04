@@ -16,12 +16,11 @@
 
 package com.exactpro.th2.rptdataprovider.entities.sse
 
-import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.th2.rptdataprovider.asStringSuspend
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.fasterxml.jackson.databind.ObjectMapper
-import java.security.Timestamp
+import io.ktor.util.*
 
 enum class EventType {
     MESSAGE, EVENT, CLOSE, ERROR, KEEP_ALIVE;
@@ -32,6 +31,8 @@ enum class EventType {
 }
 
 data class LastScannedObjectInfo(val id: String, val timestamp: Long)
+
+data class ExceptionInfo(val exceptionName: String, val exceptionCause: String)
 
 /**
  * The data class representing a SSE Event that will be sent to the client.
@@ -62,6 +63,14 @@ data class SseEvent(val data: String = "empty data", val event: EventType? = nul
                         message.timestamp.toEpochMilli()
                     )
                 )
+            )
+        }
+
+        @InternalAPI
+        suspend fun build(jacksonMapper: ObjectMapper, e: Exception): SseEvent {
+            return SseEvent(
+                jacksonMapper.asStringSuspend(ExceptionInfo(e.javaClass.name, e.rootCause?.message ?: e.toString())),
+                event = EventType.ERROR
             )
         }
     }

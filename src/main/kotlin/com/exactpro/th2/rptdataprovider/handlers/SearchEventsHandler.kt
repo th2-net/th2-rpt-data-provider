@@ -134,12 +134,16 @@ class SearchEventsHandler(private val cradle: CradleService, private val dbRetry
     @ExperimentalCoroutinesApi
     suspend fun searchEvents(request: EventSearchRequest): List<Any> {
         return coroutineScope {
-            val baseList = getEventTreeNodeFlow(
-                request.parentEvent, request.timestampFrom,
-                request.timestampTo, coroutineContext,
-                UNLIMITED,
-                RequestType.REST
-            ).map {
+            val baseList = flow {
+                for (timestamp in changeOfDayProcessing(request.timestampFrom, request.timestampTo)) {
+                    getEventTreeNodeFlow(
+                        request.parentEvent, timestamp.first,
+                        timestamp.second, coroutineContext,
+                        UNLIMITED,
+                        RequestType.REST
+                    ).collect { emit(it) }
+                }
+            }.map {
                 coroutineContext.ensureActive()
                 it.await()
             }.toList().flatten()
