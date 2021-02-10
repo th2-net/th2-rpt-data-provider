@@ -115,9 +115,9 @@ class SearchMessagesHandler(
     ): StoredMessage? {
         if (messageBatch.isEmpty()) return null
         return if (timelineDirection == TimeRelation.AFTER)
-            messageBatch.find { it.timestamp.isAfter(timestamp) } ?: messageBatch.last()
+            messageBatch.find { it.timestamp.isAfter(timestamp) } ?: messageBatch.lastOrNull()
         else
-            messageBatch.findLast { it.timestamp.isBefore(timestamp) } ?: messageBatch.first()
+            messageBatch.findLast { it.timestamp.isBefore(timestamp) } ?: messageBatch.firstOrNull()
 
     }
 
@@ -397,7 +397,7 @@ class SearchMessagesHandler(
                     .let {
                         val streamIsEmpty = it.size < perStreamLimit
                         val filteredIdsList = dropUntilInRangeInOppositeDirection(startTimestamp, it, timelineDirection)
-                        streamMessageIndexMap[stream] = if (streamIsEmpty) null else filteredIdsList.last().id
+                        streamMessageIndexMap[stream] = if (streamIsEmpty) null else filteredIdsList.lastOrNull()?.id
                         filteredIdsList
                     }
             }
