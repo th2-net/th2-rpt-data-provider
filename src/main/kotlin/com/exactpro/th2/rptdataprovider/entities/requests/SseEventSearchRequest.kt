@@ -42,13 +42,14 @@ data class SseEventSearchRequest(
 
     constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<EventTreeNode>) : this(
         filterPredicate = filterPredicate,
-        startTimestamp = parameters["startTimestamp"]?.first()?.let { Instant.ofEpochMilli(it.toLong()) }!!,
-        parentEvent = parameters["parentEvent"]?.first(),
-        searchDirection = parameters["searchDirection"]?.let {
-            asCradleTimeRelation(it.first())
+        startTimestamp = parameters["startTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) }
+            ?: throw InvalidRequestException("Required parameter 'startTimestamp' not specified"),
+        parentEvent = parameters["parentEvent"]?.firstOrNull(),
+        searchDirection = parameters["searchDirection"]?.firstOrNull()?.let {
+            asCradleTimeRelation(it)
         } ?: TimeRelation.AFTER,
-        resultCountLimit = parameters["resultCountLimit"]?.first()?.toInt() ?: 100,
-        endTimestamp = parameters["endTimestamp"]?.first()?.let { Instant.ofEpochMilli(it.toLong()) }
+        resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt() ?: 100,
+        endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) }
     )
 
     fun checkEndTimestamp() {

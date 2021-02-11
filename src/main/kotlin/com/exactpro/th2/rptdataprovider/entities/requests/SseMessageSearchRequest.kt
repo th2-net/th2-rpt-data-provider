@@ -43,15 +43,16 @@ data class SseMessageSearchRequest(
 
     constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<Message>) : this(
         filterPredicate = filterPredicate,
-        startTimestamp = parameters["startTimestamp"]?.first()?.let { Instant.ofEpochMilli(it.toLong()) }!!,
+        startTimestamp = parameters["startTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) }
+            ?: throw InvalidRequestException("Required parameter 'startTimestamp' not specified"),
         stream = parameters["stream"],
-        searchDirection = parameters["searchDirection"]?.let {
+        searchDirection = parameters["searchDirection"]?.firstOrNull()?.let {
             asCradleTimeRelation(
-                it.first()
+                it
             )
         } ?: TimeRelation.AFTER,
-        resultCountLimit = parameters["resultCountLimit"]?.first()?.toInt() ?: 100,
-        endTimestamp = parameters["endTimestamp"]?.first()?.let { Instant.ofEpochMilli(it.toLong()) }
+        resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt() ?: 100,
+        endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) }
     )
 
     fun checkEndTimestamp() {
