@@ -29,8 +29,8 @@ import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.RequestType
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
-import com.exactpro.th2.rptdataprovider.entities.sse.EventType
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
+import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
@@ -47,14 +47,16 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
 import mu.KotlinLogging
 import java.io.Writer
-import java.security.Timestamp
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneOffset
 import kotlin.coroutines.CoroutineContext
-import kotlin.coroutines.coroutineContext
 
-class SearchEventsHandler(private val cradle: CradleService, private val dbRetryDelay: Long) {
+class SearchEventsHandler(
+    private val cradle: CradleService,
+    private val eventProducer: EventProducer,
+    private val dbRetryDelay: Long
+) {
     companion object {
         private val logger = KotlinLogging.logger { }
     }
@@ -183,7 +185,7 @@ class SearchEventsHandler(private val cradle: CradleService, private val dbRetry
         sseEventSearchStep: Long
     ): Sequence<Pair<Instant, Instant>> {
         var timestamp = request.resumeFromId?.let {
-            cradle.getEventSuspend(StoredTestEventId(it))?.startTimestamp
+            eventProducer.fromId(ProviderEventId(request.resumeFromId)).startTimestamp
         } ?: request.startTimestamp
 
         return sequence {
@@ -224,6 +226,7 @@ class SearchEventsHandler(private val cradle: CradleService, private val dbRetry
             }
                 .map { it.await() }
                 .flatMapMerge { it.asFlow() }
+                .filter { it.id.toString() != request.resumeFromId }
                 .takeWhile { event ->
                     request.endTimestamp?.let {
                         if (request.searchDirection == TimeRelation.AFTER) {
