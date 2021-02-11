@@ -62,7 +62,7 @@ data class SseMessageSearchRequest(
             if (startTimestamp.isAfter(endTimestamp))
                 throw InvalidRequestException("startTimestamp: $startTimestamp > endTimestamp: $endTimestamp")
         } else {
-            if (endTimestamp.isBefore(startTimestamp))
+            if (startTimestamp.isBefore(endTimestamp))
                 throw InvalidRequestException("startTimestamp: $startTimestamp < endTimestamp: $endTimestamp")
         }
     }
