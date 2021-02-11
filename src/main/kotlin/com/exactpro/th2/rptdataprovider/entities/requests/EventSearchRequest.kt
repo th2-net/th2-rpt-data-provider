@@ -35,14 +35,16 @@ data class EventSearchRequest(
     val probe: Boolean
 ) {
     constructor(parameters: Map<String, List<String>>) : this(
-        attachedMessageId = parameters["attachedMessageId"]?.first(),
-        timestampFrom = parameters["timestampFrom"]?.first()?.let { Instant.ofEpochMilli(it.toLong()) }!!,
-        timestampTo = parameters["timestampTo"]?.first()?.let { Instant.ofEpochMilli(it.toLong()) }!!,
+        attachedMessageId = parameters["attachedMessageId"]?.firstOrNull(),
+        timestampFrom = parameters["timestampFrom"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) }
+            ?: throw InvalidRequestException("Required parameter 'timestampFrom' not specified"),
+        timestampTo = parameters["timestampTo"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) }
+            ?: throw InvalidRequestException("Required parameter 'timestampTo' not specified"),
         name = parameters["name"],
         type = parameters["type"],
-        flat = parameters["flat"]?.first()?.toBoolean() ?: false,
-        parentEvent = parameters["parentEvent"]?.first(),
-        probe = parameters["probe"]?.first()?.toBoolean() ?: false
+        flat = parameters["flat"]?.firstOrNull()?.toBoolean() ?: false,
+        parentEvent = parameters["parentEvent"]?.firstOrNull(),
+        probe = parameters["probe"]?.firstOrNull()?.toBoolean() ?: false
     )
 
     fun checkTimestamps() {

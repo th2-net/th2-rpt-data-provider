@@ -43,21 +43,21 @@ data class MessageSearchRequest(
     }
 
     constructor(parameters: Map<String, List<String>>) : this(
-        attachedEventId = parameters["attachedEventId"]?.first(),
-        timestampFrom = parameters["timestampFrom"]?.first()?.let { Instant.ofEpochMilli(it.toLong()) },
-        timestampTo = parameters["timestampTo"]?.first()?.let { Instant.ofEpochMilli(it.toLong()) },
+        attachedEventId = parameters["attachedEventId"]?.firstOrNull(),
+        timestampFrom = parameters["timestampFrom"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
+        timestampTo = parameters["timestampTo"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
         stream = parameters["stream"],
         messageType = parameters["messageType"],
-        limit = parameters["limit"]?.first()?.toInt() ?: 100,
+        limit = parameters["limit"]?.firstOrNull()?.toInt() ?: 100,
 
-        timelineDirection = parameters["timelineDirection"]?.let {
+        timelineDirection = parameters["timelineDirection"]?.firstOrNull()?.let {
             asCradleTimeRelation(
-                it.first()
+                it
             )
         } ?: TimeRelation.AFTER,
 
-        messageId = parameters["messageId"]?.first(),
-        idsOnly = parameters["idsOnly"]?.first()?.toBoolean() ?: true,
-        probe = parameters["probe"]?.first()?.toBoolean() ?: false
+        messageId = parameters["messageId"]?.firstOrNull(),
+        idsOnly = parameters["idsOnly"]?.firstOrNull()?.toBoolean() ?: true,
+        probe = parameters["probe"]?.firstOrNull()?.toBoolean() ?: false
     )
 }
