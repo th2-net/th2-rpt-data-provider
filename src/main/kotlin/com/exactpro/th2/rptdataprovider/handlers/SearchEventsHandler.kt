@@ -52,6 +52,7 @@ import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneOffset
 import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.coroutineContext
 
 class SearchEventsHandler(private val cradle: CradleService, private val dbRetryDelay: Long) {
     companion object {
@@ -180,9 +181,12 @@ class SearchEventsHandler(private val cradle: CradleService, private val dbRetry
     private suspend fun getTimeIntervals(
         request: SseEventSearchRequest,
         sseEventSearchStep: Long
-    ): Iterator<Pair<Instant, Instant>> {
+    ): Sequence<Pair<Instant, Instant>> {
+        var timestamp = request.resumeFromId?.let {
+            cradle.getEventSuspend(StoredTestEventId(it))?.startTimestamp
+        } ?: request.startTimestamp
+
         return sequence {
-            var timestamp = request.startTimestamp
             val comparator = getComparator(request.searchDirection, request.endTimestamp)
             while (comparator.invoke(timestamp)) {
                 yieldAll(
@@ -196,7 +200,7 @@ class SearchEventsHandler(private val cradle: CradleService, private val dbRetry
                     }
                 )
             }
-        }.iterator()
+        }
     }
 
     @ExperimentalCoroutinesApi
