@@ -16,6 +16,7 @@
 package com.exactpro.th2.rptdataprovider.entities.requests
 
 import com.exactpro.cradle.TimeRelation
+import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
@@ -29,7 +30,8 @@ data class SseMessageSearchRequest(
     val stream: List<String>?,
     val searchDirection: TimeRelation,
     val resultCountLimit: Int,
-    val endTimestamp: Instant?
+    val endTimestamp: Instant?,
+    val resumeFromId: String?
 ) {
 
     companion object {
@@ -52,7 +54,8 @@ data class SseMessageSearchRequest(
             )
         } ?: TimeRelation.AFTER,
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt() ?: 100,
-        endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) }
+        endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
+        resumeFromId = parameters["resumeFromId"]?.firstOrNull()
     )
 
     fun checkEndTimestamp() {

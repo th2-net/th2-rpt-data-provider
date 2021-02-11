@@ -29,7 +29,8 @@ data class SseEventSearchRequest(
     val parentEvent: String?,
     val searchDirection: TimeRelation,
     val resultCountLimit: Int,
-    val endTimestamp: Instant?
+    val endTimestamp: Instant?,
+    val resumeFromId: String?
 ) {
     companion object {
         private fun asCradleTimeRelation(value: String): TimeRelation {
@@ -49,7 +50,8 @@ data class SseEventSearchRequest(
             asCradleTimeRelation(it)
         } ?: TimeRelation.AFTER,
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt() ?: 100,
-        endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) }
+        endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
+        resumeFromId = parameters["resumeFromId"]?.firstOrNull()
     )
 
     fun checkEndTimestamp() {
