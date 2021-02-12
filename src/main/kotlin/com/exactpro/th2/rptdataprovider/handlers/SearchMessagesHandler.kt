@@ -292,7 +292,7 @@ class SearchMessagesHandler(
         writer: Writer
     ) {
         withContext(coroutineContext) {
-            val messageId = null
+            val messageId = request.resumeFromId
 
             val startTimestamp = chooseStartTimestamp(
                 messageId, request.searchDirection,
