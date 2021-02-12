@@ -67,6 +67,7 @@ class Context(
     val eventCache: EventCache = EventCache(cacheTimeout, configuration.eventCacheSize.value.toLong(), eventProducer),
     val searchEventsHandler: SearchEventsHandler = SearchEventsHandler(
         cradleService,
+        eventProducer,
         configuration.dbRetryDelay.value.toLong()
     ),
 
