@@ -237,7 +237,9 @@ class SearchEventsHandler(
                     } ?: true
                 }
                 .filter { request.filterPredicate.apply(it) }
-                .take(request.resultCountLimit)
+                .let { fl ->
+                    request.resultCountLimit?.let { fl.take(it) } ?: fl
+                }
                 .onCompletion {
                     it?.let { throwable -> throw throwable }
                 }

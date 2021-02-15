@@ -29,9 +29,9 @@ data class SseMessageSearchRequest(
     val startTimestamp: Instant,
     val stream: List<String>?,
     val searchDirection: TimeRelation,
-    val resultCountLimit: Int,
     val endTimestamp: Instant?,
-    val resumeFromId: String?
+    val resumeFromId: String?,
+    val resultCountLimit: Int?
 ) {
 
     companion object {
@@ -53,9 +53,9 @@ data class SseMessageSearchRequest(
                 it
             )
         } ?: TimeRelation.AFTER,
-        resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt() ?: 100,
         endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
-        resumeFromId = parameters["resumeFromId"]?.firstOrNull()
+        resumeFromId = parameters["resumeFromId"]?.firstOrNull(),
+        resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt()
     )
 
     fun checkEndTimestamp() {
