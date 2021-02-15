@@ -303,8 +303,9 @@ class SearchMessagesHandler(
                 startTimestamp
             )
 
+            val startMessageCountLimit = 25
             getMessageStream(
-                streamMessageIndexMap, request.searchDirection, request.resultCountLimit,
+                streamMessageIndexMap, request.searchDirection, startMessageCountLimit,
                 messageId, startTimestamp, request.endTimestamp, request.endTimestamp, RequestType.SSE
             ).map {
                 async {
@@ -316,7 +317,6 @@ class SearchMessagesHandler(
                 .map { it.await() }
                 .filter { it.second }
                 .map { it.first }
-                .take(request.resultCountLimit)
                 .onCompletion {
                     it?.let { throwable -> throw throwable }
                 }

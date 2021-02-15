@@ -25,10 +25,9 @@ import java.util.concurrent.TimeUnit
 
 data class SseEventSearchRequest(
     val filterPredicate: FilterPredicate<EventTreeNode>,
-    val startTimestamp: Instant,
+    val startTimestamp: Instant?,
     val parentEvent: String?,
     val searchDirection: TimeRelation,
-    val resultCountLimit: Int,
     val endTimestamp: Instant?,
     val resumeFromId: String?
 ) {
@@ -43,19 +42,17 @@ data class SseEventSearchRequest(
 
     constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<EventTreeNode>) : this(
         filterPredicate = filterPredicate,
-        startTimestamp = parameters["startTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) }
-            ?: throw InvalidRequestException("Required parameter 'startTimestamp' not specified"),
+        startTimestamp = parameters["startTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
         parentEvent = parameters["parentEvent"]?.firstOrNull(),
         searchDirection = parameters["searchDirection"]?.firstOrNull()?.let {
             asCradleTimeRelation(it)
         } ?: TimeRelation.AFTER,
-        resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt() ?: 100,
         endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
         resumeFromId = parameters["resumeFromId"]?.firstOrNull()
     )
 
-    fun checkEndTimestamp() {
-        if (endTimestamp == null) return
+    private fun checkEndTimestamp() {
+        if (endTimestamp == null || startTimestamp == null) return
 
         if (searchDirection == TimeRelation.AFTER) {
             if (startTimestamp.isAfter(endTimestamp))
@@ -64,5 +61,15 @@ data class SseEventSearchRequest(
             if (startTimestamp.isBefore(endTimestamp))
                 throw InvalidRequestException("startTimestamp: $startTimestamp < endTimestamp: $endTimestamp")
         }
+    }
+
+    private fun checkStartPoint() {
+        if (startTimestamp == null && resumeFromId == null)
+            throw InvalidRequestException("One of the 'startTimestamp' or 'resumeFromId' must not be null")
+    }
+
+    fun checkRequest() {
+        checkStartPoint()
+        checkEndTimestamp()
     }
 }
