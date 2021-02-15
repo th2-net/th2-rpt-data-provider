@@ -26,7 +26,7 @@ import java.util.concurrent.TimeUnit
 
 data class SseMessageSearchRequest(
     val filterPredicate: FilterPredicate<Message>,
-    val startTimestamp: Instant,
+    val startTimestamp: Instant?,
     val stream: List<String>?,
     val searchDirection: TimeRelation,
     val endTimestamp: Instant?,
@@ -45,8 +45,7 @@ data class SseMessageSearchRequest(
 
     constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<Message>) : this(
         filterPredicate = filterPredicate,
-        startTimestamp = parameters["startTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) }
-            ?: throw InvalidRequestException("Required parameter 'startTimestamp' not specified"),
+        startTimestamp = parameters["startTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
         stream = parameters["stream"],
         searchDirection = parameters["searchDirection"]?.firstOrNull()?.let {
             asCradleTimeRelation(
@@ -58,8 +57,8 @@ data class SseMessageSearchRequest(
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt()
     )
 
-    fun checkEndTimestamp() {
-        if (endTimestamp == null) return
+    private fun checkEndTimestamp() {
+        if (endTimestamp == null || startTimestamp == null) return
 
         if (searchDirection == TimeRelation.AFTER) {
             if (startTimestamp.isAfter(endTimestamp))
@@ -68,6 +67,16 @@ data class SseMessageSearchRequest(
             if (startTimestamp.isBefore(endTimestamp))
                 throw InvalidRequestException("startTimestamp: $startTimestamp < endTimestamp: $endTimestamp")
         }
+    }
+
+    private fun checkStartPoint() {
+        if (startTimestamp == null && resumeFromId == null)
+            throw InvalidRequestException("One of the 'startTimestamp' or 'resumeFromId' must not be null")
+    }
+
+    fun checkRequest() {
+        checkStartPoint()
+        checkEndTimestamp()
     }
 }
 

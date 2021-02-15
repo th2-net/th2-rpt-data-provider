@@ -186,7 +186,7 @@ class SearchEventsHandler(
     ): Sequence<Pair<Instant, Instant>> {
         var timestamp = request.resumeFromId?.let {
             eventProducer.fromId(ProviderEventId(request.resumeFromId)).startTimestamp
-        } ?: request.startTimestamp
+        } ?: request.startTimestamp!!
 
         return sequence {
             val comparator = getComparator(request.searchDirection, request.endTimestamp)
