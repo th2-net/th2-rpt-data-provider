@@ -186,7 +186,7 @@ class SearchEventsHandler(
     ): Sequence<Pair<Instant, Instant>> {
         var timestamp = request.resumeFromId?.let {
             eventProducer.fromId(ProviderEventId(request.resumeFromId)).startTimestamp
-        } ?: request.startTimestamp
+        } ?: request.startTimestamp!!
 
         return sequence {
             val comparator = getComparator(request.searchDirection, request.endTimestamp)
@@ -237,7 +237,9 @@ class SearchEventsHandler(
                     } ?: true
                 }
                 .filter { request.filterPredicate.apply(it) }
-                .take(request.resultCountLimit)
+                .let { fl ->
+                    request.resultCountLimit?.let { fl.take(it) } ?: fl
+                }
                 .onCompletion {
                     it?.let { throwable -> throw throwable }
                 }

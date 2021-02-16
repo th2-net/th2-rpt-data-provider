@@ -24,7 +24,7 @@ import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.testevents.StoredTestEventId
-import com.exactpro.th2.rptdataprovider.asStringSuspend
+import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.cache.MessageCache
 import com.exactpro.th2.rptdataprovider.entities.requests.MessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.RequestType
@@ -32,7 +32,6 @@ import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchReques
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.entities.sse.EventType
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
-import com.exactpro.th2.rptdataprovider.eventWrite
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
@@ -302,9 +301,9 @@ class SearchMessagesHandler(
                 request.searchDirection, request.stream,
                 startTimestamp
             )
-
+            val startMessageCountLimit = 25
             getMessageStream(
-                streamMessageIndexMap, request.searchDirection, request.resultCountLimit,
+                streamMessageIndexMap, request.searchDirection, request.resultCountLimit ?: startMessageCountLimit,
                 messageId, startTimestamp, request.endTimestamp, request.endTimestamp, RequestType.SSE
             ).map {
                 async {
@@ -316,7 +315,9 @@ class SearchMessagesHandler(
                 .map { it.await() }
                 .filter { it.second }
                 .map { it.first }
-                .take(request.resultCountLimit)
+                .let { fl ->
+                    request.resultCountLimit?.let { fl.take(it) } ?: fl
+                }
                 .onCompletion {
                     it?.let { throwable -> throw throwable }
                 }
