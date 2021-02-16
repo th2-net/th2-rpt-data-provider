@@ -323,7 +323,7 @@ class Main(args: Array<String>) {
                         suspend fun(w: Writer) {
                             val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
                             val request = SseMessageSearchRequest(queryParametersMap, filterPredicate)
-                            request.checkEndTimestamp()
+                            request.checkRequest()
                             searchMessagesHandler.searchMessagesSse(request, jacksonMapper, w)
                         }
                     }
@@ -347,7 +347,7 @@ class Main(args: Array<String>) {
                             val filterPredicate =
                                 eventFiltersPredicateFactory.build(queryParametersMap)
                             val request = SseEventSearchRequest(queryParametersMap, filterPredicate)
-                            request.checkEndTimestamp()
+                            request.checkRequest()
                             searchEventsHandler.searchEventsSse(request, jacksonMapper, sseEventSearchStep, w)
                         }
                     }
