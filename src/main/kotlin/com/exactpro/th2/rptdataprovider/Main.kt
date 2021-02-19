@@ -21,7 +21,8 @@ import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedExcepti
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.requests.*
 import com.exactpro.th2.rptdataprovider.entities.sse.EventType
-import com.exactpro.th2.rptdataprovider.entities.sse.ExceptionInfo
+
+import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import io.ktor.application.*
@@ -37,6 +38,8 @@ import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.io.Writer
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicLong
+import javax.management.monitor.CounterMonitor
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -89,9 +92,11 @@ class Main(args: Array<String>) {
         }
     }
 
-    private suspend fun keepAlive(writer: Writer) {
+    private suspend fun keepAlive(writer: Writer, lastId: LastScannedObjectInfo, counter: AtomicLong) {
         while (coroutineContext.isActive) {
-            writer.eventWrite(SseEvent(event = EventType.KEEP_ALIVE))
+            writer.eventWrite(
+                SseEvent.build(jacksonMapper, lastId, counter)
+            )
             delay(keepAliveTimeout)
         }
     }
@@ -139,7 +144,11 @@ class Main(args: Array<String>) {
                         if (useSse) {
                             val function = calledFun.invoke()
                             @Suppress("UNCHECKED_CAST")
-                            handleSseRequest(call, context, function as suspend (Writer) -> Unit)
+                            handleSseRequest(
+                                call,
+                                context,
+                                function as suspend (Writer, suspend (Writer, LastScannedObjectInfo, AtomicLong) -> Unit) -> Unit
+                            )
                         } else {
                             handleRestApiRequest(call, context, cacheControl, probe, calledFun)
                         }
@@ -165,7 +174,7 @@ class Main(args: Array<String>) {
     private suspend fun handleSseRequest(
         call: ApplicationCall,
         context: ApplicationCall,
-        calledFun: suspend (Writer) -> Unit
+        calledFun: suspend (Writer, suspend (Writer, LastScannedObjectInfo, AtomicLong) -> Unit) -> Unit
     ) {
         coroutineScope {
             launch {
@@ -176,10 +185,7 @@ class Main(args: Array<String>) {
                 call.response.header("Cache-Control", "no-transform")
                 call.respondTextWriter(contentType = ContentType.Text.EventStream) {
                     try {
-                        launch {
-                            keepAlive(this@respondTextWriter)
-                        }
-                        calledFun.invoke(this)
+                        calledFun.invoke(this, ::keepAlive)
                     } catch (e: Exception) {
                         eventWrite(SseEvent.build(jacksonMapper, e))
                         throw e
@@ -320,11 +326,11 @@ class Main(args: Array<String>) {
                 get("search/sse/messages") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "search messages sse", null, false, true, queryParametersMap) {
-                        suspend fun(w: Writer) {
+                        suspend fun(w: Writer, keepAlive: suspend (Writer, LastScannedObjectInfo, AtomicLong) -> Unit) {
                             val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
                             val request = SseMessageSearchRequest(queryParametersMap, filterPredicate)
                             request.checkRequest()
-                            searchMessagesHandler.searchMessagesSse(request, jacksonMapper, w)
+                            searchMessagesHandler.searchMessagesSse(request, jacksonMapper, keepAlive, w)
                         }
                     }
                 }
@@ -343,12 +349,18 @@ class Main(args: Array<String>) {
                 get("search/sse/events") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "search events sse", null, false, true, queryParametersMap) {
-                        suspend fun(w: Writer) {
+                        suspend fun(w: Writer, keepAlive: suspend (Writer, LastScannedObjectInfo, AtomicLong) -> Unit) {
                             val filterPredicate =
                                 eventFiltersPredicateFactory.build(queryParametersMap)
                             val request = SseEventSearchRequest(queryParametersMap, filterPredicate)
                             request.checkRequest()
-                            searchEventsHandler.searchEventsSse(request, jacksonMapper, sseEventSearchStep, w)
+                            searchEventsHandler.searchEventsSse(
+                                request,
+                                jacksonMapper,
+                                sseEventSearchStep,
+                                keepAlive,
+                                w
+                            )
                         }
                     }
                 }
