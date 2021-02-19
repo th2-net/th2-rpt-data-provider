@@ -29,6 +29,7 @@ import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.RequestType
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
+import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
@@ -50,6 +51,7 @@ import java.io.Writer
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneOffset
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.CoroutineContext
 
 class SearchEventsHandler(
@@ -211,9 +213,13 @@ class SearchEventsHandler(
         request: SseEventSearchRequest,
         jacksonMapper: ObjectMapper,
         sseEventSearchStep: Long,
+        keepAlive: suspend (Writer, LastScannedObjectInfo, AtomicLong) -> Unit,
         writer: Writer
     ) {
         coroutineScope {
+            val lastScannedObject = LastScannedObjectInfo()
+            val lastEventId = AtomicLong(0)
+
             val timeIntervals = getTimeIntervals(request, sseEventSearchStep)
             flow {
                 for (timestamp in timeIntervals) {
@@ -236,16 +242,21 @@ class SearchEventsHandler(
                         }
                     } ?: true
                 }
+                .onEach { lastScannedObject.apply { id = it.eventId; timestamp = it.startTimestamp.toEpochMilli() } }
                 .filter { request.filterPredicate.apply(it) }
-                .let { fl ->
-                    request.resultCountLimit?.let { fl.take(it) } ?: fl
+                .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
+                .onStart {
+                    launch {
+                        keepAlive.invoke(writer, lastScannedObject, lastEventId)
+                    }
                 }
                 .onCompletion {
+                    coroutineContext.cancelChildren()
                     it?.let { throwable -> throw throwable }
                 }
                 .collect {
                     coroutineContext.ensureActive()
-                    writer.eventWrite(SseEvent.build(jacksonMapper, it))
+                    writer.eventWrite(SseEvent.build(jacksonMapper, it, lastEventId))
                 }
         }
     }
