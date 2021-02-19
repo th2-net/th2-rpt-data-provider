@@ -16,8 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider.handlers
 
-import com.datastax.oss.driver.api.core.DriverException
-import com.datastax.oss.driver.api.core.DriverTimeoutException
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessage
@@ -30,11 +28,10 @@ import com.exactpro.th2.rptdataprovider.entities.requests.MessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.RequestType
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
-import com.exactpro.th2.rptdataprovider.entities.sse.EventType
+import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
-import com.exactpro.th2.rptdataprovider.producers.MessageProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -46,6 +43,7 @@ import java.lang.Integer.min
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneOffset
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 
 class SearchMessagesHandler(
@@ -288,6 +286,7 @@ class SearchMessagesHandler(
     suspend fun searchMessagesSse(
         request: SseMessageSearchRequest,
         jacksonMapper: ObjectMapper,
+        keepAlive: suspend (Writer, lastId: LastScannedObjectInfo, counter: AtomicLong) -> Unit,
         writer: Writer
     ) {
         withContext(coroutineContext) {
@@ -302,6 +301,8 @@ class SearchMessagesHandler(
                 startTimestamp
             )
             val startMessageCountLimit = 25
+            val lastScannedObject = LastScannedObjectInfo()
+            val lastEventId = AtomicLong(0)
             getMessageStream(
                 streamMessageIndexMap, request.searchDirection, request.resultCountLimit ?: startMessageCountLimit,
                 messageId, startTimestamp, request.endTimestamp, request.endTimestamp, RequestType.SSE
@@ -313,18 +314,25 @@ class SearchMessagesHandler(
             }
                 .buffer(messageSearchPipelineBuffer)
                 .map { it.await() }
+                .onEach {
+                    lastScannedObject.apply { id = it.first.id.toString(); timestamp = it.first.timestamp.toEpochMilli() }
+                }
                 .filter { it.second }
                 .map { it.first }
-                .let { fl ->
-                    request.resultCountLimit?.let { fl.take(it) } ?: fl
+                .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
+                .onStart {
+                    launch {
+                        keepAlive.invoke(writer,lastScannedObject, lastEventId)
+                    }
                 }
                 .onCompletion {
+                    coroutineContext.cancelChildren()
                     it?.let { throwable -> throw throwable }
                 }
                 .collect {
                     coroutineContext.ensureActive()
                     writer.eventWrite(
-                        SseEvent.build(jacksonMapper, messageCache.getOrPut(it))
+                        SseEvent.build(jacksonMapper, messageCache.getOrPut(it), lastEventId)
                     )
                 }
         }

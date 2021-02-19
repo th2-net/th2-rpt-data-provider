@@ -21,6 +21,7 @@ import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.ktor.util.*
+import java.util.concurrent.atomic.AtomicLong
 
 enum class EventType {
     MESSAGE, EVENT, CLOSE, ERROR, KEEP_ALIVE;
@@ -30,7 +31,7 @@ enum class EventType {
     }
 }
 
-data class LastScannedObjectInfo(val id: String, val timestamp: Long)
+data class LastScannedObjectInfo(var id: String = "", var timestamp: Long = 0)
 
 data class ExceptionInfo(val exceptionName: String, val exceptionCause: String)
 
@@ -40,29 +41,27 @@ data class ExceptionInfo(val exceptionName: String, val exceptionCause: String)
 
 data class SseEvent(val data: String = "empty data", val event: EventType? = null, val metadata: String? = null) {
     companion object {
-        suspend fun build(jacksonMapper: ObjectMapper, event: EventTreeNode): SseEvent {
+        suspend fun build(jacksonMapper: ObjectMapper, event: EventTreeNode, counter: AtomicLong): SseEvent {
             return SseEvent(
                 jacksonMapper.asStringSuspend(event),
                 EventType.EVENT,
-                jacksonMapper.asStringSuspend(
-                    LastScannedObjectInfo(
-                        event.eventId,
-                        event.startTimestamp.toEpochMilli()
-                    )
-                )
+                counter.incrementAndGet().toString()
             )
         }
 
-        suspend fun build(jacksonMapper: ObjectMapper, message: Message): SseEvent {
+        suspend fun build(jacksonMapper: ObjectMapper, message: Message, counter: AtomicLong): SseEvent {
             return SseEvent(
                 jacksonMapper.asStringSuspend(message),
                 EventType.MESSAGE,
-                jacksonMapper.asStringSuspend(
-                    LastScannedObjectInfo(
-                        message.id.toString(),
-                        message.timestamp.toEpochMilli()
-                    )
-                )
+                counter.incrementAndGet().toString()
+            )
+        }
+
+        suspend fun build(jacksonMapper: ObjectMapper, lastId: LastScannedObjectInfo, counter: AtomicLong): SseEvent {
+            return SseEvent(
+                data = jacksonMapper.asStringSuspend(lastId),
+                event = EventType.KEEP_ALIVE,
+                metadata = counter.incrementAndGet().toString()
             )
         }
 
