@@ -43,11 +43,24 @@ class MessageProducer(
 
     companion object {
         private val logger = KotlinLogging.logger { }
+        private val messageProtocolDescriptor =
+            RawMessage.getDescriptor().findFieldByName("metadata").messageType.findFieldByName("protocol")
+        private val TYPE_IMAGE = "image"
     }
 
-    suspend fun fromRawMessage(rawMessage: StoredMessage): Message {
-        val processed = cradle.getProcessedMessageSuspend(rawMessage.id)?.let { storedMessage ->
+    private suspend fun parseRawMessage(rawMessage: StoredMessage): RawMessage? {
+        return try {
+            RawMessage.parseFrom(rawMessage.content)
+        } catch (e: InvalidProtocolBufferException) {
+            logger.error {
+                "unable to unpack raw message '${rawMessage.id}' - invalid data '${String(rawMessage.content)}'"
+            }
+            null
+        }
+    }
 
+    private suspend fun getProcessedMessage(rawMessage: StoredMessage): com.exactpro.th2.common.grpc.Message? {
+        return cradle.getProcessedMessageSuspend(rawMessage.id)?.let { storedMessage ->
             storedMessage.content?.let {
                 try {
                     com.exactpro.th2.common.grpc.Message.parseFrom(it)
@@ -55,30 +68,37 @@ class MessageProducer(
                     logger.error {
                         "unable to parse message (id=${storedMessage.id}) - invalid data (${String(storedMessage.content)})"
                     }
-
                     null
                 }
             }
         } ?: parseMessage(rawMessage)
+    }
+
+    private suspend fun getFieldName(parsedRawMessage: RawMessage?): String? {
+        return try {
+            parsedRawMessage?.metadata?.getField(messageProtocolDescriptor).toString()
+        } catch (e: Exception) {
+            logger.error(e) { "Field: '${messageProtocolDescriptor.name}' does not exist in message: $parsedRawMessage " }
+            null
+        }
+    }
+
+    private fun isImage(protocolName: String?): Boolean {
+        return protocolName?.contains(TYPE_IMAGE) ?: false
+    }
+
+    suspend fun fromRawMessage(rawMessage: StoredMessage): Message {
+        val parsedRawMessage = parseRawMessage(rawMessage)
+        val parsedRawMessageProtocol = getFieldName(parsedRawMessage)
+        val processed = if (!isImage(parsedRawMessageProtocol)) getProcessedMessage(rawMessage) else null
 
         return Message(
             rawMessage,
             processed?.let { JsonFormat.printer().print(processed) },
-
-            rawMessage.content?.let {
-                try {
-                    RawMessage.parseFrom(it)?.body?.let { body ->
-                        Base64.getEncoder().encodeToString(body.toByteArray())
-                    }
-                } catch (e: InvalidProtocolBufferException) {
-                    logger.error {
-                        "unable to unpack raw message '${rawMessage.id}' - invalid data '${String(rawMessage.content)}'"
-                    }
-                    null
-                }
+            parsedRawMessage?.let {
+                Base64.getEncoder().encodeToString(it.body.toByteArray())
             },
-
-            processed?.metadata?.messageType ?: ""
+            processed?.metadata?.messageType ?: parsedRawMessageProtocol ?:  ""
         )
     }
 
