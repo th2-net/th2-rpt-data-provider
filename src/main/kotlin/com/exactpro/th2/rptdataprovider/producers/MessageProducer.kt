@@ -29,10 +29,7 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import com.google.protobuf.InvalidProtocolBufferException
 import com.google.protobuf.util.JsonFormat
-import io.ktor.util.*
-import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import mu.KotlinLogging
-import java.lang.IllegalStateException
 import java.util.*
 
 class MessageProducer(
@@ -98,14 +95,19 @@ class MessageProducer(
             parsedRawMessage?.let {
                 Base64.getEncoder().encodeToString(it.body.toByteArray())
             },
-            processed?.metadata?.messageType ?: parsedRawMessageProtocol ?:  ""
+            processed?.metadata?.messageType ?: parsedRawMessageProtocol ?: ""
         )
     }
 
     private suspend fun parseMessage(message: StoredMessage): com.exactpro.th2.common.grpc.Message? {
         return codecCache.get(message.id.toString())
             ?: let {
-                val messages = cradle.getMessageBatch(message.id)
+                val messages = cradle.getMessageBatchSuspend(message.id)
+
+                if (messages.isEmpty()) {
+                    logger.error { "unable to parse message '${message.id}' - message batch does not exist or is empty" }
+                    return null
+                }
 
                 val batch = RawMessageBatch.newBuilder().addAllMessages(
                     messages
@@ -119,10 +121,10 @@ class MessageProducer(
                         .onEach { codecCache.put(getId(it.metadata.id).toString(), it) }
                         .firstOrNull { message.id == getId(it.metadata.id) }
                 } catch (e: IllegalStateException) {
-                    logger.error(e) { "unable to parse message '${message.id}' using RabbitMqService" }
+                    logger.error(e) { "unable to parse message '${message.id}'" }
                     null
                 } ?: let {
-                    logger.error { "unable to parse message '${message.id}' using RabbitMqService - parsed message is set to 'null'" }
+                    logger.error { "unable to parse message '${message.id}'" }
                     null
                 }
             }
