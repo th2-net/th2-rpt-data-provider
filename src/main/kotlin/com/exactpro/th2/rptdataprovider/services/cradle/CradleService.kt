@@ -50,7 +50,7 @@ class CradleService(configuration: Configuration) {
     suspend fun getMessagesSuspend(filter: StoredMessageFilter): Iterable<StoredMessage> {
         return withContext(Dispatchers.IO) {
             logTime("getMessages (filter=${filter.convertToString()})") {
-                storage.getMessages(filter)
+                storage.getMessagesAsync(filter).await()
             }
         }!!
     }
@@ -58,7 +58,7 @@ class CradleService(configuration: Configuration) {
     suspend fun getProcessedMessageSuspend(id: StoredMessageId): StoredMessage? {
         return withContext(Dispatchers.IO) {
             logTime("getProcessedMessage (id=$id)") {
-                storage.getProcessedMessage(id)
+                storage.getProcessedMessageAsync(id).await()
             }
         }
     }
@@ -66,7 +66,7 @@ class CradleService(configuration: Configuration) {
     suspend fun getMessageSuspend(id: StoredMessageId): StoredMessage? {
         return withContext(Dispatchers.IO) {
             logTime("getMessage (id=$id)") {
-                storage.getMessage(id)
+                storage.getMessageAsync(id).await()
             }
         }
     }
@@ -117,7 +117,7 @@ class CradleService(configuration: Configuration) {
     suspend fun getMessageBatchSuspend(id: StoredMessageId): Collection<StoredMessage> {
         return withContext(Dispatchers.IO) {
             logTime("getTestEventIdsByMessageId (id=$id)") {
-                storage.getMessageBatch(id)
+                storage.getMessageBatchAsync(id).await()
             }
         } ?: emptyList()
     }
@@ -125,7 +125,7 @@ class CradleService(configuration: Configuration) {
     suspend fun getEventIdsSuspend(id: StoredMessageId): Collection<StoredTestEventId> {
         return withContext(Dispatchers.IO) {
             logTime("getTestEventIdsByMessageId (id=$id)") {
-                linker.getTestEventIdsByMessageId(id)
+                linker.getTestEventIdsByMessageIdAsync(id).await()
             }
         } ?: emptyList()
     }
@@ -133,7 +133,7 @@ class CradleService(configuration: Configuration) {
     suspend fun getMessageIdsSuspend(id: StoredTestEventId): Collection<StoredMessageId> {
         return withContext(Dispatchers.IO) {
             logTime("getMessageIdsByTestEventId (id=$id)") {
-                linker.getMessageIdsByTestEventId(id)
+                linker.getMessageIdsByTestEventIdAsync(id).await()
             }
         } ?: emptyList()
     }
