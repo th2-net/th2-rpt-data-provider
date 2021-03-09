@@ -51,8 +51,8 @@ class CradleService(configuration: Configuration) {
         return withContext(Dispatchers.IO) {
             logTime("getMessages (filter=${filter.convertToString()})") {
                 storage.getMessages(filter)
-            }!!
-        }
+            }
+        }!!
     }
 
     suspend fun getProcessedMessageSuspend(id: StoredMessageId): StoredMessage? {
@@ -119,7 +119,7 @@ class CradleService(configuration: Configuration) {
             logTime("getTestEventIdsByMessageId (id=$id)") {
                 storage.getMessageBatch(id)
             }
-        }!!
+        } ?: emptyList()
     }
 
     suspend fun getEventIdsSuspend(id: StoredMessageId): Collection<StoredTestEventId> {
@@ -127,7 +127,7 @@ class CradleService(configuration: Configuration) {
             logTime("getTestEventIdsByMessageId (id=$id)") {
                 linker.getTestEventIdsByMessageId(id)
             }
-        }!!
+        } ?: emptyList()
     }
 
     suspend fun getMessageIdsSuspend(id: StoredTestEventId): Collection<StoredMessageId> {
@@ -135,9 +135,7 @@ class CradleService(configuration: Configuration) {
             logTime("getMessageIdsByTestEventId (id=$id)") {
                 linker.getMessageIdsByTestEventId(id)
             }
-        } ?: let {
-            emptyList<StoredMessageId>()
-        }
+        } ?: emptyList()
     }
 
     suspend fun getMessageStreams(): Collection<String> {
@@ -145,14 +143,6 @@ class CradleService(configuration: Configuration) {
             logTime("getStreams") {
                 storage.streams
             }
-        }!!
-    }
-
-    suspend fun getMessageBatch(id: StoredMessageId): Collection<StoredMessage> {
-        return withContext(Dispatchers.IO) {
-            logTime("getMessageBatch (id=$id)") {
-                storage.getMessageBatch(id)
-            }
-        }!!
+        } ?: emptyList()
     }
 }
