@@ -31,7 +31,7 @@ enum class EventType {
     }
 }
 
-data class LastScannedObjectInfo(var id: String = "", var timestamp: Long = 0)
+data class LastScannedObjectInfo(var id: String = "", var timestamp: Long = 0, var scanCounter : Long = 0)
 
 data class ExceptionInfo(val exceptionName: String, val exceptionCause: String)
 
@@ -57,9 +57,9 @@ data class SseEvent(val data: String = "empty data", val event: EventType? = nul
             )
         }
 
-        suspend fun build(jacksonMapper: ObjectMapper, lastId: LastScannedObjectInfo, counter: AtomicLong): SseEvent {
+        suspend fun build(jacksonMapper: ObjectMapper, lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong): SseEvent {
             return SseEvent(
-                data = jacksonMapper.asStringSuspend(lastId),
+                data = jacksonMapper.asStringSuspend(lastScannedObjectInfo),
                 event = EventType.KEEP_ALIVE,
                 metadata = counter.incrementAndGet().toString()
             )

@@ -286,7 +286,7 @@ class SearchMessagesHandler(
     suspend fun searchMessagesSse(
         request: SseMessageSearchRequest,
         jacksonMapper: ObjectMapper,
-        keepAlive: suspend (Writer, lastId: LastScannedObjectInfo, counter: AtomicLong) -> Unit,
+        keepAlive: suspend (Writer, lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong) -> Unit,
         writer: Writer
     ) {
         withContext(coroutineContext) {
@@ -303,6 +303,7 @@ class SearchMessagesHandler(
             val startMessageCountLimit = 25
             val lastScannedObject = LastScannedObjectInfo()
             val lastEventId = AtomicLong(0)
+            val scanCounter = AtomicLong(0)
             getMessageStream(
                 streamMessageIndexMap, request.searchDirection, request.resultCountLimit ?: startMessageCountLimit,
                 messageId, startTimestamp, request.endTimestamp, request.endTimestamp, RequestType.SSE
@@ -315,7 +316,7 @@ class SearchMessagesHandler(
                 .buffer(messageSearchPipelineBuffer)
                 .map { it.await() }
                 .onEach {
-                    lastScannedObject.apply { id = it.first.id.toString(); timestamp = it.first.timestamp.toEpochMilli() }
+                    lastScannedObject.apply { id = it.first.id.toString(); timestamp = it.first.timestamp.toEpochMilli(); scanCounter.addAndGet(1); }
                 }
                 .filter { it.second }
                 .map { it.first }

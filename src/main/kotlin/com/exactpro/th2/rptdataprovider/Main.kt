@@ -38,7 +38,6 @@ import mu.KotlinLogging
 import java.io.Writer
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicLong
-import javax.management.monitor.CounterMonitor
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -91,10 +90,10 @@ class Main(args: Array<String>) {
         }
     }
 
-    private suspend fun keepAlive(writer: Writer, lastId: LastScannedObjectInfo, counter: AtomicLong) {
+    private suspend fun keepAlive(writer: Writer, lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong) {
         while (coroutineContext.isActive) {
             writer.eventWrite(
-                SseEvent.build(jacksonMapper, lastId, counter)
+                SseEvent.build(jacksonMapper, lastScannedObjectInfo, counter)
             )
             delay(keepAliveTimeout)
         }
