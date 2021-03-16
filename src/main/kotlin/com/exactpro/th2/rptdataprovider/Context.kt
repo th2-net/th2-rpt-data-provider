@@ -68,7 +68,8 @@ class Context(
     val searchEventsHandler: SearchEventsHandler = SearchEventsHandler(
         cradleService,
         eventProducer,
-        configuration.dbRetryDelay.value.toLong()
+        configuration.dbRetryDelay.value.toLong(),
+        configuration.sseSearchDelay.value.toLong()
     ),
 
     val codecCache: CodecCache = CodecCache(configuration),
@@ -80,7 +81,8 @@ class Context(
         messageCache,
         configuration.maxMessagesLimit.value.toInt(),
         configuration.messageSearchPipelineBuffer.value.toInt(),
-        configuration.dbRetryDelay.value.toLong()
+        configuration.dbRetryDelay.value.toLong(),
+        configuration.sseSearchDelay.value.toLong()
     ),
 
     val eventFiltersPredicateFactory: PredicateFactory<EventTreeNode> = PredicateFactory(

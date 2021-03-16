@@ -48,6 +48,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
 import mu.KotlinLogging
 import java.io.Writer
+import java.lang.Math.cos
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneOffset
@@ -57,7 +58,8 @@ import kotlin.coroutines.CoroutineContext
 class SearchEventsHandler(
     private val cradle: CradleService,
     private val eventProducer: EventProducer,
-    private val dbRetryDelay: Long
+    private val dbRetryDelay: Long,
+    private val sseSearchDelay: Long
 ) {
     companion object {
         private val logger = KotlinLogging.logger { }
@@ -184,9 +186,10 @@ class SearchEventsHandler(
 
     private suspend fun getTimeIntervals(
         request: SseEventSearchRequest,
-        sseEventSearchStep: Long
+        sseEventSearchStep: Long,
+        hardStartTimestamp: Instant? = null
     ): Sequence<Pair<Instant, Instant>> {
-        var timestamp = request.resumeFromId?.let {
+        var timestamp = hardStartTimestamp ?: request.resumeFromId?.let {
             eventProducer.fromId(ProviderEventId(request.resumeFromId)).startTimestamp
         } ?: request.startTimestamp!!
 
@@ -221,9 +224,25 @@ class SearchEventsHandler(
             val lastEventId = AtomicLong(0)
             val scanCnt = AtomicLong(0)
 
-            val timeIntervals = getTimeIntervals(request, sseEventSearchStep)
+            var timeIntervals = getTimeIntervals(request, sseEventSearchStep).iterator()
+            var isSearchInFuture = false
+            val keepOpen = request.keepOpen
+            val isSearchNext = request.searchDirection == TimeRelation.AFTER
             flow {
-                for (timestamp in timeIntervals) {
+                while (timeIntervals.hasNext()) {
+                    if (isSearchInFuture)
+                        delay(sseSearchDelay * 1000)
+
+                    val timestamp = timeIntervals.next()
+                    if (!isSearchInFuture && isSearchNext && timestamp.second.isAfter(Instant.now())) {
+                        if (keepOpen) {
+                            timeIntervals = getTimeIntervals(request, sseSearchDelay, timestamp.first).iterator()
+                            isSearchInFuture = true
+                            continue
+                        } else {
+                            break
+                        }
+                    }
                     getEventTreeNodeFlow(
                         request.parentEvent, timestamp.first,
                         timestamp.second, coroutineContext,
@@ -243,7 +262,12 @@ class SearchEventsHandler(
                         }
                     } ?: true
                 }
-                .onEach { lastScannedObject.apply { id = it.eventId; timestamp = it.startTimestamp.toEpochMilli(); scanCounter = scanCnt.incrementAndGet();  } }
+                .onEach {
+                    lastScannedObject.apply {
+                        id = it.eventId; timestamp = it.startTimestamp.toEpochMilli(); scanCounter =
+                        scanCnt.incrementAndGet();
+                    }
+                }
                 .filter { request.filterPredicate.apply(it) }
                 .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
                 .onStart {

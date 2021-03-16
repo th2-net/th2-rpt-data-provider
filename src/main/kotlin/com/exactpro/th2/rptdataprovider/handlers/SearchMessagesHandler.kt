@@ -30,8 +30,6 @@ import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchReques
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
-import com.exactpro.th2.rptdataprovider.isAfterOrEqual
-import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -51,10 +49,12 @@ class SearchMessagesHandler(
     private val messageCache: MessageCache,
     private val maxMessagesLimit: Int,
     private val messageSearchPipelineBuffer: Int,
-    private val dbRetryDelay: Long
+    private val dbRetryDelay: Long,
+    private val sseSearchDelay: Long
 ) {
     companion object {
         private val logger = KotlinLogging.logger { }
+        private const val standardLimit = 25
     }
 
     private suspend fun isMessageMatched(
@@ -192,24 +192,38 @@ class SearchMessagesHandler(
         startTimestamp: Instant,
         timestampFrom: Instant?,
         timestampTo: Instant?,
-        requestType: RequestType
+        requestType: RequestType,
+        keepOpen: Boolean = false
     ): Flow<StoredMessage> {
         return coroutineScope {
             flow {
-                var limit = initLimit
+                var limit = min(maxMessagesLimit, initLimit)
+                var isSearchInFuture = false
                 do {
+                    if (isSearchInFuture)
+                        delay(sseSearchDelay * 1000)
+
                     val data = pullMoreMerged(
                         streamMessageIndexMap,
                         timelineDirection,
                         limit,
                         startTimestamp,
-                        requestType
+                        requestType,
+                        keepOpen
                     )
                     for (item in data) {
                         emit(item)
                     }
-                    limit = min(maxMessagesLimit, limit * 2)
-                } while (data.size >= limit)
+                    val canGetData = if (data.size >= limit) {
+                        limit = min(maxMessagesLimit, limit * 2)
+                        true
+                    } else {
+                        limit = standardLimit
+                        (keepOpen && timelineDirection == TimeRelation.AFTER).also {
+                            isSearchInFuture = it
+                        }
+                    }
+                } while (canGetData)
             }
                 .filterNot { it.id.toString() == messageId }
                 .distinctUntilChanged { old, new -> old.id == new.id }
@@ -307,7 +321,7 @@ class SearchMessagesHandler(
             val scanCnt = AtomicLong(0)
             getMessageStream(
                 streamMessageIndexMap, request.searchDirection, request.resultCountLimit ?: startMessageCountLimit,
-                messageId, startTimestamp, request.endTimestamp, request.endTimestamp, RequestType.SSE
+                messageId, startTimestamp, request.endTimestamp, request.endTimestamp, RequestType.SSE, request.keepOpen
             ).map {
                 async {
                     @Suppress("USELESS_CAST")
@@ -317,7 +331,10 @@ class SearchMessagesHandler(
                 .buffer(messageSearchPipelineBuffer)
                 .map { it.await() }
                 .onEach {
-                    lastScannedObject.apply { id = it.first.id.toString(); timestamp = it.first.timestamp.toEpochMilli(); scanCounter = scanCnt.incrementAndGet(); }
+                    lastScannedObject.apply {
+                        id = it.first.id.toString(); timestamp = it.first.timestamp.toEpochMilli(); scanCounter =
+                        scanCnt.incrementAndGet();
+                    }
                 }
                 .filter { it.second }
                 .map { it.first }
@@ -388,12 +405,27 @@ class SearchMessagesHandler(
         }
     }
 
+    private fun changeStreamMessageIndex(
+        storedMessageId: StoredMessageId?,
+        streamIsEmpty: Boolean,
+        filteredIdsList: List<StoredMessage>,
+        timelineDirection: TimeRelation,
+        keepOpen: Boolean
+    ): StoredMessageId? {
+        return if (!keepOpen || timelineDirection == TimeRelation.BEFORE) {
+            if (streamIsEmpty) null else filteredIdsList.lastOrNull()?.id
+        } else {
+            filteredIdsList.lastOrNull()?.id ?: storedMessageId
+        }
+    }
+
     private suspend fun pullMoreMerged(
         streamMessageIndexMap: MutableMap<Pair<String, Direction>, StoredMessageId?>,
         timelineDirection: TimeRelation,
         perStreamLimit: Int,
         startTimestamp: Instant,
-        requestType: RequestType
+        requestType: RequestType,
+        keepOpen: Boolean
     ): List<StoredMessage> {
         logger.debug { "pulling more messages (streams=${streamMessageIndexMap.keys} direction=$timelineDirection perStreamLimit=$perStreamLimit)" }
         return streamMessageIndexMap.keys
@@ -407,8 +439,16 @@ class SearchMessagesHandler(
                 }.toList()
                     .let {
                         val streamIsEmpty = it.size < perStreamLimit
-                        val filteredIdsList = dropUntilInRangeInOppositeDirection(startTimestamp, it, timelineDirection)
-                        streamMessageIndexMap[stream] = if (streamIsEmpty) null else filteredIdsList.lastOrNull()?.id
+                        val filteredIdsList =
+                            dropUntilInRangeInOppositeDirection(startTimestamp, it, timelineDirection)
+                        streamMessageIndexMap[stream] =
+                            changeStreamMessageIndex(
+                                streamMessageIndexMap[stream],
+                                streamIsEmpty,
+                                filteredIdsList,
+                                timelineDirection,
+                                keepOpen
+                            )
                         filteredIdsList
                     }
             }
