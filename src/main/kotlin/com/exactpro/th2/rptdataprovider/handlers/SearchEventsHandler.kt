@@ -243,7 +243,7 @@ class SearchEventsHandler(
                         }
                     } ?: true
                 }
-                .onEach { lastScannedObject.apply { id = it.eventId; timestamp = it.startTimestamp.toEpochMilli(); scanCounter = scanCnt.incrementAndGet().toString();  } }
+                .onEach { lastScannedObject.apply { id = it.eventId; timestamp = it.startTimestamp.toEpochMilli(); scanCounter = scanCnt.incrementAndGet();  } }
                 .filter { request.filterPredicate.apply(it) }
                 .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
                 .onStart {
