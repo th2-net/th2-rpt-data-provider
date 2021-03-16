@@ -219,6 +219,7 @@ class SearchEventsHandler(
         coroutineScope {
             val lastScannedObject = LastScannedObjectInfo()
             val lastEventId = AtomicLong(0)
+            val scanCounter = AtomicLong(0)
 
             val timeIntervals = getTimeIntervals(request, sseEventSearchStep)
             flow {
@@ -242,7 +243,7 @@ class SearchEventsHandler(
                         }
                     } ?: true
                 }
-                .onEach { lastScannedObject.apply { id = it.eventId; timestamp = it.startTimestamp.toEpochMilli() } }
+                .onEach { lastScannedObject.apply { id = it.eventId; timestamp = it.startTimestamp.toEpochMilli(); scanCounter.addAndGet(1); } }
                 .filter { request.filterPredicate.apply(it) }
                 .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
                 .onStart {
