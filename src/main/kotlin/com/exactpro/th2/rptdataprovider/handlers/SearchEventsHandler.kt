@@ -264,8 +264,9 @@ class SearchEventsHandler(
                 }
                 .onEach {
                     lastScannedObject.apply {
-                        id = it.eventId; timestamp = it.startTimestamp.toEpochMilli(); scanCounter =
-                        scanCnt.incrementAndGet();
+                        id = it.eventId
+                        timestamp = it.startTimestamp.toEpochMilli()
+                        scanCounter = scanCnt.incrementAndGet();
                     }
                 }
                 .filter { request.filterPredicate.apply(it) }

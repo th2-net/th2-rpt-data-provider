@@ -332,8 +332,9 @@ class SearchMessagesHandler(
                 .map { it.await() }
                 .onEach {
                     lastScannedObject.apply {
-                        id = it.first.id.toString(); timestamp = it.first.timestamp.toEpochMilli(); scanCounter =
-                        scanCnt.incrementAndGet();
+                        id = it.first.id.toString()
+                        timestamp = it.first.timestamp.toEpochMilli()
+                        scanCounter = scanCnt.incrementAndGet();
                     }
                 }
                 .filter { it.second }
