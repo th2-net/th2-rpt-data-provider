@@ -31,7 +31,7 @@ enum class EventType {
     }
 }
 
-data class LastScannedObjectInfo(var id: String = "", var timestamp: Long = 0, var scanCounter: String = "")
+data class LastScannedObjectInfo(var id: String = "", var timestamp: Long = 0, var scanCounter: Long = 0)
 
 data class ExceptionInfo(val exceptionName: String, val exceptionCause: String)
 
