@@ -18,6 +18,7 @@ package com.exactpro.th2.rptdataprovider.entities.responses
 
 import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventBatchMetadata
+import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ParseEventTreeNodeException
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
@@ -128,6 +129,21 @@ data class EventTreeNode(
     constructor(batch: StoredTestEventBatchMetadata?, event: BatchedStoredTestEventMetadata) : this(
         batch, null, event, true
     )
+
+    constructor(event: Event) : this(
+        id = ProviderEventId(event.batchId?.let { StoredTestEventId(it) }, StoredTestEventId(event.eventId)),
+        parentEventId = event.parentEventId?.let { ProviderEventId(it) },
+        eventName = event.eventName,
+        eventType = event.eventType ?: "",
+        successful = event.successful,
+        startTimestamp = event.startTimestamp,
+        childList = mutableSetOf<EventTreeNode>(),
+        filtered = false,
+        batch = null,
+        batchedEvent = null,
+        nonBatchedEvent = null
+    )
+
 
     fun addChild(child: EventTreeNode) {
 
