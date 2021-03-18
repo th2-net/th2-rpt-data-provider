@@ -209,7 +209,7 @@ class SearchMessagesHandler(
                         emit(item)
                     }
                     limit = min(maxMessagesLimit, limit * 2)
-                } while (data.size >= limit)
+                } while (data.isNotEmpty())
             }
                 .filterNot { it.id.toString() == messageId }
                 .distinctUntilChanged { old, new -> old.id == new.id }
@@ -311,7 +311,7 @@ class SearchMessagesHandler(
             ).map {
                 async {
                     @Suppress("USELESS_CAST")
-                    Pair(it, request.filterPredicate.apply(messageCache.getOrPut(it)))
+                    Pair(it, !String(it.content).contains("35=0"))
                 }.also { coroutineContext.ensureActive() }
             }
                 .buffer(messageSearchPipelineBuffer)
@@ -319,6 +319,7 @@ class SearchMessagesHandler(
                 .onEach {
                     lastScannedObject.apply { id = it.first.id.toString(); timestamp = it.first.timestamp.toEpochMilli(); scanCounter = scanCnt.incrementAndGet(); }
                 }
+                //.onEach { logger.debug { "aaaaaaaaaaaaaaaaaaa" + it } }
                 .filter { it.second }
                 .map { it.first }
                 .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
