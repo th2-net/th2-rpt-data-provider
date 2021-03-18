@@ -203,7 +203,7 @@ class SearchMessagesHandler(
                     if (isSearchInFuture)
                         delay(sseSearchDelay * 1000)
 
-                    val data = pullMoreMerged(
+                    val (data, allStreamEmpty) = pullMoreMerged(
                         streamMessageIndexMap,
                         timelineDirection,
                         limit,
@@ -214,15 +214,16 @@ class SearchMessagesHandler(
                     for (item in data) {
                         emit(item)
                     }
-                    val canGetData = if (data.size >= limit) {
-                        limit = min(maxMessagesLimit, limit * 2)
-                        true
-                    } else {
-                        limit = standardLimit
-                        (keepOpen && timelineDirection == TimeRelation.AFTER).also {
-                            isSearchInFuture = it
-                        }
-                    }
+                    val canGetData = isSearchInFuture ||
+                            if (!allStreamEmpty) {
+                                limit = min(maxMessagesLimit, limit * 2)
+                                true
+                            } else {
+                                limit = standardLimit
+                                (keepOpen && timelineDirection == TimeRelation.AFTER).also {
+                                    isSearchInFuture = it
+                                }
+                            }
                 } while (canGetData)
             }
                 .filterNot { it.id.toString() == messageId }
@@ -427,9 +428,10 @@ class SearchMessagesHandler(
         startTimestamp: Instant,
         requestType: RequestType,
         keepOpen: Boolean
-    ): List<StoredMessage> {
+    ): Pair<List<StoredMessage>, Boolean> {
         logger.debug { "pulling more messages (streams=${streamMessageIndexMap.keys} direction=$timelineDirection perStreamLimit=$perStreamLimit)" }
-        return streamMessageIndexMap.keys
+        var allStreamEmpty = true
+        val messages = streamMessageIndexMap.keys
             .flatMap { stream ->
                 if (requestType == RequestType.SSE) {
                     databaseRequestRetry(dbRetryDelay) {
@@ -440,6 +442,7 @@ class SearchMessagesHandler(
                 }.toList()
                     .let {
                         val streamIsEmpty = it.size < perStreamLimit
+                        allStreamEmpty = allStreamEmpty && streamIsEmpty
                         val filteredIdsList =
                             dropUntilInRangeInOppositeDirection(startTimestamp, it, timelineDirection)
                         streamMessageIndexMap[stream] =
@@ -460,5 +463,6 @@ class SearchMessagesHandler(
                     list.sortedByDescending { it.timestamp }
                 }
             }
+        return Pair(messages, allStreamEmpty)
     }
 }
