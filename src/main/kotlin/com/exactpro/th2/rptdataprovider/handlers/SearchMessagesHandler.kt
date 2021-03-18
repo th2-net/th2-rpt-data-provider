@@ -413,10 +413,10 @@ class SearchMessagesHandler(
         timelineDirection: TimeRelation,
         keepOpen: Boolean
     ): StoredMessageId? {
-        return if (!keepOpen || timelineDirection == TimeRelation.BEFORE) {
-            if (streamIsEmpty) null else filteredIdsList.lastOrNull()?.id
-        } else {
+        return if (keepOpen && timelineDirection == TimeRelation.AFTER) {
             filteredIdsList.lastOrNull()?.id ?: storedMessageId
+        } else {
+            if (streamIsEmpty) null else filteredIdsList.lastOrNull()?.id
         }
     }
 
