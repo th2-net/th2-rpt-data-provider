@@ -311,7 +311,7 @@ class SearchMessagesHandler(
             ).map {
                 async {
                     @Suppress("USELESS_CAST")
-                    Pair(it, !String(it.content).contains("35=0"))
+                    Pair(it, request.filterPredicate.apply(messageCache.getOrPut(it)))
                 }.also { coroutineContext.ensureActive() }
             }
                 .buffer(messageSearchPipelineBuffer)
@@ -319,7 +319,6 @@ class SearchMessagesHandler(
                 .onEach {
                     lastScannedObject.apply { id = it.first.id.toString(); timestamp = it.first.timestamp.toEpochMilli(); scanCounter = scanCnt.incrementAndGet(); }
                 }
-                //.onEach { logger.debug { "aaaaaaaaaaaaaaaaaaa" + it } }
                 .filter { it.second }
                 .map { it.first }
                 .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
