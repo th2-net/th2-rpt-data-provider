@@ -57,6 +57,8 @@ class SearchMessagesHandler(
         private val logger = KotlinLogging.logger { }
     }
 
+    data class SseMessageInfo(val storedMessage: StoredMessage, val error: String?, val filtered: Boolean)
+
     private suspend fun isMessageMatched(
         messageType: List<String>?,
         messagesFromAttachedId: Collection<StoredMessageId>?,
@@ -310,17 +312,26 @@ class SearchMessagesHandler(
                 messageId, startTimestamp, request.endTimestamp, request.endTimestamp, RequestType.SSE
             ).map {
                 async {
-                    @Suppress("USELESS_CAST")
-                    Pair(it, request.filterPredicate.apply(messageCache.getOrPut(it)))
+                    val (message, error) = messageCache.getOrPutWithInfo(it)
+                    SseMessageInfo(it, error, request.filterPredicate.apply(message))
                 }.also { coroutineContext.ensureActive() }
             }
                 .buffer(messageSearchPipelineBuffer)
                 .map { it.await() }
                 .onEach {
-                    lastScannedObject.apply { id = it.first.id.toString(); timestamp = it.first.timestamp.toEpochMilli(); scanCounter = scanCnt.incrementAndGet(); }
+                    lastScannedObject.apply {
+                        id = it.storedMessage.id.toString()
+                        timestamp = it.storedMessage.timestamp.toEpochMilli()
+                        scanCounter = scanCnt.incrementAndGet()
+                    }
                 }
-                .filter { it.second }
-                .map { it.first }
+                .onEach {
+                    it.error?.let { error ->
+                        writer.eventWrite(SseEvent.build(it.storedMessage.id, error, lastEventId))
+                    }
+                }
+                .filter { it.filtered }
+                .map { it.storedMessage }
                 .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
                 .onStart {
                     launch {

@@ -23,6 +23,7 @@ import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.rptdataprovider.cache.CodecCache
+import com.exactpro.th2.rptdataprovider.entities.exceptions.ParseMessageException
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
@@ -62,10 +63,11 @@ class MessageProducer(
                 try {
                     com.exactpro.th2.common.grpc.Message.parseFrom(it)
                 } catch (e: Exception) {
-                    logger.error {
-                        "unable to parse message (id=${storedMessage.id}) - invalid data (${String(storedMessage.content)})"
-                    }
-                    null
+                    logger.error(e) {}
+                    throw ParseMessageException(
+                        "unable to parse message (id=${storedMessage.id}) " +
+                                "- invalid data (${String(storedMessage.content)})"
+                    )
                 }
             }
         } ?: parseMessage(rawMessage)
@@ -85,17 +87,40 @@ class MessageProducer(
     }
 
     suspend fun fromRawMessage(rawMessage: StoredMessage): Message {
+        return fromRawMessageWithInfo(rawMessage).first
+    }
+
+    private suspend fun catchProcessedMessageExceptions(rawMessage: StoredMessage):
+            Pair<com.exactpro.th2.common.grpc.Message?, String?> {
+        return try {
+            Pair(getProcessedMessage(rawMessage), null)
+        } catch (e: ParseMessageException) {
+            Pair(null, e.message)
+        }
+    }
+
+    suspend fun fromRawMessageWithInfo(rawMessage: StoredMessage): Pair<Message, String?> {
         val parsedRawMessage = parseRawMessage(rawMessage)
         val parsedRawMessageProtocol = getFieldName(parsedRawMessage)
-        val processed = if (!isImage(parsedRawMessageProtocol)) getProcessedMessage(rawMessage) else null
-
-        return Message(
-            rawMessage,
-            processed?.let { JsonFormat.printer().print(processed) },
-            parsedRawMessage?.let {
-                Base64.getEncoder().encodeToString(it.body.toByteArray())
-            },
-            processed?.metadata?.messageType ?: parsedRawMessageProtocol ?: ""
+        var error: String? = null
+        val processed =
+            if (isImage(parsedRawMessageProtocol)) {
+                null
+            } else {
+                catchProcessedMessageExceptions(rawMessage).let {
+                    error = it.second
+                    it.first
+                }
+            }
+        return Pair(
+            Message(
+                rawMessage,
+                processed?.let { JsonFormat.printer().print(processed) },
+                parsedRawMessage?.let {
+                    Base64.getEncoder().encodeToString(it.body.toByteArray())
+                },
+                processed?.metadata?.messageType ?: parsedRawMessageProtocol ?: ""
+            ), error
         )
     }
 
@@ -105,8 +130,7 @@ class MessageProducer(
                 val messages = cradle.getMessageBatchSuspend(message.id)
 
                 if (messages.isEmpty()) {
-                    logger.error { "unable to parse message '${message.id}' - message batch does not exist or is empty" }
-                    return null
+                    throw ParseMessageException("unable to parse message '${message.id}' - message batch does not exist or is empty")
                 }
 
                 val batch = RawMessageBatch.newBuilder().addAllMessages(
@@ -121,11 +145,10 @@ class MessageProducer(
                         .onEach { codecCache.put(getId(it.metadata.id).toString(), it) }
                         .firstOrNull { message.id == getId(it.metadata.id) }
                 } catch (e: IllegalStateException) {
-                    logger.error(e) { "unable to parse message '${message.id}'" }
-                    null
+                    logger.error(e) { }
+                    throw ParseMessageException("unable to parse message '${message.id}'")
                 } ?: let {
-                    logger.error { "unable to parse message '${message.id}'" }
-                    null
+                    throw ParseMessageException("unable to parse message '${message.id}'")
                 }
             }
     }

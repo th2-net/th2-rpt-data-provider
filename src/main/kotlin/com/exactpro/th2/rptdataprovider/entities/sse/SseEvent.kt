@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider.entities.sse
 
+import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.asStringSuspend
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
@@ -25,7 +26,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 
 enum class EventType {
-    MESSAGE, EVENT, CLOSE, ERROR, KEEP_ALIVE;
+    MESSAGE, EVENT, CLOSE, ERROR, KEEP_ALIVE, WARNING;
 
     override fun toString(): String {
         return super.toString().toLowerCase()
@@ -71,6 +72,14 @@ data class SseEvent(val data: String = "empty data", val event: EventType? = nul
             return SseEvent(
                 jacksonMapper.asStringSuspend(ExceptionInfo(e.javaClass.name, e.rootCause?.message ?: e.toString())),
                 event = EventType.ERROR
+            )
+        }
+
+        suspend fun build(id: StoredMessageId, error: String, counter: AtomicLong): SseEvent {
+            return SseEvent(
+                "Message id: $id error: $error",
+                event = EventType.WARNING,
+                metadata = counter.incrementAndGet().toString()
             )
         }
     }

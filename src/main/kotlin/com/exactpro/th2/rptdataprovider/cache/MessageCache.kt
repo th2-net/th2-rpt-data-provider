@@ -66,4 +66,12 @@ class MessageCache(configuration: Configuration, private val messageProducer: Me
                 put(rawMessage.id.toString(), it)
             }
     }
+
+    suspend fun getOrPutWithInfo(rawMessage: StoredMessage): Pair<Message, String?> {
+        return cache.get(rawMessage.id.toString())?.let { Pair(it, null) }
+            ?: messageProducer.fromRawMessageWithInfo(rawMessage).also {
+                logger.debug { "Message cache miss for id=${rawMessage.id}" }
+                put(rawMessage.id.toString(), it.first)
+            }
+    }
 }
