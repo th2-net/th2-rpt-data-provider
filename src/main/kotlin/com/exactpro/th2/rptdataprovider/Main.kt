@@ -35,6 +35,7 @@ import io.ktor.routing.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.util.*
+import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.io.Writer
@@ -44,6 +45,12 @@ import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
 class Main(args: Array<String>) {
+
+    private val sseRequestsProcessedInParallelQuantity: Counter =
+        Counter.build("th2_sse_requests_processed_in_parallel_quantity", "Quantity of SSE requests processed in parallel").register()
+
+    private val restRequestsProcessedInParallelQuantity: Counter =
+        Counter.build("th2_rest_requests_processed_in_parallel_quantity", "Quantity of REST requests processed in parallel").register()
 
     private val logger = KotlinLogging.logger {}
 
@@ -142,6 +149,8 @@ class Main(args: Array<String>) {
                 try {
                     try {
                         if (useSse) {
+                            sseRequestsProcessedInParallelQuantity.inc()
+                            val get = sseRequestsProcessedInParallelQuantity.get()
                             val function = calledFun.invoke()
                             @Suppress("UNCHECKED_CAST")
                             handleSseRequest(
@@ -149,8 +158,12 @@ class Main(args: Array<String>) {
                                 context,
                                 function as suspend (Writer, suspend (Writer, LastScannedObjectInfo, AtomicLong) -> Unit) -> Unit
                             )
+                            sseRequestsProcessedInParallelQuantity.inc(-1.0)
                         } else {
+                            restRequestsProcessedInParallelQuantity.inc()
+                            val get = restRequestsProcessedInParallelQuantity.get()
                             handleRestApiRequest(call, context, cacheControl, probe, calledFun)
+                            restRequestsProcessedInParallelQuantity.inc(-1.0)
                         }
                     } catch (e: Exception) {
                         throw e.rootCause ?: e
