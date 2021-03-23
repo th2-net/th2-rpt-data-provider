@@ -38,7 +38,7 @@ class CustomConfigurationClass {
     val notModifiedObjectsLifetime: Int = 3600
     val rarelyModifiedObjects: Int = 500
     val frequentlyModifiedObjects: Int = 100
-    val maxMessagesLimit: Int = 100
+    val maxMessagesLimit: Int = 500
     val messageSearchPipelineBuffer: Int = 25
     val sseEventSearchStep: Long = 200
     val keepAliveTimeout: Long = 5000

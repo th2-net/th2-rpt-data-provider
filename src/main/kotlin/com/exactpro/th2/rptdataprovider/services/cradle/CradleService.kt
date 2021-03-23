@@ -52,7 +52,7 @@ class CradleService(configuration: Configuration) {
             logTime("getMessages (filter=${filter.convertToString()})") {
                 storage.getMessagesAsync(filter).await()
             }
-        }!!
+        } ?: listOf()
     }
 
     suspend fun getProcessedMessageSuspend(id: StoredMessageId): StoredMessage? {
@@ -116,7 +116,7 @@ class CradleService(configuration: Configuration) {
 
     suspend fun getMessageBatchSuspend(id: StoredMessageId): Collection<StoredMessage> {
         return withContext(Dispatchers.IO) {
-            logTime("getTestEventIdsByMessageId (id=$id)") {
+            logTime("getMessageBatchByMessageId (id=$id)") {
                 storage.getMessageBatchAsync(id).await()
             }
         } ?: emptyList()

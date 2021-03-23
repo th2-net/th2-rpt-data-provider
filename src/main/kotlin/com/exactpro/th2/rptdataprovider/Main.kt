@@ -16,6 +16,8 @@
 
 package com.exactpro.th2.rptdataprovider
 
+import com.exactpro.cradle.Direction
+import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.utils.CradleIdException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
@@ -409,6 +411,31 @@ class Main(args: Array<String>) {
                         val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
                         val event = messageCache.getOrPut(call.parameters["id"]!!)
                         filterPredicate.apply(event)
+                    }
+                }
+
+
+                get("search/sse/test") {
+                    val queryParametersMap = call.request.queryParameters.toMap()
+                    handleRequest(call, context, "search events sse", null, false, true, queryParametersMap) {
+                        suspend fun(w: Writer, keepAlive: suspend (Writer, LastScannedObjectInfo, AtomicLong) -> Unit) {
+                            var i = 0
+                            launch {
+                                keepAlive.invoke(w, LastScannedObjectInfo(), AtomicLong(0))
+                            }
+                            while (true) {
+                                val st = Instant.now().toEpochMilli()
+                                cradleService.getMessagesSuspend(
+                                    StoredMessageFilterBuilder().index().isGreaterThanOrEqualTo(1614164040675594471).streamName()
+                                        .isEqualTo("arfq01dc03")
+                                        .direction().isEqualTo(Direction.FIRST)
+                                        .limit(100)
+                                        .build()
+                                )
+                                w.eventWrite(SseEvent((Instant.now().toEpochMilli() - st).toString()))
+                                i++
+                            }
+                        }
                     }
                 }
             }

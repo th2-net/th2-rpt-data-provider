@@ -30,14 +30,13 @@ import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchReques
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
-import com.exactpro.th2.rptdataprovider.isAfterOrEqual
-import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
 import com.fasterxml.jackson.databind.ObjectMapper
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import mu.KotlinLogging
+import org.ehcache.core.spi.store.Store
 import java.io.Writer
 import java.lang.Integer.min
 import java.time.Instant
@@ -205,11 +204,11 @@ class SearchMessagesHandler(
                         startTimestamp,
                         requestType
                     )
-                    for (item in data) {
-                        emit(item)
+                    for (element in data) {
+                        emit(element)
                     }
                     limit = min(maxMessagesLimit, limit * 2)
-                } while (data.isNotEmpty())
+                } while (data.iterator().hasNext())
             }
                 .filterNot { it.id.toString() == messageId }
                 .distinctUntilChanged { old, new -> old.id == new.id }
@@ -291,33 +290,38 @@ class SearchMessagesHandler(
     ) {
         withContext(coroutineContext) {
             val messageId = request.resumeFromId
-
-            val startTimestamp = chooseStartTimestamp(
-                messageId, request.searchDirection,
-                request.startTimestamp, request.startTimestamp
-            )
-            val streamMessageIndexMap = initStreamMessageIdMap(
-                request.searchDirection, request.stream,
-                startTimestamp
-            )
-
             val startMessageCountLimit = 25
             val lastScannedObject = LastScannedObjectInfo()
             val lastEventId = AtomicLong(0)
             val scanCnt = AtomicLong(0)
-            getMessageStream(
-                streamMessageIndexMap, request.searchDirection, request.resultCountLimit ?: startMessageCountLimit,
-                messageId, startTimestamp, request.endTimestamp, request.endTimestamp, RequestType.SSE
-            ).map {
+            flow {
+                val startTimestamp = chooseStartTimestamp(
+                    messageId, request.searchDirection,
+                    request.startTimestamp, request.startTimestamp
+                )
+                val streamMessageIndexMap = initStreamMessageIdMap(
+                    request.searchDirection, request.stream,
+                    startTimestamp
+                )
+                getMessageStream(
+                    streamMessageIndexMap, request.searchDirection, request.resultCountLimit ?: startMessageCountLimit,
+                    messageId, startTimestamp, request.endTimestamp, request.endTimestamp, RequestType.SSE
+                ).collect { emit(it) }
+            }.map {
                 async {
                     @Suppress("USELESS_CAST")
-                    Pair(it, request.filterPredicate.apply(messageCache.getOrPut(it)))
+                    val s = messageCache.getOrPut(it)
+                    Pair(s, request.filterPredicate.apply(s))
                 }.also { coroutineContext.ensureActive() }
             }
                 .buffer(messageSearchPipelineBuffer)
                 .map { it.await() }
                 .onEach {
-                    lastScannedObject.apply { id = it.first.id.toString(); timestamp = it.first.timestamp.toEpochMilli(); scanCounter = scanCnt.incrementAndGet(); }
+                    lastScannedObject.apply {
+                        id = it.first.id.toString()
+                        timestamp = it.first.timestamp.toEpochMilli()
+                        scanCounter = scanCnt.incrementAndGet()
+                    }
                 }
                 .filter { it.second }
                 .map { it.first }
@@ -334,7 +338,7 @@ class SearchMessagesHandler(
                 .collect {
                     coroutineContext.ensureActive()
                     writer.eventWrite(
-                        SseEvent.build(jacksonMapper, messageCache.getOrPut(it), lastEventId)
+                        SseEvent.build(jacksonMapper, it, lastEventId)
                     )
                 }
         }
@@ -344,7 +348,7 @@ class SearchMessagesHandler(
         startId: StoredMessageId?,
         limit: Int,
         timelineDirection: TimeRelation
-    ): List<StoredMessage> {
+    ): Iterable<StoredMessage> {
 
         logger.debug { "pulling more messages (id=$startId limit=$limit direction=$timelineDirection)" }
 
@@ -366,25 +370,90 @@ class SearchMessagesHandler(
                     }
                 }.build()
         )
-            .let { list ->
-                if (timelineDirection == TimeRelation.AFTER) {
-                    list.sortedBy { it.timestamp }
-                } else {
-                    list.sortedByDescending { it.timestamp }
-                }
-            }
-            .toList()
     }
 
     private fun dropUntilInRangeInOppositeDirection(
         startTimestamp: Instant,
-        storedMessages: List<StoredMessage>,
+        storedMessages: StreamData,
         timelineDirection: TimeRelation
-    ): List<StoredMessage> {
-        return if (timelineDirection == TimeRelation.AFTER) {
-            storedMessages.dropWhile { it.timestamp.isBefore(startTimestamp) }
+    ): StreamData {
+        if (timelineDirection == TimeRelation.AFTER) {
+            while (storedMessages.nextOrNull()?.timestamp?.isBefore(startTimestamp) == true);
         } else {
-            storedMessages.dropWhile { it.timestamp.isAfter(startTimestamp) }
+            while (storedMessages.nextOrNull()?.timestamp?.isAfter(startTimestamp) == true);
+        }
+        return storedMessages
+    }
+
+    private fun getComparator(timelineDirection: TimeRelation): ((Instant, Instant) -> Boolean) {
+        return { a: Instant, b: Instant ->
+            if (timelineDirection == TimeRelation.AFTER) {
+                a.isAfter(b)
+            } else {
+                a.isBefore(b)
+            }
+        }
+    }
+
+    data class StreamData(
+        val iterator: Iterator<StoredMessage>,
+        val stream: Pair<String, Direction>,
+        var value: StoredMessage? = null,
+        var count: Int = 0,
+        var lastElement: StoredMessage? = null
+    ) {
+        fun nextOrNull(): StoredMessage? {
+            value = if (iterator.hasNext()) {
+                count++
+                iterator.next().also { lastElement = it }
+            } else {
+                null
+            }
+            return value
+        }
+    }
+
+    private fun maxElement(
+        streamList: List<StreamData>,
+        timelineDirection: TimeRelation,
+        isGreater: (Instant, Instant) -> Boolean
+    ): StoredMessage? {
+        var maxTimestamp = if (timelineDirection == TimeRelation.AFTER) Instant.MIN else Instant.MAX
+        var maxElement: StoredMessage? = null
+        for (stream in streamList) {
+            stream.value?.let {
+                if (isGreater(it.timestamp, maxTimestamp!!)) {
+                    stream.nextOrNull()
+                    maxTimestamp = it.timestamp
+                    maxElement = it
+                }
+            }
+        }
+        return maxElement
+    }
+
+    private suspend fun mergeIterables(
+        iterables: List<StreamData>,
+        timelineDirection: TimeRelation,
+        startTimestamp: Instant,
+        streamMessageIndexMap: MutableMap<Pair<String, Direction>, StoredMessageId?>,
+        perStreamLimit: Int
+    ): Sequence<StoredMessage> {
+        return sequence {
+            val streamList = iterables.map {
+                dropUntilInRangeInOppositeDirection(startTimestamp, it, timelineDirection)
+            }
+            val isGreater = getComparator(timelineDirection)
+            do {
+                val maxElement = maxElement(streamList, timelineDirection, isGreater)?.let {
+                    yield(it)
+                    it
+                }
+            } while (maxElement != null)
+            streamList.map {
+                val streamIsEmpty = it.count < perStreamLimit
+                streamMessageIndexMap[it.stream] = if (streamIsEmpty) null else it.lastElement?.id
+            }
         }
     }
 
@@ -394,30 +463,21 @@ class SearchMessagesHandler(
         perStreamLimit: Int,
         startTimestamp: Instant,
         requestType: RequestType
-    ): List<StoredMessage> {
+    ): Sequence<StoredMessage> {
         logger.debug { "pulling more messages (streams=${streamMessageIndexMap.keys} direction=$timelineDirection perStreamLimit=$perStreamLimit)" }
         return streamMessageIndexMap.keys
-            .flatMap { stream ->
+            .map { stream ->
                 if (requestType == RequestType.SSE) {
                     databaseRequestRetry(dbRetryDelay) {
                         pullMore(streamMessageIndexMap[stream], perStreamLimit, timelineDirection)
                     }
                 } else {
                     pullMore(streamMessageIndexMap[stream], perStreamLimit, timelineDirection)
-                }.toList()
-                    .let {
-                        val streamIsEmpty = it.size < perStreamLimit
-                        val filteredIdsList = dropUntilInRangeInOppositeDirection(startTimestamp, it, timelineDirection)
-                        streamMessageIndexMap[stream] = if (streamIsEmpty) null else filteredIdsList.lastOrNull()?.id
-                        filteredIdsList
-                    }
-            }
-            .let { list ->
-                if (timelineDirection == TimeRelation.AFTER) {
-                    list.sortedBy { it.timestamp }
-                } else {
-                    list.sortedByDescending { it.timestamp }
+                }.let {
+                    val iterable = (if (timelineDirection == TimeRelation.AFTER) it else it.reversed()).iterator()
+                    StreamData(iterable, stream)
                 }
             }
+            .let { mergeIterables(it, timelineDirection, startTimestamp, streamMessageIndexMap, perStreamLimit) }
     }
 }
