@@ -150,7 +150,6 @@ class Main(args: Array<String>) {
                     try {
                         if (useSse) {
                             sseRequestsProcessedInParallelQuantity.inc()
-                            val get = sseRequestsProcessedInParallelQuantity.get()
                             val function = calledFun.invoke()
                             @Suppress("UNCHECKED_CAST")
                             handleSseRequest(
@@ -161,7 +160,6 @@ class Main(args: Array<String>) {
                             sseRequestsProcessedInParallelQuantity.inc(-1.0)
                         } else {
                             restRequestsProcessedInParallelQuantity.inc()
-                            val get = restRequestsProcessedInParallelQuantity.get()
                             handleRestApiRequest(call, context, cacheControl, probe, calledFun)
                             restRequestsProcessedInParallelQuantity.inc(-1.0)
                         }
