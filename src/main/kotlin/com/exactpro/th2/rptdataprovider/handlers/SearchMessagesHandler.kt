@@ -193,6 +193,7 @@ class SearchMessagesHandler(
         requestType: RequestType
     ): Flow<StoredMessage> {
         return coroutineScope {
+            val uniqueIds = mutableSetOf<String>()
             flow {
                 var limit = initLimit
                 do {
@@ -212,7 +213,11 @@ class SearchMessagesHandler(
                 } while (hasElements)
             }
                 .filterNot { it.id.toString() == messageId }
-//                .distinctUntilChanged { old, new -> old.id == new.id }
+                .filterNot { message ->
+                    uniqueIds.contains(message.id.toString()).also {
+                        if (!it) uniqueIds.add(message.id.toString())
+                    }
+                }
                 .takeWhile {
                     it.timestamp.let { timestamp ->
                         if (timelineDirection == TimeRelation.AFTER) {
@@ -295,9 +300,6 @@ class SearchMessagesHandler(
             val lastScannedObject = LastScannedObjectInfo()
             val lastEventId = AtomicLong(0)
             val scanCnt = AtomicLong(0)
-            val test = mutableListOf<LastScannedObjectInfo>()
-
-            val used = mutableSetOf<String>()
             flow {
                 val startTimestamp = chooseStartTimestamp(
                     messageId, request.searchDirection,
@@ -319,18 +321,12 @@ class SearchMessagesHandler(
             }
                 .buffer(messageSearchPipelineBuffer)
                 .map { it.await() }
-                .filter {
-                    !used.contains(it.first.id.toString()).also { rrr ->
-                        used.add(it.first.id.toString())
-                    }
-                }
                 .onEach {
                     lastScannedObject.apply {
                         id = it.first.id.toString()
                         timestamp = it.first.timestamp.toEpochMilli()
                         scanCounter = scanCnt.incrementAndGet()
                     }
-                    test.add(lastScannedObject.copy())
                 }
                 .filter { it.second }
                 .map { it.first }
@@ -341,7 +337,6 @@ class SearchMessagesHandler(
                     }
                 }
                 .onCompletion {
-                    println(test)
                     coroutineContext.cancelChildren()
                     it?.let { throwable -> throw throwable }
                 }
@@ -461,18 +456,6 @@ class SearchMessagesHandler(
                 val streamIsEmpty = it.count < perStreamLimit
                 streamMessageIndexMap[it.stream] = if (streamIsEmpty) null else it.lastElement?.id
             }
-        }
-    }
-
-    private fun dropUntilInRangeInOppositeDirection(
-        startTimestamp: Instant,
-        storedMessages: List<StoredMessage>,
-        timelineDirection: TimeRelation
-    ): List<StoredMessage> {
-        return if (timelineDirection == TimeRelation.AFTER) {
-            storedMessages.dropWhile { it.timestamp.isBefore(startTimestamp) }
-        } else {
-            storedMessages.dropWhile { it.timestamp.isAfter(startTimestamp) }
         }
     }
 

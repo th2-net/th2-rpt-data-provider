@@ -413,31 +413,6 @@ class Main(args: Array<String>) {
                         filterPredicate.apply(event)
                     }
                 }
-
-
-                get("search/sse/test") {
-                    val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, context, "search events sse", null, false, true, queryParametersMap) {
-                        suspend fun(w: Writer, keepAlive: suspend (Writer, LastScannedObjectInfo, AtomicLong) -> Unit) {
-                            var i = 0
-                            launch {
-                                keepAlive.invoke(w, LastScannedObjectInfo(), AtomicLong(0))
-                            }
-                            while (true) {
-                                val st = Instant.now().toEpochMilli()
-                                cradleService.getMessagesSuspend(
-                                    StoredMessageFilterBuilder().index().isGreaterThanOrEqualTo(1614164040675594471).streamName()
-                                        .isEqualTo("arfq01dc03")
-                                        .direction().isEqualTo(Direction.FIRST)
-                                        .limit(100)
-                                        .build()
-                                )
-                                w.eventWrite(SseEvent((Instant.now().toEpochMilli() - st).toString()))
-                                i++
-                            }
-                        }
-                    }
-                }
             }
         }.start(false)
 

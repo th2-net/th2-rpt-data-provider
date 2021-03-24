@@ -68,7 +68,7 @@ class MessageProducer(
                     null
                 }
             }
-        } //?: parseMessage(rawMessage)
+        } ?: parseMessage(rawMessage)
     }
 
     private suspend fun getFieldName(parsedRawMessage: RawMessage?): String? {
