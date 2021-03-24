@@ -467,20 +467,25 @@ class SearchMessagesHandler(
         requestType: RequestType
     ): Sequence<StoredMessage> {
         logger.debug { "pulling more messages (streams=${streamMessageIndexMap.keys} direction=$timelineDirection perStreamLimit=$perStreamLimit)" }
-        return streamMessageIndexMap.keys
-            .map { stream ->
-                if (requestType == RequestType.SSE) {
-                    databaseRequestRetry(dbRetryDelay) {
-                        pullMore(streamMessageIndexMap[stream], perStreamLimit, timelineDirection)
+        return coroutineScope {
+            streamMessageIndexMap.keys
+                .map { stream ->
+                    async {
+                        if (requestType == RequestType.SSE) {
+                            databaseRequestRetry(dbRetryDelay) {
+                                pullMore(streamMessageIndexMap[stream], perStreamLimit, timelineDirection)
+                            }
+                        } else {
+                            pullMore(streamMessageIndexMap[stream], perStreamLimit, timelineDirection)
+                        }.let {
+                            val iterable =
+                                (if (timelineDirection == TimeRelation.AFTER) it else it.reversed()).toList().iterator()
+                            StreamData(iterable, stream)
+                        }
                     }
-                } else {
-                    pullMore(streamMessageIndexMap[stream], perStreamLimit, timelineDirection)
-                }.let {
-                    val iterable =
-                        (if (timelineDirection == TimeRelation.AFTER) it else it.reversed()).toList().iterator()
-                    StreamData(iterable, stream)
                 }
-            }
-            .let { mergeIterables(it, timelineDirection, startTimestamp, streamMessageIndexMap, perStreamLimit) }
+                .awaitAll()
+                .let { mergeIterables(it, timelineDirection, startTimestamp, streamMessageIndexMap, perStreamLimit) }
+        }
     }
 }
