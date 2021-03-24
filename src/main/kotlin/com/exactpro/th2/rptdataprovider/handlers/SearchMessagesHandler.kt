@@ -204,11 +204,13 @@ class SearchMessagesHandler(
                         startTimestamp,
                         requestType
                     )
+                    var hasElements = false
                     for (element in data) {
+                        hasElements = true
                         emit(element)
                     }
                     limit = min(maxMessagesLimit, limit * 2)
-                } while (data.iterator().hasNext())
+                } while (hasElements)
             }
                 .filterNot { it.id.toString() == messageId }
                 .distinctUntilChanged { old, new -> old.id == new.id }
@@ -388,28 +390,40 @@ class SearchMessagesHandler(
     private fun getComparator(timelineDirection: TimeRelation): ((Instant, Instant) -> Boolean) {
         return { a: Instant, b: Instant ->
             if (timelineDirection == TimeRelation.AFTER) {
-                a.isAfter(b)
+                a.isAfterOrEqual(b)
             } else {
-                a.isBefore(b)
+                a.isBeforeOrEqual(b)
             }
         }
     }
 
-    data class StreamData(
+    private inner class StreamData(
         val iterator: Iterator<StoredMessage>,
         val stream: Pair<String, Direction>,
+        timelineDirection: TimeRelation,
         var value: StoredMessage? = null,
         var count: Int = 0,
         var lastElement: StoredMessage? = null
     ) {
+        private var isGreaterOrEqual = getComparator(timelineDirection)
+
         fun nextOrNull(): StoredMessage? {
-            value = if (iterator.hasNext()) {
+            do {
+                value = next()
+            } while (value != null && lastElement != null &&
+                !isGreaterOrEqual(value!!.timestamp, lastElement!!.timestamp)
+            )
+            value?.let { lastElement = it }
+            return value
+        }
+
+        private fun next(): StoredMessage? {
+            return if (iterator.hasNext()) {
                 count++
-                iterator.next().also { lastElement = it }
+                iterator.next()
             } else {
                 null
             }
-            return value
         }
     }
 
@@ -475,7 +489,7 @@ class SearchMessagesHandler(
                     pullMore(streamMessageIndexMap[stream], perStreamLimit, timelineDirection)
                 }.let {
                     val iterable = (if (timelineDirection == TimeRelation.AFTER) it else it.reversed()).iterator()
-                    StreamData(iterable, stream)
+                    StreamData(iterable, stream, timelineDirection)
                 }
             }
             .let { mergeIterables(it, timelineDirection, startTimestamp, streamMessageIndexMap, perStreamLimit) }
