@@ -28,6 +28,7 @@ import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.RequestType
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
@@ -36,16 +37,11 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundExcep
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
 import com.fasterxml.jackson.databind.ObjectMapper
+import io.ktor.utils.io.errors.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel.Factory.BUFFERED
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.flow.*
-import io.ktor.utils.io.errors.*
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.asFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.toList
 import mu.KotlinLogging
 import java.io.Writer
 import java.time.Instant
@@ -114,6 +110,45 @@ class SearchEventsHandler(
                                 ?: getDirectBatchedChildren(metadata.id, timestampFrom, timestampTo)
                         } else {
                             listOf(EventTreeNode(null, metadata))
+                        }
+                    }.also { parentContext.ensureActive() }
+                }
+                .buffer(bufferSize)
+        }
+    }
+
+    @ExperimentalCoroutinesApi
+    private suspend fun getEventTreeFlow(
+        parentEvent: String?,
+        timestampFrom: Instant,
+        timestampTo: Instant,
+        parentContext: CoroutineContext,
+        bufferSize: Int,
+        requestType: RequestType
+    ): Flow<Deferred<List<Event>>> {
+        return coroutineScope {
+            flow {
+                val eventsCollection = if (requestType == RequestType.SSE)
+                    databaseRequestRetry(dbRetryDelay) { getEventsSuspend(parentEvent, timestampFrom, timestampTo) }
+                else
+                    getEventsSuspend(parentEvent, timestampFrom, timestampTo)
+
+                for (event in eventsCollection)
+                    emit(event)
+            }
+                .map { metadata ->
+                    async(parentContext) {
+                        if (metadata.isBatch) {
+                            try {
+                                metadata.batchMetadata
+                            } catch (e: IOException) {
+                                null
+                            }
+                                ?.testEvents?.map { eventProducer.fromId(ProviderEventId(it.batchId, it.id)) }
+
+                                ?: getDirectBatchedChildrenEvent(metadata.id, timestampFrom, timestampTo)
+                        } else {
+                            listOf(eventProducer.fromId(ProviderEventId(null, metadata.id)))
                         }
                     }.also { parentContext.ensureActive() }
                 }
@@ -224,7 +259,7 @@ class SearchEventsHandler(
             val timeIntervals = getTimeIntervals(request, sseEventSearchStep)
             flow {
                 for (timestamp in timeIntervals) {
-                    getEventTreeNodeFlow(
+                    getEventTreeFlow(
                         request.parentEvent, timestamp.first,
                         timestamp.second, coroutineContext,
                         BUFFERED, RequestType.SSE
@@ -233,7 +268,7 @@ class SearchEventsHandler(
             }
                 .map { it.await() }
                 .flatMapMerge { it.asFlow() }
-                .filter { it.id.toString() != request.resumeFromId }
+                .filter { it.eventId != request.resumeFromId }
                 .takeWhile { event ->
                     request.endTimestamp?.let {
                         if (request.searchDirection == TimeRelation.AFTER) {
@@ -344,6 +379,22 @@ class SearchEventsHandler(
                 val batchMetadata = StoredTestEventBatchMetadata(batch)
 
                 EventTreeNode(batchMetadata, BatchedStoredTestEventMetadata(it, batchMetadata))
+            }
+    }
+
+    private suspend fun getDirectBatchedChildrenEvent(
+        batchId: StoredTestEventId,
+        timestampFrom: Instant,
+        timestampTo: Instant
+    ): List<Event> {
+
+        val batch = cradle.getEventSuspend(batchId)?.asBatch()
+
+        return (batch?.testEvents
+            ?: throw CradleEventNotFoundException("unable to get test events of batch '$batchId'"))
+            .filter { it.startTimestamp.isAfter(timestampFrom) && it.startTimestamp.isBefore(timestampTo) }
+            .map {
+                eventProducer.fromId(ProviderEventId(it.batchId, it.id))
             }
     }
 }
