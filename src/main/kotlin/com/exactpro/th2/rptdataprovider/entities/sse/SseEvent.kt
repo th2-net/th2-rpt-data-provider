@@ -17,6 +17,7 @@
 package com.exactpro.th2.rptdataprovider.entities.sse
 
 import com.exactpro.th2.rptdataprovider.asStringSuspend
+import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -42,7 +43,7 @@ data class ExceptionInfo(val exceptionName: String, val exceptionCause: String)
 
 data class SseEvent(val data: String = "empty data", val event: EventType? = null, val metadata: String? = null) {
     companion object {
-        suspend fun build(jacksonMapper: ObjectMapper, event: EventTreeNode, counter: AtomicLong): SseEvent {
+        suspend fun build(jacksonMapper: ObjectMapper, event: Event, counter: AtomicLong): SseEvent {
             return SseEvent(
                 jacksonMapper.asStringSuspend(event),
                 EventType.EVENT,

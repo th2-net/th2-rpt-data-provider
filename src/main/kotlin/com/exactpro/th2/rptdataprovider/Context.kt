@@ -23,12 +23,13 @@ import com.exactpro.th2.rptdataprovider.cache.MessageCache
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.entities.filters.PredicateFactory
 import com.exactpro.th2.rptdataprovider.entities.filters.events.AttachedMessageFilter
+import com.exactpro.th2.rptdataprovider.entities.filters.events.EventBodyFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.events.EventNameFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.events.EventTypeFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.AttachedEventFilters
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageTypeFilter
-import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
+import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.handlers.SearchEventsHandler
 import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
@@ -83,19 +84,20 @@ class Context(
         configuration.dbRetryDelay.value.toLong()
     ),
 
-    val eventFiltersPredicateFactory: PredicateFactory<EventTreeNode> = PredicateFactory(
+    val eventFiltersPredicateFactory: PredicateFactory<Event> = PredicateFactory(
         mapOf(
-            AttachedMessageFilter.filterInfo to AttachedMessageFilter.Companion::build,
-            EventTypeFilter.filterInfo to EventTypeFilter.Companion::build,
-            EventNameFilter.filterInfo to EventNameFilter.Companion::build
+            AttachedMessageFilter.filterInfo to ::AttachedMessageFilter,
+            EventTypeFilter.filterInfo to ::EventTypeFilter,
+            EventNameFilter.filterInfo to ::EventNameFilter,
+            EventBodyFilter.filterInfo to ::EventBodyFilter
         ), cradleService
     ),
 
     val messageFiltersPredicateFactory: PredicateFactory<Message> = PredicateFactory(
         mapOf(
-            AttachedEventFilters.filterInfo to AttachedEventFilters.Companion::build,
-            MessageTypeFilter.filterInfo to MessageTypeFilter.Companion::build,
-            MessageBodyFilter.filterInfo to MessageBodyFilter.Companion::build
+            AttachedEventFilters.filterInfo to ::AttachedEventFilters,
+            MessageTypeFilter.filterInfo to ::MessageTypeFilter,
+            MessageBodyFilter.filterInfo to ::MessageBodyFilter
         ), cradleService
     ),
 

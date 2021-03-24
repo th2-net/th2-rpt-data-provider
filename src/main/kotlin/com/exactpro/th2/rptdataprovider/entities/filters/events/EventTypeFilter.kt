@@ -21,24 +21,24 @@ import com.exactpro.th2.rptdataprovider.entities.filters.Filter
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
-import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
+import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
-class EventTypeFilter private constructor(
-    private var type: List<String>,
+class EventTypeFilter(
+    requestMap: Map<String, List<String>>,
+    cradleService: CradleService
+) : Filter<Event>(requestMap, cradleService) {
+
+    private var type: List<String>
     override var negative: Boolean = false
-) : Filter<EventTreeNode> {
+
+    init {
+        negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false
+        type = requestMap["${filterInfo.name}-values"]
+            ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
+    }
 
     companion object {
-
-        suspend fun build(requestMap: Map<String, List<String>>, cradleService: CradleService): Filter<EventTreeNode> {
-            return EventTypeFilter(
-                negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false,
-                type = requestMap["${filterInfo.name}-values"]
-                    ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
-            )
-        }
-
         val filterInfo = FilterInfo(
             "type",
             "matches events by one of the specified types",
@@ -49,9 +49,9 @@ class EventTypeFilter private constructor(
         )
     }
 
-    override fun match(element: EventTreeNode): Boolean {
+    override fun match(element: Event): Boolean {
         return negative.xor(type.any { item ->
-            element.eventType.toLowerCase().contains(item.toLowerCase())
+            element.type.toLowerCase().contains(item.toLowerCase())
         })
     }
 

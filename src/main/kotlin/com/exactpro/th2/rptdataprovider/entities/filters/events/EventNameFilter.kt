@@ -21,22 +21,24 @@ import com.exactpro.th2.rptdataprovider.entities.filters.Filter
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
-import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
+import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
-class EventNameFilter private constructor(
-    private var name: List<String>, override var negative: Boolean = false
-) : Filter<EventTreeNode> {
+class EventNameFilter(
+    requestMap: Map<String, List<String>>,
+    cradleService: CradleService
+) : Filter<Event>(requestMap, cradleService) {
+
+    private var name: List<String>
+    override var negative: Boolean = false
+
+    init {
+        negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false
+        name = requestMap["${filterInfo.name}-values"]
+            ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
+    }
 
     companion object {
-        suspend fun build(requestMap: Map<String, List<String>>, cradleService: CradleService): Filter<EventTreeNode> {
-            return EventNameFilter(
-                negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false,
-                name = requestMap["${filterInfo.name}-values"]
-                    ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
-            )
-        }
-
         val filterInfo = FilterInfo(
             "name",
             "matches events by one of the specified names",
@@ -47,7 +49,8 @@ class EventNameFilter private constructor(
         )
     }
 
-    override fun match(element: EventTreeNode): Boolean {
+
+    override fun match(element: Event): Boolean {
         return negative.xor(name.any { item ->
             element.eventName.toLowerCase().contains(item.toLowerCase())
         })
@@ -56,6 +59,4 @@ class EventNameFilter private constructor(
     override fun getInfo(): FilterInfo {
         return filterInfo
     }
-
 }
-
