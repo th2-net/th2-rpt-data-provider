@@ -36,7 +36,6 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import mu.KotlinLogging
-import org.ehcache.core.spi.store.Store
 import java.io.Writer
 import java.lang.Integer.min
 import java.time.Instant
@@ -213,7 +212,7 @@ class SearchMessagesHandler(
                 } while (hasElements)
             }
                 .filterNot { it.id.toString() == messageId }
-                .distinctUntilChanged { old, new -> old.id == new.id }
+//                .distinctUntilChanged { old, new -> old.id == new.id }
                 .takeWhile {
                     it.timestamp.let { timestamp ->
                         if (timelineDirection == TimeRelation.AFTER) {
@@ -296,6 +295,9 @@ class SearchMessagesHandler(
             val lastScannedObject = LastScannedObjectInfo()
             val lastEventId = AtomicLong(0)
             val scanCnt = AtomicLong(0)
+            val test = mutableListOf<LastScannedObjectInfo>()
+
+            val used = mutableSetOf<String>()
             flow {
                 val startTimestamp = chooseStartTimestamp(
                     messageId, request.searchDirection,
@@ -312,18 +314,23 @@ class SearchMessagesHandler(
             }.map {
                 async {
                     @Suppress("USELESS_CAST")
-                    val s = messageCache.getOrPut(it)
-                    Pair(s, request.filterPredicate.apply(s))
+                    Pair(it, request.filterPredicate.apply(messageCache.getOrPut(it)))
                 }.also { coroutineContext.ensureActive() }
             }
                 .buffer(messageSearchPipelineBuffer)
                 .map { it.await() }
+                .filter {
+                    !used.contains(it.first.id.toString()).also { rrr ->
+                        used.add(it.first.id.toString())
+                    }
+                }
                 .onEach {
                     lastScannedObject.apply {
                         id = it.first.id.toString()
                         timestamp = it.first.timestamp.toEpochMilli()
                         scanCounter = scanCnt.incrementAndGet()
                     }
+                    test.add(lastScannedObject.copy())
                 }
                 .filter { it.second }
                 .map { it.first }
@@ -334,13 +341,14 @@ class SearchMessagesHandler(
                     }
                 }
                 .onCompletion {
+                    println(test)
                     coroutineContext.cancelChildren()
                     it?.let { throwable -> throw throwable }
                 }
                 .collect {
                     coroutineContext.ensureActive()
                     writer.eventWrite(
-                        SseEvent.build(jacksonMapper, it, lastEventId)
+                        SseEvent.build(jacksonMapper, messageCache.getOrPut(it), lastEventId)
                     )
                 }
         }
@@ -387,63 +395,49 @@ class SearchMessagesHandler(
         return storedMessages
     }
 
-    private fun getComparator(timelineDirection: TimeRelation): ((Instant, Instant) -> Boolean) {
-        return { a: Instant, b: Instant ->
-            if (timelineDirection == TimeRelation.AFTER) {
-                a.isAfterOrEqual(b)
-            } else {
-                a.isBeforeOrEqual(b)
-            }
+    private fun getIsLess(timelineDirection: TimeRelation): ((Instant, Instant) -> Boolean) {
+        return if (timelineDirection == TimeRelation.AFTER) {
+            { a: Instant, b: Instant -> a.isBefore(b) }
+        } else {
+            { a: Instant, b: Instant -> a.isAfter(b) }
         }
     }
 
-    private inner class StreamData(
+    data class StreamData(
         val iterator: Iterator<StoredMessage>,
         val stream: Pair<String, Direction>,
-        timelineDirection: TimeRelation,
         var value: StoredMessage? = null,
         var count: Int = 0,
         var lastElement: StoredMessage? = null
     ) {
-        private var isGreaterOrEqual = getComparator(timelineDirection)
-
         fun nextOrNull(): StoredMessage? {
-            do {
-                value = next()
-            } while (value != null && lastElement != null &&
-                !isGreaterOrEqual(value!!.timestamp, lastElement!!.timestamp)
-            )
-            value?.let { lastElement = it }
-            return value
-        }
-
-        private fun next(): StoredMessage? {
-            return if (iterator.hasNext()) {
+            value = if (iterator.hasNext()) {
                 count++
-                iterator.next()
+                iterator.next().also { lastElement = it }
             } else {
                 null
             }
+            return value
         }
     }
 
-    private fun maxElement(
+    private fun minElement(
         streamList: List<StreamData>,
         timelineDirection: TimeRelation,
-        isGreater: (Instant, Instant) -> Boolean
+        isLess: (Instant, Instant) -> Boolean
     ): StoredMessage? {
-        var maxTimestamp = if (timelineDirection == TimeRelation.AFTER) Instant.MIN else Instant.MAX
-        var maxElement: StoredMessage? = null
+        var minTimestamp = if (timelineDirection == TimeRelation.AFTER) Instant.MAX else Instant.MIN
+        var minElement: StreamData? = null
         for (stream in streamList) {
             stream.value?.let {
-                if (isGreater(it.timestamp, maxTimestamp!!)) {
-                    stream.nextOrNull()
-                    maxTimestamp = it.timestamp
-                    maxElement = it
+                if (isLess(it.timestamp, minTimestamp!!)) {
+                    minTimestamp = it.timestamp
+                    minElement = stream
                 }
             }
         }
-        return maxElement
+
+        return minElement?.value?.also { minElement?.nextOrNull() }
     }
 
     private suspend fun mergeIterables(
@@ -457,17 +451,28 @@ class SearchMessagesHandler(
             val streamList = iterables.map {
                 dropUntilInRangeInOppositeDirection(startTimestamp, it, timelineDirection)
             }
-            val isGreater = getComparator(timelineDirection)
+            val isLess = getIsLess(timelineDirection)
             do {
-                val maxElement = maxElement(streamList, timelineDirection, isGreater)?.let {
+                val minElement = minElement(streamList, timelineDirection, isLess)?.also {
                     yield(it)
-                    it
                 }
-            } while (maxElement != null)
+            } while (minElement != null)
             streamList.map {
                 val streamIsEmpty = it.count < perStreamLimit
                 streamMessageIndexMap[it.stream] = if (streamIsEmpty) null else it.lastElement?.id
             }
+        }
+    }
+
+    private fun dropUntilInRangeInOppositeDirection(
+        startTimestamp: Instant,
+        storedMessages: List<StoredMessage>,
+        timelineDirection: TimeRelation
+    ): List<StoredMessage> {
+        return if (timelineDirection == TimeRelation.AFTER) {
+            storedMessages.dropWhile { it.timestamp.isBefore(startTimestamp) }
+        } else {
+            storedMessages.dropWhile { it.timestamp.isAfter(startTimestamp) }
         }
     }
 
@@ -488,8 +493,9 @@ class SearchMessagesHandler(
                 } else {
                     pullMore(streamMessageIndexMap[stream], perStreamLimit, timelineDirection)
                 }.let {
-                    val iterable = (if (timelineDirection == TimeRelation.AFTER) it else it.reversed()).iterator()
-                    StreamData(iterable, stream, timelineDirection)
+                    val iterable =
+                        (if (timelineDirection == TimeRelation.AFTER) it else it.reversed()).toList().iterator()
+                    StreamData(iterable, stream)
                 }
             }
             .let { mergeIterables(it, timelineDirection, startTimestamp, streamMessageIndexMap, perStreamLimit) }
