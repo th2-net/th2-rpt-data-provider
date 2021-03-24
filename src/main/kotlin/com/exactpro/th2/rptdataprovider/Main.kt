@@ -157,14 +157,18 @@ class Main(args: Array<String>) {
                                 context,
                                 function as suspend (Writer, suspend (Writer, LastScannedObjectInfo, AtomicLong) -> Unit) -> Unit
                             )
-                            sseRequestsProcessedInParallelQuantity.dec()
                         } else {
                             restRequestsProcessedInParallelQuantity.inc()
                             handleRestApiRequest(call, context, cacheControl, probe, calledFun)
-                            restRequestsProcessedInParallelQuantity.dec()
                         }
                     } catch (e: Exception) {
                         throw e.rootCause ?: e
+                    } finally {
+                        if (useSse) {
+                            sseRequestsProcessedInParallelQuantity.dec()
+                        } else {
+                            restRequestsProcessedInParallelQuantity.dec()
+                        }
                     }
                 } catch (e: InvalidRequestException) {
                     logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - invalid request" }
