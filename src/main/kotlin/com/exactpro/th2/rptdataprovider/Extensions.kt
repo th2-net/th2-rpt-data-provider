@@ -19,7 +19,9 @@ package com.exactpro.th2.rptdataprovider
 import com.exactpro.cradle.messages.StoredMessageFilter
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.google.common.util.concurrent.AtomicDouble
 import io.prometheus.client.Gauge
+import io.prometheus.client.Histogram
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
@@ -27,6 +29,7 @@ import mu.KotlinLogging
 import java.io.Writer
 import java.time.Instant
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -63,21 +66,33 @@ suspend fun <T> logTime(methodName: String, lambda: suspend () -> T): T? {
     }
 }
 
-suspend fun <T> logMetrics(counter: Gauge, lambda: suspend () -> T): T? {
-    return withContext(coroutineContext) {
-        try {
-            counter.inc()
-            lambda.invoke()
-        } finally {
-            counter.dec()
+data class Metrics(private val histogram: Histogram, private val counter: AtomicLong) {
+    companion object {
+        fun createMetric(variableName: String, descriptionName: String): Metrics {
+            return Metrics(
+                Histogram.build(
+                    variableName, "Quantity of $descriptionName"
+                ).register(), AtomicLong(0)
+            )
         }
+    }
+    fun startObserve() {
+        histogram.observe(counter.incrementAndGet().toDouble())
+    }
+    fun stopObserve() {
+        histogram.observe(counter.decrementAndGet().toDouble())
     }
 }
 
-fun createGauge(variableName: String, descriptionName: String): Gauge {
-    return Gauge.build(
-        variableName, "Quantity of $descriptionName method call"
-    ).register()
+suspend fun <T> logMetrics(metrics: Metrics, lambda: suspend () -> T): T? {
+    return withContext(coroutineContext) {
+        metrics.startObserve()
+        try {
+            lambda.invoke()
+        } finally {
+            metrics.stopObserve()
+        }
+    }
 }
 
 private val writerDispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
