@@ -26,9 +26,7 @@ import com.exactpro.th2.rptdataprovider.logMetrics
 import io.ktor.utils.io.errors.*
 import io.prometheus.client.Gauge
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import mu.KotlinLogging
-import java.lang.IllegalStateException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentSkipListSet
 
@@ -36,7 +34,7 @@ class RabbitMqService(private val configuration: Configuration) {
 
     companion object {
         val logger = KotlinLogging.logger { }
-        private val rabbitMqMessageParse: Gauge = createGauge("rabbit_mq_message_parse", "rabbitMqMessageParse")
+        private val rabbitMqMessageParseGauge: Gauge = createGauge("rabbit_mq_message_parse", "rabbitMqMessageParse")
     }
 
     private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
@@ -68,7 +66,7 @@ class RabbitMqService(private val configuration: Configuration) {
             .associate { it.metadata.id to CodecRequest(it.metadata.id) }
 
         return withContext(Dispatchers.IO) {
-            logMetrics(rabbitMqMessageParse) {
+            logMetrics(rabbitMqMessageParseGauge) {
                 val deferred = requests.map { async { it.value.channel.receive() } }
 
                 var alreadyRequested = true

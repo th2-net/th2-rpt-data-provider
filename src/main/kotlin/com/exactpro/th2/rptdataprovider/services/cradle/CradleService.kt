@@ -44,19 +44,19 @@ class CradleService(configuration: Configuration) {
     companion object {
         val logger = KotlinLogging.logger {}
 
-        private val getMessagesAsync: Gauge = createGauge("get_messages_async", "getMessagesAsync")
-        private val getProcessedMessageAsync: Gauge =
+        private val getMessagesAsyncGauge: Gauge = createGauge("get_messages_async", "getMessagesAsync")
+        private val getProcessedMessageAsyncGauge: Gauge =
             createGauge("get_processed_message_async", "getProcessedMessageAsync")
-        private val getMessageAsync: Gauge = createGauge("get_message_async", "getMessageAsync")
-        private val getTestEventsAsync: Gauge = createGauge("get_test_events_async", "getTestEventsAsync")
-        private val getTestEventAsync: Gauge = createGauge("get_test_event_async", "getTestEventAsync")
-        private val getNearestMessageId: Gauge = createGauge("get_nearest_message_id", "getNearestMessageId")
-        private val getMessageBatchAsync: Gauge = createGauge("get_message_batch_async", "getMessageBatchAsync")
-        private val getTestEventIdsByMessageIdAsync: Gauge =
+        private val getMessageAsyncGauge: Gauge = createGauge("get_message_async", "getMessageAsync")
+        private val getTestEventsAsyncGauge: Gauge = createGauge("get_test_events_async", "getTestEventsAsync")
+        private val getTestEventAsyncGauge: Gauge = createGauge("get_test_event_async", "getTestEventAsync")
+        private val getNearestMessageIdGauge: Gauge = createGauge("get_nearest_message_id", "getNearestMessageId")
+        private val getMessageBatchAsyncGauge: Gauge = createGauge("get_message_batch_async", "getMessageBatchAsync")
+        private val getTestEventIdsByMessageIdAsyncGauge: Gauge =
             createGauge("get_test_event_ids_by_message_id_async", "getTestEventIdsByMessageIdAsync")
-        private val getMessageIdsByTestEventIdAsync: Gauge =
+        private val getMessageIdsByTestEventIdAsyncGauge: Gauge =
             createGauge("get_message_ids_by_test_event_id_async", "getMessageIdsByTestEventIdAsync")
-        private val getStreams: Gauge =
+        private val getStreamsGauge: Gauge =
             createGauge("get_streams", "getStreams")
     }
 
@@ -68,7 +68,7 @@ class CradleService(configuration: Configuration) {
 
     suspend fun getMessagesSuspend(filter: StoredMessageFilter): Iterable<StoredMessage> {
         return withContext(Dispatchers.IO) {
-            logMetrics(getMessagesAsync) {
+            logMetrics(getMessagesAsyncGauge) {
                 logTime("getMessages (filter=${filter.convertToString()})") {
                     storage.getMessagesAsync(filter).await()
                 }
@@ -78,7 +78,7 @@ class CradleService(configuration: Configuration) {
 
     suspend fun getProcessedMessageSuspend(id: StoredMessageId): StoredMessage? {
         return withContext(Dispatchers.IO) {
-            logMetrics(getProcessedMessageAsync) {
+            logMetrics(getProcessedMessageAsyncGauge) {
                 logTime("getProcessedMessage (id=$id)") {
                     storage.getProcessedMessageAsync(id).await()
                 }
@@ -88,7 +88,7 @@ class CradleService(configuration: Configuration) {
 
     suspend fun getMessageSuspend(id: StoredMessageId): StoredMessage? {
         return withContext(Dispatchers.IO) {
-            logMetrics(getMessageAsync) {
+            logMetrics(getMessageAsyncGauge) {
                 logTime("getMessage (id=$id)") {
                     storage.getMessageAsync(id).await()
                 }
@@ -98,7 +98,7 @@ class CradleService(configuration: Configuration) {
 
     suspend fun getEventsSuspend(from: Instant, to: Instant): Iterable<StoredTestEventMetadata> {
         return withContext(coroutineContext) {
-            logMetrics(getTestEventsAsync) {
+            logMetrics(getTestEventsAsyncGauge) {
                 logTime("Get events from: $from to: $to") {
                     storage.getTestEventsAsync(from, to).await()
                 }
@@ -112,7 +112,7 @@ class CradleService(configuration: Configuration) {
         to: Instant
     ): Iterable<StoredTestEventMetadata> {
         return withContext(coroutineContext) {
-            logMetrics(getTestEventsAsync) {
+            logMetrics(getTestEventsAsyncGauge) {
                 logTime("Get events parent: $parentId from: $from to: $to") {
                     storage.getTestEventsAsync(parentId, from, to).await()
                 }
@@ -122,7 +122,7 @@ class CradleService(configuration: Configuration) {
 
     suspend fun getEventSuspend(id: StoredTestEventId): StoredTestEventWrapper? {
         return withContext(coroutineContext) {
-            logMetrics(getTestEventAsync) {
+            logMetrics(getTestEventAsyncGauge) {
                 logTime("getTestEvent (id=$id)") {
                     storage.getTestEventAsync(id).await()
                 }
@@ -137,7 +137,7 @@ class CradleService(configuration: Configuration) {
         timelineDirection: TimeRelation
     ): StoredMessageId? {
         return withContext(Dispatchers.IO) {
-            logMetrics(getNearestMessageId) {
+            logMetrics(getNearestMessageIdGauge) {
                 logTime(("getFirstMessageId (timestamp=$timestamp stream=$stream direction=${direction.label} )")) {
                     storage.getNearestMessageId(stream, direction, timestamp, timelineDirection)
                 }
@@ -147,7 +147,7 @@ class CradleService(configuration: Configuration) {
 
     suspend fun getMessageBatchSuspend(id: StoredMessageId): Collection<StoredMessage> {
         return withContext(Dispatchers.IO) {
-            logMetrics(getMessageBatchAsync) {
+            logMetrics(getMessageBatchAsyncGauge) {
                 logTime("getTestEventIdsByMessageId (id=$id)") {
                     storage.getMessageBatchAsync(id).await()
                 }
@@ -157,7 +157,7 @@ class CradleService(configuration: Configuration) {
 
     suspend fun getEventIdsSuspend(id: StoredMessageId): Collection<StoredTestEventId> {
         return withContext(Dispatchers.IO) {
-            logMetrics(getTestEventIdsByMessageIdAsync) {
+            logMetrics(getTestEventIdsByMessageIdAsyncGauge) {
                 logTime("getTestEventIdsByMessageId (id=$id)") {
                     linker.getTestEventIdsByMessageIdAsync(id).await()
                 }
@@ -167,7 +167,7 @@ class CradleService(configuration: Configuration) {
 
     suspend fun getMessageIdsSuspend(id: StoredTestEventId): Collection<StoredMessageId> {
         return withContext(Dispatchers.IO) {
-            logMetrics(getMessageIdsByTestEventIdAsync) {
+            logMetrics(getMessageIdsByTestEventIdAsyncGauge) {
                 logTime("getMessageIdsByTestEventId (id=$id)") {
                     linker.getMessageIdsByTestEventIdAsync(id).await()
                 }
@@ -177,7 +177,7 @@ class CradleService(configuration: Configuration) {
 
     suspend fun getMessageStreams(): Collection<String> {
         return withContext(Dispatchers.IO) {
-            logMetrics(getStreams) {
+            logMetrics(getStreamsGauge) {
                 logTime("getStreams") {
                     storage.streams
                 }
