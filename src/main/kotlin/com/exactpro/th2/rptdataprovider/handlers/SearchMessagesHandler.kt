@@ -352,7 +352,8 @@ class SearchMessagesHandler(
     private suspend fun pullMore(
         startId: StoredMessageId?,
         limit: Int,
-        timelineDirection: TimeRelation
+        timelineDirection: TimeRelation,
+        isFirstPull: Boolean = true
     ): Iterable<StoredMessage> {
 
         logger.debug { "pulling more messages (id=$startId limit=$limit direction=$timelineDirection)" }
@@ -360,20 +361,27 @@ class SearchMessagesHandler(
         if (startId == null) return emptyList()
 
         return cradle.getMessagesSuspend(
-            StoredMessageFilterBuilder()
-                .let {
-                    if (timelineDirection == TimeRelation.AFTER) {
-                        it.streamName().isEqualTo(startId.streamName)
-                            .direction().isEqualTo(startId.direction)
-                            .index().isGreaterThanOrEqualTo(startId.index)
-                            .limit(limit)
-                    } else {
-                        it.streamName().isEqualTo(startId.streamName)
-                            .direction().isEqualTo(startId.direction)
-                            .index().isLessThanOrEqualTo(startId.index)
-                            .limit(limit)
+            StoredMessageFilterBuilder().apply {
+                streamName().isEqualTo(startId.streamName)
+                direction().isEqualTo(startId.direction)
+                limit(limit)
+
+                if (timelineDirection == TimeRelation.AFTER) {
+                    index().let {
+                        if (isFirstPull)
+                            it.isGreaterThanOrEqualTo(startId.index)
+                        else
+                            it.isGreaterThan(startId.index)
                     }
-                }.build()
+                } else {
+                    index().let {
+                        if (isFirstPull)
+                            it.isLessThanOrEqualTo(startId.index)
+                        else
+                            it.isLessThan(startId.index)
+                    }
+                }
+            }.build()
         )
     }
 
