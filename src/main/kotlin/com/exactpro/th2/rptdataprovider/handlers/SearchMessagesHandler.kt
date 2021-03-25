@@ -392,9 +392,9 @@ class SearchMessagesHandler(
 
     private fun getIsLess(timelineDirection: TimeRelation): ((Instant, Instant) -> Boolean) {
         return if (timelineDirection == TimeRelation.AFTER) {
-            { a: Instant, b: Instant -> a.isBefore(b) }
+            { a: Instant, b: Instant -> a.isBeforeOrEqual(b) }
         } else {
-            { a: Instant, b: Instant -> a.isAfter(b) }
+            { a: Instant, b: Instant -> a.isAfterOrEqual(b) }
         }
     }
 
