@@ -24,6 +24,7 @@ import com.exactpro.th2.rptdataprovider.entities.sse.EventType
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
+import com.google.api.Metric
 import io.ktor.application.*
 import io.ktor.features.*
 import io.ktor.http.*
@@ -44,11 +45,11 @@ import kotlin.system.measureTimeMillis
 
 class Main(args: Array<String>) {
 
-    private val sseRequestsProcessedInParallelQuantity: Gauge =
-        Gauge.build("th2_sse_requests_processed_in_parallel_quantity", "Quantity of SSE requests processed in parallel").register()
+    private val sseRequestsProcessedInParallelQuantity: Metrics =
+        Metrics.createMetric("th2_sse_requests_processed_in_parallel_quantity", "SSE requests processed in parallel")
 
-    private val restRequestsProcessedInParallelQuantity: Gauge =
-        Gauge.build("th2_rest_requests_processed_in_parallel_quantity", "Quantity of REST requests processed in parallel").register()
+    private val restRequestsProcessedInParallelQuantity: Metrics =
+        Metrics.createMetric("th2_rest_requests_processed_in_parallel_quantity", "REST requests processed in parallel")
 
     private val logger = KotlinLogging.logger {}
 
@@ -141,43 +142,37 @@ class Main(args: Array<String>) {
         calledFun: suspend () -> Any
     ) {
         val stringParameters = parameters.contentDeepToString()
-        coroutineScope {
-            measureTimeMillis {
-                logger.debug { "handling '$requestName' request with parameters '$stringParameters'" }
-                try {
+        logMetrics(if (useSse) sseRequestsProcessedInParallelQuantity else restRequestsProcessedInParallelQuantity) {
+            coroutineScope {
+                measureTimeMillis {
+                    logger.debug { "handling '$requestName' request with parameters '$stringParameters'" }
                     try {
-                        if (useSse) {
-                            sseRequestsProcessedInParallelQuantity.inc()
-                            val function = calledFun.invoke()
-                            @Suppress("UNCHECKED_CAST")
-                            handleSseRequest(
-                                call,
-                                context,
-                                function as suspend (Writer, suspend (Writer,  LastScannedObjectInfo, AtomicLong) -> Unit) -> Unit
-                            )
-                        } else {
-                            restRequestsProcessedInParallelQuantity.inc()
-                            handleRestApiRequest(call, context, cacheControl, probe, calledFun)
+                        try {
+                            if (useSse) {
+                                val function = calledFun.invoke()
+                                @Suppress("UNCHECKED_CAST")
+                                handleSseRequest(
+                                    call,
+                                    context,
+                                    function as suspend (Writer, suspend (Writer, LastScannedObjectInfo, AtomicLong) -> Unit) -> Unit
+                                )
+                            } else {
+                                handleRestApiRequest(call, context, cacheControl, probe, calledFun)
+                            }
+                        } catch (e: Exception) {
+                            throw e.rootCause ?: e
                         }
+                    } catch (e: InvalidRequestException) {
+                        logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - invalid request" }
+                    } catch (e: CradleObjectNotFoundException) {
+                        logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - missing cradle data" }
+                    } catch (e: ChannelClosedException) {
+                        logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - channel closed" }
                     } catch (e: Exception) {
-                        throw e.rootCause ?: e
-                    } finally {
-                        if (useSse) {
-                            sseRequestsProcessedInParallelQuantity.dec()
-                        } else {
-                            restRequestsProcessedInParallelQuantity.dec()
-                        }
+                        logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - unexpected exception" }
                     }
-                } catch (e: InvalidRequestException) {
-                    logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - invalid request" }
-                } catch (e: CradleObjectNotFoundException) {
-                    logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - missing cradle data" }
-                } catch (e: ChannelClosedException) {
-                    logger.debug { "unable to handle request '$requestName' with parameters '$stringParameters' - channel closed" }
-                } catch (e: Exception) {
-                    logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - unexpected exception" }
-                }
-            }.let { logger.debug { "request '$requestName' with parameters '$stringParameters' handled - time=${it}ms" } }
+                }.let { logger.debug { "request '$requestName' with parameters '$stringParameters' handled - time=${it}ms" } }
+            }
         }
     }
 

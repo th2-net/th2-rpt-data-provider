@@ -26,12 +26,8 @@ import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventWrapper
-import com.exactpro.th2.rptdataprovider.convertToString
-import com.exactpro.th2.rptdataprovider.createGauge
+import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
-import com.exactpro.th2.rptdataprovider.logMetrics
-import com.exactpro.th2.rptdataprovider.logTime
-import io.prometheus.client.Gauge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.withContext
@@ -44,20 +40,20 @@ class CradleService(configuration: Configuration) {
     companion object {
         val logger = KotlinLogging.logger {}
 
-        private val getMessagesAsyncGauge: Gauge = createGauge("get_messages_async", "getMessagesAsync")
-        private val getProcessedMessageAsyncGauge: Gauge =
-            createGauge("get_processed_message_async", "getProcessedMessageAsync")
-        private val getMessageAsyncGauge: Gauge = createGauge("get_message_async", "getMessageAsync")
-        private val getTestEventsAsyncGauge: Gauge = createGauge("get_test_events_async", "getTestEventsAsync")
-        private val getTestEventAsyncGauge: Gauge = createGauge("get_test_event_async", "getTestEventAsync")
-        private val getNearestMessageIdGauge: Gauge = createGauge("get_nearest_message_id", "getNearestMessageId")
-        private val getMessageBatchAsyncGauge: Gauge = createGauge("get_message_batch_async", "getMessageBatchAsync")
-        private val getTestEventIdsByMessageIdAsyncGauge: Gauge =
-            createGauge("get_test_event_ids_by_message_id_async", "getTestEventIdsByMessageIdAsync")
-        private val getMessageIdsByTestEventIdAsyncGauge: Gauge =
-            createGauge("get_message_ids_by_test_event_id_async", "getMessageIdsByTestEventIdAsync")
-        private val getStreamsGauge: Gauge =
-            createGauge("get_streams", "getStreams")
+        private val getMessagesAsyncGauge: Metrics = Metrics.createMetric("get_messages_async", "getMessagesAsync")
+        private val getProcessedMessageAsyncGauge: Metrics =
+            Metrics.createMetric("get_processed_message_async", "getProcessedMessageAsync")
+        private val getMessageAsyncGauge: Metrics =  Metrics.createMetric("get_message_async", "getMessageAsync")
+        private val getTestEventsAsyncGauge: Metrics =  Metrics.createMetric("get_test_events_async", "getTestEventsAsync")
+        private val getTestEventAsyncGauge: Metrics =  Metrics.createMetric("get_test_event_async", "getTestEventAsync")
+        private val getNearestMessageIdGauge: Metrics =  Metrics.createMetric("get_nearest_message_id", "getNearestMessageId")
+        private val getMessageBatchAsyncGauge: Metrics =  Metrics.createMetric("get_message_batch_async", "getMessageBatchAsync")
+        private val getTestEventIdsByMessageIdAsyncGauge: Metrics =
+            Metrics.createMetric("get_test_event_ids_by_message_id_async", "getTestEventIdsByMessageIdAsync")
+        private val getMessageIdsByTestEventIdAsyncGauge: Metrics =
+            Metrics.createMetric("get_message_ids_by_test_event_id_async", "getMessageIdsByTestEventIdAsync")
+        private val getStreamsGauge: Metrics =
+            Metrics.createMetric("get_streams", "getStreams")
     }
 
     private val cradleManager: CradleManager = configuration.cradleManager
