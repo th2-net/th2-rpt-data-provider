@@ -51,6 +51,8 @@ dependencies {
 
     implementation 'io.github.microutils:kotlin-logging:1.7.10'
 
+    implementation 'io.prometheus:simpleclient'
+
     implementation 'com.fasterxml.jackson.core:jackson-core'
     implementation 'com.fasterxml.jackson.module:jackson-module-kotlin'
 

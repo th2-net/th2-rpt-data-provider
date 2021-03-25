@@ -33,6 +33,7 @@ import io.ktor.routing.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.util.*
+import io.prometheus.client.Gauge
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.io.Writer
@@ -42,6 +43,12 @@ import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
 class Main(args: Array<String>) {
+
+    private val sseRequestsProcessedInParallelQuantity: Gauge =
+        Gauge.build("th2_sse_requests_processed_in_parallel_quantity", "Quantity of SSE requests processed in parallel").register()
+
+    private val restRequestsProcessedInParallelQuantity: Gauge =
+        Gauge.build("th2_rest_requests_processed_in_parallel_quantity", "Quantity of REST requests processed in parallel").register()
 
     private val logger = KotlinLogging.logger {}
 
@@ -140,6 +147,7 @@ class Main(args: Array<String>) {
                 try {
                     try {
                         if (useSse) {
+                            sseRequestsProcessedInParallelQuantity.inc()
                             val function = calledFun.invoke()
                             @Suppress("UNCHECKED_CAST")
                             handleSseRequest(
@@ -148,10 +156,17 @@ class Main(args: Array<String>) {
                                 function as suspend (Writer, suspend (Writer,  LastScannedObjectInfo, AtomicLong) -> Unit) -> Unit
                             )
                         } else {
+                            restRequestsProcessedInParallelQuantity.inc()
                             handleRestApiRequest(call, context, cacheControl, probe, calledFun)
                         }
                     } catch (e: Exception) {
                         throw e.rootCause ?: e
+                    } finally {
+                        if (useSse) {
+                            sseRequestsProcessedInParallelQuantity.dec()
+                        } else {
+                            restRequestsProcessedInParallelQuantity.dec()
+                        }
                     }
                 } catch (e: InvalidRequestException) {
                     logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - invalid request" }
