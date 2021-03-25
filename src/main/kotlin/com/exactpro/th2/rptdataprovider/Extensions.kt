@@ -19,6 +19,7 @@ package com.exactpro.th2.rptdataprovider
 import com.exactpro.cradle.messages.StoredMessageFilter
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.fasterxml.jackson.databind.ObjectMapper
+import io.prometheus.client.Gauge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
@@ -60,6 +61,23 @@ suspend fun <T> logTime(methodName: String, lambda: suspend () -> T): T? {
 
         result
     }
+}
+
+suspend fun <T> logMetrics(counter: Gauge, lambda: suspend () -> T): T? {
+    return withContext(coroutineContext) {
+        try {
+            counter.inc()
+            lambda.invoke()
+        } finally {
+            counter.dec()
+        }
+    }
+}
+
+fun createGauge(variableName: String, descriptionName: String): Gauge {
+    return Gauge.build(
+        variableName, "Quantity of $descriptionName method call"
+    ).register()
 }
 
 private val writerDispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
