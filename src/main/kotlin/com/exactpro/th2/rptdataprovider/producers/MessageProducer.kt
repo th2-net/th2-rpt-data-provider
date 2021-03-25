@@ -117,7 +117,7 @@ class MessageProducer(
                 ).build()
 
                 try {
-                    rabbitMqService.decodeMessage(batch)
+                    rabbitMqService.decodeMessage(batch).onEach {  }
                         .onEach { codecCache.put(getId(it.metadata.id).toString(), it) }
                         .firstOrNull { message.id == getId(it.metadata.id) }
                 } catch (e: IllegalStateException) {
