@@ -193,8 +193,8 @@ class SearchMessagesHandler(
         requestType: RequestType
     ): Flow<StoredMessage> {
         return coroutineScope {
-            val uniqueIds = mutableSetOf<String>()
             flow {
+                var isFirstPull = true
                 var limit = initLimit
                 do {
                     val data = pullMoreMerged(
@@ -202,22 +202,19 @@ class SearchMessagesHandler(
                         timelineDirection,
                         limit,
                         startTimestamp,
-                        requestType
+                        requestType,
+                        isFirstPull
                     )
                     var hasElements = false
                     for (element in data) {
                         hasElements = true
                         emit(element)
                     }
+                    isFirstPull = false
                     limit = min(maxMessagesLimit, limit * 2)
                 } while (hasElements)
             }
                 .filterNot { it.id.toString() == messageId }
-                .filterNot { message ->
-                    uniqueIds.contains(message.id.toString()).also {
-                        if (!it) uniqueIds.add(message.id.toString())
-                    }
-                }
                 .takeWhile {
                     it.timestamp.let { timestamp ->
                         if (timelineDirection == TimeRelation.AFTER) {
@@ -353,7 +350,7 @@ class SearchMessagesHandler(
         startId: StoredMessageId?,
         limit: Int,
         timelineDirection: TimeRelation,
-        isFirstPull: Boolean = true
+        isFirstPull: Boolean
     ): Iterable<StoredMessage> {
 
         logger.debug { "pulling more messages (id=$startId limit=$limit direction=$timelineDirection)" }
@@ -472,7 +469,8 @@ class SearchMessagesHandler(
         timelineDirection: TimeRelation,
         perStreamLimit: Int,
         startTimestamp: Instant,
-        requestType: RequestType
+        requestType: RequestType,
+        isFirstPull: Boolean
     ): Sequence<StoredMessage> {
         logger.debug { "pulling more messages (streams=${streamMessageIndexMap.keys} direction=$timelineDirection perStreamLimit=$perStreamLimit)" }
         return coroutineScope {
@@ -481,10 +479,10 @@ class SearchMessagesHandler(
                     async {
                         if (requestType == RequestType.SSE) {
                             databaseRequestRetry(dbRetryDelay) {
-                                pullMore(streamMessageIndexMap[stream], perStreamLimit, timelineDirection)
+                                pullMore(streamMessageIndexMap[stream], perStreamLimit, timelineDirection, isFirstPull)
                             }
                         } else {
-                            pullMore(streamMessageIndexMap[stream], perStreamLimit, timelineDirection)
+                            pullMore(streamMessageIndexMap[stream], perStreamLimit, timelineDirection, isFirstPull)
                         }.let {
                             val iterable =
                                 (if (timelineDirection == TimeRelation.AFTER) it else it.reversed()).toList().iterator()
