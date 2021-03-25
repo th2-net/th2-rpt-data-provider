@@ -35,7 +35,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import mu.KotlinLogging
-import java.lang.Exception
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentSkipListSet
 
@@ -44,7 +43,7 @@ class RabbitMqService(private val configuration: Configuration) {
     companion object {
         val logger = KotlinLogging.logger { }
 
-        private val rabbitMqMessageParse: Gauge = createGauge("rabbit_mq_message_parse", "rabbitMqMessageParse")
+        private val rabbitMqMessageParseGauge: Gauge = createGauge("rabbit_mq_message_parse", "rabbitMqMessageParse")
     }
 
     private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
@@ -90,7 +89,7 @@ class RabbitMqService(private val configuration: Configuration) {
             .associate { it.metadata.id to CodecRequest(it.metadata.id) }
 
         return withContext(Dispatchers.IO) {
-            logMetrics(rabbitMqMessageParse) {
+            logMetrics(rabbitMqMessageParseGauge) {
                 val deferred = requests.map { async { it.value.channel.receive() } }
 
                 var alreadyRequested = true
