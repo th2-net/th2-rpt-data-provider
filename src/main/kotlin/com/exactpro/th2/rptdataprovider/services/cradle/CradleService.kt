@@ -27,8 +27,11 @@ import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventWrapper
 import com.exactpro.th2.rptdataprovider.convertToString
+import com.exactpro.th2.rptdataprovider.createGauge
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
+import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.logTime
+import io.prometheus.client.Gauge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.withContext
@@ -40,6 +43,21 @@ class CradleService(configuration: Configuration) {
 
     companion object {
         val logger = KotlinLogging.logger {}
+
+        private val getMessagesAsyncGauge: Gauge = createGauge("get_messages_async", "getMessagesAsync")
+        private val getProcessedMessageAsyncGauge: Gauge =
+            createGauge("get_processed_message_async", "getProcessedMessageAsync")
+        private val getMessageAsyncGauge: Gauge = createGauge("get_message_async", "getMessageAsync")
+        private val getTestEventsAsyncGauge: Gauge = createGauge("get_test_events_async", "getTestEventsAsync")
+        private val getTestEventAsyncGauge: Gauge = createGauge("get_test_event_async", "getTestEventAsync")
+        private val getNearestMessageIdGauge: Gauge = createGauge("get_nearest_message_id", "getNearestMessageId")
+        private val getMessageBatchAsyncGauge: Gauge = createGauge("get_message_batch_async", "getMessageBatchAsync")
+        private val getTestEventIdsByMessageIdAsyncGauge: Gauge =
+            createGauge("get_test_event_ids_by_message_id_async", "getTestEventIdsByMessageIdAsync")
+        private val getMessageIdsByTestEventIdAsyncGauge: Gauge =
+            createGauge("get_message_ids_by_test_event_id_async", "getMessageIdsByTestEventIdAsync")
+        private val getStreamsGauge: Gauge =
+            createGauge("get_streams", "getStreams")
     }
 
     private val cradleManager: CradleManager = configuration.cradleManager
@@ -47,37 +65,45 @@ class CradleService(configuration: Configuration) {
     private val storage = cradleManager.storage
     private val linker = cradleManager.storage.testEventsMessagesLinker
 
+
     suspend fun getMessagesSuspend(filter: StoredMessageFilter): Iterable<StoredMessage> {
         return withContext(Dispatchers.IO) {
-            logTime("getMessages (filter=${filter.convertToString()})") {
-                storage.getMessagesAsync(filter).await()
-            }
-        }!!
+            logMetrics(getMessagesAsyncGauge) {
+                logTime("getMessages (filter=${filter.convertToString()})") {
+                    storage.getMessagesAsync(filter).await()
+                }
+            } ?: listOf()
+        }
     }
 
     suspend fun getProcessedMessageSuspend(id: StoredMessageId): StoredMessage? {
         return withContext(Dispatchers.IO) {
-            logTime("getProcessedMessage (id=$id)") {
-                storage.getProcessedMessageAsync(id).await()
+            logMetrics(getProcessedMessageAsyncGauge) {
+                logTime("getProcessedMessage (id=$id)") {
+                    storage.getProcessedMessageAsync(id).await()
+                }
             }
         }
     }
 
     suspend fun getMessageSuspend(id: StoredMessageId): StoredMessage? {
         return withContext(Dispatchers.IO) {
-            logTime("getMessage (id=$id)") {
-                storage.getMessageAsync(id).await()
+            logMetrics(getMessageAsyncGauge) {
+                logTime("getMessage (id=$id)") {
+                    storage.getMessageAsync(id).await()
+                }
             }
         }
     }
 
     suspend fun getEventsSuspend(from: Instant, to: Instant): Iterable<StoredTestEventMetadata> {
         return withContext(coroutineContext) {
-            logTime("Get events from: $from to: $to") {
-                storage.getTestEventsAsync(from, to).await()
-            }
-        } ?: listOf()
-
+            logMetrics(getTestEventsAsyncGauge) {
+                logTime("Get events from: $from to: $to") {
+                    storage.getTestEventsAsync(from, to).await()
+                }
+            } ?: listOf()
+        }
     }
 
     suspend fun getEventsSuspend(
@@ -86,17 +112,20 @@ class CradleService(configuration: Configuration) {
         to: Instant
     ): Iterable<StoredTestEventMetadata> {
         return withContext(coroutineContext) {
-            logTime("Get events parent: $parentId from: $from to: $to") {
-                storage.getTestEventsAsync(parentId, from, to).await()
-            }
-        } ?: listOf()
-
+            logMetrics(getTestEventsAsyncGauge) {
+                logTime("Get events parent: $parentId from: $from to: $to") {
+                    storage.getTestEventsAsync(parentId, from, to).await()
+                }
+            } ?: listOf()
+        }
     }
 
     suspend fun getEventSuspend(id: StoredTestEventId): StoredTestEventWrapper? {
         return withContext(coroutineContext) {
-            logTime("getTestEvent (id=$id)") {
-                storage.getTestEventAsync(id).await()
+            logMetrics(getTestEventAsyncGauge) {
+                logTime("getTestEvent (id=$id)") {
+                    storage.getTestEventAsync(id).await()
+                }
             }
         }
     }
@@ -108,41 +137,51 @@ class CradleService(configuration: Configuration) {
         timelineDirection: TimeRelation
     ): StoredMessageId? {
         return withContext(Dispatchers.IO) {
-            logTime(("getFirstMessageId (timestamp=$timestamp stream=$stream direction=${direction.label} )")) {
-                storage.getNearestMessageId(stream, direction, timestamp, timelineDirection)
+            logMetrics(getNearestMessageIdGauge) {
+                logTime(("getFirstMessageId (timestamp=$timestamp stream=$stream direction=${direction.label} )")) {
+                    storage.getNearestMessageId(stream, direction, timestamp, timelineDirection)
+                }
             }
         }
     }
 
     suspend fun getMessageBatchSuspend(id: StoredMessageId): Collection<StoredMessage> {
         return withContext(Dispatchers.IO) {
-            logTime("getTestEventIdsByMessageId (id=$id)") {
-                storage.getMessageBatchAsync(id).await()
-            }
-        } ?: emptyList()
+            logMetrics(getMessageBatchAsyncGauge) {
+                logTime("getTestEventIdsByMessageId (id=$id)") {
+                    storage.getMessageBatchAsync(id).await()
+                }
+            } ?: emptyList()
+        }
     }
 
     suspend fun getEventIdsSuspend(id: StoredMessageId): Collection<StoredTestEventId> {
         return withContext(Dispatchers.IO) {
-            logTime("getTestEventIdsByMessageId (id=$id)") {
-                linker.getTestEventIdsByMessageIdAsync(id).await()
-            }
-        } ?: emptyList()
+            logMetrics(getTestEventIdsByMessageIdAsyncGauge) {
+                logTime("getTestEventIdsByMessageId (id=$id)") {
+                    linker.getTestEventIdsByMessageIdAsync(id).await()
+                }
+            } ?: emptyList()
+        }
     }
 
     suspend fun getMessageIdsSuspend(id: StoredTestEventId): Collection<StoredMessageId> {
         return withContext(Dispatchers.IO) {
-            logTime("getMessageIdsByTestEventId (id=$id)") {
-                linker.getMessageIdsByTestEventIdAsync(id).await()
-            }
-        } ?: emptyList()
+            logMetrics(getMessageIdsByTestEventIdAsyncGauge) {
+                logTime("getMessageIdsByTestEventId (id=$id)") {
+                    linker.getMessageIdsByTestEventIdAsync(id).await()
+                }
+            } ?: emptyList()
+        }
     }
 
     suspend fun getMessageStreams(): Collection<String> {
         return withContext(Dispatchers.IO) {
-            logTime("getStreams") {
-                storage.streams
-            }
-        } ?: emptyList()
+            logMetrics(getStreamsGauge) {
+                logTime("getStreams") {
+                    storage.streams
+                }
+            } ?: emptyList()
+        }
     }
 }
