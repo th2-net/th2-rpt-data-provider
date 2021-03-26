@@ -22,11 +22,9 @@ import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestExcept
 import com.exactpro.th2.rptdataprovider.entities.requests.*
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.sse.EventType
-
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
-import com.google.api.Metric
 import io.ktor.application.*
 import io.ktor.features.*
 import io.ktor.http.*
@@ -36,7 +34,6 @@ import io.ktor.routing.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.util.*
-import io.prometheus.client.Gauge
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.io.Writer
@@ -48,10 +45,10 @@ import kotlin.system.measureTimeMillis
 class Main(args: Array<String>) {
 
     private val sseRequestsProcessedInParallelQuantity: Metrics =
-        Metrics.createMetric("th2_sse_requests_processed_in_parallel_quantity", "SSE requests processed in parallel")
+        Metrics("th2_sse_requests_processed_in_parallel_quantity", "SSE requests processed in parallel")
 
     private val restRequestsProcessedInParallelQuantity: Metrics =
-        Metrics.createMetric("th2_rest_requests_processed_in_parallel_quantity", "REST requests processed in parallel")
+        Metrics("th2_rest_requests_processed_in_parallel_quantity", "REST requests processed in parallel")
 
     private val logger = KotlinLogging.logger {}
 

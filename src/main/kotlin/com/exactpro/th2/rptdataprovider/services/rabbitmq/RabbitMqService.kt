@@ -42,7 +42,7 @@ class RabbitMqService(private val configuration: Configuration) {
     companion object {
         val logger = KotlinLogging.logger { }
 
-        private val rabbitMqMessageParseGauge: Metrics = Metrics.createMetric("rabbit_mq_message_parse", "rabbitMqMessageParse")
+        private val rabbitMqMessageParseGauge: Metrics = Metrics("rabbit_mq_message_parse", "rabbitMqMessageParse")
     }
 
     private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
