@@ -20,6 +20,7 @@ import com.exactpro.cradle.messages.StoredMessageFilter
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.prometheus.client.Gauge
+import io.prometheus.client.Histogram
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
@@ -27,6 +28,7 @@ import mu.KotlinLogging
 import java.io.Writer
 import java.time.Instant
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -63,13 +65,46 @@ suspend fun <T> logTime(methodName: String, lambda: suspend () -> T): T? {
     }
 }
 
-suspend fun <T> logMetrics(counter: Gauge, lambda: suspend () -> T): T? {
+data class Metrics(
+    private val histogramGauge: Histogram,
+    private val histogramTime: Histogram,
+    private val gauge: Gauge,
+    private val counter: AtomicLong
+) {
+
+    constructor(variableName: String, descriptionName: String) : this(
+        histogramGauge = Histogram.build(
+            "${variableName}_hist_gauge", "Quantity of $descriptionName using Histogram"
+        ).register(),
+        histogramTime = Histogram.build(
+            "${variableName}_hist_time", "Time of $descriptionName"
+        ).register(),
+        gauge = Gauge.build(
+            "${variableName}_gauge", "Quantity of $descriptionName using Gauge"
+        ).register(),
+        counter = AtomicLong(0)
+    )
+
+    fun startObserve(): Histogram.Timer {
+        gauge.inc()
+        histogramGauge.observe(counter.incrementAndGet().toDouble())
+        return histogramTime.startTimer()
+    }
+
+    fun stopObserve(timer: Histogram.Timer) {
+        gauge.dec()
+        histogramGauge.observe(counter.decrementAndGet().toDouble())
+        timer.observeDuration()
+    }
+}
+
+suspend fun <T> logMetrics(metrics: Metrics, lambda: suspend () -> T): T? {
     return withContext(coroutineContext) {
+        val timer = metrics.startObserve()
         try {
-            counter.inc()
             lambda.invoke()
         } finally {
-            counter.dec()
+            metrics.stopObserve(timer)
         }
     }
 }

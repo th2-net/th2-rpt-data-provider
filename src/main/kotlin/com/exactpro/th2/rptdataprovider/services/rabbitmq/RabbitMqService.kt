@@ -20,11 +20,10 @@ import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.schema.message.MessageListener
-import com.exactpro.th2.rptdataprovider.createGauge
+import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.logMetrics
 import io.ktor.utils.io.errors.*
-import io.prometheus.client.Gauge
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.util.concurrent.ConcurrentHashMap
@@ -34,7 +33,8 @@ class RabbitMqService(private val configuration: Configuration) {
 
     companion object {
         val logger = KotlinLogging.logger { }
-        private val rabbitMqMessageParseGauge: Gauge = createGauge("rabbit_mq_message_parse", "rabbitMqMessageParse")
+        private val rabbitMqMessageParseGauge: Metrics = Metrics("rabbit_mq_message_parse", "rabbitMqMessageParse")
+
     }
 
     private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
