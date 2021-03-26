@@ -55,6 +55,68 @@ class SearchMessagesHandler(
         private val logger = KotlinLogging.logger { }
     }
 
+    data class StreamDataIterator(
+        private var iterator: Iterator<StoredMessage>,
+        val stream: Pair<String, Direction>
+    ) {
+        var value: StoredMessage? = null
+            private set
+        var count: Int = 0
+            private set
+        var lastElement: StoredMessage? = null
+            private set
+        var isFirstPull: Boolean = true
+            private set
+
+        constructor(stream: Pair<String, Direction>, startId: StoredMessage?) : this(
+            iterator = iterator<StoredMessage> { },
+            stream = stream
+        ) {
+            lastElement = startId
+        }
+
+        private fun dropUntilInRangeInOppositeDirection(
+            startTimestamp: Instant,
+            timelineDirection: TimeRelation
+        ) {
+            if (timelineDirection == TimeRelation.AFTER) {
+                while (this.nextOrNull()?.timestamp?.isBefore(startTimestamp) == true);
+            } else {
+                while (this.nextOrNull()?.timestamp?.isAfter(startTimestamp) == true);
+            }
+        }
+
+        fun update(
+            newIterator: Iterator<StoredMessage>,
+            timelineDirection: TimeRelation,
+            startTimestamp: Instant
+        ): StreamDataIterator {
+            iterator = newIterator
+            count = 0
+            value = null
+            isFirstPull = false
+
+            dropUntilInRangeInOppositeDirection(startTimestamp, timelineDirection)
+
+            return this
+        }
+
+        fun chooseLastId(perStreamLimit: Int) {
+            if (count < perStreamLimit)
+                lastElement = null
+        }
+
+        fun nextOrNull(): StoredMessage? {
+            value = if (iterator.hasNext()) {
+                count++
+                iterator.next().also { lastElement = it }
+            } else {
+                null
+            }
+            return value
+        }
+    }
+
     private suspend fun isMessageMatched(
         messageType: List<String>?,
         messagesFromAttachedId: Collection<StoredMessageId>?,
@@ -103,7 +165,7 @@ class SearchMessagesHandler(
                 }) ?: Instant.now()
     }
 
-    private suspend fun getNearestMessage(
+    private fun getNearestMessage(
         messageBatch: Collection<StoredMessage>,
         timelineDirection: TimeRelation,
         timestamp: Instant
@@ -158,9 +220,9 @@ class SearchMessagesHandler(
         timelineDirection: TimeRelation,
         streamList: List<String>?,
         timestamp: Instant
-    ): List<StreamData> {
+    ): List<StreamDataIterator> {
 
-        return mutableListOf<StreamData>().apply {
+        return mutableListOf<StreamDataIterator>().apply {
             for (stream in streamList ?: emptyList()) {
                 for (direction in Direction.values()) {
                     val storedMessageId =
@@ -168,12 +230,14 @@ class SearchMessagesHandler(
 
                     if (storedMessageId != null) {
                         val messageBatch = cradle.getMessageBatchSuspend(storedMessageId)
-                        StreamData(
-                            Pair(stream, direction),
-                            getNearestMessage(messageBatch, timelineDirection, timestamp)
+                        add(
+                            StreamDataIterator(
+                                Pair(stream, direction),
+                                getNearestMessage(messageBatch, timelineDirection, timestamp)
+                            )
                         )
                     } else {
-                        StreamData(Pair(stream, direction), null)
+                        add(StreamDataIterator(Pair(stream, direction), null))
                     }
                 }
             }
@@ -183,7 +247,7 @@ class SearchMessagesHandler(
     @ExperimentalCoroutinesApi
     @FlowPreview
     private suspend fun getMessageStream(
-        dataStreams: List<StreamData>,
+        dataStreamIterators: List<StreamDataIterator>,
         timelineDirection: TimeRelation,
         initLimit: Int,
         messageId: String?,
@@ -197,7 +261,7 @@ class SearchMessagesHandler(
                 var limit = initLimit
                 do {
                     val data = pullMoreMerged(
-                        dataStreams,
+                        dataStreamIterators,
                         timelineDirection,
                         limit,
                         startTimestamp,
@@ -208,6 +272,7 @@ class SearchMessagesHandler(
                         hasElements = true
                         emit(element)
                     }
+                    dataStreamIterators.forEach { it.chooseLastId(limit) }
                     limit = min(maxMessagesLimit, limit * 2)
                 } while (hasElements)
             }
@@ -379,19 +444,6 @@ class SearchMessagesHandler(
         )
     }
 
-    private fun dropUntilInRangeInOppositeDirection(
-        startTimestamp: Instant,
-        storedMessages: StreamData,
-        timelineDirection: TimeRelation
-    ): StreamData {
-        if (timelineDirection == TimeRelation.AFTER) {
-            while (storedMessages.nextOrNull()?.timestamp?.isBefore(startTimestamp) == true);
-        } else {
-            while (storedMessages.nextOrNull()?.timestamp?.isAfter(startTimestamp) == true);
-        }
-        return storedMessages
-    }
-
     private fun getIsLess(timelineDirection: TimeRelation): ((Instant, Instant) -> Boolean) {
         return if (timelineDirection == TimeRelation.AFTER) {
             { a: Instant, b: Instant -> a.isBeforeOrEqual(b) }
@@ -400,58 +452,15 @@ class SearchMessagesHandler(
         }
     }
 
-    data class StreamData(
-        private var iterator: Iterator<StoredMessage>,
-        val stream: Pair<String, Direction>
-    ) {
-        var value: StoredMessage? = null
-            private set
-        var count: Int = 0
-            private set
-        var lastElement: StoredMessage? = null
-            private set
-        var isFirstPull: Boolean = true
-            private set
-
-        constructor(stream: Pair<String, Direction>, startId: StoredMessage?) : this(
-            iterator = iterator<StoredMessage> { },
-            stream = stream
-        ) {
-            lastElement = startId
-        }
-
-        fun update(newIterator: Iterator<StoredMessage>): StreamData {
-            iterator = newIterator
-            count = 0
-            value = null
-            isFirstPull = false
-            return this
-        }
-
-        fun chooseLastId(perStreamLimit: Int) {
-            if (count < perStreamLimit)
-                lastElement = null
-        }
-
-        fun nextOrNull(): StoredMessage? {
-            value = if (iterator.hasNext()) {
-                count++
-                iterator.next().also { lastElement = it }
-            } else {
-                null
-            }
-            return value
-        }
-    }
 
     private fun minElement(
-        streamList: List<StreamData>,
+        streamListIterator: List<StreamDataIterator>,
         timelineDirection: TimeRelation,
         isLess: (Instant, Instant) -> Boolean
     ): StoredMessage? {
         var minTimestamp = if (timelineDirection == TimeRelation.AFTER) Instant.MAX else Instant.MIN
-        var minElement: StreamData? = null
-        for (stream in streamList) {
+        var minElement: StreamDataIterator? = null
+        for (stream in streamListIterator) {
             stream.value?.let {
                 if (isLess(it.timestamp, minTimestamp!!)) {
                     minTimestamp = it.timestamp
@@ -464,37 +473,29 @@ class SearchMessagesHandler(
     }
 
     private suspend fun mergeIterables(
-        streamList: List<StreamData>,
-        timelineDirection: TimeRelation,
-        startTimestamp: Instant,
-        perStreamLimit: Int
+        streamListIterator: List<StreamDataIterator>,
+        timelineDirection: TimeRelation
     ): Sequence<StoredMessage> {
         return sequence {
-            streamList.forEach {
-                dropUntilInRangeInOppositeDirection(startTimestamp, it, timelineDirection)
-            }
             val isLess = getIsLess(timelineDirection)
             do {
-                val minElement = minElement(streamList, timelineDirection, isLess)?.also {
+                val minElement = minElement(streamListIterator, timelineDirection, isLess)?.also {
                     yield(it)
                 }
             } while (minElement != null)
-            streamList.forEach {
-                it.chooseLastId(perStreamLimit)
-            }
         }
     }
 
     private suspend fun pullMoreMerged(
-        dataStreams: List<StreamData>,
+        dataStreamIterators: List<StreamDataIterator>,
         timelineDirection: TimeRelation,
         perStreamLimit: Int,
         startTimestamp: Instant,
         requestType: RequestType
     ): Sequence<StoredMessage> {
-        logger.debug { "pulling more messages (streams=${dataStreams.map { it.stream }} direction=$timelineDirection perStreamLimit=$perStreamLimit)" }
+        logger.debug { "pulling more messages (streams=${dataStreamIterators.map { it.stream }} direction=$timelineDirection perStreamLimit=$perStreamLimit)" }
         return coroutineScope {
-            dataStreams
+            dataStreamIterators
                 .map { stream ->
                     async {
                         if (requestType == RequestType.SSE) {
@@ -506,12 +507,12 @@ class SearchMessagesHandler(
                         }.let {
                             val iterable =
                                 (if (timelineDirection == TimeRelation.AFTER) it else it.reversed()).toList().iterator()
-                            stream.update(iterable)
+                            stream.update(iterable, timelineDirection, startTimestamp)
                         }
                     }
                 }
                 .awaitAll()
-                .let { mergeIterables(it, timelineDirection, startTimestamp, perStreamLimit) }
+                .let { mergeIterables(it, timelineDirection) }
         }
     }
 }
