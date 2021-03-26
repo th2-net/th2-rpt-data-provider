@@ -154,13 +154,13 @@ class SearchMessagesHandler(
     }
 
 
-    private suspend fun initStreamMessageIdMap(
+    private suspend fun initDataStreams(
         timelineDirection: TimeRelation,
         streamList: List<String>?,
         timestamp: Instant
-    ): MutableMap<Pair<String, Direction>, StoredMessageId?> {
+    ): List<StreamData> {
 
-        return mutableMapOf<Pair<String, Direction>, StoredMessageId?>().apply {
+        return mutableListOf<StreamData>().apply {
             for (stream in streamList ?: emptyList()) {
                 for (direction in Direction.values()) {
                     val storedMessageId =
@@ -168,12 +168,12 @@ class SearchMessagesHandler(
 
                     if (storedMessageId != null) {
                         val messageBatch = cradle.getMessageBatchSuspend(storedMessageId)
-                        put(
+                        StreamData(
                             Pair(stream, direction),
-                            getNearestMessage(messageBatch, timelineDirection, timestamp)?.id
+                            getNearestMessage(messageBatch, timelineDirection, timestamp)
                         )
                     } else {
-                        put(Pair(stream, direction), null)
+                        StreamData(Pair(stream, direction), null)
                     }
                 }
             }
@@ -183,7 +183,7 @@ class SearchMessagesHandler(
     @ExperimentalCoroutinesApi
     @FlowPreview
     private suspend fun getMessageStream(
-        streamMessageIndexMap: MutableMap<Pair<String, Direction>, StoredMessageId?>,
+        dataStreams: List<StreamData>,
         timelineDirection: TimeRelation,
         initLimit: Int,
         messageId: String?,
@@ -194,23 +194,20 @@ class SearchMessagesHandler(
     ): Flow<StoredMessage> {
         return coroutineScope {
             flow {
-                var isFirstPull = true
                 var limit = initLimit
                 do {
                     val data = pullMoreMerged(
-                        streamMessageIndexMap,
+                        dataStreams,
                         timelineDirection,
                         limit,
                         startTimestamp,
-                        requestType,
-                        isFirstPull
+                        requestType
                     )
                     var hasElements = false
                     for (element in data) {
                         hasElements = true
                         emit(element)
                     }
-                    isFirstPull = false
                     limit = min(maxMessagesLimit, limit * 2)
                 } while (hasElements)
             }
@@ -242,7 +239,7 @@ class SearchMessagesHandler(
                 request.timestampFrom, request.timestampTo
             )
 
-            val streamMessageIndexMap = initStreamMessageIdMap(
+            val streamMessageIndexMap = initDataStreams(
                 request.timelineDirection, request.stream,
                 startTimestamp
             )
@@ -302,12 +299,12 @@ class SearchMessagesHandler(
                     messageId, request.searchDirection,
                     request.startTimestamp, request.startTimestamp
                 )
-                val streamMessageIndexMap = initStreamMessageIdMap(
+                val dataStreams = initDataStreams(
                     request.searchDirection, request.stream,
                     startTimestamp
                 )
                 getMessageStream(
-                    streamMessageIndexMap, request.searchDirection, request.resultCountLimit ?: startMessageCountLimit,
+                    dataStreams, request.searchDirection, request.resultCountLimit ?: startMessageCountLimit,
                     messageId, startTimestamp, request.endTimestamp, request.endTimestamp, RequestType.SSE
                 ).collect { emit(it) }
             }.map {
@@ -404,12 +401,38 @@ class SearchMessagesHandler(
     }
 
     data class StreamData(
-        val iterator: Iterator<StoredMessage>,
-        val stream: Pair<String, Direction>,
-        var value: StoredMessage? = null,
-        var count: Int = 0,
-        var lastElement: StoredMessage? = null
+        private var iterator: Iterator<StoredMessage>,
+        val stream: Pair<String, Direction>
     ) {
+        var value: StoredMessage? = null
+            private set
+        var count: Int = 0
+            private set
+        var lastElement: StoredMessage? = null
+            private set
+        var isFirstPull: Boolean = true
+            private set
+
+        constructor(stream: Pair<String, Direction>, startId: StoredMessage?) : this(
+            iterator = iterator<StoredMessage> { },
+            stream = stream
+        ) {
+            lastElement = startId
+        }
+
+        fun update(newIterator: Iterator<StoredMessage>): StreamData {
+            iterator = newIterator
+            count = 0
+            value = null
+            isFirstPull = false
+            return this
+        }
+
+        fun chooseLastId(perStreamLimit: Int) {
+            if (count < perStreamLimit)
+                lastElement = null
+        }
+
         fun nextOrNull(): StoredMessage? {
             value = if (iterator.hasNext()) {
                 count++
@@ -441,14 +464,13 @@ class SearchMessagesHandler(
     }
 
     private suspend fun mergeIterables(
-        iterables: List<StreamData>,
+        streamList: List<StreamData>,
         timelineDirection: TimeRelation,
         startTimestamp: Instant,
-        streamMessageIndexMap: MutableMap<Pair<String, Direction>, StoredMessageId?>,
         perStreamLimit: Int
     ): Sequence<StoredMessage> {
         return sequence {
-            val streamList = iterables.map {
+            streamList.forEach {
                 dropUntilInRangeInOppositeDirection(startTimestamp, it, timelineDirection)
             }
             val isLess = getIsLess(timelineDirection)
@@ -457,41 +479,39 @@ class SearchMessagesHandler(
                     yield(it)
                 }
             } while (minElement != null)
-            streamList.map {
-                val streamIsEmpty = it.count < perStreamLimit
-                streamMessageIndexMap[it.stream] = if (streamIsEmpty) null else it.lastElement?.id
+            streamList.forEach {
+                it.chooseLastId(perStreamLimit)
             }
         }
     }
 
     private suspend fun pullMoreMerged(
-        streamMessageIndexMap: MutableMap<Pair<String, Direction>, StoredMessageId?>,
+        dataStreams: List<StreamData>,
         timelineDirection: TimeRelation,
         perStreamLimit: Int,
         startTimestamp: Instant,
-        requestType: RequestType,
-        isFirstPull: Boolean
+        requestType: RequestType
     ): Sequence<StoredMessage> {
-        logger.debug { "pulling more messages (streams=${streamMessageIndexMap.keys} direction=$timelineDirection perStreamLimit=$perStreamLimit)" }
+        logger.debug { "pulling more messages (streams=${dataStreams.map { it.stream }} direction=$timelineDirection perStreamLimit=$perStreamLimit)" }
         return coroutineScope {
-            streamMessageIndexMap.keys
+            dataStreams
                 .map { stream ->
                     async {
                         if (requestType == RequestType.SSE) {
                             databaseRequestRetry(dbRetryDelay) {
-                                pullMore(streamMessageIndexMap[stream], perStreamLimit, timelineDirection, isFirstPull)
+                                pullMore(stream.lastElement?.id, perStreamLimit, timelineDirection, stream.isFirstPull)
                             }
                         } else {
-                            pullMore(streamMessageIndexMap[stream], perStreamLimit, timelineDirection, isFirstPull)
+                            pullMore(stream.lastElement?.id, perStreamLimit, timelineDirection, stream.isFirstPull)
                         }.let {
                             val iterable =
                                 (if (timelineDirection == TimeRelation.AFTER) it else it.reversed()).toList().iterator()
-                            StreamData(iterable, stream)
+                            stream.update(iterable)
                         }
                     }
                 }
                 .awaitAll()
-                .let { mergeIterables(it, timelineDirection, startTimestamp, streamMessageIndexMap, perStreamLimit) }
+                .let { mergeIterables(it, timelineDirection, startTimestamp, perStreamLimit) }
         }
     }
 }
