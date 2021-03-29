@@ -142,34 +142,36 @@ class Main(args: Array<String>) {
     ) {
         val stringParameters = parameters.contentDeepToString()
         coroutineScope {
-            measureTimeMillis {
-                logger.debug { "handling '$requestName' request with parameters '$stringParameters'" }
-                try {
+            logMetrics(if (useSse) sseRequestsProcessedInParallelQuantity else restRequestsProcessedInParallelQuantity) {
+                measureTimeMillis {
+                    logger.debug { "handling '$requestName' request with parameters '$stringParameters'" }
                     try {
-                        if (useSse) {
-                            val function = calledFun.invoke()
-                            @Suppress("UNCHECKED_CAST")
-                            handleSseRequest(
-                                call,
-                                context,
-                                function as suspend (Writer, suspend (Writer,  LastScannedObjectInfo, AtomicLong) -> Unit) -> Unit
-                            )
-                        } else {
-                            handleRestApiRequest(call, context, cacheControl, probe, calledFun)
+                        try {
+                            if (useSse) {
+                                val function = calledFun.invoke()
+                                @Suppress("UNCHECKED_CAST")
+                                handleSseRequest(
+                                    call,
+                                    context,
+                                    function as suspend (Writer, suspend (Writer, LastScannedObjectInfo, AtomicLong) -> Unit) -> Unit
+                                )
+                            } else {
+                                handleRestApiRequest(call, context, cacheControl, probe, calledFun)
+                            }
+                        } catch (e: Exception) {
+                            throw e.rootCause ?: e
                         }
+                    } catch (e: InvalidRequestException) {
+                        logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - invalid request" }
+                    } catch (e: CradleObjectNotFoundException) {
+                        logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - missing cradle data" }
+                    } catch (e: ChannelClosedException) {
+                        logger.debug { "unable to handle request '$requestName' with parameters '$stringParameters' - channel closed" }
                     } catch (e: Exception) {
-                        throw e.rootCause ?: e
+                        logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - unexpected exception" }
                     }
-                } catch (e: InvalidRequestException) {
-                    logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - invalid request" }
-                } catch (e: CradleObjectNotFoundException) {
-                    logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - missing cradle data" }
-                } catch (e: ChannelClosedException) {
-                    logger.debug { "unable to handle request '$requestName' with parameters '$stringParameters' - channel closed" }
-                } catch (e: Exception) {
-                    logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - unexpected exception" }
-                }
-            }.let { logger.debug { "request '$requestName' with parameters '$stringParameters' handled - time=${it}ms" } }
+                }.let { logger.debug { "request '$requestName' with parameters '$stringParameters' handled - time=${it}ms" } }
+            }
         }
     }
 
