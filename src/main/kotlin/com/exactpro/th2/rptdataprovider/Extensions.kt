@@ -19,6 +19,7 @@ package com.exactpro.th2.rptdataprovider
 import com.exactpro.cradle.messages.StoredMessageFilter
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.fasterxml.jackson.databind.ObjectMapper
+import io.prometheus.client.Gauge
 import io.prometheus.client.Histogram
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -27,7 +28,6 @@ import mu.KotlinLogging
 import java.io.Writer
 import java.time.Instant
 import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -64,31 +64,39 @@ suspend fun <T> logTime(methodName: String, lambda: suspend () -> T): T? {
     }
 }
 
-data class Metrics(private val histogram: Histogram, private val counter: AtomicLong) {
-    companion object {
-        fun createMetric(variableName: String, descriptionName: String): Metrics {
-            return Metrics(
-                Histogram.build(
-                    variableName, "Quantity of $descriptionName"
-                ).register(), AtomicLong(0)
-            )
-        }
+data class Metrics(
+    private val histogramTime: Histogram,
+    private val gauge: Gauge
+) {
+
+    constructor(variableName: String, descriptionName: String) : this(
+        histogramTime = Histogram.build(
+            "${variableName}_hist_time", "Time of $descriptionName"
+        ).buckets(.005, .01, .025, .05, .075, .1, .25, .5, .75, 1.0, 2.5, 5.0, 7.5, 10.0, 25.0, 50.0, 75.0)
+            .register(),
+        gauge = Gauge.build(
+            "${variableName}_gauge", "Quantity of $descriptionName using Gauge"
+        ).register()
+    )
+
+    fun startObserve(): Histogram.Timer {
+        gauge.inc()
+        return histogramTime.startTimer()
     }
-    fun startObserve() {
-        histogram.observe(counter.incrementAndGet().toDouble())
-    }
-    fun stopObserve() {
-        histogram.observe(counter.decrementAndGet().toDouble())
+
+    fun stopObserve(timer: Histogram.Timer) {
+        gauge.dec()
+        timer.observeDuration()
     }
 }
 
 suspend fun <T> logMetrics(metrics: Metrics, lambda: suspend () -> T): T? {
     return withContext(coroutineContext) {
-        metrics.startObserve()
+        val time = metrics.startObserve()
         try {
             lambda.invoke()
         } finally {
-            metrics.stopObserve()
+            metrics.stopObserve(time)
         }
     }
 }
