@@ -167,9 +167,9 @@ class Main(args: Array<String>) {
                 measureTimeMillis {
                     logger.debug { "handling '$requestName' request with parameters '$stringParameters'" }
                     try {
+                        if (useSse) sseRequestGet.inc() else restRequestGet.inc()
                         try {
                             if (useSse) {
-                                sseRequestGet.inc()
                                 val function = calledFun.invoke()
                                 @Suppress("UNCHECKED_CAST")
                                 handleSseRequest(
@@ -178,7 +178,6 @@ class Main(args: Array<String>) {
                                     function as suspend (Writer, suspend (Writer, LastScannedObjectInfo, AtomicLong) -> Unit) -> Unit
                                 )
                             } else {
-                                restRequestGet.inc()
                                 handleRestApiRequest(call, context, cacheControl, probe, calledFun)
                             }
                         } catch (e: Exception) {
