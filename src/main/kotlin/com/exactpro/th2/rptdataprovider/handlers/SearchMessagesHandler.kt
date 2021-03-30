@@ -30,11 +30,10 @@ import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchReques
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
-import com.exactpro.th2.rptdataprovider.isAfterOrEqual
-import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
 import com.fasterxml.jackson.databind.ObjectMapper
+import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import mu.KotlinLogging
@@ -55,6 +54,10 @@ class SearchMessagesHandler(
 ) {
     companion object {
         private val logger = KotlinLogging.logger { }
+
+        private val processedMessageCount = Counter.build(
+            "processed_message_count", "Count of processed Message"
+        ).register()
     }
 
     private suspend fun isMessageMatched(
@@ -317,7 +320,11 @@ class SearchMessagesHandler(
                 .buffer(messageSearchPipelineBuffer)
                 .map { it.await() }
                 .onEach {
-                    lastScannedObject.apply { id = it.first.id.toString(); timestamp = it.first.timestamp.toEpochMilli(); scanCounter = scanCnt.incrementAndGet(); }
+                    lastScannedObject.apply {
+                        id = it.first.id.toString(); timestamp = it.first.timestamp.toEpochMilli(); scanCounter =
+                        scanCnt.incrementAndGet();
+                    }
+                    processedMessageCount.inc()
                 }
                 .filter { it.second }
                 .map { it.first }
