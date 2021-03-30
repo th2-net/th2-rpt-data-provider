@@ -34,6 +34,7 @@ import io.ktor.routing.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.util.*
+import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.io.Writer
@@ -49,6 +50,25 @@ class Main(args: Array<String>) {
 
     private val restRequestsProcessedInParallelQuantity: Metrics =
         Metrics("th2_rest_requests_processed_in_parallel_quantity", "REST requests processed in parallel")
+
+
+    private val restRequestGet: Counter =
+        Counter.build("th2_rest_requests_get", "REST requests get")
+            .register()
+
+    private val restRequestProcessed: Counter =
+        Counter.build("th2_rest_requests_processed", "REST requests processed")
+            .register()
+
+
+    private val sseRequestGet: Counter =
+        Counter.build("th2_sse_requests_get", "SSE requests get")
+            .register()
+
+    private val sseRequestProcessed: Counter =
+        Counter.build("th2_sse_requests_processed", "SSE requests processed")
+            .register()
+
 
     private val logger = KotlinLogging.logger {}
 
@@ -127,6 +147,7 @@ class Main(args: Array<String>) {
         }
     }
 
+
     @ExperimentalCoroutinesApi
     @EngineAPI
     @InternalAPI
@@ -148,6 +169,7 @@ class Main(args: Array<String>) {
                     try {
                         try {
                             if (useSse) {
+                                sseRequestGet.inc()
                                 val function = calledFun.invoke()
                                 @Suppress("UNCHECKED_CAST")
                                 handleSseRequest(
@@ -156,10 +178,13 @@ class Main(args: Array<String>) {
                                     function as suspend (Writer, suspend (Writer, LastScannedObjectInfo, AtomicLong) -> Unit) -> Unit
                                 )
                             } else {
+                                restRequestGet.inc()
                                 handleRestApiRequest(call, context, cacheControl, probe, calledFun)
                             }
                         } catch (e: Exception) {
                             throw e.rootCause ?: e
+                        } finally {
+                            if (useSse) sseRequestProcessed.inc() else restRequestProcessed.inc()
                         }
                     } catch (e: InvalidRequestException) {
                         logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - invalid request" }
