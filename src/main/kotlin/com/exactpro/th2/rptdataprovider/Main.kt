@@ -182,7 +182,7 @@ class Main(args: Array<String>) {
     private suspend fun handleSseRequest(
         call: ApplicationCall,
         context: ApplicationCall,
-        calledFun: suspend (Writer, suspend (Writer,  LastScannedObjectInfo, AtomicLong) -> Unit) -> Unit
+        calledFun: suspend (Writer, suspend (Writer, LastScannedObjectInfo, AtomicLong) -> Unit) -> Unit
     ) {
         coroutineScope {
             launch {
@@ -334,7 +334,7 @@ class Main(args: Array<String>) {
                 get("search/sse/messages") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "search messages sse", null, false, true, queryParametersMap) {
-                        suspend fun(w: Writer, keepAlive: suspend (Writer,  LastScannedObjectInfo, AtomicLong) -> Unit) {
+                        suspend fun(w: Writer, keepAlive: suspend (Writer, LastScannedObjectInfo, AtomicLong) -> Unit) {
                             val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
                             val request = SseMessageSearchRequest(queryParametersMap, filterPredicate)
                             request.checkRequest()
@@ -357,7 +357,7 @@ class Main(args: Array<String>) {
                 get("search/sse/events") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "search events sse", null, false, true, queryParametersMap) {
-                        suspend fun(w: Writer, keepAlive: suspend (Writer,  LastScannedObjectInfo, AtomicLong) -> Unit) {
+                        suspend fun(w: Writer, keepAlive: suspend (Writer, LastScannedObjectInfo, AtomicLong) -> Unit) {
                             val filterPredicate =
                                 eventFiltersPredicateFactory.build(queryParametersMap)
                             val request = SseEventSearchRequest(queryParametersMap, filterPredicate)
