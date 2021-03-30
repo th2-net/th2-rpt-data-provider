@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider.entities.filters.events
 
+import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.Filter
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
@@ -23,30 +24,36 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
-class EventStatusFilter(
-    requestMap: Map<String, List<String>>,
-    cradleService: CradleService
-) : Filter<Event>(requestMap, cradleService) {
-
-    private var status: Boolean = false
-    override var negative: Boolean = false
-
-    init {
-        negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false
-        status = requestMap["${filterInfo.name}-values"]?.first()?.toBoolean() ?: false
-    }
-
+class EventStatusFilter private constructor(
+    private var status: Boolean, override var negative: Boolean = false
+) : Filter<Event> {
     companion object {
+        private const val failedStatus = "failed"
+        private const val passedStatus = "passed"
+
+        suspend fun build(requestMap: Map<String, List<String>>, cradleService: CradleService): Filter<Event> {
+            val status = requestMap["${filterInfo.name}-value"]?.first()?.toLowerCase()
+                ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
+
+            if (failedStatus != status && passedStatus != status) {
+                throw InvalidRequestException("'${filterInfo.name}-values' wrong value")
+            }
+
+            return EventStatusFilter(
+                negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false,
+                status = status == passedStatus
+            )
+        }
+
         val filterInfo = FilterInfo(
             "status",
-            "matches events by status of event",
+            "matches events by one of the status",
             mutableListOf<Parameter>().apply {
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
-                add(Parameter("values", FilterParameterType.STRING_LIST, null, "Failed, ..."))
+                add(Parameter("value", FilterParameterType.STRING, null, "Failed, Passed"))
             }
         )
     }
-
 
     override fun match(element: Event): Boolean {
         return negative.xor(status == element.successful)
@@ -55,4 +62,5 @@ class EventStatusFilter(
     override fun getInfo(): FilterInfo {
         return filterInfo
     }
+
 }

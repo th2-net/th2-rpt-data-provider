@@ -24,21 +24,19 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
-class EventBodyFilter(
-    requestMap: Map<String, List<String>>,
-    cradleService: CradleService
-) : Filter<Event>(requestMap, cradleService) {
-
-    private var body: List<String>
-    override var negative: Boolean = false
-
-    init {
-        negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false
-        body = requestMap["${filterInfo.name}-values"]
-            ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
-    }
+class EventBodyFilter private constructor(
+    private var body: List<String>, override var negative: Boolean = false
+) : Filter<Event> {
 
     companion object {
+        suspend fun build(requestMap: Map<String, List<String>>, cradleService: CradleService): Filter<Event> {
+            return EventBodyFilter(
+                negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false,
+                body = requestMap["${filterInfo.name}-values"]
+                    ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
+            )
+        }
+
         val filterInfo = FilterInfo(
             "body",
             "matches events whose body contains one of the specified tokens",
@@ -49,7 +47,6 @@ class EventBodyFilter(
         )
     }
 
-
     override fun match(element: Event): Boolean {
         return negative.xor(body.any { item ->
             element.body?.toLowerCase()?.contains(item.toLowerCase()) ?: false
@@ -59,4 +56,5 @@ class EventBodyFilter(
     override fun getInfo(): FilterInfo {
         return filterInfo
     }
+
 }

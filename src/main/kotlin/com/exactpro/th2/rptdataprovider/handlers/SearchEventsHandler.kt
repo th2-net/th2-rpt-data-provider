@@ -83,17 +83,18 @@ class SearchEventsHandler(
 
 
     @ExperimentalCoroutinesApi
-    private suspend fun getEventTreeNodeFlow(
+    private suspend fun getEventFlow(
         parentEvent: String?,
         timestampFrom: Instant,
         timestampTo: Instant,
         parentContext: CoroutineContext,
         bufferSize: Int,
         requestType: RequestType
-    ): Flow<Deferred<List<EventTreeNode>>> {
+    ): Flow<Deferred<List<Pair<EventTreeNode, Event?>>>> {
         return coroutineScope {
+            val isSSE = requestType == RequestType.SSE
             flow {
-                val eventsCollection = if (requestType == RequestType.SSE)
+                val eventsCollection = if (isSSE)
                     databaseRequestRetry(dbRetryDelay) { getEventsSuspend(parentEvent, timestampFrom, timestampTo) }
                 else
                     getEventsSuspend(parentEvent, timestampFrom, timestampTo)
@@ -109,50 +110,21 @@ class SearchEventsHandler(
                             } catch (e: IOException) {
                                 null
                             }
-                                ?.testEvents?.map { EventTreeNode(metadata.batchMetadata, it) }
+                                ?.testEvents?.map {
+                                    Pair(
+                                        EventTreeNode(metadata.batchMetadata, it),
+                                        if (isSSE) eventProducer.fromId(ProviderEventId(it.batchId, it.id)) else null
+                                    )
+                                }
 
-                                ?: getDirectBatchedChildren(metadata.id, timestampFrom, timestampTo)
+                                ?: getDirectBatchedChildren(metadata.id, timestampFrom, timestampTo, isSSE)
                         } else {
-                            listOf(EventTreeNode(null, metadata))
-                        }
-                    }.also { parentContext.ensureActive() }
-                }
-                .buffer(bufferSize)
-        }
-    }
-
-    @ExperimentalCoroutinesApi
-    private suspend fun getEventTreeFlow(
-        parentEvent: String?,
-        timestampFrom: Instant,
-        timestampTo: Instant,
-        parentContext: CoroutineContext,
-        bufferSize: Int,
-        requestType: RequestType
-    ): Flow<Deferred<List<Event>>> {
-        return coroutineScope {
-            flow {
-                val eventsCollection = if (requestType == RequestType.SSE)
-                    databaseRequestRetry(dbRetryDelay) { getEventsSuspend(parentEvent, timestampFrom, timestampTo) }
-                else
-                    getEventsSuspend(parentEvent, timestampFrom, timestampTo)
-
-                for (event in eventsCollection)
-                    emit(event)
-            }
-                .map { metadata ->
-                    async(parentContext) {
-                        if (metadata.isBatch) {
-                            try {
-                                metadata.batchMetadata
-                            } catch (e: IOException) {
-                                null
-                            }
-                                ?.testEvents?.map { eventProducer.fromId(ProviderEventId(it.batchId, it.id)) }
-
-                                ?: getDirectBatchedChildrenEvent(metadata.id, timestampFrom, timestampTo)
-                        } else {
-                            listOf(eventProducer.fromId(ProviderEventId(null, metadata.id)))
+                            listOf(
+                                Pair(
+                                    EventTreeNode(null, metadata),
+                                    if (isSSE) eventProducer.fromId(ProviderEventId(null, metadata.id)) else null
+                                )
+                            )
                         }
                     }.also { parentContext.ensureActive() }
                 }
@@ -176,11 +148,12 @@ class SearchEventsHandler(
     }
 
     @ExperimentalCoroutinesApi
+    @FlowPreview
     suspend fun searchEvents(request: EventSearchRequest): List<Any> {
         return coroutineScope {
             val baseList = flow {
                 for (timestamp in changeOfDayProcessing(request.timestampFrom, request.timestampTo)) {
-                    getEventTreeNodeFlow(
+                    getEventFlow(
                         request.parentEvent, timestamp.first,
                         timestamp.second, coroutineContext,
                         UNLIMITED,
@@ -190,7 +163,9 @@ class SearchEventsHandler(
             }.map {
                 coroutineContext.ensureActive()
                 it.await()
-            }.toList().flatten()
+            }.flatMapMerge { it.asFlow() }
+                .map { it.first }
+                .toList()
 
             val filteredList =
                 baseList.filter { isEventMatched(it, request.type, request.name, request.attachedMessageId) }
@@ -264,7 +239,7 @@ class SearchEventsHandler(
             logger.debug { "end get time intervals $timeIntervals" }
             flow {
                 for (timestamp in timeIntervals) {
-                    getEventTreeFlow(
+                    getEventFlow(
                         request.parentEvent, timestamp.first,
                         timestamp.second, coroutineContext,
                         BUFFERED, RequestType.SSE
@@ -273,21 +248,23 @@ class SearchEventsHandler(
             }
                 .map { it.await() }
                 .flatMapMerge { it.asFlow() }
-                .filter { it.eventId != request.resumeFromId }
-                .takeWhile { event ->
+                .filter { it.first.eventId != request.resumeFromId }
+                .takeWhile { pair ->
                     request.endTimestamp?.let {
                         if (request.searchDirection == TimeRelation.AFTER) {
-                            event.startTimestamp.isBeforeOrEqual(it)
+                            pair.first.startTimestamp.isBeforeOrEqual(it)
                         } else {
-                            event.startTimestamp.isAfterOrEqual(it)
+                            pair.first.startTimestamp.isAfterOrEqual(it)
                         }
                     } ?: true
                 }
                 .onEach {
-                    lastScannedObject.apply { id = it.eventId; timestamp = it.startTimestamp.toEpochMilli(); scanCounter = scanCnt.incrementAndGet();  }
-                    processedEventCount.inc()
+                    lastScannedObject.apply {
+                        id = it.first.eventId; timestamp = it.first.startTimestamp.toEpochMilli();
+                        scanCounter = scanCnt.incrementAndGet();
+                    }
                 }
-                .filter { request.filterPredicate.apply(it) }
+                .filter { request.filterPredicate.apply(it.second!!) }
                 .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
                 .onStart {
                     launch {
@@ -300,7 +277,7 @@ class SearchEventsHandler(
                 }
                 .collect {
                     coroutineContext.ensureActive()
-                    writer.eventWrite(SseEvent.build(jacksonMapper, it, lastEventId))
+                    writer.eventWrite(SseEvent.build(jacksonMapper, it.first, lastEventId))
                 }
         }
     }
@@ -375,8 +352,9 @@ class SearchEventsHandler(
     private suspend fun getDirectBatchedChildren(
         batchId: StoredTestEventId,
         timestampFrom: Instant,
-        timestampTo: Instant
-    ): List<EventTreeNode> {
+        timestampTo: Instant,
+        isSSE: Boolean
+    ): List<Pair<EventTreeNode, Event?>> {
 
         val batch = cradle.getEventSuspend(batchId)?.asBatch()
 
@@ -386,23 +364,11 @@ class SearchEventsHandler(
             .map {
                 val batchMetadata = StoredTestEventBatchMetadata(batch)
 
-                EventTreeNode(batchMetadata, BatchedStoredTestEventMetadata(it, batchMetadata))
-            }
-    }
+                Pair(
+                    EventTreeNode(batchMetadata, BatchedStoredTestEventMetadata(it, batchMetadata)),
+                    if (isSSE) eventProducer.fromId(ProviderEventId(it.batchId, it.id)) else null
+                )
 
-    private suspend fun getDirectBatchedChildrenEvent(
-        batchId: StoredTestEventId,
-        timestampFrom: Instant,
-        timestampTo: Instant
-    ): List<Event> {
-
-        val batch = cradle.getEventSuspend(batchId)?.asBatch()
-
-        return (batch?.testEvents
-            ?: throw CradleEventNotFoundException("unable to get test events of batch '$batchId'"))
-            .filter { it.startTimestamp.isAfter(timestampFrom) && it.startTimestamp.isBefore(timestampTo) }
-            .map {
-                eventProducer.fromId(ProviderEventId(it.batchId, it.id))
             }
     }
 }
