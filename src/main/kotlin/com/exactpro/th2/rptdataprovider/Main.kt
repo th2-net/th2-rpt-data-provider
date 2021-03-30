@@ -46,10 +46,10 @@ import kotlin.system.measureTimeMillis
 class Main(args: Array<String>) {
 
     private val sseRequestsProcessedInParallelQuantity: Metrics =
-        Metrics.createMetric("th2_sse_requests_processed_in_parallel_quantity", "SSE requests processed in parallel")
+        Metrics("th2_sse_requests_processed_in_parallel_quantity", "SSE requests processed in parallel")
 
     private val restRequestsProcessedInParallelQuantity: Metrics =
-        Metrics.createMetric("th2_rest_requests_processed_in_parallel_quantity", "REST requests processed in parallel")
+        Metrics("th2_rest_requests_processed_in_parallel_quantity", "REST requests processed in parallel")
 
     private val logger = KotlinLogging.logger {}
 
