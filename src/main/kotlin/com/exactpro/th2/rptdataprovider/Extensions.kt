@@ -66,16 +66,11 @@ suspend fun <T> logTime(methodName: String, lambda: suspend () -> T): T? {
 }
 
 data class Metrics(
-    private val histogramGauge: Histogram,
     private val histogramTime: Histogram,
     private val gauge: Gauge
 ) {
 
     constructor(variableName: String, descriptionName: String) : this(
-        histogramGauge = Histogram.build(
-            "${variableName}_hist_gauge", "Quantity of $descriptionName using Histogram"
-        ).buckets(-1.0, 1.0)
-            .register(),
         histogramTime = Histogram.build(
             "${variableName}_hist_time", "Time of $descriptionName"
         ).buckets(.005, .01, .025, .05, .075, .1, .25, .5, .75, 1.0, 2.5, 5.0, 7.5, 10.0, 25.0, 50.0, 75.0)
@@ -87,13 +82,11 @@ data class Metrics(
 
     fun startObserve(): Histogram.Timer {
         gauge.inc()
-        histogramGauge.observe(1.0)
         return histogramTime.startTimer()
     }
 
     fun stopObserve(timer: Histogram.Timer) {
         gauge.dec()
-        histogramGauge.observe(-1.0)
         timer.observeDuration()
     }
 }
@@ -107,12 +100,6 @@ suspend fun <T> logMetrics(metrics: Metrics, lambda: suspend () -> T): T? {
             metrics.stopObserve(timer)
         }
     }
-}
-
-fun createGauge(variableName: String, descriptionName: String): Gauge {
-    return Gauge.build(
-        variableName, "Quantity of $descriptionName method call"
-    ).register()
 }
 
 private val writerDispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()

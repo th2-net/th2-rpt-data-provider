@@ -24,6 +24,7 @@ import com.exactpro.th2.rptdataprovider.entities.sse.EventType
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
+import com.google.api.Metric
 import io.ktor.application.*
 import io.ktor.features.*
 import io.ktor.http.*
@@ -141,35 +142,37 @@ class Main(args: Array<String>) {
         calledFun: suspend () -> Any
     ) {
         val stringParameters = parameters.contentDeepToString()
-        coroutineScope {
-            measureTimeMillis {
-                logger.debug { "handling '$requestName' request with parameters '$stringParameters'" }
-                try {
+        logMetrics(if (useSse) sseRequestsProcessedInParallelQuantity else restRequestsProcessedInParallelQuantity) {
+            coroutineScope {
+                measureTimeMillis {
+                    logger.debug { "handling '$requestName' request with parameters '$stringParameters'" }
                     try {
-                        if (useSse) {
-                            val function = calledFun.invoke()
-                            @Suppress("UNCHECKED_CAST")
-                            handleSseRequest(
-                                call,
-                                context,
-                                function as suspend (Writer, suspend (Writer,  LastScannedObjectInfo, AtomicLong) -> Unit) -> Unit
-                            )
-                        } else {
-                            handleRestApiRequest(call, context, cacheControl, probe, calledFun)
+                        try {
+                            if (useSse) {
+                                val function = calledFun.invoke()
+                                @Suppress("UNCHECKED_CAST")
+                                handleSseRequest(
+                                    call,
+                                    context,
+                                    function as suspend (Writer, suspend (Writer, LastScannedObjectInfo, AtomicLong) -> Unit) -> Unit
+                                )
+                            } else {
+                                handleRestApiRequest(call, context, cacheControl, probe, calledFun)
+                            }
+                        } catch (e: Exception) {
+                            throw e.rootCause ?: e
                         }
+                    } catch (e: InvalidRequestException) {
+                        logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - invalid request" }
+                    } catch (e: CradleObjectNotFoundException) {
+                        logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - missing cradle data" }
+                    } catch (e: ChannelClosedException) {
+                        logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - channel closed" }
                     } catch (e: Exception) {
-                        throw e.rootCause ?: e
+                        logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - unexpected exception" }
                     }
-                } catch (e: InvalidRequestException) {
-                    logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - invalid request" }
-                } catch (e: CradleObjectNotFoundException) {
-                    logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - missing cradle data" }
-                } catch (e: ChannelClosedException) {
-                    logger.debug { "unable to handle request '$requestName' with parameters '$stringParameters' - channel closed" }
-                } catch (e: Exception) {
-                    logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - unexpected exception" }
-                }
-            }.let { logger.debug { "request '$requestName' with parameters '$stringParameters' handled - time=${it}ms" } }
+                }.let { logger.debug { "request '$requestName' with parameters '$stringParameters' handled - time=${it}ms" } }
+            }
         }
     }
 
@@ -179,7 +182,7 @@ class Main(args: Array<String>) {
     private suspend fun handleSseRequest(
         call: ApplicationCall,
         context: ApplicationCall,
-        calledFun: suspend (Writer, suspend (Writer,  LastScannedObjectInfo, AtomicLong) -> Unit) -> Unit
+        calledFun: suspend (Writer, suspend (Writer, LastScannedObjectInfo, AtomicLong) -> Unit) -> Unit
     ) {
         coroutineScope {
             launch {
@@ -331,7 +334,7 @@ class Main(args: Array<String>) {
                 get("search/sse/messages") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "search messages sse", null, false, true, queryParametersMap) {
-                        suspend fun(w: Writer, keepAlive: suspend (Writer,  LastScannedObjectInfo, AtomicLong) -> Unit) {
+                        suspend fun(w: Writer, keepAlive: suspend (Writer, LastScannedObjectInfo, AtomicLong) -> Unit) {
                             val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
                             val request = SseMessageSearchRequest(queryParametersMap, filterPredicate)
                             request.checkRequest()
@@ -354,7 +357,7 @@ class Main(args: Array<String>) {
                 get("search/sse/events") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "search events sse", null, false, true, queryParametersMap) {
-                        suspend fun(w: Writer, keepAlive: suspend (Writer,  LastScannedObjectInfo, AtomicLong) -> Unit) {
+                        suspend fun(w: Writer, keepAlive: suspend (Writer, LastScannedObjectInfo, AtomicLong) -> Unit) {
                             val filterPredicate =
                                 eventFiltersPredicateFactory.build(queryParametersMap)
                             val request = SseEventSearchRequest(queryParametersMap, filterPredicate)

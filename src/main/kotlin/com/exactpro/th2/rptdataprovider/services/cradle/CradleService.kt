@@ -28,7 +28,6 @@ import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventWrapper
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
-import io.prometheus.client.Gauge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.withContext
@@ -55,7 +54,6 @@ class CradleService(configuration: Configuration) {
             Metrics("get_message_ids_by_test_event_id_async", "getMessageIdsByTestEventIdAsync")
         private val getStreamsMetric: Metrics =
             Metrics("get_streams", "getStreams")
-
     }
 
     private val cradleManager: CradleManager = configuration.cradleManager
