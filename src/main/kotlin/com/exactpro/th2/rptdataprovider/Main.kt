@@ -34,7 +34,6 @@ import io.ktor.routing.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.util.*
-import io.prometheus.client.Gauge
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.io.Writer

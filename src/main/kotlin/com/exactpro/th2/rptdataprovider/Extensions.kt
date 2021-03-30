@@ -28,6 +28,7 @@ import mu.KotlinLogging
 import java.io.Writer
 import java.time.Instant
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -92,11 +93,11 @@ data class Metrics(
 
 suspend fun <T> logMetrics(metrics: Metrics, lambda: suspend () -> T): T? {
     return withContext(coroutineContext) {
-        val time = metrics.startObserve()
+        val timer = metrics.startObserve()
         try {
             lambda.invoke()
         } finally {
-            metrics.stopObserve(time)
+            metrics.stopObserve(timer)
         }
     }
 }
