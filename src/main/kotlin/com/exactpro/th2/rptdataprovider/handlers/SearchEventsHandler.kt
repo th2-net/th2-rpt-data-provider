@@ -224,8 +224,9 @@ class SearchEventsHandler(
             val lastScannedObject = LastScannedObjectInfo()
             val lastEventId = AtomicLong(0)
             val scanCnt = AtomicLong(0)
-
+            logger.debug { "start get time intervals" }
             val timeIntervals = getTimeIntervals(request, sseEventSearchStep)
+            logger.debug { "end get time intervals $timeIntervals" }
             flow {
                 for (timestamp in timeIntervals) {
                     getEventTreeNodeFlow(

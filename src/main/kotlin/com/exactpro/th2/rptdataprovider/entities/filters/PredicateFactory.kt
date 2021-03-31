@@ -53,9 +53,11 @@ class PredicateFactory<T>(
     fun build(requestMap: Map<String, List<String>>): FilterPredicate<T> {
         val filtersList = mutableListOf<Filter<T>>().apply {
             for (filterName in requestMap["filters"] ?: emptyList()) {
+                logger.debug { "start build filter predicate $filterName" }
                 val constructor = containedFiltersInit[filterName]
                     ?: throw InvalidRequestException("Incorrect filter name '$filterName'")
                 add(constructor(requestMap, cradleService))
+                logger.debug { "end build filter predicate $filterName" }
             }
         }
         return FilterPredicate(filtersList)

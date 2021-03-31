@@ -152,8 +152,11 @@ class CradleService(configuration: Configuration) {
     }
 
     suspend fun getEventIdsSuspend(id: StoredMessageId): Collection<StoredTestEventId> {
+        logger.debug { "cradle: 'getEventIdsSuspend' start request" }
         return withContext(Dispatchers.IO) {
+            logger.debug { "cradle: 'withContext(Dispatchers.IO)'" }
             logMetrics(getTestEventIdsByMessageIdAsyncMetric) {
+                logger.debug { "cradle: 'logMetrics'" }
                 logTime("getTestEventIdsByMessageId (id=$id)") {
                     logger.debug { "cradle: 'getTestEventIdsByMessageId' start request" }
                     linker.getTestEventIdsByMessageIdAsync(id).await().also {
