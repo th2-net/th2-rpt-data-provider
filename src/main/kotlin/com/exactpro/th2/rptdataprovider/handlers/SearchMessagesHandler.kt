@@ -209,7 +209,7 @@ class SearchMessagesHandler(
                         emit(item)
                     }
                     limit = min(maxMessagesLimit, limit * 2)
-                } while (data.size >= limit)
+                } while (data.isNotEmpty())
             }
                 .filterNot { it.id.toString() == messageId }
                 .distinctUntilChanged { old, new -> old.id == new.id }
