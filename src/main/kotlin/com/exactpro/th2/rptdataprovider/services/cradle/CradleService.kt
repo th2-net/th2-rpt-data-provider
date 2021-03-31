@@ -43,11 +43,11 @@ class CradleService(configuration: Configuration) {
         private val getMessagesAsyncMetric: Metrics = Metrics("get_messages_async", "getMessagesAsync")
         private val getProcessedMessageAsyncMetric: Metrics =
             Metrics("get_processed_message_async", "getProcessedMessageAsync")
-        private val getMessageAsyncMetric: Metrics =  Metrics("get_message_async", "getMessageAsync")
-        private val getTestEventsAsyncMetric: Metrics =  Metrics("get_test_events_async", "getTestEventsAsync")
-        private val getTestEventAsyncMetric: Metrics =  Metrics("get_test_event_async", "getTestEventAsync")
-        private val getNearestMessageIdMetric: Metrics =  Metrics("get_nearest_message_id", "getNearestMessageId")
-        private val getMessageBatchAsyncMetric: Metrics =  Metrics("get_message_batch_async", "getMessageBatchAsync")
+        private val getMessageAsyncMetric: Metrics = Metrics("get_message_async", "getMessageAsync")
+        private val getTestEventsAsyncMetric: Metrics = Metrics("get_test_events_async", "getTestEventsAsync")
+        private val getTestEventAsyncMetric: Metrics = Metrics("get_test_event_async", "getTestEventAsync")
+        private val getNearestMessageIdMetric: Metrics = Metrics("get_nearest_message_id", "getNearestMessageId")
+        private val getMessageBatchAsyncMetric: Metrics = Metrics("get_message_batch_async", "getMessageBatchAsync")
         private val getTestEventIdsByMessageIdAsyncMetric: Metrics =
             Metrics("get_test_event_ids_by_message_id_async", "getTestEventIdsByMessageIdAsync")
         private val getMessageIdsByTestEventIdAsyncMetric: Metrics =
@@ -155,7 +155,10 @@ class CradleService(configuration: Configuration) {
         return withContext(Dispatchers.IO) {
             logMetrics(getTestEventIdsByMessageIdAsyncMetric) {
                 logTime("getTestEventIdsByMessageId (id=$id)") {
-                    linker.getTestEventIdsByMessageIdAsync(id).await()
+                    logger.debug { "cradle: 'getTestEventIdsByMessageId' start request" }
+                    linker.getTestEventIdsByMessageIdAsync(id).await().also {
+                        logger.debug { "cradle: 'getTestEventIdsByMessageId' end request" }
+                    }
                 }
             } ?: emptyList()
         }
