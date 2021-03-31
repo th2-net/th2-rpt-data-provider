@@ -25,26 +25,23 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterTyp
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
-import kotlinx.coroutines.runBlocking
 
-class AttachedEventFilters(
-    requestMap: Map<String, List<String>>,
-    cradleService: CradleService
-) : Filter<Message>(requestMap, cradleService) {
-
-    private lateinit var messagesFromAttachedId: Collection<Collection<StoredMessageId>>
+class AttachedEventFilters private constructor(
+    private var messagesFromAttachedId: Collection<Collection<StoredMessageId>>,
     override var negative: Boolean = false
-
-    init {
-        negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false
-        runBlocking {
-            messagesFromAttachedId = requestMap["${filterInfo.name}-values"]
-                ?.map { cradleService.getMessageIdsSuspend(StoredTestEventId(it)) }
-                ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
-        }
-    }
+) : Filter<Message> {
 
     companion object {
+
+        suspend fun build(requestMap: Map<String, List<String>>, cradleService: CradleService): Filter<Message> {
+            return AttachedEventFilters(
+                negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false,
+                messagesFromAttachedId = requestMap["${filterInfo.name}-values"]
+                    ?.map { cradleService.getMessageIdsSuspend(StoredTestEventId(it)) }
+                    ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
+            )
+        }
+
         val filterInfo = FilterInfo(
             "attachedEventIds",
             "matches messages by one of the attached event id",

@@ -17,19 +17,12 @@
 package com.exactpro.th2.rptdataprovider.entities.filters
 
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
-import com.exactpro.th2.rptdataprovider.entities.filters.events.EventNameFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
-import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import mu.KotlinLogging
-import java.lang.Exception
-import kotlin.reflect.KClass
-import kotlin.reflect.KFunction
-import kotlin.reflect.full.*
-import kotlin.reflect.jvm.javaField
 
 class PredicateFactory<T>(
-    private val filters: Map<FilterInfo, (Map<String, List<String>>, CradleService) -> Filter<T>>,
+    private val filters: Map<FilterInfo, suspend (Map<String, List<String>>, CradleService) -> Filter<T>>,
     private val cradleService: CradleService
 ) {
 
@@ -39,7 +32,7 @@ class PredicateFactory<T>(
 
     private var containedFiltersInfo: Map<String, FilterInfo> = mapOf()
 
-    private var containedFiltersInit: Map<String, (Map<String, List<String>>, CradleService) -> Filter<T>>
+    private var containedFiltersInit: Map<String, suspend (Map<String, List<String>>, CradleService) -> Filter<T>>
 
     init {
         containedFiltersInfo = filters.entries.associate {
@@ -50,7 +43,7 @@ class PredicateFactory<T>(
         }
     }
 
-    fun build(requestMap: Map<String, List<String>>): FilterPredicate<T> {
+    suspend fun build(requestMap: Map<String, List<String>>): FilterPredicate<T> {
         val filtersList = mutableListOf<Filter<T>>().apply {
             for (filterName in requestMap["filters"] ?: emptyList()) {
                 val constructor = containedFiltersInit[filterName]
