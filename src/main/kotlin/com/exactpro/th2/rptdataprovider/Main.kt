@@ -34,6 +34,7 @@ import io.ktor.routing.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.util.*
+import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.io.Writer
@@ -49,6 +50,23 @@ class Main(args: Array<String>) {
 
     private val restRequestsProcessedInParallelQuantity: Metrics =
         Metrics("th2_rest_requests_processed_in_parallel_quantity", "REST requests processed in parallel")
+
+    private val restRequestGet: Counter =
+        Counter.build("th2_rest_requests_get", "REST requests get")
+            .register()
+
+    private val restRequestProcessed: Counter =
+        Counter.build("th2_rest_requests_processed", "REST requests processed")
+            .register()
+
+
+    private val sseRequestGet: Counter =
+        Counter.build("th2_sse_requests_get", "SSE requests get")
+            .register()
+
+    private val sseRequestProcessed: Counter =
+        Counter.build("th2_sse_requests_processed", "SSE requests processed")
+            .register()
 
     private val logger = KotlinLogging.logger {}
 
