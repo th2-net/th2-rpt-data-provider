@@ -65,10 +65,3 @@ class AttachedMessageFilter private constructor(private var eventIds: Collection
         return filterInfo
     }
 }
-
-
-fun main(args: Array<String>) {
-    runBlocking {
-        val f = AttachedMessageFilter.Companion::build
-    }
-}
