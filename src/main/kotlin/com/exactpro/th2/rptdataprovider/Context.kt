@@ -85,17 +85,17 @@ class Context(
 
     val eventFiltersPredicateFactory: PredicateFactory<EventTreeNode> = PredicateFactory(
         mapOf(
-            AttachedMessageFilter.filterInfo to ::AttachedMessageFilter,
-            EventTypeFilter.filterInfo to ::EventTypeFilter,
-            EventNameFilter.filterInfo to ::EventNameFilter
+            AttachedMessageFilter.filterInfo to AttachedMessageFilter.Companion::build,
+            EventTypeFilter.filterInfo to EventTypeFilter.Companion::build,
+            EventNameFilter.filterInfo to EventNameFilter.Companion::build
         ), cradleService
     ),
 
     val messageFiltersPredicateFactory: PredicateFactory<Message> = PredicateFactory(
         mapOf(
-            AttachedEventFilters.filterInfo to ::AttachedEventFilters,
-            MessageTypeFilter.filterInfo to ::MessageTypeFilter,
-            MessageBodyFilter.filterInfo to ::MessageBodyFilter
+            AttachedEventFilters.filterInfo to AttachedEventFilters.Companion::build,
+            MessageTypeFilter.filterInfo to MessageTypeFilter.Companion::build,
+            MessageBodyFilter.filterInfo to MessageBodyFilter.Companion::build
         ), cradleService
     ),
 

@@ -50,8 +50,7 @@ class Main(args: Array<String>) {
 
     private val restRequestsProcessedInParallelQuantity: Metrics =
         Metrics("th2_rest_requests_processed_in_parallel_quantity", "REST requests processed in parallel")
-
-
+    
     private val restRequestGet: Counter =
         Counter.build("th2_rest_requests_get", "REST requests get")
             .register()
@@ -68,7 +67,6 @@ class Main(args: Array<String>) {
     private val sseRequestProcessed: Counter =
         Counter.build("th2_sse_requests_processed", "SSE requests processed")
             .register()
-
 
     private val logger = KotlinLogging.logger {}
 

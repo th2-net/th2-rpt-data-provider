@@ -20,8 +20,8 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
 
-abstract class Filter<T>(val requestMap: Map<String, List<String>>, val cradleService: CradleService) {
-    abstract val negative: Boolean
-    abstract fun match(element: T): Boolean
-    abstract fun getInfo(): FilterInfo
+interface Filter<T> {
+    val negative: Boolean
+    fun match(element: T): Boolean
+    fun getInfo(): FilterInfo
 }

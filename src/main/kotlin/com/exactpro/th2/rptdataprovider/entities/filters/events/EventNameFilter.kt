@@ -24,21 +24,19 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
-class EventNameFilter(
-    requestMap: Map<String, List<String>>,
-    cradleService: CradleService
-) : Filter<EventTreeNode>(requestMap, cradleService) {
-
-    private var name: List<String>
-    override var negative: Boolean = false
-
-    init {
-        negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false
-        name = requestMap["${filterInfo.name}-values"]
-            ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
-    }
+class EventNameFilter private constructor(
+    private var name: List<String>, override var negative: Boolean = false
+) : Filter<EventTreeNode> {
 
     companion object {
+        suspend fun build(requestMap: Map<String, List<String>>, cradleService: CradleService): Filter<EventTreeNode> {
+            return EventNameFilter(
+                negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false,
+                name = requestMap["${filterInfo.name}-values"]
+                    ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
+            )
+        }
+
         val filterInfo = FilterInfo(
             "name",
             "matches events by one of the specified names",
@@ -49,7 +47,6 @@ class EventNameFilter(
         )
     }
 
-
     override fun match(element: EventTreeNode): Boolean {
         return negative.xor(name.any { item ->
             element.eventName.toLowerCase().contains(item.toLowerCase())
@@ -59,4 +56,6 @@ class EventNameFilter(
     override fun getInfo(): FilterInfo {
         return filterInfo
     }
+
 }
+
