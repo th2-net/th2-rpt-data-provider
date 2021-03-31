@@ -381,13 +381,10 @@ class Main(args: Array<String>) {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "search events sse", null, false, true, queryParametersMap) {
                         suspend fun(w: Writer, keepAlive: suspend (Writer, LastScannedObjectInfo, AtomicLong) -> Unit) {
-                            logger.debug { "start create 'filterPredicate'" }
                             val filterPredicate =
                                 eventFiltersPredicateFactory.build(queryParametersMap)
-                            logger.debug { "end create 'filterPredicate' $filterPredicate" }
                             val request = SseEventSearchRequest(queryParametersMap, filterPredicate)
                             request.checkRequest()
-                            logger.debug { "end check request $request" }
                             searchEventsHandler.searchEventsSse(
                                 request,
                                 jacksonMapper,

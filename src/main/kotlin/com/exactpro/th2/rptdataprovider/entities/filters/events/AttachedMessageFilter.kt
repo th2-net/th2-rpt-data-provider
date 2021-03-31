@@ -41,26 +41,15 @@ class AttachedMessageFilter(
     override var negative: Boolean = false
 
     init {
-        logger.debug { "start init filter block" }
         negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false
-        logger.debug { "parse 'negative parameter' $negative" }
         runBlocking {
-            logger.debug { "start 'runBlocking'" }
             eventIds = requestMap["${filterInfo.name}-values"]?.first()
-                ?.let {
-                    logger.debug { "start cradle service 'getEventIdsSuspend' id $it" }
-                    cradleService.getEventIdsSuspend(StoredMessageId.fromString(it)).also {
-                        logger.debug { "end cradle service 'getEventIdsSuspend'" }
-                    }
-                }
+                ?.let { cradleService.getEventIdsSuspend(StoredMessageId.fromString(it)) }
                 ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
-            logger.debug { "end 'runBlocking'" }
         }
     }
 
     companion object {
-
-        private val logger = KotlinLogging.logger {}
 
         val filterInfo = FilterInfo(
             "attachedMessageId",
