@@ -50,6 +50,7 @@ class Main(args: Array<String>) {
     private val restRequestsProcessedInParallelQuantity: Metrics =
         Metrics("th2_rest_requests_processed_in_parallel_quantity", "REST requests processed in parallel")
 
+
     private val logger = KotlinLogging.logger {}
 
     private val context = Context(args)

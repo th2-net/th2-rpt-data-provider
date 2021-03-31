@@ -24,6 +24,7 @@ import com.exactpro.cradle.testevents.StoredTestEventBatchMetadata
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.rptdataprovider.*
+import com.exactpro.th2.rptdataprovider.entities.filters.PredicateFactory
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.RequestType

@@ -21,6 +21,7 @@ import com.exactpro.th2.common.grpc.MessageBatch
 import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.schema.factory.CommonFactory
 import com.exactpro.th2.common.schema.message.MessageRouter
+import mu.KotlinLogging
 
 class CustomConfigurationClass {
     var hostname: String = "localhost"
@@ -30,7 +31,7 @@ class CustomConfigurationClass {
     var clientCacheTimeout: Int = 60
     var eventCacheSize: Int = 100000
     var messageCacheSize: Int = 100000
-    var ioDispatcherThreadPoolSize: Int = 1
+    var ioDispatcherThreadPoolSize: Int = 10
     var codecResponseTimeout: Int = 6000
     var codecCacheSize: Int = 100
     var checkRequestsAliveDelay: Long = 2000
@@ -44,12 +45,19 @@ class CustomConfigurationClass {
     val keepAliveTimeout: Long = 5000
     val dbRetryDelay: Long = 5000
 
+    val cradleDispatcherPoolSize: Long = 1
+
     override fun toString(): String {
-        return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, clientCacheTimeout=$clientCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, codecResponseTimeout=$codecResponseTimeout, codecCacheSize=$codecCacheSize, checkRequestsAliveDelay=$checkRequestsAliveDelay, enableCaching=$enableCaching, notModifiedObjectsLifetime=$notModifiedObjectsLifetime, rarelyModifiedObjects=$rarelyModifiedObjects, frequentlyModifiedObjects=$frequentlyModifiedObjects, maxMessagesLimit=$maxMessagesLimit, messageSearchPipelineBuffer=$messageSearchPipelineBuffer, sseEventSearchStep=$sseEventSearchStep, keepAliveTimeout=$keepAliveTimeout, dbRetryDelay=$dbRetryDelay)"
+        return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, clientCacheTimeout=$clientCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, codecResponseTimeout=$codecResponseTimeout, codecCacheSize=$codecCacheSize, checkRequestsAliveDelay=$checkRequestsAliveDelay, enableCaching=$enableCaching, notModifiedObjectsLifetime=$notModifiedObjectsLifetime, rarelyModifiedObjects=$rarelyModifiedObjects, frequentlyModifiedObjects=$frequentlyModifiedObjects, maxMessagesLimit=$maxMessagesLimit, messageSearchPipelineBuffer=$messageSearchPipelineBuffer, sseEventSearchStep=$sseEventSearchStep, keepAliveTimeout=$keepAliveTimeout, dbRetryDelay=$dbRetryDelay, cradleDispatcherPoolSize=$cradleDispatcherPoolSize)"
     }
+
 }
 
 class Configuration(args: Array<String>) {
+
+    companion object {
+        private val logger = KotlinLogging.logger { }
+    }
 
     private val configurationFactory = CommonFactory.createFromArguments(*args)
 
@@ -95,7 +103,11 @@ class Configuration(args: Array<String>) {
     )
 
     val ioDispatcherThreadPoolSize: Variable =
-        Variable("ioDispatcherThreadPoolSize", customConfiguration.ioDispatcherThreadPoolSize.toString(), "1")
+        Variable("ioDispatcherThreadPoolSize", customConfiguration.ioDispatcherThreadPoolSize.let {
+            if (it < 10) logger.warn { "The optimal value of the ioDispatcherThreadPoolSize is 10. Current: $it" }
+
+            it.toString()
+        }, "10")
 
     val enableCaching: Variable = Variable("enableCaching", customConfiguration.enableCaching.toString(), "true")
     val notModifiedObjectsLifetime: Variable =
@@ -121,4 +133,7 @@ class Configuration(args: Array<String>) {
         Variable("keepAliveTimeout", customConfiguration.keepAliveTimeout.toString(), "5000")
 
     val dbRetryDelay: Variable = Variable("dbRetryDelay", customConfiguration.dbRetryDelay.toString(), "5000")
+
+    val cradleDispatcherPoolSize: Variable =
+        Variable("cradleDispatcherPoolSize", customConfiguration.cradleDispatcherPoolSize.toString(), "2")
 }
