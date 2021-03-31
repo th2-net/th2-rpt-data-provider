@@ -20,6 +20,7 @@ import com.exactpro.cradle.messages.StoredMessageFilter
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.prometheus.client.Gauge
+import io.prometheus.client.Histogram
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
@@ -63,21 +64,41 @@ suspend fun <T> logTime(methodName: String, lambda: suspend () -> T): T? {
     }
 }
 
-suspend fun <T> logMetrics(counter: Gauge, lambda: suspend () -> T): T? {
-    return withContext(coroutineContext) {
-        try {
-            counter.inc()
-            lambda.invoke()
-        } finally {
-            counter.dec()
-        }
+data class Metrics(
+    private val histogramTime: Histogram,
+    private val gauge: Gauge
+) {
+
+    constructor(variableName: String, descriptionName: String) : this(
+        histogramTime = Histogram.build(
+            "${variableName}_hist_time", "Time of $descriptionName"
+        ).buckets(.005, .01, .025, .05, .075, .1, .25, .5, .75, 1.0, 2.5, 5.0, 7.5, 10.0, 25.0, 50.0, 75.0)
+            .register(),
+        gauge = Gauge.build(
+            "${variableName}_gauge", "Quantity of $descriptionName using Gauge"
+        ).register()
+    )
+
+    fun startObserve(): Histogram.Timer {
+        gauge.inc()
+        return histogramTime.startTimer()
+    }
+
+    fun stopObserve(timer: Histogram.Timer) {
+        gauge.dec()
+        timer.observeDuration()
     }
 }
 
-fun createGauge(variableName: String, descriptionName: String): Gauge {
-    return Gauge.build(
-        variableName, "Quantity of $descriptionName method call"
-    ).register()
+suspend fun <T> logMetrics(metrics: Metrics, lambda: suspend () -> T): T? {
+    return withContext(coroutineContext) {
+        val timer = metrics.startObserve()
+        try {
+            lambda.invoke()
+        } finally {
+            metrics.stopObserve(timer)
+        }
+    }
 }
 
 private val writerDispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()

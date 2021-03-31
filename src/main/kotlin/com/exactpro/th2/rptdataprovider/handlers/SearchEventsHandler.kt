@@ -24,6 +24,7 @@ import com.exactpro.cradle.testevents.StoredTestEventBatchMetadata
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.rptdataprovider.*
+import com.exactpro.th2.rptdataprovider.entities.filters.PredicateFactory
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.RequestType
@@ -41,6 +42,7 @@ import kotlinx.coroutines.channels.Channel.Factory.BUFFERED
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.flow.*
 import io.ktor.utils.io.errors.*
+import io.prometheus.client.Counter
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.asFlow
@@ -61,6 +63,9 @@ class SearchEventsHandler(
 ) {
     companion object {
         private val logger = KotlinLogging.logger { }
+        private val processedEventCount = Counter.build(
+            "processed_event_count", "Count of processed Events"
+        ).register()
     }
 
     private suspend fun getEventsSuspend(
@@ -243,7 +248,10 @@ class SearchEventsHandler(
                         }
                     } ?: true
                 }
-                .onEach { lastScannedObject.apply { id = it.eventId; timestamp = it.startTimestamp.toEpochMilli(); scanCounter = scanCnt.incrementAndGet();  } }
+                .onEach {
+                    lastScannedObject.apply { id = it.eventId; timestamp = it.startTimestamp.toEpochMilli(); scanCounter = scanCnt.incrementAndGet();  }
+                    processedEventCount.inc()
+                }
                 .filter { request.filterPredicate.apply(it) }
                 .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
                 .onStart {

@@ -24,21 +24,20 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
-class MessageBodyFilter(
-    requestMap: Map<String, List<String>>,
-    cradleService: CradleService
-) : Filter<Message>(requestMap, cradleService) {
-
-    private var body: List<String>
+class MessageBodyFilter private constructor(
+    private var body: List<String>,
     override var negative: Boolean = false
-
-    init {
-        negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false
-        body = requestMap["${filterInfo.name}-values"]
-            ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
-    }
+) : Filter<Message> {
 
     companion object {
+        suspend fun build(requestMap: Map<String, List<String>>, cradleService: CradleService): Filter<Message> {
+            return MessageBodyFilter(
+                negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false,
+                body = requestMap["${filterInfo.name}-values"]
+                    ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
+            )
+        }
+
         val filterInfo = FilterInfo(
             "body",
             "matches messages whose body contains one of the specified tokens",

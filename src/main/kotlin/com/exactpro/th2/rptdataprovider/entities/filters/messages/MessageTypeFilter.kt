@@ -25,20 +25,19 @@ import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
 class MessageTypeFilter(
-    requestMap: Map<String, List<String>>,
-    cradleService: CradleService
-) : Filter<Message>(requestMap, cradleService) {
-
-    private var type: List<String>
+    private var type: List<String>,
     override var negative: Boolean = false
-
-    init {
-        negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false
-        type = requestMap["${filterInfo.name}-values"]
-            ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
-    }
+) : Filter<Message> {
 
     companion object {
+        suspend fun build(requestMap: Map<String, List<String>>, cradleService: CradleService): Filter<Message> {
+            return MessageTypeFilter(
+                negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false,
+                type = requestMap["${filterInfo.name}-values"]
+                    ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
+            )
+        }
+
         val filterInfo = FilterInfo(
             "type",
             "matches messages by one of the specified types",
