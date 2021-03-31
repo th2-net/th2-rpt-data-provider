@@ -30,6 +30,7 @@ import kotlinx.coroutines.DisposableHandle
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import mu.KotlinLogging
 
 class AttachedMessageFilter(
     requestMap: Map<String, List<String>>,
@@ -49,6 +50,7 @@ class AttachedMessageFilter(
     }
 
     companion object {
+
         val filterInfo = FilterInfo(
             "attachedMessageId",
             "matches events by one of the attached message id",

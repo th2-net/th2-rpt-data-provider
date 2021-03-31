@@ -41,6 +41,7 @@ import kotlinx.coroutines.channels.Channel.Factory.BUFFERED
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.flow.*
 import io.ktor.utils.io.errors.*
+import io.prometheus.client.Counter
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.asFlow
@@ -61,6 +62,9 @@ class SearchEventsHandler(
 ) {
     companion object {
         private val logger = KotlinLogging.logger { }
+        private val processedEventCount = Counter.build(
+            "processed_event_count", "Count of processed Events"
+        ).register()
     }
 
     private suspend fun getEventsSuspend(
@@ -220,8 +224,9 @@ class SearchEventsHandler(
             val lastScannedObject = LastScannedObjectInfo()
             val lastEventId = AtomicLong(0)
             val scanCnt = AtomicLong(0)
-
+            logger.debug { "start get time intervals" }
             val timeIntervals = getTimeIntervals(request, sseEventSearchStep)
+            logger.debug { "end get time intervals $timeIntervals" }
             flow {
                 for (timestamp in timeIntervals) {
                     getEventTreeNodeFlow(
@@ -243,7 +248,10 @@ class SearchEventsHandler(
                         }
                     } ?: true
                 }
-                .onEach { lastScannedObject.apply { id = it.eventId; timestamp = it.startTimestamp.toEpochMilli(); scanCounter = scanCnt.incrementAndGet();  } }
+                .onEach {
+                    lastScannedObject.apply { id = it.eventId; timestamp = it.startTimestamp.toEpochMilli(); scanCounter = scanCnt.incrementAndGet();  }
+                    processedEventCount.inc()
+                }
                 .filter { request.filterPredicate.apply(it) }
                 .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
                 .onStart {
