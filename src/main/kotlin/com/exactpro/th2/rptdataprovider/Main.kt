@@ -164,6 +164,7 @@ class Main(args: Array<String>) {
                 measureTimeMillis {
                     logger.debug { "handling '$requestName' request with parameters '$stringParameters'" }
                     try {
+                        if (useSse) sseRequestGet.inc() else restRequestGet.inc()
                         try {
                             if (useSse) {
                                 val function = calledFun.invoke()
@@ -178,6 +179,8 @@ class Main(args: Array<String>) {
                             }
                         } catch (e: Exception) {
                             throw e.rootCause ?: e
+                        } finally {
+                            if (useSse) sseRequestProcessed.inc() else restRequestProcessed.inc()
                         }
                     } catch (e: InvalidRequestException) {
                         logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - invalid request" }
