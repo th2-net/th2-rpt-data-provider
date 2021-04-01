@@ -49,7 +49,8 @@ class SearchMessagesHandler(
     private val cradle: CradleService,
     private val messageCache: MessageCache,
     private val maxMessagesLimit: Int,
-    private val messageSearchPipelineBuffer: Int,
+    private val
+    messageSearchPipelineBuffer: Int,
     private val dbRetryDelay: Long
 ) {
     companion object {
@@ -279,6 +280,7 @@ class SearchMessagesHandler(
                 request.timestampFrom, request.timestampTo
             )
 
+
             val streamsInfo = initStreamsInfo(
                 request.timelineDirection, request.stream,
                 startTimestamp
@@ -339,6 +341,7 @@ class SearchMessagesHandler(
                     messageId, request.searchDirection,
                     request.startTimestamp, request.startTimestamp
                 )
+
                 val streamsInfo = initStreamsInfo(
                     request.searchDirection, request.stream,
                     startTimestamp
