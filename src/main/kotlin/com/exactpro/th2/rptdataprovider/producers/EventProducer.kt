@@ -32,30 +32,34 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
         private val logger = KotlinLogging.logger { }
     }
 
-    suspend fun fromId(id: ProviderEventId): Event {
-        val batch = id.batchId?.let { cradle.getEventSuspend(it)?.asBatch() }
+    suspend fun fromId(id: ProviderEventId, needRetry: Boolean = false): Event {
+        val batch = id.batchId?.let { cradle.getEventSuspend(it, needRetry)?.asBatch() }
 
         if (id.batchId != null && batch == null) {
             logger.error { "unable to find batch with id '${id.batchId}' referenced in event '${id.eventId}'- this is a bug" }
         }
 
-        val storedEvent = batch?.getTestEvent(id.eventId) ?: cradle.getEventSuspend(id.eventId)?.asSingle()
+        val storedEvent = batch?.getTestEvent(id.eventId) ?: cradle.getEventSuspend(id.eventId, needRetry)?.asSingle()
 
         if (storedEvent == null) {
             logger.error { "unable to find event '${id.eventId}'" }
             throw CradleEventNotFoundException("${id.eventId} is not a valid id")
         }
 
-        return fromStoredEvent(storedEvent, batch)
+        return fromStoredEvent(storedEvent, batch, needRetry)
     }
 
-    private suspend fun fromStoredEvent(storedEvent: StoredTestEventWithContent, batch: StoredTestEventBatch?): Event {
+    private suspend fun fromStoredEvent(
+        storedEvent: StoredTestEventWithContent,
+        batch: StoredTestEventBatch?,
+        needRetry: Boolean
+    ): Event {
         return Event(
             storedEvent,
             ProviderEventId(batch?.id, storedEvent.id).toString(),
             storedEvent.id.let {
                 try {
-                    cradle.getMessageIdsSuspend(it).map(Any::toString).toSet()
+                    cradle.getMessageIdsSuspend(it, needRetry).map(Any::toString).toSet()
                 } catch (e: Exception) {
                     KotlinLogging.logger { }
                         .error(e) { "unable to get messages attached to event (id=${storedEvent.id})" }

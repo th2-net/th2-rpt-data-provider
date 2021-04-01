@@ -24,7 +24,6 @@ import com.exactpro.cradle.testevents.StoredTestEventBatchMetadata
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.rptdataprovider.*
-import com.exactpro.th2.rptdataprovider.entities.filters.PredicateFactory
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.RequestType
@@ -35,19 +34,13 @@ import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
-import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
 import com.fasterxml.jackson.databind.ObjectMapper
+import io.ktor.utils.io.errors.*
+import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel.Factory.BUFFERED
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.flow.*
-import io.ktor.utils.io.errors.*
-import io.prometheus.client.Counter
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.asFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.toList
 import mu.KotlinLogging
 import java.io.Writer
 import java.time.Instant
@@ -58,8 +51,7 @@ import kotlin.coroutines.CoroutineContext
 
 class SearchEventsHandler(
     private val cradle: CradleService,
-    private val eventProducer: EventProducer,
-    private val dbRetryDelay: Long
+    private val eventProducer: EventProducer
 ) {
     companion object {
         private val logger = KotlinLogging.logger { }
@@ -71,17 +63,19 @@ class SearchEventsHandler(
     private suspend fun getEventsSuspend(
         parentEvent: String?,
         timestampFrom: Instant,
-        timestampTo: Instant
+        timestampTo: Instant,
+        needRetry: Boolean
     ): Iterable<StoredTestEventMetadata> {
         return coroutineScope {
             if (parentEvent != null) {
                 cradle.getEventsSuspend(
                     ProviderEventId(parentEvent).eventId,
                     timestampFrom,
-                    timestampTo
+                    timestampTo,
+                    needRetry
                 )
             } else {
-                cradle.getEventsSuspend(timestampFrom, timestampTo)
+                cradle.getEventsSuspend(timestampFrom, timestampTo, needRetry)
             }
         }
     }
@@ -98,10 +92,12 @@ class SearchEventsHandler(
     ): Flow<Deferred<List<EventTreeNode>>> {
         return coroutineScope {
             flow {
-                val eventsCollection = if (requestType == RequestType.SSE)
-                    databaseRequestRetry(dbRetryDelay) { getEventsSuspend(parentEvent, timestampFrom, timestampTo) }
-                else
-                    getEventsSuspend(parentEvent, timestampFrom, timestampTo)
+                val eventsCollection = getEventsSuspend(
+                    parentEvent,
+                    timestampFrom,
+                    timestampTo,
+                    requestType == RequestType.SSE
+                )
 
                 for (event in eventsCollection)
                     emit(event)
@@ -130,20 +126,22 @@ class SearchEventsHandler(
         event: EventTreeNode,
         type: List<String>?,
         name: List<String>?,
-        attachedMessageId: String?
+        attachedMessageId: String?,
+        needRetry: Boolean
     ): Boolean {
         return (type == null || type.any { item ->
             event.eventType.toLowerCase().contains(item.toLowerCase())
         }) && (name == null || name.any { item ->
             event.eventName.toLowerCase().contains(item.toLowerCase())
         }) && (attachedMessageId == null ||
-                cradle.getEventIdsSuspend(StoredMessageId.fromString(attachedMessageId))
+                cradle.getEventIdsSuspend(StoredMessageId.fromString(attachedMessageId), needRetry)
                     .contains(StoredTestEventId(event.eventId)))
     }
 
     @ExperimentalCoroutinesApi
     suspend fun searchEvents(request: EventSearchRequest): List<Any> {
         return coroutineScope {
+            val needRetry = false
             val baseList = flow {
                 for (timestamp in changeOfDayProcessing(request.timestampFrom, request.timestampTo)) {
                     getEventTreeNodeFlow(
@@ -159,7 +157,7 @@ class SearchEventsHandler(
             }.toList().flatten()
 
             val filteredList =
-                baseList.filter { isEventMatched(it, request.type, request.name, request.attachedMessageId) }
+                baseList.filter { isEventMatched(it, request.type, request.name, request.attachedMessageId, needRetry) }
 
             if (request.flat)
                 filteredList.map { it.eventId }
@@ -192,7 +190,7 @@ class SearchEventsHandler(
         sseEventSearchStep: Long
     ): Sequence<Pair<Instant, Instant>> {
         var timestamp = request.resumeFromId?.let {
-            eventProducer.fromId(ProviderEventId(request.resumeFromId)).startTimestamp
+            eventProducer.fromId(ProviderEventId(request.resumeFromId), needRetry = true).startTimestamp
         } ?: request.startTimestamp!!
 
         return sequence {
@@ -225,7 +223,6 @@ class SearchEventsHandler(
             val lastScannedObject = LastScannedObjectInfo()
             val lastEventId = AtomicLong(0)
             val scanCnt = AtomicLong(0)
-
             val timeIntervals = getTimeIntervals(request, sseEventSearchStep)
             flow {
                 for (timestamp in timeIntervals) {
@@ -249,7 +246,10 @@ class SearchEventsHandler(
                     } ?: true
                 }
                 .onEach {
-                    lastScannedObject.apply { id = it.eventId; timestamp = it.startTimestamp.toEpochMilli(); scanCounter = scanCnt.incrementAndGet();  }
+                    lastScannedObject.apply {
+                        id = it.eventId; timestamp = it.startTimestamp.toEpochMilli(); scanCounter =
+                        scanCnt.incrementAndGet();
+                    }
                     processedEventCount.inc()
                 }
                 .filter { request.filterPredicate.apply(it) }

@@ -56,8 +56,11 @@ class MessageProducer(
         }
     }
 
-    private suspend fun getProcessedMessage(rawMessage: StoredMessage): com.exactpro.th2.common.grpc.Message? {
-        return cradle.getProcessedMessageSuspend(rawMessage.id)?.let { storedMessage ->
+    private suspend fun getProcessedMessage(
+        rawMessage: StoredMessage,
+        needRetry: Boolean
+    ): com.exactpro.th2.common.grpc.Message? {
+        return cradle.getProcessedMessageSuspend(rawMessage.id, needRetry)?.let { storedMessage ->
             storedMessage.content?.let {
                 try {
                     com.exactpro.th2.common.grpc.Message.parseFrom(it)
@@ -68,7 +71,7 @@ class MessageProducer(
                     null
                 }
             }
-        } ?: parseMessage(rawMessage)
+        } ?: parseMessage(rawMessage, needRetry)
     }
 
     private suspend fun getFieldName(parsedRawMessage: RawMessage?): String? {
@@ -84,10 +87,10 @@ class MessageProducer(
         return protocolName?.contains(TYPE_IMAGE) ?: false
     }
 
-    suspend fun fromRawMessage(rawMessage: StoredMessage): Message {
+    suspend fun fromRawMessage(rawMessage: StoredMessage, needRetry: Boolean = false): Message {
         val parsedRawMessage = parseRawMessage(rawMessage)
         val parsedRawMessageProtocol = getFieldName(parsedRawMessage)
-        val processed = if (!isImage(parsedRawMessageProtocol)) getProcessedMessage(rawMessage) else null
+        val processed = if (!isImage(parsedRawMessageProtocol)) getProcessedMessage(rawMessage, needRetry) else null
 
         return Message(
             rawMessage,
@@ -99,10 +102,13 @@ class MessageProducer(
         )
     }
 
-    private suspend fun parseMessage(message: StoredMessage): com.exactpro.th2.common.grpc.Message? {
+    private suspend fun parseMessage(
+        message: StoredMessage,
+        needRetry: Boolean
+    ): com.exactpro.th2.common.grpc.Message? {
         return codecCache.get(message.id.toString())
             ?: let {
-                val messages = cradle.getMessageBatchSuspend(message.id)
+                val messages = cradle.getMessageBatchSuspend(message.id, needRetry)
 
                 if (messages.isEmpty()) {
                     logger.error { "unable to parse message '${message.id}' - message batch does not exist or is empty" }
@@ -137,10 +143,10 @@ class MessageProducer(
         return StoredMessageId(id.connectionId.sessionAlias, direction, id.sequence)
     }
 
-    suspend fun fromId(id: StoredMessageId): Message {
+    suspend fun fromId(id: StoredMessageId, needRetry: Boolean = false): Message {
 
         return fromRawMessage(
-            cradle.getMessageSuspend(id)
+            cradle.getMessageSuspend(id, needRetry)
                 ?: throw CradleMessageNotFoundException("message '${id}' does not exist in cradle")
         )
     }

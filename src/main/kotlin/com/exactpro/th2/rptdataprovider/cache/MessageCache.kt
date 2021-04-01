@@ -51,17 +51,17 @@ class MessageCache(configuration: Configuration, private val messageProducer: Me
         return cache.get(id)
     }
 
-    suspend fun getOrPut(id: String): Message {
+    suspend fun getOrPut(id: String, needRetry: Boolean = false): Message {
         return cache.get(id)
-            ?: messageProducer.fromId(StoredMessageId.fromString(id)).also {
+            ?: messageProducer.fromId(StoredMessageId.fromString(id), needRetry).also {
                 logger.debug { "Message cache miss for id=$id" }
                 put(id, it)
             }
     }
 
-    suspend fun getOrPut(rawMessage: StoredMessage): Message {
+    suspend fun getOrPut(rawMessage: StoredMessage, needRetry: Boolean = false): Message {
         return cache.get(rawMessage.id.toString())
-            ?: messageProducer.fromRawMessage(rawMessage).also {
+            ?: messageProducer.fromRawMessage(rawMessage, needRetry).also {
                 logger.debug { "Message cache miss for id=${rawMessage.id}" }
                 put(rawMessage.id.toString(), it)
             }

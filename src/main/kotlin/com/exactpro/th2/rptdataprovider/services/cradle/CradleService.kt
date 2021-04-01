@@ -17,6 +17,7 @@
 
 package com.exactpro.th2.rptdataprovider.services.cradle
 
+import com.datastax.oss.driver.api.core.DriverTimeoutException
 import com.exactpro.cradle.CradleManager
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.TimeRelation
@@ -30,9 +31,11 @@ import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.withContext
 import mu.KotlinLogging
+import org.apache.commons.lang3.exception.ExceptionUtils
 import java.time.Instant
 import java.util.concurrent.Executors
 import kotlin.coroutines.coroutineContext
@@ -66,42 +69,80 @@ class CradleService(configuration: Configuration) {
     private val linker = cradleManager.storage.testEventsMessagesLinker
 
     private val cradleDispatcher = Executors.newFixedThreadPool(cradleDispatcherPoolSize).asCoroutineDispatcher()
+    private val dbRetryDelay = configuration.dbRetryDelay.value.toLong()
 
-    suspend fun getMessagesSuspend(filter: StoredMessageFilter): Iterable<StoredMessage> {
+
+    private suspend fun <T> simpleRetry(useRetry: Boolean, request: suspend () -> T?): T? {
+        return withContext(coroutineContext) {
+            var result: T? = null
+            var needRetry = useRetry
+            do {
+                try {
+                    result = request.invoke()
+                    needRetry = false
+                } catch (e: Exception) {
+                    logger.error(e) { }
+                    when (ExceptionUtils.getRootCause(e)) {
+                        is DriverTimeoutException -> {
+                            logger.debug { "try to reconnect" }
+                            delay(dbRetryDelay)
+                        }
+                        else -> throw e
+                    }
+                }
+            } while (needRetry)
+
+            result
+        }
+    }
+
+    suspend fun getMessagesSuspend(filter: StoredMessageFilter, needRetry: Boolean = false): Iterable<StoredMessage> {
         return withContext(cradleDispatcher) {
             logMetrics(getMessagesAsyncMetric) {
                 logTime("getMessages (filter=${filter.convertToString()})") {
-                    storage.getMessagesAsync(filter).await()
+                    simpleRetry(needRetry) {
+                        storage.getMessagesAsync(filter).await()
+                    }
                 }
             } ?: listOf()
         }
     }
 
-    suspend fun getProcessedMessageSuspend(id: StoredMessageId): StoredMessage? {
+    suspend fun getProcessedMessageSuspend(id: StoredMessageId, needRetry: Boolean = false): StoredMessage? {
         return withContext(cradleDispatcher) {
             logMetrics(getProcessedMessageAsyncMetric) {
                 logTime("getProcessedMessage (id=$id)") {
-                    storage.getProcessedMessageAsync(id).await()
+                    simpleRetry(needRetry) {
+                        storage.getProcessedMessageAsync(id).await()
+                    }
                 }
             }
         }
     }
 
-    suspend fun getMessageSuspend(id: StoredMessageId): StoredMessage? {
+    suspend fun getMessageSuspend(id: StoredMessageId, needRetry: Boolean = false): StoredMessage? {
         return withContext(cradleDispatcher) {
             logMetrics(getMessageAsyncMetric) {
                 logTime("getMessage (id=$id)") {
-                    storage.getMessageAsync(id).await()
+                    simpleRetry(needRetry) {
+                        storage.getMessageAsync(id).await()
+                    }
                 }
             }
         }
     }
 
-    suspend fun getEventsSuspend(from: Instant, to: Instant): Iterable<StoredTestEventMetadata> {
+    suspend fun getEventsSuspend(
+        from: Instant,
+        to: Instant,
+        needRetry: Boolean = false
+    ): Iterable<StoredTestEventMetadata> {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
                 logTime("Get events from: $from to: $to") {
-                    storage.getTestEventsAsync(from, to).await()
+                    simpleRetry(needRetry) {
+                        storage.getTestEventsAsync(from, to).await()
+                    }
                 }
             } ?: listOf()
         }
@@ -110,22 +151,30 @@ class CradleService(configuration: Configuration) {
     suspend fun getEventsSuspend(
         parentId: StoredTestEventId,
         from: Instant,
-        to: Instant
+        to: Instant,
+        needRetry: Boolean = false
     ): Iterable<StoredTestEventMetadata> {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
                 logTime("Get events parent: $parentId from: $from to: $to") {
-                    storage.getTestEventsAsync(parentId, from, to).await()
+                    simpleRetry(needRetry) {
+                        storage.getTestEventsAsync(parentId, from, to).await()
+                    }
                 }
             } ?: listOf()
         }
     }
 
-    suspend fun getEventSuspend(id: StoredTestEventId): StoredTestEventWrapper? {
+    suspend fun getEventSuspend(
+        id: StoredTestEventId,
+        needRetry: Boolean = false
+    ): StoredTestEventWrapper? {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventAsyncMetric) {
                 logTime("getTestEvent (id=$id)") {
-                    storage.getTestEventAsync(id).await()
+                    simpleRetry(needRetry) {
+                        storage.getTestEventAsync(id).await()
+                    }
                 }
             }
         }
@@ -135,52 +184,72 @@ class CradleService(configuration: Configuration) {
         timestamp: Instant,
         stream: String,
         direction: Direction,
-        timelineDirection: TimeRelation
+        timelineDirection: TimeRelation,
+        needRetry: Boolean = false
     ): StoredMessageId? {
         return withContext(cradleDispatcher) {
             logMetrics(getNearestMessageIdMetric) {
                 logTime(("getFirstMessageId (timestamp=$timestamp stream=$stream direction=${direction.label} )")) {
-                    storage.getNearestMessageId(stream, direction, timestamp, timelineDirection)
+                    simpleRetry(needRetry) {
+                        storage.getNearestMessageId(stream, direction, timestamp, timelineDirection)
+                    }
                 }
             }
         }
     }
 
-    suspend fun getMessageBatchSuspend(id: StoredMessageId): Collection<StoredMessage> {
+    suspend fun getMessageBatchSuspend(
+        id: StoredMessageId,
+        needRetry: Boolean = false
+    ): Collection<StoredMessage> {
         return withContext(cradleDispatcher) {
             logMetrics(getMessageBatchAsyncMetric) {
                 logTime("getMessageBatchByMessageId (id=$id)") {
-                    storage.getMessageBatchAsync(id).await()
+                    simpleRetry(needRetry) {
+                        storage.getMessageBatchAsync(id).await()
+                    }
                 }
             } ?: emptyList()
         }
     }
 
-    suspend fun getEventIdsSuspend(id: StoredMessageId): Collection<StoredTestEventId> {
+    suspend fun getEventIdsSuspend(
+        id: StoredMessageId,
+        needRetry: Boolean = false
+    ): Collection<StoredTestEventId> {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventIdsByMessageIdAsyncMetric) {
                 logTime("getTestEventIdsByMessageId (id=$id)") {
-                    linker.getTestEventIdsByMessageIdAsync(id).await()
+                    simpleRetry(needRetry) {
+                        linker.getTestEventIdsByMessageIdAsync(id).await()
+                    }
                 }
             } ?: emptyList()
         }
     }
 
-    suspend fun getMessageIdsSuspend(id: StoredTestEventId): Collection<StoredMessageId> {
+    suspend fun getMessageIdsSuspend(
+        id: StoredTestEventId,
+        needRetry: Boolean = false
+    ): Collection<StoredMessageId> {
         return withContext(cradleDispatcher) {
             logMetrics(getMessageIdsByTestEventIdAsyncMetric) {
                 logTime("getMessageIdsByTestEventId (id=$id)") {
-                    linker.getMessageIdsByTestEventIdAsync(id).await()
+                    simpleRetry(needRetry) {
+                        linker.getMessageIdsByTestEventIdAsync(id).await()
+                    }
                 }
             } ?: emptyList()
         }
     }
 
-    suspend fun getMessageStreams(): Collection<String> {
+    suspend fun getMessageStreams(needRetry: Boolean = false): Collection<String> {
         return withContext(cradleDispatcher) {
             logMetrics(getStreamsMetric) {
                 logTime("getStreams") {
-                    storage.streams
+                    simpleRetry(needRetry) {
+                        storage.streams
+                    }
                 }
             } ?: emptyList()
         }

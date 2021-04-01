@@ -49,9 +49,7 @@ class SearchMessagesHandler(
     private val cradle: CradleService,
     private val messageCache: MessageCache,
     private val maxMessagesLimit: Int,
-    private val
-    messageSearchPipelineBuffer: Int,
-    private val dbRetryDelay: Long
+    private val messageSearchPipelineBuffer: Int
 ) {
     companion object {
         private val logger = KotlinLogging.logger { }
@@ -132,10 +130,11 @@ class SearchMessagesHandler(
         messageId: String?,
         timelineDirection: TimeRelation,
         timestampFrom: Instant?,
-        timestampTo: Instant?
+        timestampTo: Instant?,
+        needRetry: Boolean
     ): Instant {
         return messageId?.let {
-            cradle.getMessageSuspend(StoredMessageId.fromString(it))?.timestamp
+            cradle.getMessageSuspend(StoredMessageId.fromString(it), needRetry)?.timestamp
         } ?: (
                 if (timelineDirection == TimeRelation.AFTER) {
                     timestampFrom
@@ -160,10 +159,11 @@ class SearchMessagesHandler(
     private suspend fun getFirstMessageCurrentDay(
         timestamp: Instant,
         stream: String,
-        direction: Direction
+        direction: Direction,
+        needRetry: Boolean
     ): StoredMessageId? {
         for (timeRelation in listOf(TimeRelation.BEFORE, TimeRelation.AFTER)) {
-            cradle.getFirstMessageIdSuspend(timestamp, stream, direction, timeRelation)
+            cradle.getFirstMessageIdSuspend(timestamp, stream, direction, timeRelation, needRetry)
                 ?.let { return it }
         }
         return null
@@ -174,6 +174,7 @@ class SearchMessagesHandler(
         stream: String,
         direction: Direction,
         timelineDirection: TimeRelation,
+        needRetry: Boolean,
         daysInterval: Int = 2
     ): StoredMessageId? {
         var daysChecking = daysInterval
@@ -183,9 +184,9 @@ class SearchMessagesHandler(
         while (messageId == null && daysChecking >= 0) {
             messageId =
                 if (isCurrentDay) {
-                    getFirstMessageCurrentDay(timestamp, stream, direction)
+                    getFirstMessageCurrentDay(timestamp, stream, direction, needRetry)
                 } else {
-                    cradle.getFirstMessageIdSuspend(timestamp, stream, direction, timelineDirection)
+                    cradle.getFirstMessageIdSuspend(timestamp, stream, direction, timelineDirection, needRetry)
                 }
             daysChecking -= 1
             isCurrentDay = false
@@ -198,17 +199,18 @@ class SearchMessagesHandler(
     private suspend fun initStreamMessageIdMap(
         timelineDirection: TimeRelation,
         streamList: List<String>?,
-        timestamp: Instant
+        timestamp: Instant,
+        needRetry: Boolean
     ): List<StreamInfo> {
 
         return mutableListOf<StreamInfo>().apply {
             for (stream in streamList ?: emptyList()) {
                 for (direction in Direction.values()) {
                     val storedMessageId =
-                        getFirstMessageIdDifferentDays(timestamp, stream, direction, timelineDirection)
+                        getFirstMessageIdDifferentDays(timestamp, stream, direction, timelineDirection, needRetry)
 
                     if (storedMessageId != null) {
-                        val messageBatch = cradle.getMessageBatchSuspend(storedMessageId)
+                        val messageBatch = cradle.getMessageBatchSuspend(storedMessageId, needRetry)
                         add(
                             StreamInfo(
                                 Pair(stream, direction),
@@ -275,14 +277,18 @@ class SearchMessagesHandler(
             val messagesFromAttachedId =
                 request.attachedEventId?.let { cradle.getMessageIdsSuspend(StoredTestEventId(it)) }
 
+            // REST requests don't need cradle retry
+            val needRetry = false
+
             val startTimestamp = chooseStartTimestamp(
                 request.messageId, request.timelineDirection,
-                request.timestampFrom, request.timestampTo
+                request.timestampFrom, request.timestampTo,
+                needRetry
             )
 
             val streamsInfo = initStreamMessageIdMap(
                 request.timelineDirection, request.stream,
-                startTimestamp
+                startTimestamp, needRetry
             )
             getMessageStream(
                 streamsInfo, request.timelineDirection, request.limit,
@@ -335,14 +341,18 @@ class SearchMessagesHandler(
             val lastScannedObject = LastScannedObjectInfo()
             val lastEventId = AtomicLong(0)
             val scanCnt = AtomicLong(0)
+            val needRetry = true
+
             flow {
                 val startTimestamp = chooseStartTimestamp(
                     messageId, request.searchDirection,
-                    request.startTimestamp, request.startTimestamp
+                    request.startTimestamp, request.startTimestamp,
+                    needRetry
                 )
                 val streamsInfo = initStreamMessageIdMap(
                     request.searchDirection, request.stream,
-                    startTimestamp
+                    startTimestamp,
+                    needRetry
                 )
                 getMessageStream(
                     streamsInfo, request.searchDirection, request.resultCountLimit ?: startMessageCountLimit,
@@ -351,7 +361,7 @@ class SearchMessagesHandler(
             }.map {
                 async {
                     @Suppress("USELESS_CAST")
-                    val message = messageCache.getOrPut(it)
+                    val message = messageCache.getOrPut(it, needRetry)
                     Pair(message, request.filterPredicate.apply(message))
                 }.also { coroutineContext.ensureActive() }
             }
@@ -390,7 +400,8 @@ class SearchMessagesHandler(
         startId: StoredMessageId?,
         limit: Int,
         timelineDirection: TimeRelation,
-        isFirstPull: Boolean
+        isFirstPull: Boolean,
+        needRetry: Boolean
     ): Iterable<StoredMessage> {
 
         logger.debug { "pulling more messages (id=$startId limit=$limit direction=$timelineDirection)" }
@@ -418,7 +429,7 @@ class SearchMessagesHandler(
                             it.isLessThan(startId.index)
                     }
                 }
-            }.build()
+            }.build(), needRetry
         )
     }
 
@@ -446,13 +457,13 @@ class SearchMessagesHandler(
             streamsInfo
                 .map { stream ->
                     async {
-                        if (requestType == RequestType.SSE) {
-                            databaseRequestRetry(dbRetryDelay) {
-                                pullMore(stream.lastElement, perStreamLimit, timelineDirection, stream.isFirstPull)
-                            }
-                        } else {
-                            pullMore(stream.lastElement, perStreamLimit, timelineDirection, stream.isFirstPull)
-                        }.toList()
+                        pullMore(
+                            stream.lastElement,
+                            perStreamLimit,
+                            timelineDirection,
+                            stream.isFirstPull,
+                            requestType == RequestType.SSE
+                        ).toList()
                             .let { list ->
                                 dropUntilInRangeInOppositeDirection(startTimestamp, list, timelineDirection).also {
                                     stream.update(list.size, perStreamLimit, timelineDirection, it)
