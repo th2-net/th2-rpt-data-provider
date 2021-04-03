@@ -24,10 +24,10 @@ import com.exactpro.cradle.testevents.StoredTestEventBatchMetadata
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.rptdataprovider.*
-import com.exactpro.th2.rptdataprovider.entities.filters.PredicateFactory
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.RequestType
+import com.exactpro.th2.rptdataprovider.entities.requests.RequestType.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
@@ -53,6 +53,7 @@ import java.io.Writer
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneOffset
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.CoroutineContext
 
@@ -86,6 +87,19 @@ class SearchEventsHandler(
         }
     }
 
+    private fun checkCountAndGet(
+        parentEventCounter: ConcurrentHashMap<String, AtomicLong>,
+        eventTreeNode: EventTreeNode,
+        limitForParent: Long
+    ): EventTreeNode? {
+        if (eventTreeNode.parentId == null) return eventTreeNode
+        val count = parentEventCounter[eventTreeNode.parentId!!]
+        return if (count?.let { it.get() < limitForParent } != false) {
+            eventTreeNode
+        } else {
+            null
+        }
+    }
 
     @ExperimentalCoroutinesApi
     private suspend fun getEventTreeNodeFlow(
@@ -94,11 +108,13 @@ class SearchEventsHandler(
         timestampTo: Instant,
         parentContext: CoroutineContext,
         bufferSize: Int,
-        requestType: RequestType
+        requestType: RequestType,
+        parentEventCounter: ConcurrentHashMap<String, AtomicLong> = ConcurrentHashMap(),
+        limitForParent: Long = 0
     ): Flow<Deferred<List<EventTreeNode>>> {
         return coroutineScope {
             flow {
-                val eventsCollection = if (requestType == RequestType.SSE)
+                val eventsCollection = if (requestType == SSE)
                     databaseRequestRetry(dbRetryDelay) { getEventsSuspend(parentEvent, timestampFrom, timestampTo) }
                 else
                     getEventsSuspend(parentEvent, timestampFrom, timestampTo)
@@ -114,11 +130,31 @@ class SearchEventsHandler(
                             } catch (e: IOException) {
                                 null
                             }
-                                ?.testEvents?.map { EventTreeNode(metadata.batchMetadata, it) }
-
-                                ?: getDirectBatchedChildren(metadata.id, timestampFrom, timestampTo)
+                                ?.testEvents?.let { testEvents ->
+                                    if (requestType == SSE)
+                                        testEvents.mapNotNull {
+                                            checkCountAndGet(
+                                                parentEventCounter,
+                                                EventTreeNode(metadata.batchMetadata, it),
+                                                limitForParent
+                                            )
+                                        }
+                                    else
+                                        testEvents.map { EventTreeNode(metadata.batchMetadata, it) }
+                                }
+                                ?: getDirectBatchedChildren(
+                                    metadata.id, timestampFrom, timestampTo,
+                                    parentEventCounter, requestType, limitForParent
+                                )
                         } else {
-                            listOf(EventTreeNode(null, metadata))
+                            EventTreeNode(null, metadata).let { eventTreeNode ->
+                                if (requestType == SSE)
+                                    checkCountAndGet(parentEventCounter, eventTreeNode, limitForParent)?.let {
+                                        listOf(it)
+                                    } ?: emptyList()
+                                else
+                                    listOf(eventTreeNode)
+                            }
                         }
                     }.also { parentContext.ensureActive() }
                 }
@@ -149,8 +185,7 @@ class SearchEventsHandler(
                     getEventTreeNodeFlow(
                         request.parentEvent, timestamp.first,
                         timestamp.second, coroutineContext,
-                        UNLIMITED,
-                        RequestType.REST
+                        UNLIMITED, REST
                     ).collect { emit(it) }
                 }
             }.map {
@@ -227,12 +262,15 @@ class SearchEventsHandler(
             val scanCnt = AtomicLong(0)
 
             val timeIntervals = getTimeIntervals(request, sseEventSearchStep)
+
+            val parentEventCounter: ConcurrentHashMap<String, AtomicLong> = ConcurrentHashMap()
+
             flow {
                 for (timestamp in timeIntervals) {
                     getEventTreeNodeFlow(
                         request.parentEvent, timestamp.first,
                         timestamp.second, coroutineContext,
-                        BUFFERED, RequestType.SSE
+                        BUFFERED, SSE, parentEventCounter, request.limitForParent
                     ).collect { emit(it) }
                 }
             }
@@ -249,10 +287,20 @@ class SearchEventsHandler(
                     } ?: true
                 }
                 .onEach {
-                    lastScannedObject.apply { id = it.eventId; timestamp = it.startTimestamp.toEpochMilli(); scanCounter = scanCnt.incrementAndGet();  }
+                    lastScannedObject.apply {
+                        id = it.eventId; timestamp = it.startTimestamp.toEpochMilli(); scanCounter =
+                        scanCnt.incrementAndGet();
+                    }
                     processedEventCount.inc()
                 }
                 .filter { request.filterPredicate.apply(it) }
+                .onEach { event ->
+                    event.parentId?.let { parentId ->
+                        parentEventCounter.getOrPut(parentId, { AtomicLong(0) }).also {
+                            it.incrementAndGet()
+                        }
+                    }
+                }
                 .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
                 .onStart {
                     launch {
@@ -340,7 +388,10 @@ class SearchEventsHandler(
     private suspend fun getDirectBatchedChildren(
         batchId: StoredTestEventId,
         timestampFrom: Instant,
-        timestampTo: Instant
+        timestampTo: Instant,
+        parentEventCounter: ConcurrentHashMap<String, AtomicLong>,
+        requestType: RequestType,
+        limitForParent: Long
     ): List<EventTreeNode> {
 
         val batch = cradle.getEventSuspend(batchId)?.asBatch()
@@ -348,10 +399,18 @@ class SearchEventsHandler(
         return (batch?.testEvents
             ?: throw CradleEventNotFoundException("unable to get test events of batch '$batchId'"))
             .filter { it.startTimestamp.isAfter(timestampFrom) && it.startTimestamp.isBefore(timestampTo) }
-            .map {
+            .mapNotNull {
                 val batchMetadata = StoredTestEventBatchMetadata(batch)
 
-                EventTreeNode(batchMetadata, BatchedStoredTestEventMetadata(it, batchMetadata))
+                EventTreeNode(
+                    batchMetadata,
+                    BatchedStoredTestEventMetadata(it, batchMetadata)
+                ).let { eventTreeNode ->
+                    if (requestType == SSE)
+                        checkCountAndGet(parentEventCounter, eventTreeNode, limitForParent)
+                    else
+                        eventTreeNode
+                }
             }
     }
 }
