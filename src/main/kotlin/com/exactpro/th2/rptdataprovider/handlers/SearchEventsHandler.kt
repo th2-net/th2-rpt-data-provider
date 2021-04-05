@@ -24,10 +24,10 @@ import com.exactpro.cradle.testevents.StoredTestEventBatchMetadata
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.rptdataprovider.*
-import com.exactpro.th2.rptdataprovider.entities.filters.PredicateFactory
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.EventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.RequestType
+import com.exactpro.th2.rptdataprovider.entities.requests.RequestType.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
@@ -55,6 +55,7 @@ import java.io.Writer
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneOffset
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.CoroutineContext
 
@@ -88,6 +89,19 @@ class SearchEventsHandler(
         }
     }
 
+    private fun checkCountAndGet(
+        parentEventCounter: ConcurrentHashMap<String, AtomicLong>,
+        eventTreeNode: EventTreeNode,
+        limitForParent: Long?
+    ): EventTreeNode? {
+        if (eventTreeNode.parentId == null || limitForParent == null) return eventTreeNode
+        val count = parentEventCounter[eventTreeNode.parentId!!]
+        return if (count?.let { it.get() < limitForParent } != false) {
+            eventTreeNode
+        } else {
+            null
+        }
+    }
 
     @ExperimentalCoroutinesApi
     private suspend fun getEventFlow(
@@ -96,10 +110,15 @@ class SearchEventsHandler(
         timestampTo: Instant,
         parentContext: CoroutineContext,
         bufferSize: Int,
-        requestType: RequestType
+        requestType: RequestType,
+        parentEventCounter: ConcurrentHashMap<String, AtomicLong>? = null,
+        limitForParent: Long? = null
     ): Flow<Deferred<List<Pair<EventTreeNode, Event?>>>> {
         return coroutineScope {
-            val isSSE = requestType == RequestType.SSE
+            val isSSE = requestType == SSE
+            if (isSSE && parentEventCounter == null)
+                throw IllegalArgumentException("If RequestType is SSE we must set parentEventCounter")
+
             flow {
                 val eventsCollection = if (isSSE)
                     databaseRequestRetry(dbRetryDelay) { getEventsSuspend(parentEvent, timestampFrom, timestampTo) }
@@ -116,22 +135,34 @@ class SearchEventsHandler(
                                 metadata.batchMetadata
                             } catch (e: IOException) {
                                 null
-                            }
-                                ?.testEvents?.map {
-                                    Pair(
-                                        EventTreeNode(metadata.batchMetadata, it),
-                                        if (isSSE) eventProducer.fromId(ProviderEventId(it.batchId, it.id)) else null
-                                    )
+                            }?.testEvents?.let { testEvents ->
+                                if (isSSE) {
+                                    testEvents.mapNotNull { event ->
+                                        checkCountAndGet(
+                                            parentEventCounter!!,
+                                            EventTreeNode(metadata.batchMetadata, event),
+                                            limitForParent
+                                        )?.let {
+                                            Pair(it, eventProducer.fromId(ProviderEventId(event.batchId, event.id)))
+                                        }
+                                    }
+                                } else {
+                                    testEvents.map { Pair(EventTreeNode(metadata.batchMetadata, it), null) }
                                 }
-
-                                ?: getDirectBatchedChildren(metadata.id, timestampFrom, timestampTo, isSSE)
-                        } else {
-                            listOf(
-                                Pair(
-                                    EventTreeNode(null, metadata),
-                                    if (isSSE) eventProducer.fromId(ProviderEventId(null, metadata.id)) else null
+                            }
+                                ?: getDirectBatchedChildren(
+                                    metadata.id, timestampFrom, timestampTo,
+                                    isSSE, parentEventCounter, limitForParent
                                 )
-                            )
+                        } else {
+                            EventTreeNode(null, metadata).let { eventTreeNode ->
+                                if (isSSE)
+                                    checkCountAndGet(parentEventCounter!!, eventTreeNode, limitForParent)?.let {
+                                        listOf(Pair(it, eventProducer.fromId(ProviderEventId(null, metadata.id))))
+                                    } ?: emptyList()
+                                else
+                                    listOf((Pair(eventTreeNode, null)))
+                            }
                         }
                     }.also { parentContext.ensureActive() }
                 }
@@ -163,8 +194,7 @@ class SearchEventsHandler(
                     getEventFlow(
                         request.parentEvent, timestamp.first,
                         timestamp.second, coroutineContext,
-                        UNLIMITED,
-                        RequestType.REST
+                        UNLIMITED, REST
                     ).collect { emit(it) }
                 }
             }.map {
@@ -243,12 +273,15 @@ class SearchEventsHandler(
             val scanCnt = AtomicLong(0)
 
             val timeIntervals = getTimeIntervals(request, sseEventSearchStep)
+
+            val parentEventCounter: ConcurrentHashMap<String, AtomicLong> = ConcurrentHashMap()
+
             flow {
                 for (timestamp in timeIntervals) {
                     getEventFlow(
                         request.parentEvent, timestamp.first,
                         timestamp.second, coroutineContext,
-                        BUFFERED, RequestType.SSE
+                        BUFFERED, SSE, parentEventCounter, request.limitForParent
                     ).collect { emit(it) }
                 }
             }
@@ -271,17 +304,27 @@ class SearchEventsHandler(
                     }
                 }
                 .filter { request.filterPredicate.apply(it.second!!) }
-                .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
+                .let { fl ->
+                    if (request.limitForParent != null) {
+                        fl.onEach { (event, _) ->
+                            event.parentId?.let { parentId ->
+                                parentEventCounter.getOrPut(parentId, { AtomicLong(0) }).also {
+                                    it.incrementAndGet()
+                                }
+                            }
+                        }
+                    } else {
+                        fl
+                    }
+                }.let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
                 .onStart {
                     launch {
                         keepAlive.invoke(writer, lastScannedObject, lastEventId)
                     }
-                }
-                .onCompletion {
+                }.onCompletion {
                     coroutineContext.cancelChildren()
                     it?.let { throwable -> throw throwable }
-                }
-                .collect {
+                }.collect {
                     coroutineContext.ensureActive()
                     writer.eventWrite(SseEvent.build(jacksonMapper, it.first, lastEventId))
                 }
@@ -359,7 +402,9 @@ class SearchEventsHandler(
         batchId: StoredTestEventId,
         timestampFrom: Instant,
         timestampTo: Instant,
-        isSSE: Boolean
+        isSSE: Boolean,
+        parentEventCounter: ConcurrentHashMap<String, AtomicLong>?,
+        limitForParent: Long?
     ): List<Pair<EventTreeNode, Event?>> {
 
         val batch = cradle.getEventSuspend(batchId)?.asBatch()
@@ -367,13 +412,23 @@ class SearchEventsHandler(
         return (batch?.testEvents
             ?: throw CradleEventNotFoundException("unable to get test events of batch '$batchId'"))
             .filter { it.startTimestamp.isAfter(timestampFrom) && it.startTimestamp.isBefore(timestampTo) }
-            .map {
+            .mapNotNull { testEvent ->
                 val batchMetadata = StoredTestEventBatchMetadata(batch)
 
-                Pair(
-                    EventTreeNode(batchMetadata, BatchedStoredTestEventMetadata(it, batchMetadata)),
-                    if (isSSE) eventProducer.fromId(ProviderEventId(it.batchId, it.id)) else null
-                )
+                EventTreeNode(
+                    batchMetadata,
+                    BatchedStoredTestEventMetadata(testEvent, batchMetadata)
+                ).let { eventTreeNode ->
+                    if (isSSE)
+                        checkCountAndGet(parentEventCounter!!, eventTreeNode, limitForParent)?.let {
+                            Pair(
+                                it,
+                                eventProducer.fromId(ProviderEventId(testEvent.batchId, testEvent.id))
+                            )
+                        }
+                    else
+                        Pair(eventTreeNode, null)
+                }
 
             }
     }
