@@ -136,16 +136,19 @@ class SearchEventsHandler(
                             } catch (e: IOException) {
                                 null
                             }?.testEvents?.let { testEvents ->
-                                if (isSSE)
+                                if (isSSE) {
                                     testEvents.mapNotNull { event ->
                                         checkCountAndGet(
                                             parentEventCounter!!,
                                             EventTreeNode(metadata.batchMetadata, event),
                                             limitForParent
-                                        )
-                                    }.map { Pair(it, eventProducer.fromId(ProviderEventId(null, metadata.id))) }
-                                else
+                                        )?.let {
+                                            Pair(it, eventProducer.fromId(ProviderEventId(event.batchId, event.id)))
+                                        }
+                                    }
+                                } else {
                                     testEvents.map { Pair(EventTreeNode(metadata.batchMetadata, it), null) }
+                                }
                             }
                                 ?: getDirectBatchedChildren(
                                     metadata.id, timestampFrom, timestampTo,
