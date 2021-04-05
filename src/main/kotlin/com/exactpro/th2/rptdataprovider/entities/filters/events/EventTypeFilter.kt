@@ -21,17 +21,17 @@ import com.exactpro.th2.rptdataprovider.entities.filters.Filter
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
-import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
+import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
 class EventTypeFilter private constructor(
     private var type: List<String>,
     override var negative: Boolean = false
-) : Filter<EventTreeNode> {
+) : Filter<Event> {
 
     companion object {
 
-        suspend fun build(requestMap: Map<String, List<String>>, cradleService: CradleService): Filter<EventTreeNode> {
+        suspend fun build(requestMap: Map<String, List<String>>, cradleService: CradleService): Filter<Event> {
             return EventTypeFilter(
                 negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false,
                 type = requestMap["${filterInfo.name}-values"]
@@ -49,9 +49,9 @@ class EventTypeFilter private constructor(
         )
     }
 
-    override fun match(element: EventTreeNode): Boolean {
+    override fun match(element: Event): Boolean {
         return negative.xor(type.any { item ->
-            element.eventType.toLowerCase().contains(item.toLowerCase())
+            element.eventType!!.toLowerCase().contains(item.toLowerCase())
         })
     }
 

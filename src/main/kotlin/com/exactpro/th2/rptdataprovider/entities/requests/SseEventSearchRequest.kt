@@ -19,12 +19,11 @@ package com.exactpro.th2.rptdataprovider.entities.requests
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
-import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
+import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import java.time.Instant
-import java.util.concurrent.TimeUnit
 
 data class SseEventSearchRequest(
-    val filterPredicate: FilterPredicate<EventTreeNode>,
+    val filterPredicate: FilterPredicate<Event>,
     val startTimestamp: Instant?,
     val parentEvent: String?,
     val searchDirection: TimeRelation,
@@ -41,7 +40,7 @@ data class SseEventSearchRequest(
         }
     }
 
-    constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<EventTreeNode>) : this(
+    constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<Event>) : this(
         filterPredicate = filterPredicate,
         startTimestamp = parameters["startTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
         parentEvent = parameters["parentEvent"]?.firstOrNull(),
