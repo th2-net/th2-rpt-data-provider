@@ -149,7 +149,7 @@ class CradleService(configuration: Configuration) {
     suspend fun getMessageBatchSuspend(id: StoredMessageId): Collection<StoredMessage> {
         return withContext(cradleDispatcher) {
             logMetrics(getMessageBatchAsyncMetric) {
-                logTime("getTestEventIdsByMessageId (id=$id)") {
+                logTime("getMessageBatchByMessageId (id=$id)") {
                     storage.getMessageBatchAsync(id).await()
                 }
             } ?: emptyList()
