@@ -297,6 +297,12 @@ class SearchEventsHandler(
                         }
                     } ?: true
                 }
+                .onEach {
+                    lastScannedObject.apply {
+                        id = it.first.eventId; timestamp = it.first.startTimestamp.toEpochMilli();
+                        scanCounter = scanCnt.incrementAndGet();
+                    }
+                }
                 .filter { request.filterPredicate.apply(it.second!!) }
                 .let { fl ->
                     if (request.limitForParent != null) {
