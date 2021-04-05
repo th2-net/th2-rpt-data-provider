@@ -110,7 +110,7 @@ class SearchEventsHandler(
         bufferSize: Int,
         requestType: RequestType,
         parentEventCounter: ConcurrentHashMap<String, AtomicLong> = ConcurrentHashMap(),
-        limitForParent: Long = 0
+        limitForParent: Long? = null
     ): Flow<Deferred<List<EventTreeNode>>> {
         return coroutineScope {
             flow {
@@ -131,7 +131,7 @@ class SearchEventsHandler(
                                 null
                             }
                                 ?.testEvents?.let { testEvents ->
-                                    if (requestType == SSE)
+                                    if (limitForParent != null && requestType == SSE)
                                         testEvents.mapNotNull {
                                             checkCountAndGet(
                                                 parentEventCounter,
@@ -148,7 +148,7 @@ class SearchEventsHandler(
                                 )
                         } else {
                             EventTreeNode(null, metadata).let { eventTreeNode ->
-                                if (requestType == SSE)
+                                if (limitForParent != null && requestType == SSE)
                                     checkCountAndGet(parentEventCounter, eventTreeNode, limitForParent)?.let {
                                         listOf(it)
                                     } ?: emptyList()
@@ -288,17 +288,24 @@ class SearchEventsHandler(
                 }
                 .onEach {
                     lastScannedObject.apply {
-                        id = it.eventId; timestamp = it.startTimestamp.toEpochMilli(); scanCounter =
-                        scanCnt.incrementAndGet();
+                        id = it.eventId
+                        timestamp = it.startTimestamp.toEpochMilli()
+                        scanCounter = scanCnt.incrementAndGet()
                     }
                     processedEventCount.inc()
                 }
                 .filter { request.filterPredicate.apply(it) }
-                .onEach { event ->
-                    event.parentId?.let { parentId ->
-                        parentEventCounter.getOrPut(parentId, { AtomicLong(0) }).also {
-                            it.incrementAndGet()
+                .let { fl ->
+                    if (request.limitForParent != null) {
+                        fl.onEach { event ->
+                            event.parentId?.let { parentId ->
+                                parentEventCounter.getOrPut(parentId, { AtomicLong(0) }).also {
+                                    it.incrementAndGet()
+                                }
+                            }
                         }
+                    } else {
+                        fl
                     }
                 }
                 .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
@@ -391,7 +398,7 @@ class SearchEventsHandler(
         timestampTo: Instant,
         parentEventCounter: ConcurrentHashMap<String, AtomicLong>,
         requestType: RequestType,
-        limitForParent: Long
+        limitForParent: Long?
     ): List<EventTreeNode> {
 
         val batch = cradle.getEventSuspend(batchId)?.asBatch()
@@ -406,7 +413,7 @@ class SearchEventsHandler(
                     batchMetadata,
                     BatchedStoredTestEventMetadata(it, batchMetadata)
                 ).let { eventTreeNode ->
-                    if (requestType == SSE)
+                    if (limitForParent != null && requestType == SSE)
                         checkCountAndGet(parentEventCounter, eventTreeNode, limitForParent)
                     else
                         eventTreeNode
