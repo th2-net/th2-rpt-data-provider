@@ -23,16 +23,18 @@ import com.exactpro.th2.rptdataprovider.entities.filters.Filter
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
-import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
+import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
-import kotlinx.coroutines.runBlocking
 
-class AttachedMessageFilter private constructor(private var eventIds: Collection<StoredTestEventId>, override var negative: Boolean) :
-    Filter<EventTreeNode> {
+class AttachedMessageFilter private constructor(
+    private var eventIds: Collection<StoredTestEventId>,
+    override var negative: Boolean
+) :
+    Filter<Event> {
 
     companion object {
 
-        suspend fun build(requestMap: Map<String, List<String>>, cradleService: CradleService): Filter<EventTreeNode> {
+        suspend fun build(requestMap: Map<String, List<String>>, cradleService: CradleService): Filter<Event> {
             return AttachedMessageFilter(
                 negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false,
                 eventIds = requestMap["${filterInfo.name}-values"]?.first()
@@ -57,7 +59,7 @@ class AttachedMessageFilter private constructor(private var eventIds: Collection
     }
 
 
-    override fun match(element: EventTreeNode): Boolean {
+    override fun match(element: Event): Boolean {
         return negative.xor(eventIds.contains(StoredTestEventId(element.eventId)))
     }
 

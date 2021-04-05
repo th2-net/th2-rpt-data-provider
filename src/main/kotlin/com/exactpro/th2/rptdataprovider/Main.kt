@@ -20,7 +20,6 @@ import com.exactpro.cradle.utils.CradleIdException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.requests.*
-import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.sse.EventType
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
@@ -426,8 +425,7 @@ class Main(args: Array<String>) {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "search events sse", null, false, false, queryParametersMap) {
                         val filterPredicate = eventFiltersPredicateFactory.build(queryParametersMap)
-                        val eventTreeNode = EventTreeNode(eventCache.getOrPut(call.parameters["id"]!!))
-                        filterPredicate.apply(eventTreeNode)
+                        filterPredicate.apply(eventCache.getOrPut(call.parameters["id"]!!))
                     }
                 }
 
