@@ -54,8 +54,8 @@ data class EventTreeNode(
     val eventId: String
         get() = id.toString()
 
-    val parentId: String
-        get() = parentEventId.toString()
+    val parentId: String?
+        get() = parentEventId?.toString()
 
     companion object {
         private const val error = "field is null in both batched and non-batched event metadata"
