@@ -58,6 +58,13 @@ class SearchMessagesHandler(
         private val processedMessageCount = Counter.build(
             "processed_message_count", "Count of processed Message"
         ).register()
+
+        private val pullMoreMetric: Metrics = Metrics("pull_more", "pullMore")
+        private val pullMoreMergedMetric: Metrics = Metrics("pull_more_merged", "pullMoreMerged")
+        private val initStreamsInfoMetric: Metrics = Metrics("init_streams_info", "initStreamsInfo")
+        private val getParsedMessageAllTime: Metrics = Metrics("get_parsed_message_all_time", "getOrPut")
+        private val filterApplyTime: Metrics = Metrics("filter_apply_time", "filterApplyTime")
+
     }
 
     data class StreamInfo(
@@ -199,27 +206,28 @@ class SearchMessagesHandler(
         streamList: List<String>?,
         timestamp: Instant
     ): List<StreamInfo> {
+        return logMetrics(initStreamsInfoMetric) {
+            mutableListOf<StreamInfo>().apply {
+                for (stream in streamList ?: emptyList()) {
+                    for (direction in Direction.values()) {
+                        val storedMessageId =
+                            getFirstMessageIdDifferentDays(timestamp, stream, direction, timelineDirection)
 
-        return mutableListOf<StreamInfo>().apply {
-            for (stream in streamList ?: emptyList()) {
-                for (direction in Direction.values()) {
-                    val storedMessageId =
-                        getFirstMessageIdDifferentDays(timestamp, stream, direction, timelineDirection)
-
-                    if (storedMessageId != null) {
-                        val messageBatch = cradle.getMessageBatchSuspend(storedMessageId)
-                        add(
-                            StreamInfo(
-                                Pair(stream, direction),
-                                getNearestMessage(messageBatch, timelineDirection, timestamp)?.id
+                        if (storedMessageId != null) {
+                            val messageBatch = cradle.getMessageBatchSuspend(storedMessageId)
+                            add(
+                                StreamInfo(
+                                    Pair(stream, direction),
+                                    getNearestMessage(messageBatch, timelineDirection, timestamp)?.id
+                                )
                             )
-                        )
-                    } else {
-                        add(StreamInfo(Pair(stream, direction), null))
+                        } else {
+                            add(StreamInfo(Pair(stream, direction), null))
+                        }
                     }
                 }
             }
-        }
+        }!!
     }
 
     @ExperimentalCoroutinesApi
@@ -349,9 +357,13 @@ class SearchMessagesHandler(
                 ).collect { emit(it) }
             }.map {
                 async {
-                    @Suppress("USELESS_CAST")
-                    val message = messageCache.getOrPut(it)
-                    Pair(message, request.filterPredicate.apply(message))
+                    val message = logMetrics(getParsedMessageAllTime) {
+                        @Suppress("USELESS_CAST")
+                        messageCache.getOrPut(it)
+                    }!!
+                    logMetrics(filterApplyTime) {
+                        Pair(message, request.filterPredicate.apply(message))
+                    }!!
                 }.also { coroutineContext.ensureActive() }
             }
                 .buffer(messageSearchPipelineBuffer)
@@ -368,7 +380,7 @@ class SearchMessagesHandler(
                 .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
                 .onStart {
                     launch {
-                        keepAlive.invoke(writer,lastScannedObject, lastEventId)
+                        keepAlive.invoke(writer, lastScannedObject, lastEventId)
                     }
                 }
                 .onCompletion {
@@ -391,34 +403,37 @@ class SearchMessagesHandler(
         timelineDirection: TimeRelation,
         isFirstPull: Boolean
     ): Iterable<StoredMessage> {
+        return logMetrics(pullMoreMetric) {
+            logger.debug { "pulling more messages (id=$startId limit=$limit direction=$timelineDirection)" }
 
-        logger.debug { "pulling more messages (id=$startId limit=$limit direction=$timelineDirection)" }
+            if (startId == null) {
+                emptyList()
+            } else {
+                cradle.getMessagesSuspend(
+                    StoredMessageFilterBuilder().apply {
+                        streamName().isEqualTo(startId.streamName)
+                        direction().isEqualTo(startId.direction)
+                        limit(limit)
 
-        if (startId == null) return emptyList()
-
-        return cradle.getMessagesSuspend(
-            StoredMessageFilterBuilder().apply {
-                streamName().isEqualTo(startId.streamName)
-                direction().isEqualTo(startId.direction)
-                limit(limit)
-
-                if (timelineDirection == TimeRelation.AFTER) {
-                    index().let {
-                        if (isFirstPull)
-                            it.isGreaterThanOrEqualTo(startId.index)
-                        else
-                            it.isGreaterThan(startId.index)
-                    }
-                } else {
-                    index().let {
-                        if (isFirstPull)
-                            it.isLessThanOrEqualTo(startId.index)
-                        else
-                            it.isLessThan(startId.index)
-                    }
-                }
-            }.build()
-        )
+                        if (timelineDirection == TimeRelation.AFTER) {
+                            index().let {
+                                if (isFirstPull)
+                                    it.isGreaterThanOrEqualTo(startId.index)
+                                else
+                                    it.isGreaterThan(startId.index)
+                            }
+                        } else {
+                            index().let {
+                                if (isFirstPull)
+                                    it.isLessThanOrEqualTo(startId.index)
+                                else
+                                    it.isLessThan(startId.index)
+                            }
+                        }
+                    }.build()
+                )
+            }
+        }!!
     }
 
     private fun dropUntilInRangeInOppositeDirection(
@@ -441,32 +456,34 @@ class SearchMessagesHandler(
         requestType: RequestType
     ): List<StoredMessage> {
         logger.debug { "pulling more messages (streams=${streamsInfo} direction=$timelineDirection perStreamLimit=$perStreamLimit)" }
-        return coroutineScope {
-            streamsInfo
-                .map { stream ->
-                    async {
-                        if (requestType == RequestType.SSE) {
-                            databaseRequestRetry(dbRetryDelay) {
-                                pullMore(stream.lastElement, perStreamLimit, timelineDirection, stream.isFirstPull)
-                            }
-                        } else {
-                            pullMore(stream.lastElement, perStreamLimit, timelineDirection, stream.isFirstPull)
-                        }.toList()
-                            .let { list ->
-                                dropUntilInRangeInOppositeDirection(startTimestamp, list, timelineDirection).also {
-                                    stream.update(list.size, perStreamLimit, timelineDirection, it)
+        return logMetrics(pullMoreMergedMetric) {
+            coroutineScope {
+                streamsInfo
+                    .map { stream ->
+                        async {
+                            if (requestType == RequestType.SSE) {
+                                databaseRequestRetry(dbRetryDelay) {
+                                    pullMore(stream.lastElement, perStreamLimit, timelineDirection, stream.isFirstPull)
                                 }
-                            }
+                            } else {
+                                pullMore(stream.lastElement, perStreamLimit, timelineDirection, stream.isFirstPull)
+                            }.toList()
+                                .let { list ->
+                                    dropUntilInRangeInOppositeDirection(startTimestamp, list, timelineDirection).also {
+                                        stream.update(list.size, perStreamLimit, timelineDirection, it)
+                                    }
+                                }
+                        }
+                    }.awaitAll()
+                    .flatten()
+                    .let { list ->
+                        if (timelineDirection == TimeRelation.AFTER) {
+                            list.sortedBy { it.timestamp }
+                        } else {
+                            list.sortedByDescending { it.timestamp }
+                        }
                     }
-                }.awaitAll()
-                .flatten()
-                .let { list ->
-                    if (timelineDirection == TimeRelation.AFTER) {
-                        list.sortedBy { it.timestamp }
-                    } else {
-                        list.sortedByDescending { it.timestamp }
-                    }
-                }
-        }
+            }
+        }!!
     }
 }
