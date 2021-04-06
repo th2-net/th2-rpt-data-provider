@@ -27,7 +27,7 @@ import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
 class AttachedMessageFilter private constructor(
-    private var eventIds: Collection<StoredTestEventId>,
+    private var eventIds: Collection<Collection<StoredTestEventId>>,
     override var negative: Boolean
 ) :
     Filter<Event> {
@@ -37,8 +37,8 @@ class AttachedMessageFilter private constructor(
         suspend fun build(requestMap: Map<String, List<String>>, cradleService: CradleService): Filter<Event> {
             return AttachedMessageFilter(
                 negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false,
-                eventIds = requestMap["${filterInfo.name}-values"]?.first()
-                    ?.let { cradleService.getEventIdsSuspend(StoredMessageId.fromString(it)) }
+                eventIds = requestMap["${filterInfo.name}-values"]
+                    ?.map { cradleService.getEventIdsSuspend(StoredMessageId.fromString(it)) }
                     ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
             )
         }
@@ -50,7 +50,7 @@ class AttachedMessageFilter private constructor(
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
                 add(
                     Parameter(
-                        "values", FilterParameterType.STRING, null,
+                        "values", FilterParameterType.STRING_LIST, null,
                         "arfq01fix01:second:1604492791034943949"
                     )
                 )
@@ -60,7 +60,10 @@ class AttachedMessageFilter private constructor(
 
 
     override fun match(element: Event): Boolean {
-        return negative.xor(eventIds.contains(StoredTestEventId(element.eventId)))
+        return negative.xor(eventIds.let { eventIdsFromAttachedIds ->
+            val eventId = StoredTestEventId(element.eventId)
+            eventIdsFromAttachedIds.any { it.contains(eventId) }
+        })
     }
 
     override fun getInfo(): FilterInfo {
