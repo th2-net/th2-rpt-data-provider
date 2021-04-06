@@ -1,0 +1,8 @@
+variables:
+  APP_NAME: "th2-rpt-data-provider"
+  INSPECTION_ENABLED: 'false'
+
+include:
+  - project: 'vivarium/th2/pipelines'
+    ref: master
+    file: '/.gitlab-ci-java.yml'
