@@ -1,0 +1,113 @@
+/*******************************************************************************
+ * Copyright 2009-2020 Exactpro (Exactpro Systems Limited)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ ******************************************************************************/
+
+plugins {
+    id 'java'
+    id 'org.jetbrains.kotlin.jvm' version '1.3.72'
+    id 'application'
+    id 'com.palantir.docker' version '0.25.0'
+}
+
+ext {
+    dockerImageVersion = release_version
+}
+
+group 'com.exactpro.th2'
+version release_version
+
+repositories {
+    mavenCentral()
+
+    maven {
+        name 'Bintray'
+        url 'https://dl.bintray.com/exactpro/th2'
+    }
+}
+
+dependencies {
+    api platform('com.exactpro.th2:bom:2.10.1')
+
+    implementation 'org.slf4j:slf4j-api'
+    implementation 'org.slf4j:slf4j-log4j12'
+
+    implementation 'com.exactpro.th2:grpc-common:3.0.0'
+    implementation 'com.exactpro.th2:common:3.0.0'
+
+    implementation 'com.exactpro.th2:cradle-core:2.7.0'
+    implementation 'com.exactpro.th2:cradle-cassandra:2.7.0'
+
+    implementation 'io.github.microutils:kotlin-logging:1.7.10'
+
+    implementation 'io.prometheus:simpleclient'
+
+    implementation 'com.fasterxml.jackson.core:jackson-core'
+    implementation 'com.fasterxml.jackson.module:jackson-module-kotlin'
+
+    implementation 'io.prometheus:simpleclient'
+
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8'
+
+    implementation 'io.ktor:ktor-server-netty:1.3.1'
+
+    implementation 'org.ehcache:ehcache:3.8.1'
+
+    implementation 'com.rabbitmq:amqp-client'
+
+    implementation "io.grpc:grpc-protobuf"
+    implementation "com.google.protobuf:protobuf-java-util"
+}
+
+jar {
+    manifest {
+        attributes(
+                'Created-By': "${System.getProperty('java.version')} (${System.getProperty('java.vendor')})",
+                'Specification-Title': '',
+                'Specification-Vendor': 'Exactpro Systems LLC',
+                'Implementation-Title': project.archivesBaseName,
+                'Implementation-Vendor': 'Exactpro Systems LLC',
+                'Implementation-Vendor-Id': 'com.exactpro',
+                'Implementation-Version': project.version
+        )
+    }
+}
+
+applicationName = 'service'
+
+distTar {
+    archiveName "${applicationName}.tar"
+}
+
+dockerPrepare {
+    dependsOn distTar
+}
+
+docker {
+    copySpec.from(tarTree("$buildDir/distributions/${applicationName}.tar"))
+}
+
+
+compileKotlin {
+    kotlinOptions.jvmTarget = "11"
+}
+
+application {
+    mainClassName = "com.exactpro.th2.rptdataprovider.MainKt"
+}
+
+configurations.all {
+    resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
+    resolutionStrategy.cacheDynamicVersionsFor 0, 'seconds'
+}
