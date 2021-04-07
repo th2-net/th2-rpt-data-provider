@@ -64,7 +64,8 @@ Message object example:
 - `name` - text, accepts multiple values - Will match the events which name contains one of the given substrings. Case-insensitive.
 - `type` - text, accepts multiple values - Will match the events which type contains one of the given substrings. Case-insensitive.
 - `flat` - boolean - If `true`, returns the result as a flat list of event ids. If `false`, returns them as a list of event metadata object trees. Metadata tree will contain parent event objects as long as at least one of their direct or indirect children matches the filter. So, the resulting tree will preserve the hierarchy without the irrelevant branches.
-
+- `parentEvent` - text - Filters the events that has a specified parent event id.
+- `probe` - boolean - If `true`, returns empty json instead error response. Default `false`.
 
 Event metadata object example:
 ```
@@ -91,7 +92,10 @@ Event metadata object example:
 - `limit` - number - Sets the maximum amount of messages to return. Can be used for pagination. Defaults to `100`.
 - `timelineDirection` - `next`/`previous` - Sets the lookup direction. Can be used for pagination. Defaults to `next`.
 - `messageId` - text - Sets the message id to start the lookup from. Can be used for pagination.
+- `idsOnly` - boolean - If `true` returns list of message ids instead messages else return full messages. Default `true`.
+- `probe` - boolean - If `true`, returns empty json instead error response. Default `false`.
 
+    
 ### SSE
 
 ##### Filters API
@@ -136,26 +140,32 @@ As example:
 
 ##### SSE requests API
 `http://localhost:8080/search/sse/events` - create a sse channel of event metadata that matches the filter. Accepts following query parameters:
-- `startTimestamp` - number, unix timestamp in milliseconds - Sets the search starting point. **Required**.
+- `startTimestamp` - number, unix timestamp in milliseconds - Sets the search starting point. **One of the 'startTimestamp' or 'resumeFromId' must not be null** 
+- `resumeFromId` - text, last event id. In order to continue the execution of an interrupted sse request, you need to send exactly the same request with an indication of the element ID, from which to resume data transfer. Defaults to `null`. **One of the 'startTimestamp' or 'resumeFromId' must not be null**
+
 - `parentEvent` - text - Will match events with the specified parent element.
 - `searchDirection` - `next`/`previous` - Sets the lookup direction. Can be used for pagination. Defaults to `next`.
 - `resultCountLimit` - number - Sets the maximum amount of events to return. Defaults to `100`.
 - `endTimestamp` - number, unix timestamp in milliseconds - Sets the timestamp to which the search will be performed, starting with `startTimestamp`. When `searchDirection` is `previous`, `endTimestamp` must be less then `startTimestamp`. Defaults to `null` (the search is carried out endlessly into the past or the future).
-- `resumeFromId` - text, last event id. In order to continue the execution of an interrupted sse request, you need to send exactly the same request with an indication of the element ID, from which to resume data transfer. Defaults to `null`.
+- `limitForParent` - number - How many children for each parent do we want to request. Default `not limited`.
+
 
 - `FILTERS`:
 - `attachedMessageId` - Filters the events that are linked to the specified message id. Parameters: `values` - text, `negative` - boolean. If `true`, will match events that do not match those specified attached message id. If `false`, will match the events by their attached message id. Defaults to `false`.  
 - `name` - Will match the events which name contains one of the given substrings. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean - If `true`, will match events that do not match those specified `name`. If `false`, will match the events by their `name`. Defaults to `false`. 
 - `type` - Will match the events which type contains one of the given substrings. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean - If `true`, will match events that do not match those specified `type`. If `false`, will match the events by their `type`. Defaults to `false`.
+- `body` - Will match the events which body contains one of the given substrings. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean - If `true`, will match events that do not match those specified `type`. If `false`, will match the events by their `type`. Defaults to `false`.
+- `status` - Will match the events which status equals that specified. Parameters: `values` - boolean. `negative` - boolean - If `true`, will match events that do not match those specified `status`. If `false`, will match the events by their `status`. Defaults to `false`.
 
 
 `http://localhost:8080/search/sse/messages` - create a sse channel of messages that matches the filter. Accepts following query parameters:
-- `startTimestamp` - number, unix timestamp in milliseconds - Sets the search starting point. **Required**.
+- `startTimestamp` - number, unix timestamp in milliseconds - Sets the search starting point. **One of the 'startTimestamp' or 'resumeFromId' must not be null**
+- `resumeFromId` - text, last message id. In order to continue the execution of an interrupted sse request, you need to send exactly the same request with an indication of the element ID, from which to resume data transfer. Defaults to `null`. **One of the 'startTimestamp' or 'resumeFromId' must not be null**
+
 - `stream` - text, accepts multiple values - Sets the stream ids to search in. Case-sensitive. **Required**. 
 - `searchDirection` - `next`/`previous` - Sets the lookup direction. Can be used for pagination. Defaults to `next`.
 - `resultCountLimit` - number - Sets the maximum amount of messages to return. Defaults to `100`.
 - `endTimestamp` - number, unix timestamp in milliseconds - Sets the timestamp to which the search will be performed, starting with `startTimestamp`. When `searchDirection` is `previous`, `endTimestamp` must be less then `startTimestamp`. Defaults to `null` (the search is carried out endlessly into the past or the future).
-- `resumeFromId` - text, last message id. In order to continue the execution of an interrupted sse request, you need to send exactly the same request with an indication of the element ID, from which to resume data transfer. Defaults to `null`.
 
 - `FILTERS`:
 
@@ -190,11 +200,11 @@ spec:
     
     eventCacheSize: 1000 // internal event cache size
     messageCacheSize: 1000 // internal message cache size
+    codecCacheSize: 100 // size of the internal cache for parsed messages
     serverCacheTimeout: 60000 // cached event lifetime in milliseconds
-
+    
     ioDispatcherThreadPoolSize: 10 // thread pool size for blocking database calls
     codecResponseTimeout: 6000 // if a codec doesn't respond in time, requested message is returned with a 'null' body
-    codecCacheSize: 100 // size of the internal cache for parsed messages
     checkRequestsAliveDelay: 2000 // response channel check interval in milliseconds
     
     enableCaching: true // enables proxy and client cache (Cache-control response headers)
@@ -204,6 +214,13 @@ spec:
     
     maxMessagesLimit: 100 // limits how many messages can be requested from cradle per query
     messageSearchPipelineBuffer: 500 // search/messages pipeline buffer size (defines how many messages could be processed concurrently)
+    
+    sseEventSearchStep: 200 // step size in seconds when requesting events 
+    keepAliveTimeout: 5000 // timeout in milliseconds. keep_alive sending frequency
+    dbRetryDelay: 5000 // delay in milliseconds before repeated queries to the database
+    cradleDispatcherPoolSize: 1 // number of threads in the cradle dispatcher
+
+
   pins: // pins are used to communicate with codec components to parse message data
     - name: to_codec
       connection-type: mq
