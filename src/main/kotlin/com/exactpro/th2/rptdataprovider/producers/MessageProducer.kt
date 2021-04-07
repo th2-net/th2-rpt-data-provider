@@ -29,6 +29,7 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import com.google.protobuf.InvalidProtocolBufferException
 import com.google.protobuf.util.JsonFormat
+import io.prometheus.client.Counter
 import mu.KotlinLogging
 import java.util.*
 
@@ -41,6 +42,9 @@ class MessageProducer(
 
     companion object {
         private val logger = KotlinLogging.logger { }
+
+        private val duplicateCounter =
+            Counter.build("duplicate_counter", "Count of get message batch duplicates").register()
     }
 
     suspend fun fromRawMessage(rawMessage: StoredMessage): Message {
@@ -58,7 +62,9 @@ class MessageProducer(
                         }
                     }
                 }
-            } else { null } ?: parseMessage(rawMessage)
+            } else {
+                null
+            } ?: parseMessage(rawMessage)
 
         return Message(
             rawMessage,
@@ -81,11 +87,23 @@ class MessageProducer(
         )
     }
 
+    private val messageBatchSet = mutableSetOf<String>()
+    
     private suspend fun parseMessage(message: StoredMessage): com.exactpro.th2.common.grpc.Message? {
         return codecCache.get(message.id.toString())
             ?: let {
-                val messages = cradle.getMessageBatchSuspend(message.id)
-
+                val messages = cradle.getMessageBatchSuspend(message.id).also { msg ->
+                    var isDuplicate = false
+                    msg.forEach { m ->
+                        if (!messageBatchSet.contains(m.id.toString()))
+                            messageBatchSet.add(m.id.toString())
+                        else
+                            isDuplicate = true
+                    }
+                    if (isDuplicate) {
+                        duplicateCounter.inc()
+                    }
+                }
                 if (messages.isEmpty()) {
                     logger.error { "unable to parse message '${message.id}' - message batch does not exist or is empty" }
                     return null
