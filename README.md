@@ -116,6 +116,11 @@ As example:
 
 `http://localhost:8080/filters/sse-events/{filter name}` - get filter info
 
+`http://localhost:8080/match/event/{id}` - return boolean value. Check that event with the specified id is matched by filter
+
+`http://localhost:8080/match/message/{id}` - return boolean value. Check that message with the specified id is matched by filter
+   
+
 ```Filter info example
   {
     name: "type", // non-nullable

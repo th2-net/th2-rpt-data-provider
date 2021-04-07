@@ -32,7 +32,7 @@ class EventStatusFilter private constructor(
         private const val passedStatus = "passed"
 
         suspend fun build(requestMap: Map<String, List<String>>, cradleService: CradleService): Filter<Event> {
-            val status = requestMap["${filterInfo.name}-value"]?.first()?.toLowerCase()
+            val status = requestMap["${filterInfo.name}-values"]?.first()?.toLowerCase()
                 ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
 
             if (failedStatus != status && passedStatus != status) {
