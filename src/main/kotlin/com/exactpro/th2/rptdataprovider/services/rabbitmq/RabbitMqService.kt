@@ -24,6 +24,7 @@ import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.logMetrics
 import io.ktor.utils.io.errors.IOException
+import io.prometheus.client.Counter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
@@ -42,6 +43,8 @@ class RabbitMqService(private val configuration: Configuration) {
     companion object {
         val logger = KotlinLogging.logger { }
         private val rabbitMqMessageParseGauge: Metrics = Metrics("rabbit_mq_message_parse", "rabbitMqMessageParse")
+        private val parseMessageTimeout =
+            Counter.build("parse_message_timeout", "Count of not parsed messages timeout").register()
     }
 
     private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
@@ -109,6 +112,8 @@ class RabbitMqService(private val configuration: Configuration) {
                         deferred.awaitAll().also { logger.debug { "codec response received $requestDebugInfo" } }
                     }
                 } catch (e: TimeoutCancellationException) {
+                    parseMessageTimeout.inc()
+
                     logger.error { "unable to parse messages $requestDebugInfo - timed out after $responseTimeout milliseconds" }
                     requests.map { request ->
                         decodeRequests.remove(request.key)

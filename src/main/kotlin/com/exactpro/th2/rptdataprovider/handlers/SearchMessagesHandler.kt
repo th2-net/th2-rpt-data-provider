@@ -34,6 +34,7 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.prometheus.client.Counter
+import io.prometheus.client.Histogram
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import mu.KotlinLogging
@@ -64,6 +65,7 @@ class SearchMessagesHandler(
         private val initStreamsInfoMetric: Metrics = Metrics("init_streams_info", "initStreamsInfo")
         private val getParsedMessageAllTime: Metrics = Metrics("get_parsed_message_all_time", "getOrPut")
         private val filterApplyTime: Metrics = Metrics("filter_apply_time", "filterApplyTime")
+        private val pipelineStep: Histogram = Histogram.build("pipeline_step", "Pipeline step time").register()
 
     }
 
@@ -246,6 +248,7 @@ class SearchMessagesHandler(
             flow {
                 var limit = min(maxMessagesLimit, initLimit)
                 do {
+                    val timer = pipelineStep.startTimer()
                     val data = pullMoreMerged(
                         streamsInfo,
                         timelineDirection,
@@ -256,7 +259,8 @@ class SearchMessagesHandler(
                     for (item in data) {
                         emit(item)
                     }
-                    limit = min(maxMessagesLimit, limit * 2)
+                    timer.observeDuration()
+                   // limit = min(maxMessagesLimit, limit * 2)
                 } while (streamsInfo.any { it.lastElement != null })
             }
                 .filterNot { it.id.toString() == messageId }
@@ -359,7 +363,7 @@ class SearchMessagesHandler(
                 async {
                     val message = logMetrics(getParsedMessageAllTime) {
                         @Suppress("USELESS_CAST")
-                        messageCache.getOrPut(it)
+                        messageCache.getOrPut(it, request.parsingOff)
                     }!!
                     logMetrics(filterApplyTime) {
                         Pair(message, request.filterPredicate.apply(message))

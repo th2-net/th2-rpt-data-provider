@@ -45,10 +45,13 @@ class MessageProducer(
 
         private val duplicateCounter =
             Counter.build("duplicate_counter", "Count of get message batch duplicates").register()
+
+        private val parseMessageFailed =
+            Counter.build("parse_message_failed", "Count of not parsed messages").register()
     }
 
-    suspend fun fromRawMessage(rawMessage: StoredMessage): Message {
-        val processed =
+    suspend fun fromRawMessage(rawMessage: StoredMessage, parsingOff: Boolean = false): Message {
+        val processed = if (parsingOff) null else {
             if (useGetProcessedMessage) {
                 cradle.getProcessedMessageSuspend(rawMessage.id)?.let { storedMessage ->
                     storedMessage.content?.let {
@@ -65,6 +68,7 @@ class MessageProducer(
             } else {
                 null
             } ?: parseMessage(rawMessage)
+        }
 
         return Message(
             rawMessage,
@@ -88,7 +92,7 @@ class MessageProducer(
     }
 
     private val messageBatchSet = mutableSetOf<String>()
-    
+
     private suspend fun parseMessage(message: StoredMessage): com.exactpro.th2.common.grpc.Message? {
         return codecCache.get(message.id.toString())
             ?: let {
@@ -106,6 +110,7 @@ class MessageProducer(
                 }
                 if (messages.isEmpty()) {
                     logger.error { "unable to parse message '${message.id}' - message batch does not exist or is empty" }
+                    parseMessageFailed.inc()
                     return null
                 }
 
@@ -122,9 +127,11 @@ class MessageProducer(
                         .firstOrNull { message.id == getId(it.metadata.id) }
                 } catch (e: IllegalStateException) {
                     logger.error(e) { "unable to parse message '${message.id}'" }
+                    parseMessageFailed.inc()
                     null
                 } ?: let {
                     logger.error { "unable to parse message '${message.id}'" }
+                    parseMessageFailed.inc()
                     null
                 }
             }
