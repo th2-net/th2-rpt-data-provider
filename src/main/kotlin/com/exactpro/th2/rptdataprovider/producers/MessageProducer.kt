@@ -35,7 +35,8 @@ import java.util.*
 class MessageProducer(
     private val cradle: CradleService,
     private val rabbitMqService: RabbitMqService,
-    private val codecCache: CodecCache
+    private val codecCache: CodecCache,
+    private val useGetProcessedMessage: Boolean
 ) {
 
     companion object {
@@ -43,20 +44,21 @@ class MessageProducer(
     }
 
     suspend fun fromRawMessage(rawMessage: StoredMessage): Message {
-        val processed = cradle.getProcessedMessageSuspend(rawMessage.id)?.let { storedMessage ->
-
-            storedMessage.content?.let {
-                try {
-                    com.exactpro.th2.common.grpc.Message.parseFrom(it)
-                } catch (e: Exception) {
-                    logger.error {
-                        "unable to parse message (id=${storedMessage.id}) - invalid data (${String(storedMessage.content)})"
+        val processed =
+            if (useGetProcessedMessage) {
+                cradle.getProcessedMessageSuspend(rawMessage.id)?.let { storedMessage ->
+                    storedMessage.content?.let {
+                        try {
+                            com.exactpro.th2.common.grpc.Message.parseFrom(it)
+                        } catch (e: Exception) {
+                            logger.error {
+                                "unable to parse message (id=${storedMessage.id}) - invalid data (${String(storedMessage.content)})"
+                            }
+                            null
+                        }
                     }
-
-                    null
                 }
-            }
-        } ?: parseMessage(rawMessage)
+            } else { null } ?: parseMessage(rawMessage)
 
         return Message(
             rawMessage,

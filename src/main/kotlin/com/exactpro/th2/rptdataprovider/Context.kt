@@ -71,7 +71,12 @@ class Context(
 
     val codecCache: CodecCache = CodecCache(configuration),
 
-    val messageProducer: MessageProducer = MessageProducer(cradleService, rabbitMqService, codecCache),
+    val messageProducer: MessageProducer = MessageProducer(
+        cradleService,
+        rabbitMqService,
+        codecCache,
+        configuration.useGetProcessedMessage.value.toBoolean()
+    ),
     val messageCache: MessageCache = MessageCache(configuration, messageProducer),
     val searchMessagesHandler: SearchMessagesHandler = SearchMessagesHandler(
         cradleService,
