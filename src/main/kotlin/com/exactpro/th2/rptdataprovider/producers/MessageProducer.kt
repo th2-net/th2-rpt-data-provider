@@ -23,20 +23,28 @@ import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.rptdataprovider.cache.CodecCache
+import com.exactpro.th2.rptdataprovider.cache.CodecCacheData
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import com.google.protobuf.InvalidProtocolBufferException
 import com.google.protobuf.util.JsonFormat
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.Channel.Factory.BUFFERED
+import kotlinx.coroutines.channels.ReceiveChannel
 import mu.KotlinLogging
 import java.util.*
+import java.util.stream.Stream
 
 class MessageProducer(
     private val cradle: CradleService,
     private val rabbitMqService: RabbitMqService,
     private val codecCache: CodecCache
 ) {
+
+    private val messageBuffer: Channel<CodecCacheData> = Channel(1000)
 
     companion object {
         private val logger = KotlinLogging.logger { }
@@ -100,34 +108,64 @@ class MessageProducer(
     }
 
     private suspend fun parseMessage(message: StoredMessage): com.exactpro.th2.common.grpc.Message? {
-        return codecCache.get(message.id.toString())
-            ?: let {
-                val messages = cradle.getMessageBatchSuspend(message.id)
+        return coroutineScope {
+            codecCache.get(message.id.toString()) ?: let {
+                CodecCacheData.build(message.id.toString()).also {
+                    messageBuffer.send(it)
+                }.get()
+            }
+        }
+    }
 
-                if (messages.isEmpty()) {
-                    logger.error { "unable to parse message '${message.id}' - message batch does not exist or is empty" }
-                    return null
+    private suspend fun parseMessages() {
+        return coroutineScope {
+            while (true) {
+                val deferred = messageBuffer.receiveAvailable().onEach {
+                    codecCache.put(it.id, it)
+                }.associateBy { it.id }
+
+                val idSet = mutableSetOf<String>()
+                val messageBatch = mutableListOf<StoredMessage>().apply {
+                    deferred.onEach {
+                        if (!idSet.contains(it.key)) {
+                            cradle.getMessageBatchSuspend(StoredMessageId.fromString(it.key)).let { message ->
+                                addAll(message)
+                                idSet.addAll(message.map { m -> m.id.toString() })
+                            }
+                        }
+                    }
                 }
 
-                val batch = RawMessageBatch.newBuilder().addAllMessages(
-                    messages
-                        .sortedBy { it.timestamp }
-                        .map { RawMessage.parseFrom(it.content) }
-                        .toList()
-                ).build()
+                val result = async {
+                    if (messages.isEmpty()) {
+                        logger.error { "unable to parse message '${message.id}' - message batch does not exist or is empty" }
+                        null
+                    } else {
 
-                try {
-                    rabbitMqService.decodeMessage(batch)
-                        .onEach { codecCache.put(getId(it.metadata.id).toString(), it) }
-                        .firstOrNull { message.id == getId(it.metadata.id) }
-                } catch (e: IllegalStateException) {
-                    logger.error(e) { "unable to parse message '${message.id}'" }
-                    null
-                } ?: let {
-                    logger.error { "unable to parse message '${message.id}'" }
-                    null
+                        val batch = RawMessageBatch.newBuilder().addAllMessages(
+                            messages
+                                .sortedBy { it.timestamp }
+                                .map { RawMessage.parseFrom(it.content) }
+                                .toList()
+                        ).build()
+                        MessageID().connectionId.
+                        try {
+                            rabbitMqService.decodeMessage(batch)
+                                .onEach { deferred[getId(it.metadata.id).toString()]?.sendMessage(it) }
+                                .firstOrNull { message.id == getId(it.metadata.id) }
+                        } catch (e: IllegalStateException) {
+                            logger.error(e) { "unable to parse message '${message.id}'" }
+                            null
+                        } ?: let {
+                            logger.error { "unable to parse message '${message.id}'" }
+                            null
+                        }.also {
+                            deferred.values.forEach { if (!it.messageIsSend) it.sendMessage(null) }
+                        }
+                    }
                 }
             }
+        }
     }
 
     private fun getId(id: MessageID): StoredMessageId {
@@ -144,4 +182,16 @@ class MessageProducer(
                 ?: throw CradleMessageNotFoundException("message '${id}' does not exist in cradle")
         )
     }
+}
+
+
+suspend fun <E> ReceiveChannel<E>.receiveAvailable(): List<E> {
+    val allMessages = mutableListOf<E>()
+    allMessages.add(receive())
+    var next = poll()
+    while (next != null) {
+        allMessages.add(next)
+        next = poll()
+    }
+    return allMessages
 }
