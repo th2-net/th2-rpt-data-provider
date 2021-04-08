@@ -269,8 +269,11 @@ class SearchMessagesHandler(
                     val anyStreamIsNotEmpty = streamsInfo.any { it.lastElement != null }
 
                     val canGetData = isSearchInFuture || anyStreamIsNotEmpty ||
-                            (keepOpen && timelineDirection == AFTER).also {
-                                isSearchInFuture = it
+                            if (keepOpen && timelineDirection == AFTER) {
+                                isSearchInFuture = true
+                                true
+                            } else {
+                                false
                             }
 
                     limit = min(maxMessagesLimit, limit * 2)
