@@ -18,6 +18,8 @@ package com.exactpro.th2.rptdataprovider.handlers
 
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.TimeRelation
+import com.exactpro.cradle.TimeRelation.AFTER
+import com.exactpro.cradle.TimeRelation.BEFORE
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
@@ -50,7 +52,8 @@ class SearchMessagesHandler(
     private val messageCache: MessageCache,
     private val maxMessagesLimit: Int,
     private val messageSearchPipelineBuffer: Int,
-    private val dbRetryDelay: Long
+    private val dbRetryDelay: Long,
+    private val sseSearchDelay: Long
 ) {
     companion object {
         private val logger = KotlinLogging.logger { }
@@ -61,15 +64,17 @@ class SearchMessagesHandler(
     }
 
     data class StreamInfo(
-        val stream: Pair<String, Direction>
+        val stream: Pair<String, Direction>,
+        val keepOpen: Boolean
     ) {
         var lastElement: StoredMessageId? = null
             private set
         var isFirstPull: Boolean = true
             private set
 
-        constructor(stream: Pair<String, Direction>, startId: StoredMessageId?) : this(
-            stream = stream
+        constructor(stream: Pair<String, Direction>, startId: StoredMessageId?, keepOpen: Boolean) : this(
+            stream = stream,
+            keepOpen = keepOpen
         ) {
             lastElement = startId
         }
@@ -80,18 +85,23 @@ class SearchMessagesHandler(
             timelineDirection: TimeRelation,
             filteredIdsList: List<StoredMessage>
         ) {
-            lastElement = when {
-                size < perStreamLimit -> {
-                    null
-                }
-                timelineDirection == TimeRelation.AFTER -> {
-                    filteredIdsList.lastOrNull()?.id
-                }
-                else -> {
-                    filteredIdsList.firstOrNull()?.id
-                }
-            }
+            val streamIsEmpty = size < perStreamLimit
+            lastElement = changeStreamMessageIndex(streamIsEmpty, filteredIdsList, timelineDirection)
             isFirstPull = false
+        }
+
+
+        private fun changeStreamMessageIndex(
+            streamIsEmpty: Boolean,
+            filteredIdsList: List<StoredMessage>,
+            timelineDirection: TimeRelation
+        ): StoredMessageId? {
+            return if (timelineDirection == AFTER) {
+                filteredIdsList.lastOrNull()?.id
+                    ?: if (keepOpen) lastElement else null
+            } else {
+                if (!streamIsEmpty) filteredIdsList.firstOrNull()?.id else null
+            }
         }
     }
 
@@ -118,7 +128,7 @@ class SearchMessagesHandler(
 
     private fun nextDay(timestamp: Instant, timelineDirection: TimeRelation): Instant {
         val utcTimestamp = timestamp.atOffset(ZoneOffset.UTC)
-        return if (timelineDirection == TimeRelation.AFTER) {
+        return if (timelineDirection == AFTER) {
             utcTimestamp.plusDays(1)
                 .with(LocalTime.of(0, 0, 0, 0))
         } else {
@@ -136,7 +146,7 @@ class SearchMessagesHandler(
         return messageId?.let {
             cradle.getMessageSuspend(StoredMessageId.fromString(it))?.timestamp
         } ?: (
-                if (timelineDirection == TimeRelation.AFTER) {
+                if (timelineDirection == AFTER) {
                     timestampFrom
                 } else {
                     timestampTo
@@ -149,7 +159,7 @@ class SearchMessagesHandler(
         timestamp: Instant
     ): StoredMessage? {
         if (messageBatch.isEmpty()) return null
-        return if (timelineDirection == TimeRelation.AFTER)
+        return if (timelineDirection == AFTER)
             messageBatch.find { it.timestamp.isAfter(timestamp) } ?: messageBatch.lastOrNull()
         else
             messageBatch.findLast { it.timestamp.isBefore(timestamp) } ?: messageBatch.firstOrNull()
@@ -161,7 +171,7 @@ class SearchMessagesHandler(
         stream: String,
         direction: Direction
     ): StoredMessageId? {
-        for (timeRelation in listOf(TimeRelation.BEFORE, TimeRelation.AFTER)) {
+        for (timeRelation in listOf(BEFORE, AFTER)) {
             cradle.getFirstMessageIdSuspend(timestamp, stream, direction, timeRelation)
                 ?.let { return it }
         }
@@ -197,7 +207,8 @@ class SearchMessagesHandler(
     private suspend fun initStreamsInfo(
         timelineDirection: TimeRelation,
         streamList: List<String>?,
-        timestamp: Instant
+        timestamp: Instant,
+        keepOpen: Boolean = false
     ): List<StreamInfo> {
 
         return mutableListOf<StreamInfo>().apply {
@@ -211,11 +222,12 @@ class SearchMessagesHandler(
                         add(
                             StreamInfo(
                                 Pair(stream, direction),
-                                getNearestMessage(messageBatch, timelineDirection, timestamp)?.id
+                                getNearestMessage(messageBatch, timelineDirection, timestamp)?.id,
+                                keepOpen
                             )
                         )
                     } else {
-                        add(StreamInfo(Pair(stream, direction), null))
+                        add(StreamInfo(Pair(stream, direction), null, keepOpen))
                     }
                 }
             }
@@ -232,12 +244,17 @@ class SearchMessagesHandler(
         startTimestamp: Instant,
         timestampFrom: Instant?,
         timestampTo: Instant?,
-        requestType: RequestType
+        requestType: RequestType,
+        keepOpen: Boolean = false
     ): Flow<StoredMessage> {
         return coroutineScope {
             flow {
                 var limit = min(maxMessagesLimit, initLimit)
+                var isSearchInFuture = false
                 do {
+                    if (isSearchInFuture)
+                        delay(sseSearchDelay * 1000)
+
                     val data = pullMoreMerged(
                         streamsInfo,
                         timelineDirection,
@@ -248,13 +265,24 @@ class SearchMessagesHandler(
                     for (item in data) {
                         emit(item)
                     }
+
+                    val anyStreamIsNotEmpty = streamsInfo.any { it.lastElement != null }
+
+                    val canGetData = isSearchInFuture || anyStreamIsNotEmpty ||
+                            if (keepOpen && timelineDirection == AFTER) {
+                                isSearchInFuture = true
+                                true
+                            } else {
+                                false
+                            }
+
                     limit = min(maxMessagesLimit, limit * 2)
-                } while (streamsInfo.any { it.lastElement != null })
+                } while (canGetData)
             }
                 .filterNot { it.id.toString() == messageId }
                 .takeWhile {
                     it.timestamp.let { timestamp ->
-                        if (timelineDirection == TimeRelation.AFTER) {
+                        if (timelineDirection == AFTER) {
                             timestampTo == null || timestamp.isBeforeOrEqual(timestampTo)
                         } else {
                             timestampFrom == null || timestamp.isAfterOrEqual(timestampFrom)
@@ -339,13 +367,15 @@ class SearchMessagesHandler(
                     messageId, request.searchDirection,
                     request.startTimestamp, request.startTimestamp
                 )
+
                 val streamsInfo = initStreamsInfo(
                     request.searchDirection, request.stream,
-                    startTimestamp
+                    startTimestamp, request.keepOpen
                 )
                 getMessageStream(
                     streamsInfo, request.searchDirection, request.resultCountLimit ?: startMessageCountLimit,
-                    messageId, startTimestamp, request.endTimestamp, request.endTimestamp, RequestType.SSE
+                    messageId, startTimestamp, request.endTimestamp, request.endTimestamp, RequestType.SSE,
+                    request.keepOpen
                 ).collect { emit(it) }
             }.map {
                 async {
@@ -368,7 +398,7 @@ class SearchMessagesHandler(
                 .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
                 .onStart {
                     launch {
-                        keepAlive.invoke(writer,lastScannedObject, lastEventId)
+                        keepAlive.invoke(writer, lastScannedObject, lastEventId)
                     }
                 }
                 .onCompletion {
@@ -402,7 +432,7 @@ class SearchMessagesHandler(
                 direction().isEqualTo(startId.direction)
                 limit(limit)
 
-                if (timelineDirection == TimeRelation.AFTER) {
+                if (timelineDirection == AFTER) {
                     index().let {
                         if (isFirstPull)
                             it.isGreaterThanOrEqualTo(startId.index)
@@ -426,7 +456,7 @@ class SearchMessagesHandler(
         storedMessages: List<StoredMessage>,
         timelineDirection: TimeRelation
     ): List<StoredMessage> {
-        return if (timelineDirection == TimeRelation.AFTER) {
+        return if (timelineDirection == AFTER) {
             storedMessages.filter { it.timestamp.isAfterOrEqual(startTimestamp) }
         } else {
             storedMessages.filter { it.timestamp.isBeforeOrEqual(startTimestamp) }
@@ -461,7 +491,7 @@ class SearchMessagesHandler(
                 }.awaitAll()
                 .flatten()
                 .let { list ->
-                    if (timelineDirection == TimeRelation.AFTER) {
+                    if (timelineDirection == AFTER) {
                         list.sortedBy { it.timestamp }
                     } else {
                         list.sortedByDescending { it.timestamp }

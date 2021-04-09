@@ -57,7 +57,8 @@ import kotlin.coroutines.CoroutineContext
 class SearchEventsHandler(
     private val cradle: CradleService,
     private val eventProducer: EventProducer,
-    private val dbRetryDelay: Long
+    private val dbRetryDelay: Long,
+    private val sseSearchDelay: Long
 ) {
     companion object {
         private val logger = KotlinLogging.logger { }
@@ -241,13 +242,13 @@ class SearchEventsHandler(
         }
     }
 
-    private suspend fun getTimeIntervals(
+    private fun getTimeIntervals(
         request: SseEventSearchRequest,
-        sseEventSearchStep: Long
+        sseEventSearchStep: Long,
+        initTimestamp: Instant
     ): Sequence<Pair<Instant, Instant>> {
-        var timestamp = request.resumeFromId?.let {
-            eventProducer.fromId(ProviderEventId(request.resumeFromId)).startTimestamp
-        } ?: request.startTimestamp!!
+
+        var timestamp = initTimestamp
 
         return sequence {
             val comparator = getComparator(request.searchDirection, request.endTimestamp)
@@ -266,6 +267,42 @@ class SearchEventsHandler(
         }
     }
 
+
+    private suspend fun getStartTimestamp(request: SseEventSearchRequest): Instant {
+        return request.resumeFromId?.let {
+            eventProducer.fromId(ProviderEventId(request.resumeFromId)).startTimestamp
+        } ?: request.startTimestamp!!
+    }
+
+    private suspend fun getNextTimestampGenerator(
+        request: SseEventSearchRequest,
+        sseEventSearchStep: Long,
+        initTimestamp: Instant
+    ): Sequence<Pair<Boolean, Pair<Instant, Instant>>> {
+
+        var isSearchInFuture = false
+        val keepOpen = request.keepOpen
+        val isSearchNext = request.searchDirection == TimeRelation.AFTER
+
+        var timeIntervals = getTimeIntervals(request, sseEventSearchStep, initTimestamp).iterator()
+
+        return sequence {
+            while (timeIntervals.hasNext()) {
+                val timestamp = timeIntervals.next()
+                if (!isSearchInFuture && isSearchNext && timestamp.second.isAfter(Instant.now())) {
+                    if (keepOpen) {
+                        timeIntervals = getTimeIntervals(request, sseSearchDelay, timestamp.first).iterator()
+                        isSearchInFuture = true
+                        continue
+                    } else {
+                        return@sequence
+                    }
+                }
+                yield(isSearchInFuture to timestamp)
+            }
+        }
+    }
+
     @ExperimentalCoroutinesApi
     @FlowPreview
     suspend fun searchEventsSse(
@@ -279,12 +316,17 @@ class SearchEventsHandler(
             val lastScannedObject = LastScannedObjectInfo()
             val lastEventId = AtomicLong(0)
             val scanCnt = AtomicLong(0)
-            val timeIntervals = getTimeIntervals(request, sseEventSearchStep)
 
-            val parentEventCounter: ParentEventCounter = ParentEventCounter(request.limitForParent)
+            val parentEventCounter = ParentEventCounter(request.limitForParent)
+
+            val startTimestamp = getStartTimestamp(request)
+            val timeIntervals = getNextTimestampGenerator(request, sseEventSearchStep, startTimestamp)
 
             flow {
-                for (timestamp in timeIntervals) {
+                for ((isSearchInFuture, timestamp) in timeIntervals) {
+                    if (isSearchInFuture)
+                        delay(sseSearchDelay * 1000)
+
                     getEventFlow(
                         request.parentEvent, timestamp.first,
                         timestamp.second, coroutineContext,
