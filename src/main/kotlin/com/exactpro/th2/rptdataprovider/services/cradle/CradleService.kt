@@ -176,6 +176,11 @@ class CradleService(configuration: Configuration) {
         }
     }
 
+    fun getMessageIds(id: StoredTestEventId): Collection<StoredMessageId> {
+        return linker.getMessageIdsByTestEventId(id) ?: listOf()
+
+    }
+
     suspend fun getMessageStreams(): Collection<String> {
         return withContext(cradleDispatcher) {
             logMetrics(getStreamsMetric) {
