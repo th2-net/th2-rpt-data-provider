@@ -18,21 +18,17 @@ package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
 import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.common.grpc.MessageID
+import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.schema.message.MessageListener
 import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatch
 import com.exactpro.th2.rptdataprovider.logMetrics
+import com.exactpro.th2.rptdataprovider.receiveAvailable
 import io.ktor.utils.io.errors.IOException
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import mu.KotlinLogging
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentSkipListSet
@@ -44,6 +40,9 @@ class RabbitMqService(private val configuration: Configuration) {
 
         private val rabbitMqMessageParseGauge: Metrics = Metrics("rabbit_mq_message_parse", "rabbitMqMessageParse")
     }
+
+
+    private val messageBuffer: Channel<MessageBatch> = Channel(1000)
 
     private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
 
@@ -82,7 +81,42 @@ class RabbitMqService(private val configuration: Configuration) {
         "from_codec"
     )
 
-    @Throws(IllegalStateException::class)
+
+//    suspend fun decodeBatch(messageBatch: MessageBatch) {
+//        return coroutineScope {
+//            codecCache.get(message.id.toString()) ?: let {
+//                CodecCacheData.build(message.id.toString()).also {
+//                    messageBuffer.send(it)
+//                }.get()
+//            }
+//        }
+//    }
+
+
+    private suspend fun mergeBatches(messages: Map.Entry<String, List<MessageBatch>>): RawMessageBatch {
+        return RawMessageBatch.newBuilder().addAllMessages(
+            messages.value
+                .flatMap { it.batch }
+                .sortedBy { it.timestamp }
+                .map { RawMessage.parseFrom(it.content) }
+                .toList()
+        ).build()
+    }
+
+    suspend fun decodeMessage() {
+        coroutineScope {
+            while (true) {
+                val batchesMap = mutableMapOf<String, MutableList<MessageBatch>>().apply {
+                    messageBuffer.receiveAvailable()
+                        .forEach { getOrPut(it.id.streamName, { mutableListOf() }).add(it) }
+                }
+                batchesMap.map {
+                    async { decodeMessage(mergeBatches(it)) }
+                }.awaitAll()
+            }
+        }
+    }
+
     suspend fun decodeMessage(batch: RawMessageBatch): Collection<Message> {
         val requests: Map<MessageID, CodecRequest> = batch.messagesList
             .associate { it.metadata.id to CodecRequest(it.metadata.id) }

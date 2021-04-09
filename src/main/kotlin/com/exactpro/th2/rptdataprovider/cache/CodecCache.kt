@@ -17,71 +17,33 @@
 package com.exactpro.th2.rptdataprovider.cache
 
 import com.exactpro.th2.common.grpc.Message
-import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
-import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
 import mu.KotlinLogging
 import org.ehcache.Cache
 import org.ehcache.config.builders.CacheConfigurationBuilder
 import org.ehcache.config.builders.CacheManagerBuilder
 import org.ehcache.config.builders.ResourcePoolsBuilder
 
-data class CodecCacheData private constructor(
-    val id: String,
-    private val channel: Channel<Message?>,
-    private val result: Deferred<Message?>
-) {
-    var messageIsSend: Boolean = false
-    private set
-
-    companion object {
-        suspend fun build(id: String): CodecCacheData {
-            return coroutineScope {
-                val messageChannel = Channel<Message?>(0)
-                CodecCacheData(id, messageChannel, async {
-                    messageChannel.receive()
-                })
-            }
-        }
-    }
-
-    suspend fun sendMessage(message: Message?) {
-        messageIsSend = true
-        coroutineScope {
-            if (result.isActive) {
-                launch {
-                    channel.send(message)
-                }
-            }
-        }
-    }
-
-    suspend fun get(): Message? {
-        return result.await()
-    }
-}
-
 class CodecCache(configuration: Configuration) {
     private val manager = CacheManagerBuilder.newCacheManagerBuilder().build(true)
     private val logger = KotlinLogging.logger { }
 
-    private val cache: Cache<String, CodecCacheData> = manager.createCache(
+    private val cache: Cache<String, Message> = manager.createCache(
         "codec",
         CacheConfigurationBuilder.newCacheConfigurationBuilder(
             String::class.java,
-            CodecCacheData::class.java,
+            Message::class.java,
             ResourcePoolsBuilder.heap(configuration.codecCacheSize.value.toLong())
         ).build()
     )
 
-    fun put(id: String, message: CodecCacheData) {
+    fun put(id: String, message: Message) {
         if (!cache.containsKey(id)) {
             cache.put(id, message)
         }
     }
 
-    suspend fun get(id: String): Message? {
-        return cache.get(id).get()
+    fun get(id: String): Message? {
+        return cache.get(id)
     }
 }
