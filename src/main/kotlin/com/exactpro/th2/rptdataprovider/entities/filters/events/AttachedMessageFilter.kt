@@ -17,7 +17,6 @@
 package com.exactpro.th2.rptdataprovider.entities.filters.events
 
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.Filter
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
@@ -27,7 +26,7 @@ import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
 class AttachedMessageFilter private constructor(
-    private var eventIds: Collection<Collection<StoredTestEventId>>,
+    private var eventIds: Set<String>,
     override var negative: Boolean
 ) :
     Filter<Event> {
@@ -39,6 +38,9 @@ class AttachedMessageFilter private constructor(
                 negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false,
                 eventIds = requestMap["${filterInfo.name}-values"]
                     ?.map { cradleService.getEventIdsSuspend(StoredMessageId.fromString(it)) }
+                    ?.flatMap { it.asIterable() }
+                    ?.map { it.toString() }
+                    ?.toSet()
                     ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
             )
         }
@@ -60,10 +62,7 @@ class AttachedMessageFilter private constructor(
 
 
     override fun match(element: Event): Boolean {
-        return negative.xor(eventIds.let { eventIdsFromAttachedIds ->
-            val eventId = StoredTestEventId(element.eventId)
-            eventIdsFromAttachedIds.any { it.contains(eventId) }
-        })
+        return negative.xor(eventIds.contains(element.eventId))
     }
 
     override fun getInfo(): FilterInfo {
