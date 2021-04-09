@@ -30,6 +30,7 @@ data class SseEventSearchRequest(
     val endTimestamp: Instant?,
     val resumeFromId: String?,
     val resultCountLimit: Int?,
+    val keepOpen: Boolean,
     val limitForParent: Long?
 ) {
     companion object {
@@ -51,6 +52,7 @@ data class SseEventSearchRequest(
         endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
         resumeFromId = parameters["resumeFromId"]?.firstOrNull(),
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt(),
+        keepOpen = parameters["keepOpen"]?.firstOrNull()?.toBoolean() ?: false,
         limitForParent = parameters["limitForParent"]?.firstOrNull()?.toLong()
     )
 
