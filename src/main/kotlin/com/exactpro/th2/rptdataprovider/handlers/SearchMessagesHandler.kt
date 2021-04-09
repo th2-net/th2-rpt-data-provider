@@ -204,7 +204,7 @@ class SearchMessagesHandler(
     }
 
 
-    private suspend fun initStreamInfo(
+    private suspend fun initStreamsInfo(
         timelineDirection: TimeRelation,
         streamList: List<String>?,
         timestamp: Instant,
@@ -307,7 +307,7 @@ class SearchMessagesHandler(
                 request.timestampFrom, request.timestampTo
             )
 
-            val streamsInfo = initStreamInfo(
+            val streamsInfo = initStreamsInfo(
                 request.timelineDirection, request.stream,
                 startTimestamp
             )
@@ -367,7 +367,8 @@ class SearchMessagesHandler(
                     messageId, request.searchDirection,
                     request.startTimestamp, request.startTimestamp
                 )
-                val streamsInfo = initStreamInfo(
+
+                val streamsInfo = initStreamsInfo(
                     request.searchDirection, request.stream,
                     startTimestamp, request.keepOpen
                 )

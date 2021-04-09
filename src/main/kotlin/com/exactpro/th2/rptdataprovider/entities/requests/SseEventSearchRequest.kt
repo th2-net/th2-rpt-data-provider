@@ -19,19 +19,19 @@ package com.exactpro.th2.rptdataprovider.entities.requests
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
-import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
+import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import java.time.Instant
-import java.util.concurrent.TimeUnit
 
 data class SseEventSearchRequest(
-    val filterPredicate: FilterPredicate<EventTreeNode>,
+    val filterPredicate: FilterPredicate<Event>,
     val startTimestamp: Instant?,
     val parentEvent: String?,
     val searchDirection: TimeRelation,
     val endTimestamp: Instant?,
     val resumeFromId: String?,
     val resultCountLimit: Int?,
-    val keepOpen: Boolean
+    val keepOpen: Boolean,
+    val limitForParent: Long?
 ) {
     companion object {
         private fun asCradleTimeRelation(value: String): TimeRelation {
@@ -42,7 +42,7 @@ data class SseEventSearchRequest(
         }
     }
 
-    constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<EventTreeNode>) : this(
+    constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<Event>) : this(
         filterPredicate = filterPredicate,
         startTimestamp = parameters["startTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
         parentEvent = parameters["parentEvent"]?.firstOrNull(),
@@ -52,7 +52,8 @@ data class SseEventSearchRequest(
         endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
         resumeFromId = parameters["resumeFromId"]?.firstOrNull(),
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt(),
-        keepOpen = parameters["keepOpen"]?.firstOrNull()?.toBoolean() ?: false
+        keepOpen = parameters["keepOpen"]?.firstOrNull()?.toBoolean() ?: false,
+        limitForParent = parameters["limitForParent"]?.firstOrNull()?.toLong()
     )
 
     private fun checkEndTimestamp() {
