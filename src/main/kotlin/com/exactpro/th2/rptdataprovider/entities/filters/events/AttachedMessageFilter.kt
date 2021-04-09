@@ -37,8 +37,7 @@ class AttachedMessageFilter private constructor(
             return AttachedMessageFilter(
                 negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false,
                 eventIds = requestMap["${filterInfo.name}-values"]
-                    ?.map { cradleService.getEventIdsSuspend(StoredMessageId.fromString(it)) }
-                    ?.flatMap { it.asIterable() }
+                    ?.flatMap { cradleService.getEventIdsSuspend(StoredMessageId.fromString(it)) }
                     ?.map { it.toString() }
                     ?.toSet()
                     ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
