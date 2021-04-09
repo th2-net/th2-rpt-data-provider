@@ -110,10 +110,6 @@ class Context(
 
     val cacheControlRarelyModified: CacheControl = configuration.rarelyModifiedObjects.value.toInt().let {
         cacheControlConfig(it, enableCaching)
-    },
-
-    val cacheControlFrequentlyModified: CacheControl = configuration.frequentlyModifiedObjects.value.toInt().let {
-        cacheControlConfig(it, enableCaching)
     }
 )
 
