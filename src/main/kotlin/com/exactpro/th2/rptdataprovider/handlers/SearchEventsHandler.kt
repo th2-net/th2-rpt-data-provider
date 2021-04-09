@@ -146,11 +146,10 @@ class SearchEventsHandler(
         return coroutineScope {
             val isSSE = requestType == SSE
             flow {
-                val eventsCollection = (if (isSSE)
+                val eventsCollection = if (isSSE)
                     databaseRequestRetry(dbRetryDelay) { getEventsSuspend(parentEvent, timestampFrom, timestampTo) }
                 else
-                    getEventsSuspend(parentEvent, timestampFrom, timestampTo))
-                    .reversed()
+                    getEventsSuspend(parentEvent, timestampFrom, timestampTo)
 
                 for (event in eventsCollection)
                     emit(event)
@@ -353,7 +352,7 @@ class SearchEventsHandler(
                 }
             }
                 .map { it.await() }
-                .flatMapMerge { it.asFlow() }
+                .flatMapConcat { it.asFlow() }
                 .filter { it.first.eventId != request.resumeFromId }
                 .takeWhile { pair ->
                     request.endTimestamp?.let {
