@@ -55,7 +55,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
             ProviderEventId(batch?.id, storedEvent.id).toString(),
             storedEvent.id.let {
                 try {
-                    cradle.getMessageIds(it).map(Any::toString).toSet()
+                    cradle.getMessageIdsSuspend(it).map(Any::toString).toSet()
                 } catch (e: Exception) {
                     KotlinLogging.logger { }
                         .error(e) { "unable to get messages attached to event (id=${storedEvent.id})" }
