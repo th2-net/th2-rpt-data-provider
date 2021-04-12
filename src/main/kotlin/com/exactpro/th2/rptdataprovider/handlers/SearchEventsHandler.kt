@@ -108,7 +108,8 @@ class SearchEventsHandler(
     private suspend fun getEventsSuspend(
         parentEvent: String?,
         timestampFrom: Instant,
-        timestampTo: Instant
+        timestampTo: Instant,
+        searchDirection: TimeRelation
     ): Iterable<StoredTestEventMetadata> {
         return coroutineScope {
             if (parentEvent != null) {
@@ -119,11 +120,13 @@ class SearchEventsHandler(
                 )
             } else {
                 cradle.getEventsSuspend(timestampFrom, timestampTo)
+            }.let {
+                if (searchDirection == AFTER) it else it.reversed()
             }
         }
     }
 
-    fun StoredTestEventBatchMetadata.getTestEvents(timeRelation: TimeRelation):
+    private fun StoredTestEventBatchMetadata.getTestEvents(timeRelation: TimeRelation):
             Collection<BatchedStoredTestEventMetadata>? {
         return if (timeRelation == AFTER)
             this.testEvents
@@ -147,9 +150,11 @@ class SearchEventsHandler(
             val isSSE = requestType == SSE
             flow {
                 val eventsCollection = if (isSSE)
-                    databaseRequestRetry(dbRetryDelay) { getEventsSuspend(parentEvent, timestampFrom, timestampTo) }
+                    databaseRequestRetry(dbRetryDelay) {
+                        getEventsSuspend(parentEvent, timestampFrom, timestampTo, searchDirection)
+                    }
                 else
-                    getEventsSuspend(parentEvent, timestampFrom, timestampTo)
+                    getEventsSuspend(parentEvent, timestampFrom, timestampTo, searchDirection)
 
                 for (event in eventsCollection)
                     emit(event)
@@ -225,7 +230,7 @@ class SearchEventsHandler(
             }.map {
                 coroutineContext.ensureActive()
                 it.await()
-            }.flatMapMerge { it.asFlow() }
+            }.flatMapConcat { it.asFlow() }
                 .map { it.first }
                 .toList()
 
