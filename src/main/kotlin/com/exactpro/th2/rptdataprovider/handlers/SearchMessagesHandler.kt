@@ -28,8 +28,10 @@ import com.exactpro.th2.rptdataprovider.entities.requests.MessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.RequestType
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatch
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
+import com.exactpro.th2.rptdataprovider.producers.MessageProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -47,6 +49,7 @@ import kotlin.coroutines.coroutineContext
 
 class SearchMessagesHandler(
     private val cradle: CradleService,
+    private val messageProducer: MessageProducer,
     private val messageCache: MessageCache,
     private val maxMessagesLimit: Int,
     private val messageSearchPipelineBuffer: Int,
@@ -233,7 +236,7 @@ class SearchMessagesHandler(
         timestampFrom: Instant?,
         timestampTo: Instant?,
         requestType: RequestType
-    ): Flow<StoredMessage> {
+    ): Flow<MessageBatch> {
         return coroutineScope {
             flow {
                 var limit = min(maxMessagesLimit, initLimit)
@@ -243,6 +246,7 @@ class SearchMessagesHandler(
                         timelineDirection,
                         limit,
                         startTimestamp,
+                        messageId,
                         requestType
                     )
                     for (item in data) {
@@ -251,9 +255,8 @@ class SearchMessagesHandler(
                     limit = min(maxMessagesLimit, limit * 2)
                 } while (streamsInfo.any { it.lastElement != null })
             }
-                .filterNot { it.id.toString() == messageId }
                 .takeWhile {
-                    it.timestamp.let { timestamp ->
+                    it.startTimestamp.let { timestamp ->
                         if (timelineDirection == TimeRelation.AFTER) {
                             timestampTo == null || timestamp.isBeforeOrEqual(timestampTo)
                         } else {
@@ -291,27 +294,30 @@ class SearchMessagesHandler(
                     async {
                         if ((request.attachedEventId ?: request.messageType) != null || !request.idsOnly) {
                             @Suppress("USELESS_CAST")
-                            Pair(
-                                it,
-                                isMessageMatched(
-                                    request.messageType,
-                                    messagesFromAttachedId,
-                                    messageCache.getOrPut(it)
+                            messageProducer.fromRawMessage(it).batch.map { message ->
+                                Pair(
+                                    message,
+                                    isMessageMatched(
+                                        request.messageType,
+                                        messagesFromAttachedId,
+                                        message
+                                    )
                                 )
-                            )
+                            }
                         } else {
-                            Pair(it, true)
+                            listOf(Pair(it, true))
                         }
                     }
                 }
                 .buffer(bufferSize)
                 .map { it.await() }
+                .flatMapConcat { it.asFlow() }
                 .filter { it.second }
                 .map {
                     if (request.idsOnly) {
-                        it.first.id.toString()
+                        (it.first as StoredMessage).id.toString()
                     } else {
-                        messageCache.getOrPut(it.first)
+                        it.first
                     }
                 }
                 .take(request.limit)
@@ -350,16 +356,20 @@ class SearchMessagesHandler(
             }.map {
                 async {
                     @Suppress("USELESS_CAST")
-                    val message = messageCache.getOrPut(it)
-                    Pair(message, request.filterPredicate.apply(message))
+                    messageProducer.fromRawMessage(it).batch.map { message ->
+                        messageCache.put(message.messageId, message)
+                        Pair(message, request.filterPredicate.apply(message))
+                    }
                 }.also { coroutineContext.ensureActive() }
             }
                 .buffer(messageSearchPipelineBuffer)
                 .map { it.await() }
+                .flatMapConcat { it.asFlow() }
                 .onEach {
                     lastScannedObject.apply {
-                        id = it.first.id.toString(); timestamp = it.first.timestamp.toEpochMilli(); scanCounter =
-                        scanCnt.incrementAndGet();
+                        id = it.first.id.toString()
+                        timestamp = it.first.timestamp.toEpochMilli()
+                        scanCounter = scanCnt.incrementAndGet()
                     }
                     processedMessageCount.inc()
                 }
@@ -438,8 +448,9 @@ class SearchMessagesHandler(
         timelineDirection: TimeRelation,
         perStreamLimit: Int,
         startTimestamp: Instant,
+        messageId: String?,
         requestType: RequestType
-    ): List<StoredMessage> {
+    ): List<MessageBatch> {
         logger.debug { "pulling more messages (streams=${streamsInfo} direction=$timelineDirection perStreamLimit=$perStreamLimit)" }
         return coroutineScope {
             streamsInfo
@@ -453,18 +464,19 @@ class SearchMessagesHandler(
                             pullMore(stream.lastElement, perStreamLimit, timelineDirection, stream.isFirstPull)
                         }.toList()
                             .let { list ->
-                                dropUntilInRangeInOppositeDirection(startTimestamp, list, timelineDirection).also {
+                                dropUntilInRangeInOppositeDirection(startTimestamp, list, timelineDirection).let {
                                     stream.update(list.size, perStreamLimit, timelineDirection, it)
+                                    MessageBatch.build(it.filterNot { m -> m.id.toString() == messageId })
                                 }
                             }
                     }
                 }.awaitAll()
-                .flatten()
+                .filterNotNull()
                 .let { list ->
                     if (timelineDirection == TimeRelation.AFTER) {
-                        list.sortedBy { it.timestamp }
+                        list.sortedBy { it.startTimestamp }
                     } else {
-                        list.sortedByDescending { it.timestamp }
+                        list.sortedByDescending { it.startTimestamp }
                     }
                 }
         }

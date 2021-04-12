@@ -18,18 +18,35 @@ package com.exactpro.th2.rptdataprovider.entities.responses
 
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
+import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import java.time.Instant
 
 data class MessageBatch(
-    val startTimestamp: Instant?,
-    val endTimestamp: Instant?,
+    val startTimestamp: Instant,
+    val endTimestamp: Instant,
     val id: StoredMessageId,
     val batch: Collection<StoredMessage>
 ) {
-    constructor(batch: Collection<StoredMessage>): this(
-        startTimestamp = batch.firstOrNull()?.timestamp,
-        endTimestamp = batch.lastOrNull()?.timestamp,
-        id = batch.first().id,
-        batch = batch
-    )
+    companion object {
+        fun build(batch: Collection<StoredMessage>): MessageBatch? {
+            return if (batch.isNotEmpty()) {
+                MessageBatch(
+                    startTimestamp = batch.first().timestamp,
+                    endTimestamp = batch.last().timestamp,
+                    id = batch.first().id,
+                    batch = batch
+                )
+            } else {
+                null
+            }
+        }
+    }
 }
+
+data class ParsedMessageBatch(
+    val id: StoredMessageId,
+    val batch: Collection<Message>
+)

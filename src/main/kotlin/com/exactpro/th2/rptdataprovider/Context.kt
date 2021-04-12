@@ -75,6 +75,7 @@ class Context(
     val messageCache: MessageCache = MessageCache(configuration, messageProducer),
     val searchMessagesHandler: SearchMessagesHandler = SearchMessagesHandler(
         cradleService,
+        messageProducer,
         messageCache,
         configuration.maxMessagesLimit.value.toInt(),
         configuration.messageSearchPipelineBuffer.value.toInt(),
