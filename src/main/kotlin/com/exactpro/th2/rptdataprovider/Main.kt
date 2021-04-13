@@ -277,7 +277,6 @@ class Main(args: Array<String>) {
 
         val notModifiedCacheControl = this.context.cacheControlNotModified
         val rarelyModifiedCacheControl = this.context.cacheControlRarelyModified
-        val frequentlyModifiedCacheControl = this.context.cacheControlFrequentlyModified
 
         val cradleService = this.context.cradleService
 
@@ -332,24 +331,6 @@ class Main(args: Array<String>) {
                     }
                 }
 
-                get("/search/messages") {
-                    val queryParametersMap = call.request.queryParameters.toMap()
-                    val probe = call.parameters["probe"]?.toBoolean() ?: false
-                    handleRequest(call, context, "search messages", null, probe, false, queryParametersMap) {
-                        val request = MessageSearchRequest(queryParametersMap)
-                        searchMessagesHandler.searchMessages(request)
-                            .also {
-                                call.response.cacheControl(
-                                    if (it.size == request.limit || inPast(request.timestampTo)) {
-                                        notModifiedCacheControl
-                                    } else {
-                                        frequentlyModifiedCacheControl
-                                    }
-                                )
-                            }
-                    }
-                }
-
                 get("search/sse/messages") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "search messages sse", null, false, true, queryParametersMap) {
@@ -359,17 +340,6 @@ class Main(args: Array<String>) {
                             request.checkRequest()
                             searchMessagesHandler.searchMessagesSse(request, jacksonMapper, keepAlive, w)
                         }
-                    }
-                }
-
-                get("search/events") {
-                    val queryParametersMap = call.request.queryParameters.toMap()
-                    val probe = call.parameters["probe"]?.toBoolean() ?: false
-                    handleRequest(call, context, "search events", null, probe, false, queryParametersMap) {
-                        val request = EventSearchRequest(queryParametersMap)
-                        request.checkTimestamps()
-                        searchEventsHandler.searchEvents(request)
-                            .also { call.response.cacheControl(frequentlyModifiedCacheControl) }
                     }
                 }
 

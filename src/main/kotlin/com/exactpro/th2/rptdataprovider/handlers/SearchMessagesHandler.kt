@@ -23,13 +23,9 @@ import com.exactpro.cradle.TimeRelation.BEFORE
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.cache.MessageCache
-import com.exactpro.th2.rptdataprovider.entities.requests.MessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.requests.RequestType
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
@@ -63,10 +59,7 @@ class SearchMessagesHandler(
         ).register()
     }
 
-    data class StreamInfo(
-        val stream: Pair<String, Direction>,
-        val keepOpen: Boolean
-    ) {
+    data class StreamInfo(val stream: Pair<String, Direction>, val keepOpen: Boolean) {
         var lastElement: StoredMessageId? = null
             private set
         var isFirstPull: Boolean = true
@@ -103,27 +96,6 @@ class SearchMessagesHandler(
                 if (!streamIsEmpty) filteredIdsList.firstOrNull()?.id else null
             }
         }
-    }
-
-    private suspend fun isMessageMatched(
-        messageType: List<String>?,
-        messagesFromAttachedId: Collection<StoredMessageId>?,
-        message: Message
-    ): Boolean {
-        return (messageType == null || messageType.any { item ->
-            message.messageType.toLowerCase().contains(item.toLowerCase())
-        }) && (messagesFromAttachedId == null || messagesFromAttachedId.let {
-            val messageId = StoredMessageId.fromString(message.messageId)
-            it.contains(messageId)
-        })
-    }
-
-
-    private fun chooseBufferSize(request: MessageSearchRequest): Int {
-        return if ((request.attachedEventId ?: request.messageType) == null)
-            request.limit
-        else
-            messageSearchPipelineBuffer
     }
 
     private fun nextDay(timestamp: Instant, timelineDirection: TimeRelation): Instant {
@@ -237,15 +209,10 @@ class SearchMessagesHandler(
     @ExperimentalCoroutinesApi
     @FlowPreview
     private suspend fun getMessageStream(
+        request: SseMessageSearchRequest,
         streamsInfo: List<StreamInfo>,
-        timelineDirection: TimeRelation,
         initLimit: Int,
-        messageId: String?,
-        startTimestamp: Instant,
-        timestampFrom: Instant?,
-        timestampTo: Instant?,
-        requestType: RequestType,
-        keepOpen: Boolean = false
+        startTimestamp: Instant
     ): Flow<StoredMessage> {
         return coroutineScope {
             flow {
@@ -255,21 +222,14 @@ class SearchMessagesHandler(
                     if (isSearchInFuture)
                         delay(sseSearchDelay * 1000)
 
-                    val data = pullMoreMerged(
-                        streamsInfo,
-                        timelineDirection,
-                        limit,
-                        startTimestamp,
-                        requestType
-                    )
-                    for (item in data) {
+                    for (item in pullMoreMerged(streamsInfo, request.searchDirection, limit, startTimestamp)) {
                         emit(item)
                     }
 
                     val anyStreamIsNotEmpty = streamsInfo.any { it.lastElement != null }
 
                     val canGetData = isSearchInFuture || anyStreamIsNotEmpty ||
-                            if (keepOpen && timelineDirection == AFTER) {
+                            if (request.keepOpen && request.searchDirection == AFTER) {
                                 isSearchInFuture = true
                                 true
                             } else {
@@ -279,74 +239,18 @@ class SearchMessagesHandler(
                     limit = min(maxMessagesLimit, limit * 2)
                 } while (canGetData)
             }
-                .filterNot { it.id.toString() == messageId }
+                .filterNot { it.id.toString() == request.resumeFromId }
                 .takeWhile {
                     it.timestamp.let { timestamp ->
-                        if (timelineDirection == AFTER) {
-                            timestampTo == null || timestamp.isBeforeOrEqual(timestampTo)
+                        if (request.searchDirection == AFTER) {
+                            request.endTimestamp == null || timestamp.isBeforeOrEqual(request.endTimestamp)
                         } else {
-                            timestampFrom == null || timestamp.isAfterOrEqual(timestampFrom)
-
+                            request.endTimestamp == null || timestamp.isAfterOrEqual(request.endTimestamp)
                         }
                     }
                 }
         }
     }
-
-    @FlowPreview
-    @ExperimentalCoroutinesApi
-    suspend fun searchMessages(request: MessageSearchRequest): List<Any> {
-        return coroutineScope {
-            val bufferSize = chooseBufferSize(request)
-            // Small optimization
-            val messagesFromAttachedId =
-                request.attachedEventId?.let { cradle.getMessageIdsSuspend(StoredTestEventId(it)) }
-
-            val startTimestamp = chooseStartTimestamp(
-                request.messageId, request.timelineDirection,
-                request.timestampFrom, request.timestampTo
-            )
-
-            val streamsInfo = initStreamsInfo(
-                request.timelineDirection, request.stream,
-                startTimestamp
-            )
-            getMessageStream(
-                streamsInfo, request.timelineDirection, request.limit,
-                request.messageId, startTimestamp, request.timestampFrom, request.timestampTo, RequestType.REST
-            )
-                .map {
-                    async {
-                        if ((request.attachedEventId ?: request.messageType) != null || !request.idsOnly) {
-                            @Suppress("USELESS_CAST")
-                            Pair(
-                                it,
-                                isMessageMatched(
-                                    request.messageType,
-                                    messagesFromAttachedId,
-                                    messageCache.getOrPut(it)
-                                )
-                            )
-                        } else {
-                            Pair(it, true)
-                        }
-                    }
-                }
-                .buffer(bufferSize)
-                .map { it.await() }
-                .filter { it.second }
-                .map {
-                    if (request.idsOnly) {
-                        it.first.id.toString()
-                    } else {
-                        messageCache.getOrPut(it.first)
-                    }
-                }
-                .take(request.limit)
-                .toList()
-        }
-    }
-
 
     @FlowPreview
     @ExperimentalCoroutinesApi
@@ -357,14 +261,13 @@ class SearchMessagesHandler(
         writer: Writer
     ) {
         withContext(coroutineContext) {
-            val messageId = request.resumeFromId
             val startMessageCountLimit = 25
             val lastScannedObject = LastScannedObjectInfo()
             val lastEventId = AtomicLong(0)
             val scanCnt = AtomicLong(0)
             flow {
                 val startTimestamp = chooseStartTimestamp(
-                    messageId, request.searchDirection,
+                    request.resumeFromId, request.searchDirection,
                     request.startTimestamp, request.startTimestamp
                 )
 
@@ -373,9 +276,7 @@ class SearchMessagesHandler(
                     startTimestamp, request.keepOpen
                 )
                 getMessageStream(
-                    streamsInfo, request.searchDirection, request.resultCountLimit ?: startMessageCountLimit,
-                    messageId, startTimestamp, request.endTimestamp, request.endTimestamp, RequestType.SSE,
-                    request.keepOpen
+                    request, streamsInfo, request.resultCountLimit ?: startMessageCountLimit, startTimestamp
                 ).collect { emit(it) }
             }.map {
                 async {
@@ -386,11 +287,8 @@ class SearchMessagesHandler(
             }
                 .buffer(messageSearchPipelineBuffer)
                 .map { it.await() }
-                .onEach {
-                    lastScannedObject.apply {
-                        id = it.first.id.toString(); timestamp = it.first.timestamp.toEpochMilli(); scanCounter =
-                        scanCnt.incrementAndGet();
-                    }
+                .onEach { (message, _) ->
+                    lastScannedObject.update(message, scanCnt)
                     processedMessageCount.inc()
                 }
                 .filter { it.second }
@@ -467,19 +365,14 @@ class SearchMessagesHandler(
         streamsInfo: List<StreamInfo>,
         timelineDirection: TimeRelation,
         perStreamLimit: Int,
-        startTimestamp: Instant,
-        requestType: RequestType
+        startTimestamp: Instant
     ): List<StoredMessage> {
         logger.debug { "pulling more messages (streams=${streamsInfo} direction=$timelineDirection perStreamLimit=$perStreamLimit)" }
         return coroutineScope {
             streamsInfo
                 .map { stream ->
                     async {
-                        if (requestType == RequestType.SSE) {
-                            databaseRequestRetry(dbRetryDelay) {
-                                pullMore(stream.lastElement, perStreamLimit, timelineDirection, stream.isFirstPull)
-                            }
-                        } else {
+                        databaseRequestRetry(dbRetryDelay) {
                             pullMore(stream.lastElement, perStreamLimit, timelineDirection, stream.isFirstPull)
                         }.toList()
                             .let { list ->
