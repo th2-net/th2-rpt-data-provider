@@ -18,6 +18,7 @@ package com.exactpro.th2.rptdataprovider.handlers
 
 
 import com.exactpro.cradle.TimeRelation
+import com.exactpro.cradle.TimeRelation.AFTER
 import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventBatchMetadata
 import com.exactpro.cradle.testevents.StoredTestEventId
@@ -35,14 +36,10 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.ktor.utils.io.errors.*
+import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel.Factory.BUFFERED
 import kotlinx.coroutines.flow.*
-import io.prometheus.client.Counter
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.asFlow
-import kotlinx.coroutines.flow.map
 import mu.KotlinLogging
 import java.io.Writer
 import java.time.Instant
@@ -100,7 +97,8 @@ class SearchEventsHandler(
     private suspend fun getEventsSuspend(
         parentEvent: String?,
         timestampFrom: Instant,
-        timestampTo: Instant
+        timestampTo: Instant,
+        searchDirection: TimeRelation
     ): Iterable<StoredTestEventMetadata> {
         return coroutineScope {
             if (parentEvent != null) {
@@ -111,6 +109,8 @@ class SearchEventsHandler(
                 )
             } else {
                 cradle.getEventsSuspend(timestampFrom, timestampTo)
+            }.let {
+                if (searchDirection == AFTER) it else it.reversed()
             }
         }
     }
@@ -126,20 +126,12 @@ class SearchEventsHandler(
         }
     }
 
-    private suspend fun tryToGetTestEvents(metadata: StoredTestEventMetadata):
-            Collection<BatchedStoredTestEventMetadata>? {
-        return try {
-            metadata.batchMetadata
-        } catch (e: IOException) {
-            null
-        }?.testEvents
-    }
-
     private suspend fun prepareBatchedEvent(
         metadata: StoredTestEventMetadata,
-        parentEventCounter: ParentEventCounter
+        parentEventCounter: ParentEventCounter,
+        searchDirection: TimeRelation
     ): List<Pair<EventTreeNode, Event?>>? {
-        return tryToGetTestEvents(metadata)?.mapNotNull { event ->
+        return metadata.tryToGetTestEvents(searchDirection)?.mapNotNull { event ->
             parentEventCounter.checkCountAndGet(
                 EventTreeNode(metadata.batchMetadata, event)
             )?.let {
@@ -148,27 +140,43 @@ class SearchEventsHandler(
         }
     }
 
+    private fun StoredTestEventMetadata.tryToGetTestEvents(timeRelation: TimeRelation): Collection<BatchedStoredTestEventMetadata>? {
+        return try {
+            this.batchMetadata?.testEvents?.let {
+                if (timeRelation == AFTER) it else it.reversed()
+            }
+        } catch (e: IOException) {
+            null
+        }
+    }
+
+
     @ExperimentalCoroutinesApi
     private suspend fun getEventFlow(
         parentEvent: String?,
         timestampFrom: Instant,
         timestampTo: Instant,
         parentContext: CoroutineContext,
-        parentEventCounter: ParentEventCounter
+        parentEventCounter: ParentEventCounter,
+        searchDirection: TimeRelation
     ): Flow<Deferred<List<Pair<EventTreeNode, Event?>>>> {
         return coroutineScope {
             flow {
                 val eventsCollection =
-                    databaseRequestRetry(dbRetryDelay) { getEventsSuspend(parentEvent, timestampFrom, timestampTo) }
-
+                    databaseRequestRetry(dbRetryDelay) {
+                        getEventsSuspend(parentEvent, timestampFrom, timestampTo, searchDirection)
+                    }
                 for (event in eventsCollection)
                     emit(event)
             }
                 .map { metadata ->
                     async(parentContext) {
                         if (metadata.isBatch) {
-                            prepareBatchedEvent(metadata, parentEventCounter)
-                                ?: getDirectBatchedChildren(metadata.id, timestampFrom, timestampTo, parentEventCounter)
+                            prepareBatchedEvent(metadata, parentEventCounter, searchDirection)
+                                ?: getDirectBatchedChildren(
+                                    metadata.id, timestampFrom, timestampTo,
+                                    parentEventCounter, searchDirection
+                                )
                         } else {
                             prepareNonBatchedEvent(metadata, parentEventCounter)
                         }
@@ -177,7 +185,6 @@ class SearchEventsHandler(
                 .buffer(BUFFERED)
         }
     }
-
 
     private fun changeOfDayProcessing(from: Instant, to: Instant): Iterable<Pair<Instant, Instant>> {
         return if (from.atOffset(ZoneOffset.UTC).dayOfYear != to.atOffset(ZoneOffset.UTC).dayOfYear) {
@@ -191,7 +198,7 @@ class SearchEventsHandler(
     }
 
     private fun getComparator(searchDirection: TimeRelation, endTimestamp: Instant?): (Instant) -> Boolean {
-        return if (searchDirection == TimeRelation.AFTER) {
+        return if (searchDirection == AFTER) {
             { timestamp: Instant -> timestamp.isBefore(endTimestamp ?: Instant.MAX) }
         } else {
             { timestamp: Instant -> timestamp.isAfter(endTimestamp ?: Instant.MIN) }
@@ -210,7 +217,7 @@ class SearchEventsHandler(
             val comparator = getComparator(request.searchDirection, request.endTimestamp)
             while (comparator.invoke(timestamp)) {
                 yieldAll(
-                    if (request.searchDirection == TimeRelation.AFTER) {
+                    if (request.searchDirection == AFTER) {
                         val toTimestamp = minInstant(timestamp.plusSeconds(sseEventSearchStep), Instant.MAX)
                         changeOfDayProcessing(timestamp, toTimestamp).also { timestamp = toTimestamp }
                     } else {
@@ -237,7 +244,7 @@ class SearchEventsHandler(
     ): Sequence<Pair<Boolean, Pair<Instant, Instant>>> {
 
         var isSearchInFuture = false
-        val isSearchNext = request.searchDirection == TimeRelation.AFTER
+        val isSearchNext = request.searchDirection == AFTER
         var timeIntervals = getTimeIntervals(request, sseEventSearchStep, initTimestamp).iterator()
 
         return sequence {
@@ -281,18 +288,17 @@ class SearchEventsHandler(
                         delay(sseSearchDelay * 1000)
 
                     getEventFlow(
-                        request.parentEvent, timestamp.first,
-                        timestamp.second, coroutineContext,
-                        parentEventCounter
+                        request.parentEvent, timestamp.first, timestamp.second,
+                        coroutineContext, parentEventCounter, request.searchDirection
                     ).collect { emit(it) }
                 }
             }
                 .map { it.await() }
-                .flatMapMerge { it.asFlow() }
+                .flatMapConcat { it.asFlow() }
                 .filter { it.first.eventId != request.resumeFromId }
                 .takeWhile { pair ->
                     request.endTimestamp?.let {
-                        if (request.searchDirection == TimeRelation.AFTER) {
+                        if (request.searchDirection == AFTER) {
                             pair.first.startTimestamp.isBeforeOrEqual(it)
                         } else {
                             pair.first.startTimestamp.isAfterOrEqual(it)
@@ -331,7 +337,8 @@ class SearchEventsHandler(
         batchId: StoredTestEventId,
         timestampFrom: Instant,
         timestampTo: Instant,
-        parentEventCounter: ParentEventCounter
+        parentEventCounter: ParentEventCounter,
+        searchDirection: TimeRelation
     ): List<Pair<EventTreeNode, Event?>> {
 
         val batch = cradle.getEventSuspend(batchId)?.asBatch()
@@ -349,7 +356,7 @@ class SearchEventsHandler(
                 parentEventCounter.checkCountAndGet(eventTreeNode)?.let {
                     Pair(it, eventProducer.fromId(ProviderEventId(testEvent.batchId, testEvent.id)))
                 }
-            }
+            }.let { if (searchDirection == AFTER) it else it.reversed() }
     }
 }
 
