@@ -22,6 +22,7 @@ import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.schema.message.MessageListener
 import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
+import com.exactpro.th2.rptdataprovider.entities.configuration.Variable
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatch
 import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.receiveAvailable
@@ -29,8 +30,10 @@ import io.ktor.utils.io.errors.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import mu.KotlinLogging
+import java.lang.Exception
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentSkipListSet
+import kotlin.coroutines.CoroutineContext
 
 class RabbitMqService(private val configuration: Configuration) {
 
@@ -40,8 +43,10 @@ class RabbitMqService(private val configuration: Configuration) {
         private val rabbitMqMessageParseGauge: Metrics = Metrics("rabbit_mq_message_parse", "rabbitMqMessageParse")
     }
 
+    private val rabbitBatchMergeFrequency = configuration.rabbitBatchMergeFrequency.value.toLong()
+    private val rabbitBatchMergeBuffer = configuration.rabbitBatchMergeBuffer.value.toInt()
 
-    private val messageBuffer: Channel<Pair<MessageBatch, List<MessageRequest>>> = Channel(1000)
+    private val messageBuffer: Channel<Pair<MessageBatch, List<MessageRequest>>> = Channel(rabbitBatchMergeBuffer)
 
     private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
 
@@ -81,7 +86,7 @@ class RabbitMqService(private val configuration: Configuration) {
     )
 
 
-    val messageDecoder = CoroutineScope(Dispatchers.Default).launch {
+    private val messageDecoder = CoroutineScope(Dispatchers.Default).launch {
         decodeMessage()
     }
 
@@ -150,7 +155,7 @@ class RabbitMqService(private val configuration: Configuration) {
                     }
                 }
 
-                delay(200)
+                delay(rabbitBatchMergeFrequency)
             }
         }
     }
@@ -159,7 +164,7 @@ class RabbitMqService(private val configuration: Configuration) {
         return withContext(Dispatchers.IO) {
             val rawBatch = messageBatch.batch
                 .map { RawMessage.parseFrom(it.content) }
-                .map { MessageRequest.build(it, coroutineContext) }
+                .map { MessageRequest.build(it) }
 
             messageBuffer.send(messageBatch to rawBatch)
 

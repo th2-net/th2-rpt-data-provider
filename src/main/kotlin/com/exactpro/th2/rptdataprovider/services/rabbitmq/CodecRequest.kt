@@ -36,26 +36,22 @@ data class MessageRequest(
         private set
 
     companion object {
-        suspend fun build(rawMessage: RawMessage, parentContext: CoroutineContext): MessageRequest {
-            return coroutineScope {
-                val messageChannel = Channel<Message?>(0)
-                MessageRequest(
-                    id = rawMessage.metadata.id,
-                    rawMessage = rawMessage,
-                    channel = messageChannel,
-                    result = async(parentContext) {
-                        messageChannel.receive()
-                    })
-            }
+        suspend fun build(rawMessage: RawMessage): MessageRequest {
+            val messageChannel = Channel<Message?>(0)
+            return MessageRequest(
+                id = rawMessage.metadata.id,
+                rawMessage = rawMessage,
+                channel = messageChannel,
+                result = CoroutineScope(Dispatchers.Default).async {
+                    messageChannel.receive()
+                })
         }
     }
 
     suspend fun sendMessage(message: Message?) {
-        coroutineScope {
-            if (result.isActive && !messageIsSend) {
-                CoroutineScope(Dispatchers.Default).launch {
-                    channel.send(message)
-                }
+        if (result.isActive && !messageIsSend) {
+            CoroutineScope(Dispatchers.Default).launch {
+                channel.send(message)
             }
         }
         messageIsSend = true

@@ -231,7 +231,7 @@ class SearchMessagesHandler(
         streamsInfo: List<StreamInfo>,
         timelineDirection: TimeRelation,
         initLimit: Int,
-        messageId: String?,
+        messageId: StoredMessageId?,
         startTimestamp: Instant,
         timestampFrom: Instant?,
         timestampTo: Instant?,
@@ -286,9 +286,10 @@ class SearchMessagesHandler(
                 request.timelineDirection, request.stream,
                 startTimestamp
             )
+            val storedMessageId = request.messageId?.let { StoredMessageId.fromString(it) }
             getMessageStream(
                 streamsInfo, request.timelineDirection, request.limit,
-                request.messageId, startTimestamp, request.timestampFrom, request.timestampTo, RequestType.REST
+                storedMessageId, startTimestamp, request.timestampFrom, request.timestampTo, RequestType.REST
             )
                 .map {
                     async {
@@ -340,6 +341,7 @@ class SearchMessagesHandler(
             val lastScannedObject = LastScannedObjectInfo()
             val lastEventId = AtomicLong(0)
             val scanCnt = AtomicLong(0)
+            val messageIdStored = messageId?.let { StoredMessageId.fromString(it) }
             flow {
                 val startTimestamp = chooseStartTimestamp(
                     messageId, request.searchDirection,
@@ -351,7 +353,7 @@ class SearchMessagesHandler(
                 )
                 getMessageStream(
                     streamsInfo, request.searchDirection, request.resultCountLimit ?: startMessageCountLimit,
-                    messageId, startTimestamp, request.endTimestamp, request.endTimestamp, RequestType.SSE
+                    messageIdStored, startTimestamp, request.endTimestamp, request.endTimestamp, RequestType.SSE
                 ).collect { emit(it) }
             }.map {
                 async {
@@ -448,11 +450,12 @@ class SearchMessagesHandler(
         timelineDirection: TimeRelation,
         perStreamLimit: Int,
         startTimestamp: Instant,
-        messageId: String?,
+        messageId: StoredMessageId?,
         requestType: RequestType
     ): List<MessageBatch> {
         logger.debug { "pulling more messages (streams=${streamsInfo} direction=$timelineDirection perStreamLimit=$perStreamLimit)" }
         return coroutineScope {
+            val startIdStream = messageId?.let { Pair(it.streamName, it.direction) }
             streamsInfo
                 .map { stream ->
                     async {
@@ -466,7 +469,11 @@ class SearchMessagesHandler(
                             .let { list ->
                                 dropUntilInRangeInOppositeDirection(startTimestamp, list, timelineDirection).let {
                                     stream.update(list.size, perStreamLimit, timelineDirection, it)
-                                    MessageBatch.build(it.filterNot { m -> m.id.toString() == messageId })
+                                    if (stream.stream == startIdStream) {
+                                        MessageBatch.build(it.filterNot { m -> m.id == messageId })
+                                    } else {
+                                        MessageBatch.build(it)
+                                    }
                                 }
                             }
                     }
