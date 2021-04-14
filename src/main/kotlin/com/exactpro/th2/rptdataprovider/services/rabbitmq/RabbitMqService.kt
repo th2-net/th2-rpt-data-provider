@@ -16,23 +16,18 @@
 
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
-import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.common.grpc.MessageID
+import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.schema.message.MessageListener
 import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatch
 import com.exactpro.th2.rptdataprovider.logMetrics
-import io.ktor.utils.io.errors.IOException
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
+import com.exactpro.th2.rptdataprovider.receiveAvailable
+import io.ktor.utils.io.errors.*
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import mu.KotlinLogging
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentSkipListSet
@@ -45,9 +40,14 @@ class RabbitMqService(private val configuration: Configuration) {
         private val rabbitMqMessageParseGauge: Metrics = Metrics("rabbit_mq_message_parse", "rabbitMqMessageParse")
     }
 
+    private val rabbitBatchMergeFrequency = configuration.rabbitBatchMergeFrequency.value.toLong()
+    private val rabbitBatchMergeBuffer = configuration.rabbitBatchMergeBuffer.value.toInt()
+
+    private val messageBuffer: Channel<Pair<MessageBatch, List<MessageRequest>>> = Channel(rabbitBatchMergeBuffer)
+
     private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
 
-    private val decodeRequests = ConcurrentHashMap<MessageID, ConcurrentSkipListSet<CodecRequest>>()
+    private val decodeRequests = ConcurrentHashMap<MessageID, ConcurrentSkipListSet<MessageRequest>>()
 
     private val receiveChannel = configuration.messageRouterParsedBatch.subscribeAll(
         MessageListener { _, decodedBatch ->
@@ -71,7 +71,7 @@ class RabbitMqService(private val configuration: Configuration) {
                                     build()
                                 }
                             }
-                            it.channel.send(message)
+                            it.sendMessage(message)
                         }
                     }
                 }
@@ -82,20 +82,102 @@ class RabbitMqService(private val configuration: Configuration) {
         "from_codec"
     )
 
-    @Throws(IllegalStateException::class)
-    suspend fun decodeMessage(batch: RawMessageBatch): Collection<Message> {
-        val requests: Map<MessageID, CodecRequest> = batch.messagesList
-            .associate { it.metadata.id to CodecRequest(it.metadata.id) }
 
+    private val messageDecoder = CoroutineScope(Dispatchers.Default).launch {
+        decodeMessage()
+    }
+
+
+    private suspend fun mergeBatches(messages: Map.Entry<String, MutableList<MessageRequest>>): RawMessageBatch {
+        return RawMessageBatch.newBuilder().addAllMessages(
+            messages.value.sortedBy { it.rawMessage.metadata.id.sequence }.map { it.rawMessage }
+        ).build()
+    }
+
+
+    private fun getRequestDebugInfo(batches: List<Pair<MessageBatch, List<MessageRequest>>>): List<String> {
+        return batches.map { (messageBatch, _) ->
+            let {
+                val session = messageBatch.id.streamName
+                val direction = messageBatch.id.direction
+                val firstSeqNum = messageBatch.batch.firstOrNull()?.index
+                val lastSeqNum = messageBatch.batch.lastOrNull()?.index
+                val count = messageBatch.batch.size
+
+                "(session=$session direction=$direction firstSeqNum=$firstSeqNum lastSeqNum=$lastSeqNum count=$count)"
+            }
+        }
+    }
+
+
+    private suspend fun decodeMessage() {
+        coroutineScope {
+            while (true) {
+                val batches = messageBuffer.receiveAvailable()
+
+                val batchesMap = mutableMapOf<String, MutableList<MessageRequest>>().apply {
+                    batches.forEach { getOrPut(it.first.id.streamName, { mutableListOf() }).addAll(it.second) }
+                }
+
+                val requestDebugInfo = getRequestDebugInfo(batches)
+
+                val requests = batches.flatMap { it.second }.associateBy { it.id }
+
+                batchesMap.map {
+                    launch {
+                        val batch = mergeBatches(it)
+                        sendMessageBatchToRabbit(batch, requests)
+                    }
+                }
+
+                try {
+                    withTimeout(responseTimeout) {
+                        requests.map { async { it.value.get() } }.awaitAll()
+                            .also { logger.debug { "codec response received $requestDebugInfo" } }
+                    }
+                } catch (e: TimeoutCancellationException) {
+                    withContext(NonCancellable) {
+                        logger.error { "unable to parse messages $requestDebugInfo - timed out after $responseTimeout milliseconds" }
+                        requests.map { request ->
+                            decodeRequests.remove(request.key)
+                            request.value
+                        }.forEach {
+                            try {
+                                it.sendMessage(null)
+                            } catch (e: CancellationException) {
+                                logger.error { "cancelled channel from message: '${it.rawMessage.metadata.id}'" }
+                            }
+                        }
+                        requests.values.forEach { if (!it.messageIsSend) it.sendMessage(null) }
+                    }
+                }
+
+                delay(rabbitBatchMergeFrequency)
+            }
+        }
+    }
+
+    suspend fun decodeBatch(messageBatch: MessageBatch): Collection<MessageRequest> {
         return withContext(Dispatchers.IO) {
+            val rawBatch = messageBatch.batch
+                .map { RawMessage.parseFrom(it.content) }
+                .map { MessageRequest.build(it) }
+
+            messageBuffer.send(messageBatch to rawBatch)
+
+            rawBatch.map { async { it.get(); it } }.awaitAll()
+        }
+    }
+
+    private suspend fun sendMessageBatchToRabbit(batch: RawMessageBatch, requests: Map<MessageID, MessageRequest>) {
+        withContext(Dispatchers.IO) {
             logMetrics(rabbitMqMessageParseGauge) {
-                val deferred = requests.map { async { it.value.channel.receive() } }
 
                 var alreadyRequested = true
 
                 requests.forEach {
                     decodeRequests.computeIfAbsent(it.key) {
-                        ConcurrentSkipListSet<CodecRequest>().also { alreadyRequested = false }
+                        ConcurrentSkipListSet<MessageRequest>().also { alreadyRequested = false }
                     }.add(it.value)
                 }
 
@@ -118,26 +200,7 @@ class RabbitMqService(private val configuration: Configuration) {
                         logger.error(e) { "cannot send message $requestDebugInfo" }
                     }
                 }
-
-                try {
-                    withTimeout(responseTimeout) {
-                        deferred.awaitAll().also { logger.debug { "codec response received $requestDebugInfo" } }
-                    }
-                } catch (e: TimeoutCancellationException) {
-                    logger.error { "unable to parse messages $requestDebugInfo - timed out after $responseTimeout milliseconds" }
-                    requests.map { request ->
-                        decodeRequests.remove(request.key)
-                        request.value
-                    }.forEach {
-                        try {
-                            it.channel.cancel()
-                        } catch (e: CancellationException) {
-                            logger.error { "cancelled channel from message: '${it.id}'" }
-                        }
-                    }
-                    deferred.mapNotNull { if (it.isCompleted) it.await() else null }
-                }
-            } ?: listOf()
+            }
         }
     }
 }

@@ -23,6 +23,7 @@ import io.prometheus.client.Gauge
 import io.prometheus.client.Histogram
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.withContext
 import mu.KotlinLogging
 import java.io.Writer
@@ -151,4 +152,16 @@ fun Instant.isBeforeOrEqual(other: Instant): Boolean {
 
 fun Instant.isAfterOrEqual(other: Instant): Boolean {
     return this.isAfter(other) || this == other
+}
+
+
+suspend fun <E> ReceiveChannel<E>.receiveAvailable(): List<E> {
+    val allMessages = mutableListOf<E>()
+    allMessages.add(receive())
+    var next = poll()
+    while (next != null) {
+        allMessages.add(next)
+        next = poll()
+    }
+    return allMessages
 }
