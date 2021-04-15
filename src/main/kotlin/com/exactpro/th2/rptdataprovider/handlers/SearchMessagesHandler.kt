@@ -290,6 +290,7 @@ class SearchMessagesHandler(
                 ).collect { emit(it) }
             }.map {
                 async {
+                    println("AAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
                     val parsedMessage = it.getParsedMessage()
                     messageCache.put(parsedMessage.messageId, parsedMessage)
                     Pair(parsedMessage, request.filterPredicate.apply(parsedMessage))
@@ -367,13 +368,19 @@ class SearchMessagesHandler(
         isFirstPull: Boolean
     ): Iterable<MessageWrapper> {
         val messageBatchMap = mutableMapOf<String, MessageBatch>()
-        return pullMore(startId, limit, timelineDirection, isFirstPull).map { message ->
-            val batch = messageBatchMap[message.id.toString()]
-                ?: MessageBatch.build(cradle.getMessageBatchSuspend(message.id)).also {
-                    messageBatchMap.putAll(it.batch.map { m -> m.id.toString() to it })
-                }
+        return coroutineScope {
+            databaseRequestRetry(dbRetryDelay) {
+                pullMore(startId, limit, timelineDirection, isFirstPull)
+            }.map { message ->
+                async {
+                    val batch = messageBatchMap[message.id.toString()]
+                        ?: MessageBatch.build(cradle.getMessageBatchSuspend(message.id)).also {
+                            messageBatchMap.putAll(it.batch.map { m -> m.id.toString() to it })
+                        }
 
-            MessageWrapper.build(message) { messageProducer.fromRawMessage(batch) }
+                    MessageWrapper.build(message) { messageProducer.fromRawMessage(batch) }
+                }
+            }.awaitAll()
         }
     }
 
@@ -403,9 +410,8 @@ class SearchMessagesHandler(
             streamsInfo
                 .map { stream ->
                     async {
-                        databaseRequestRetry(dbRetryDelay) {
-                            pullMoreWrapped(stream.lastElement, perStreamLimit, timelineDirection, stream.isFirstPull)
-                        }.toList()
+                        pullMoreWrapped(stream.lastElement, perStreamLimit, timelineDirection, stream.isFirstPull)
+                            .toList()
                             .let { list ->
                                 dropUntilInRangeInOppositeDirection(startTimestamp, list, timelineDirection).let {
                                     stream.update(list.size, perStreamLimit, timelineDirection, it)

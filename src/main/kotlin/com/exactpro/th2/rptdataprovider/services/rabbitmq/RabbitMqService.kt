@@ -83,7 +83,7 @@ class RabbitMqService(private val configuration: Configuration) {
     )
 
 
-    private val messageDecoder = CoroutineScope(Dispatchers.Default).launch {
+    private val messageDecoder = GlobalScope.launch {
         decodeMessage()
     }
 
@@ -121,7 +121,7 @@ class RabbitMqService(private val configuration: Configuration) {
 
                 val requestDebugInfo = getRequestDebugInfo(batches)
 
-                val requests = batches.flatMap { it.second }.associateBy { it.id }
+                val requests = batches.flatMap { it.second }.groupBy { it.id }
 
                 batchesMap.map {
                     launch {
@@ -132,7 +132,7 @@ class RabbitMqService(private val configuration: Configuration) {
 
                 try {
                     withTimeout(responseTimeout) {
-                        requests.map { async { it.value.get() } }.awaitAll()
+                        requests.values.flatten().map { async { it.get() } }.awaitAll()
                             .also { logger.debug { "codec response received $requestDebugInfo" } }
                     }
                 } catch (e: TimeoutCancellationException) {
@@ -143,12 +143,12 @@ class RabbitMqService(private val configuration: Configuration) {
                             request.value
                         }.forEach {
                             try {
-                                it.sendMessage(null)
+                                it.forEach { mes -> mes.sendMessage(null) }
                             } catch (e: CancellationException) {
-                                logger.error { "cancelled channel from message: '${it.rawMessage.metadata.id}'" }
+                                logger.error { "cancelled channel from message: '${it.first().rawMessage.metadata.id}'" }
                             }
                         }
-                        requests.values.forEach { if (!it.messageIsSend) it.sendMessage(null) }
+                        requests.values.flatten().forEach { if (!it.messageIsSend) it.sendMessage(null) }
                     }
                 }
 
@@ -169,7 +169,10 @@ class RabbitMqService(private val configuration: Configuration) {
         }
     }
 
-    private suspend fun sendMessageBatchToRabbit(batch: RawMessageBatch, requests: Map<MessageID, MessageRequest>) {
+    private suspend fun sendMessageBatchToRabbit(
+        batch: RawMessageBatch,
+        requests: Map<MessageID, List<MessageRequest>>
+    ) {
         withContext(Dispatchers.IO) {
             logMetrics(rabbitMqMessageParseGauge) {
 
@@ -178,7 +181,7 @@ class RabbitMqService(private val configuration: Configuration) {
                 requests.forEach {
                     decodeRequests.computeIfAbsent(it.key) {
                         ConcurrentSkipListSet<MessageRequest>().also { alreadyRequested = false }
-                    }.add(it.value)
+                    }.addAll(it.value)
                 }
 
                 val firstId = batch.messagesList?.first()?.metadata?.id

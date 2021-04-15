@@ -30,6 +30,7 @@ import com.exactpro.th2.rptdataprovider.services.rabbitmq.MessageRequest
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import com.google.protobuf.InvalidProtocolBufferException
 import com.google.protobuf.util.JsonFormat
+import kotlinx.coroutines.delay
 import mu.KotlinLogging
 import java.util.*
 
@@ -78,7 +79,7 @@ class MessageProducer(
 
         val parsedRawMessage = messageBatch.batch.map { parseRawMessage(it) }
         val parsedRawMessageProtocol = parsedRawMessage.firstOrNull()?.let { getFieldName(it) }
-        val processed =
+        val processed: List<MessageRequest>? = null
             if (!isImage(parsedRawMessageProtocol)) parseMessage(messageBatch) else null
 
         return ParsedMessageBatch(messageBatch.id,
