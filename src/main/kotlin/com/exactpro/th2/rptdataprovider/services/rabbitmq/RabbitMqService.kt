@@ -157,7 +157,7 @@ class RabbitMqService(private val configuration: Configuration) {
         }
     }
 
-    suspend fun decodeBatch(messageBatch: MessageBatch): MessageRequest {
+    suspend fun decodeBatch(messageBatch: MessageBatch): List<MessageRequest> {
         return withContext(Dispatchers.IO) {
             val rawBatch = messageBatch.batch
                 .map { RawMessage.parseFrom(it.content) }
@@ -165,8 +165,7 @@ class RabbitMqService(private val configuration: Configuration) {
 
             messageBuffer.send(messageBatch to rawBatch)
 
-            //rawBatch.map { async { it.get(); it } }.awaitAll()
-
+            rawBatch.map { async { it.get(); it } }.awaitAll()
         }
     }
 

@@ -20,9 +20,10 @@ import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.rptdataprovider.cache.CodecCache
+import com.exactpro.th2.rptdataprovider.cache.CodecCacheBatches
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatch
-import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
+import com.exactpro.th2.rptdataprovider.entities.responses.ParsedMessageBatch
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.MessageRequest
@@ -35,7 +36,8 @@ import java.util.*
 class MessageProducer(
     private val cradle: CradleService,
     private val rabbitMqService: RabbitMqService,
-    private val codecCache: CodecCache
+    private val codecCache: CodecCache,
+    private val codecCacheBatches: CodecCacheBatches
 ) {
 
     companion object {
@@ -69,41 +71,59 @@ class MessageProducer(
         return protocolName?.contains(TYPE_IMAGE) ?: false
     }
 
-
-    suspend fun fromRawMessage(messageWrapper: MessageWrapper): MessageWrapper {
-        codecCache.get(messageWrapper.id.toString())?.let {
-            messageWrapper.setMessage(it)
-            return messageWrapper
+    suspend fun fromRawMessage(messageBatch: MessageBatch): ParsedMessageBatch {
+        codecCacheBatches.get(messageBatch.id.toString())?.let {
+            return it
         }
 
-        val parsedRawMessage = parseRawMessage(messageWrapper.message)
-        val parsedRawMessageProtocol = getFieldName(parsedRawMessage)
-        val processed = if (!isImage(parsedRawMessageProtocol)) parseMessage(messageWrapper.message) else null
+        val parsedRawMessage = messageBatch.batch.map { parseRawMessage(it) }
+        val parsedRawMessageProtocol = parsedRawMessage.firstOrNull()?.let { getFieldName(it) }
+        val processed =
+            if (!isImage(parsedRawMessageProtocol)) parseMessage(messageBatch) else null
 
-        Message(
-            messageWrapper.message,
-            processed?.get()?.let { JsonFormat.printer().print(it) },
-            parsedRawMessage?.let {
-                Base64.getEncoder().encodeToString(it.body.toByteArray())
-            },
-            processed?.get()?.metadata?.messageType ?: parsedRawMessageProtocol ?: ""
-        ).let {
-            codecCache.put(it.messageId, it)
-            messageWrapper.setMessage(it)
-            return messageWrapper
+        return ParsedMessageBatch(messageBatch.id,
+            messageBatch.batch.mapIndexed { i, rawMessage ->
+                Message(
+                    rawMessage,
+                    processed?.get(i)?.get()?.let { JsonFormat.printer().print(it) },
+                    parsedRawMessage[i]?.let {
+                        Base64.getEncoder().encodeToString(it.body.toByteArray())
+                    },
+                    processed?.get(i)?.get()?.metadata?.messageType ?: parsedRawMessageProtocol ?: ""
+                ).also { codecCache.put(it.messageId, it) }
+            }
+        ).also {
+            codecCacheBatches.put(it.id.toString(), it)
         }
     }
 
-    private suspend fun parseMessage(message: StoredMessage): MessageRequest {
-        return rabbitMqService.decodeBatch(message)
+    private suspend fun parseMessage(message: MessageBatch): List<MessageRequest>? {
+
+        if (message.batch.isEmpty()) {
+            logger.error { "unable to parse message '${message.id}' - message batch does not exist or is empty" }
+            return null
+        }
+        return rabbitMqService.decodeBatch(message).toList().let {
+            if (it.isEmpty()) {
+                logger.error { "Decoded batch can not be empty. Batch: ${message.batch}" }
+                null
+            } else {
+                it
+            }
+        }
     }
 
 
     suspend fun fromId(id: StoredMessageId): Message {
-        return codecCache.get(id.toString())?.let {
-            MessageWrapper(id, MessageBatch.build((cradle.getMessageBatchSuspend(id))))
-        }?.let { messageBatch ->
-            fromRawMessage(messageBatch).parsedMessage
+        codecCache.get(id.toString())?.let { return it }
+        val rawBatchNullable = cradle.getMessageBatchSuspend(id).let {
+            if (it.isEmpty()) null else it
+        }
+        return rawBatchNullable?.let { rawBatch ->
+            MessageBatch.build(rawBatch).let { messageBatch ->
+                (codecCacheBatches.get(messageBatch.id.toString()) ?: fromRawMessage(messageBatch))
+                    .batch.firstOrNull { id == it.id }
+            }
         } ?: throw CradleMessageNotFoundException("message '${id}' does not exist in cradle")
     }
 }

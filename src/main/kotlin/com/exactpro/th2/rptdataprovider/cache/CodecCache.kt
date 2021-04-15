@@ -48,3 +48,27 @@ class CodecCache(configuration: Configuration) {
         return cache.get(id)
     }
 }
+
+class CodecCacheBatches(configuration: Configuration) {
+    private val manager = CacheManagerBuilder.newCacheManagerBuilder().build(true)
+    private val logger = KotlinLogging.logger { }
+
+    private val cache: Cache<String, ParsedMessageBatch> = manager.createCache(
+        "codecBatch",
+        CacheConfigurationBuilder.newCacheConfigurationBuilder(
+            String::class.java,
+            ParsedMessageBatch::class.java,
+            ResourcePoolsBuilder.heap(configuration.codecBatchesCacheSize.value.toLong())
+        ).build()
+    )
+
+    fun put(id: String, message: ParsedMessageBatch) {
+        if (!cache.containsKey(id)) {
+            cache.put(id, message)
+        }
+    }
+
+    fun get(id: String): ParsedMessageBatch? {
+        return cache.get(id)
+    }
+}

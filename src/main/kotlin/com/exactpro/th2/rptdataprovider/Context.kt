@@ -18,6 +18,7 @@ package com.exactpro.th2.rptdataprovider
 
 
 import com.exactpro.th2.rptdataprovider.cache.CodecCache
+import com.exactpro.th2.rptdataprovider.cache.CodecCacheBatches
 import com.exactpro.th2.rptdataprovider.cache.EventCache
 import com.exactpro.th2.rptdataprovider.cache.MessageCache
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
@@ -71,8 +72,15 @@ class Context(
     ),
 
     val codecCache: CodecCache = CodecCache(configuration),
+    val codecBatchesCache: CodecCacheBatches = CodecCacheBatches(configuration),
 
-    val messageProducer: MessageProducer = MessageProducer(cradleService, rabbitMqService, codecCache),
+    val messageProducer: MessageProducer = MessageProducer(
+        cradleService,
+        rabbitMqService,
+        codecCache,
+        codecBatchesCache
+    ),
+
     val messageCache: MessageCache = MessageCache(configuration, messageProducer),
     val searchMessagesHandler: SearchMessagesHandler = SearchMessagesHandler(
         cradleService,

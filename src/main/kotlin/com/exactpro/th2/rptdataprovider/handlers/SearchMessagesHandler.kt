@@ -290,17 +290,15 @@ class SearchMessagesHandler(
                 ).collect { emit(it) }
             }.map {
                 async {
-                    @Suppress("USELESS_CAST")
-                    messageProducer.fromRawMessage(it).let { message ->
-                        messageCache.put(message.parsedMessage.messageId, message.parsedMessage)
-                        Pair(message, request.filterPredicate.apply(message.parsedMessage))
-                    }
+                    val parsedMessage = it.getParsedMessage()
+                    messageCache.put(parsedMessage.messageId, parsedMessage)
+                    Pair(parsedMessage, request.filterPredicate.apply(parsedMessage))
                 }.also { coroutineContext.ensureActive() }
             }
                 .buffer(messageSearchPipelineBuffer)
                 .map { it.await() }
                 .onEach { (message, _) ->
-                    lastScannedObject.update(message.parsedMessage, scanCnt)
+                    lastScannedObject.update(message, scanCnt)
                     processedMessageCount.inc()
                 }
                 .filter { it.second }
@@ -318,7 +316,7 @@ class SearchMessagesHandler(
                 .collect {
                     coroutineContext.ensureActive()
                     writer.eventWrite(
-                        SseEvent.build(jacksonMapper, it.parsedMessage, lastEventId)
+                        SseEvent.build(jacksonMapper, it, lastEventId)
                     )
                 }
         }
@@ -330,7 +328,7 @@ class SearchMessagesHandler(
         limit: Int,
         timelineDirection: TimeRelation,
         isFirstPull: Boolean
-    ): Iterable<MessageWrapper> {
+    ): Iterable<StoredMessage> {
 
         logger.debug { "pulling more messages (id=$startId limit=$limit direction=$timelineDirection)" }
 
@@ -358,15 +356,27 @@ class SearchMessagesHandler(
                     }
                 }
             }.build()
-        ).let {
-            it.map { message ->
-                MessageWrapper(
-                    message,
-                    MessageBatch.build(cradle.getMessageBatchSuspend(message.id))
-                )
-            }
+        )
+    }
+
+
+    private suspend fun pullMoreWrapped(
+        startId: StoredMessageId?,
+        limit: Int,
+        timelineDirection: TimeRelation,
+        isFirstPull: Boolean
+    ): Iterable<MessageWrapper> {
+        val messageBatchMap = mutableMapOf<String, MessageBatch>()
+        return pullMore(startId, limit, timelineDirection, isFirstPull).map { message ->
+            val batch = messageBatchMap[message.id.toString()]
+                ?: MessageBatch.build(cradle.getMessageBatchSuspend(message.id)).also {
+                    messageBatchMap.putAll(it.batch.map { m -> m.id.toString() to it })
+                }
+
+            MessageWrapper.build(message) { messageProducer.fromRawMessage(batch) }
         }
     }
+
 
     private fun dropUntilInRangeInOppositeDirection(
         startTimestamp: Instant,
@@ -394,7 +404,7 @@ class SearchMessagesHandler(
                 .map { stream ->
                     async {
                         databaseRequestRetry(dbRetryDelay) {
-                            pullMore(stream.lastElement, perStreamLimit, timelineDirection, stream.isFirstPull)
+                            pullMoreWrapped(stream.lastElement, perStreamLimit, timelineDirection, stream.isFirstPull)
                         }.toList()
                             .let { list ->
                                 dropUntilInRangeInOppositeDirection(startTimestamp, list, timelineDirection).let {

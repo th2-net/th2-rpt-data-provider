@@ -23,7 +23,7 @@ import java.util.UUID
 
 data class MessageRequest(
     val id: MessageID,
-    val messageBatch: MessageBatch,
+    val rawMessage: RawMessage,
     private val channel: Channel<Message?>,
     private val result: Deferred<Message?>,
     private val requestId: UUID = UUID.randomUUID()
@@ -33,11 +33,11 @@ data class MessageRequest(
         private set
 
     companion object {
-        suspend fun build(rawMessage: RawMessage, messageBatch: MessageBatch): MessageRequest {
+        suspend fun build(rawMessage: RawMessage): MessageRequest {
             val messageChannel = Channel<Message?>(0)
             return MessageRequest(
                 id = rawMessage.metadata.id,
-                messageBatch = messageBatch,
+                rawMessage = rawMessage,
                 channel = messageChannel,
                 result = CoroutineScope(Dispatchers.Default).async {
                     messageChannel.receive()

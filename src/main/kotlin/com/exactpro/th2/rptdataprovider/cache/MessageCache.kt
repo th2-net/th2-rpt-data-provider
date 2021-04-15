@@ -16,14 +16,10 @@
 
 package com.exactpro.th2.rptdataprovider.cache
 
-import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
-import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatch
-import com.exactpro.th2.rptdataprovider.entities.responses.ParsedMessageBatch
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
-
 import mu.KotlinLogging
 import org.ehcache.Cache
 import org.ehcache.config.builders.CacheConfigurationBuilder
