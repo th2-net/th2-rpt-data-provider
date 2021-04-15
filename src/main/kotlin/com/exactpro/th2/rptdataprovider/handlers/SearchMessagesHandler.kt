@@ -26,8 +26,8 @@ import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.cache.MessageCache
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatch
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
@@ -80,7 +80,7 @@ class SearchMessagesHandler(
             size: Int,
             perStreamLimit: Int,
             timelineDirection: TimeRelation,
-            filteredIdsList: List<StoredMessage>
+            filteredIdsList: List<MessageWrapper>
         ) {
             val streamIsEmpty = size < perStreamLimit
             lastElement = changeStreamMessageIndex(streamIsEmpty, filteredIdsList, timelineDirection)
@@ -90,14 +90,14 @@ class SearchMessagesHandler(
 
         private fun changeStreamMessageIndex(
             streamIsEmpty: Boolean,
-            filteredIdsList: List<StoredMessage>,
+            filteredIdsList: List<MessageWrapper>,
             timelineDirection: TimeRelation
         ): StoredMessageId? {
             return if (timelineDirection == AFTER) {
-                filteredIdsList.lastOrNull()?.id
+                filteredIdsList.lastOrNull()?.message?.id
                     ?: if (keepOpen) lastElement else null
             } else {
-                if (!streamIsEmpty) filteredIdsList.firstOrNull()?.id else null
+                if (!streamIsEmpty) filteredIdsList.firstOrNull()?.message?.id else null
             }
         }
     }
@@ -218,7 +218,7 @@ class SearchMessagesHandler(
         initLimit: Int,
         messageId: StoredMessageId?,
         startTimestamp: Instant
-    ): Flow<MessageBatch> {
+    ): Flow<MessageWrapper> {
 
         return coroutineScope {
             flow {
@@ -248,7 +248,7 @@ class SearchMessagesHandler(
                 } while (canGetData)
             }
                 .takeWhile {
-                    it.startTimestamp.let { timestamp ->
+                    it.message!!.timestamp.let { timestamp ->
                         if (request.searchDirection == AFTER) {
                             request.endTimestamp == null || timestamp.isBeforeOrEqual(request.endTimestamp)
                         } else {
@@ -291,17 +291,16 @@ class SearchMessagesHandler(
             }.map {
                 async {
                     @Suppress("USELESS_CAST")
-                    messageProducer.fromRawMessage(it).batch.map { message ->
-                        messageCache.put(message.messageId, message)
-                        Pair(message, request.filterPredicate.apply(message))
+                    messageProducer.fromRawMessage(it).let { message ->
+                        messageCache.put(message.parsedMessage.messageId, message.parsedMessage)
+                        Pair(message, request.filterPredicate.apply(message.parsedMessage))
                     }
                 }.also { coroutineContext.ensureActive() }
             }
                 .buffer(messageSearchPipelineBuffer)
                 .map { it.await() }
-                .flatMapConcat { it.asFlow() }
                 .onEach { (message, _) ->
-                    lastScannedObject.update(message, scanCnt)
+                    lastScannedObject.update(message.parsedMessage, scanCnt)
                     processedMessageCount.inc()
                 }
                 .filter { it.second }
@@ -319,7 +318,7 @@ class SearchMessagesHandler(
                 .collect {
                     coroutineContext.ensureActive()
                     writer.eventWrite(
-                        SseEvent.build(jacksonMapper, it, lastEventId)
+                        SseEvent.build(jacksonMapper, it.parsedMessage, lastEventId)
                     )
                 }
         }
@@ -331,7 +330,7 @@ class SearchMessagesHandler(
         limit: Int,
         timelineDirection: TimeRelation,
         isFirstPull: Boolean
-    ): Iterable<StoredMessage> {
+    ): Iterable<MessageWrapper> {
 
         logger.debug { "pulling more messages (id=$startId limit=$limit direction=$timelineDirection)" }
 
@@ -359,18 +358,25 @@ class SearchMessagesHandler(
                     }
                 }
             }.build()
-        )
+        ).let {
+            it.map { message ->
+                MessageWrapper(
+                    message,
+                    MessageBatch.build(cradle.getMessageBatchSuspend(message.id))
+                )
+            }
+        }
     }
 
     private fun dropUntilInRangeInOppositeDirection(
         startTimestamp: Instant,
-        storedMessages: List<StoredMessage>,
+        storedMessages: List<MessageWrapper>,
         timelineDirection: TimeRelation
-    ): List<StoredMessage> {
+    ): List<MessageWrapper> {
         return if (timelineDirection == AFTER) {
-            storedMessages.filter { it.timestamp.isAfterOrEqual(startTimestamp) }
+            storedMessages.filter { it.message.timestamp.isAfterOrEqual(startTimestamp) }
         } else {
-            storedMessages.filter { it.timestamp.isBeforeOrEqual(startTimestamp) }
+            storedMessages.filter { it.message.timestamp.isBeforeOrEqual(startTimestamp) }
         }
     }
 
@@ -380,7 +386,7 @@ class SearchMessagesHandler(
         perStreamLimit: Int,
         startTimestamp: Instant,
         messageId: StoredMessageId?
-    ): List<MessageBatch> {
+    ): List<MessageWrapper> {
         logger.debug { "pulling more messages (streams=${streamsInfo} direction=$timelineDirection perStreamLimit=$perStreamLimit)" }
         return coroutineScope {
             val startIdStream = messageId?.let { Pair(it.streamName, it.direction) }
@@ -394,20 +400,20 @@ class SearchMessagesHandler(
                                 dropUntilInRangeInOppositeDirection(startTimestamp, list, timelineDirection).let {
                                     stream.update(list.size, perStreamLimit, timelineDirection, it)
                                     if (stream.stream == startIdStream) {
-                                        MessageBatch.build(it.filterNot { m -> m.id == messageId })
+                                        it.filterNot { m -> m.message.id == messageId }
                                     } else {
-                                        MessageBatch.build(it)
+                                        it
                                     }
                                 }
                             }
                     }
                 }.awaitAll()
-                .filterNotNull()
+                .flatten()
                 .let { list ->
                     if (timelineDirection == AFTER) {
-                        list.sortedBy { it.startTimestamp }
+                        list.sortedBy { it.message.timestamp }
                     } else {
-                        list.sortedByDescending { it.startTimestamp }
+                        list.sortedByDescending { it.message.timestamp }
                     }
                 }
         }

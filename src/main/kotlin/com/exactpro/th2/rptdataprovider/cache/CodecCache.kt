@@ -16,8 +16,8 @@
 
 package com.exactpro.th2.rptdataprovider.cache
 
-import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
+import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.entities.responses.ParsedMessageBatch
 import mu.KotlinLogging
 import org.ehcache.Cache
@@ -29,22 +29,22 @@ class CodecCache(configuration: Configuration) {
     private val manager = CacheManagerBuilder.newCacheManagerBuilder().build(true)
     private val logger = KotlinLogging.logger { }
 
-    private val cache: Cache<String, ParsedMessageBatch> = manager.createCache(
+    private val cache: Cache<String, Message> = manager.createCache(
         "codec",
         CacheConfigurationBuilder.newCacheConfigurationBuilder(
             String::class.java,
-            ParsedMessageBatch::class.java,
+            Message::class.java,
             ResourcePoolsBuilder.heap(configuration.codecCacheSize.value.toLong())
         ).build()
     )
 
-    fun put(id: String, message: ParsedMessageBatch) {
+    fun put(id: String, message: Message) {
         if (!cache.containsKey(id)) {
             cache.put(id, message)
         }
     }
 
-    fun get(id: String): ParsedMessageBatch? {
+    fun get(id: String): Message? {
         return cache.get(id)
     }
 }

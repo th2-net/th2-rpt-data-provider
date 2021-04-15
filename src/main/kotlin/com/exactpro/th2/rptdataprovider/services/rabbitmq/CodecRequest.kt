@@ -16,17 +16,14 @@
 
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
-import com.exactpro.th2.common.grpc.Message
-import com.exactpro.th2.common.grpc.MessageID
-import com.exactpro.th2.common.grpc.RawMessage
+import com.exactpro.th2.common.grpc.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import java.util.UUID
-import kotlin.coroutines.CoroutineContext
 
 data class MessageRequest(
     val id: MessageID,
-    val rawMessage: RawMessage,
+    val messageBatch: MessageBatch,
     private val channel: Channel<Message?>,
     private val result: Deferred<Message?>,
     private val requestId: UUID = UUID.randomUUID()
@@ -36,11 +33,11 @@ data class MessageRequest(
         private set
 
     companion object {
-        suspend fun build(rawMessage: RawMessage): MessageRequest {
+        suspend fun build(rawMessage: RawMessage, messageBatch: MessageBatch): MessageRequest {
             val messageChannel = Channel<Message?>(0)
             return MessageRequest(
                 id = rawMessage.metadata.id,
-                rawMessage = rawMessage,
+                messageBatch = messageBatch,
                 channel = messageChannel,
                 result = CoroutineScope(Dispatchers.Default).async {
                     messageChannel.receive()
