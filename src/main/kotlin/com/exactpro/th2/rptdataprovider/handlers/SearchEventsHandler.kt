@@ -131,11 +131,13 @@ class SearchEventsHandler(
         parentEventCounter: ParentEventCounter,
         searchDirection: TimeRelation
     ): List<Pair<EventTreeNode, Event?>>? {
-        return metadata.tryToGetTestEvents(searchDirection)?.mapNotNull { event ->
-            parentEventCounter.checkCountAndGet(
-                EventTreeNode(metadata.batchMetadata, event)
-            )?.let {
-                Pair(it, eventProducer.fromId(ProviderEventId(event.batchId, event.id)))
+        return metadata.tryToGetTestEvents(searchDirection)?.let { events ->
+            events.mapNotNull { event ->
+                parentEventCounter.checkCountAndGet(
+                    EventTreeNode(metadata.batchMetadata, event)
+                )
+            }.let { eventTreeNodes ->
+                eventTreeNodes.zip(eventProducer.fromIds(metadata.id, eventTreeNodes.map { it.id.eventId }))
             }
         }
     }
@@ -351,10 +353,11 @@ class SearchEventsHandler(
                     batchMetadata,
                     BatchedStoredTestEventMetadata(testEvent, batchMetadata)
                 )
-                parentEventCounter.checkCountAndGet(eventTreeNode)?.let {
-                    Pair(it, eventProducer.fromId(ProviderEventId(testEvent.batchId, testEvent.id)))
-                }
-            }.let { if (searchDirection == AFTER) it else it.reversed() }
+                parentEventCounter.checkCountAndGet(eventTreeNode)
+            }.let { events ->
+                events.zip(eventProducer.fromBatch(batch, events.map { it.id.eventId }))
+            }
+            .let { if (searchDirection == AFTER) it else it.reversed() }
     }
 }
 

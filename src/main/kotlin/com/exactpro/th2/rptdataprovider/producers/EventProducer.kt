@@ -17,12 +17,21 @@
 package com.exactpro.th2.rptdataprovider.producers
 
 import com.exactpro.cradle.testevents.StoredTestEventBatch
+import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventWithContent
+import com.exactpro.th2.common.grpc.Message
+import com.exactpro.th2.common.grpc.MessageID
+import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatch
+import com.exactpro.th2.rptdataprovider.receiveAvailable
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
+import com.exactpro.th2.rptdataprovider.services.rabbitmq.MessageRequest
 import com.fasterxml.jackson.databind.ObjectMapper
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import mu.KotlinLogging
 import java.util.*
 
@@ -31,6 +40,8 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
     companion object {
         private val logger = KotlinLogging.logger { }
     }
+
+    val cache: MutableMap<StoredTestEventId, StoredTestEventBatch> = mutableMapOf()
 
     suspend fun fromId(id: ProviderEventId): Event {
         val batch = id.batchId?.let { cradle.getEventSuspend(it)?.asBatch() }
@@ -49,13 +60,40 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
         return fromStoredEvent(storedEvent, batch)
     }
 
-    private suspend fun fromStoredEvent(storedEvent: StoredTestEventWithContent, batch: StoredTestEventBatch?): Event {
+    suspend fun fromBatch(batch: StoredTestEventBatch?, ids: List<StoredTestEventId>): List<Event> {
+        return ids.map {
+            val storedEvent = batch?.getTestEvent(it) ?: cradle.getEventSuspend(it)?.asSingle().also { println("AAAAAAAAAAAAAA") }
+            if (storedEvent == null) {
+                logger.error { "unable to find event '$it'" }
+                throw CradleEventNotFoundException("$it is not a valid id")
+            }
+            fromStoredEvent(storedEvent, batch)
+        }
+    }
+
+    suspend fun fromIds(batchId: StoredTestEventId?, ids: List<StoredTestEventId>): List<Event> {
+
+        val batch = batchId?.let {cradle.getEventSuspend(it)?.asBatch() }
+
+        if (batchId != null && batch == null) {
+            logger.error { "unable to find batch with id '$batchId' referenced in event '$ids'- this is a bug" }
+        }
+
+        return fromBatch(batch, ids)
+    }
+
+
+    private suspend fun fromStoredEvent(
+        storedEvent: StoredTestEventWithContent,
+        batch: StoredTestEventBatch?
+    ): Event {
         return Event(
             storedEvent,
             ProviderEventId(batch?.id, storedEvent.id).toString(),
             storedEvent.id.let {
                 try {
                     cradle.getMessageIdsSuspend(it).map(Any::toString).toSet()
+                    Collections.emptySet<String>()
                 } catch (e: Exception) {
                     KotlinLogging.logger { }
                         .error(e) { "unable to get messages attached to event (id=${storedEvent.id})" }

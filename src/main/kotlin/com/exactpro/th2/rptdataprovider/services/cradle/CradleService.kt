@@ -48,6 +48,8 @@ class CradleService(configuration: Configuration) {
         private val getMessageAsyncMetric: Metrics = Metrics("get_message_async", "getMessageAsync")
         private val getTestEventsAsyncMetric: Metrics = Metrics("get_test_events_async", "getTestEventsAsync")
         private val getTestEventAsyncMetric: Metrics = Metrics("get_test_event_async", "getTestEventAsync")
+        private val getTestCompletedEventAsyncMetric: Metrics =
+            Metrics("get_completed_test_event_async", "getCompleteTestEventsAsync")
         private val getNearestMessageIdMetric: Metrics = Metrics("get_nearest_message_id", "getNearestMessageId")
         private val getMessageBatchAsyncMetric: Metrics = Metrics("get_message_batch_async", "getMessageBatchAsync")
         private val getTestEventIdsByMessageIdAsyncMetric: Metrics =
@@ -128,6 +130,16 @@ class CradleService(configuration: Configuration) {
                     storage.getTestEventAsync(id).await()
                 }
             }
+        }
+    }
+
+    suspend fun getCompletedEventSuspend(ids: Set<StoredTestEventId>): MutableIterable<StoredTestEventWrapper> {
+        return withContext(cradleDispatcher) {
+            logMetrics(getTestCompletedEventAsyncMetric) {
+                logTime("getCompleteTestEvents (id=$ids)") {
+                    storage.getCompleteTestEventsAsync(ids).await()
+                }
+            } ?: emptyList()
         }
     }
 
