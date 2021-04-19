@@ -19,19 +19,14 @@ package com.exactpro.th2.rptdataprovider.producers
 import com.exactpro.cradle.testevents.StoredTestEventBatch
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventWithContent
-import com.exactpro.th2.common.grpc.Message
-import com.exactpro.th2.common.grpc.MessageID
-import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
-import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatch
-import com.exactpro.th2.rptdataprovider.receiveAvailable
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
-import com.exactpro.th2.rptdataprovider.services.rabbitmq.MessageRequest
 import com.fasterxml.jackson.databind.ObjectMapper
-import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import mu.KotlinLogging
 import java.util.*
 
@@ -61,25 +56,61 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
     }
 
     suspend fun fromBatch(batch: StoredTestEventBatch?, ids: List<StoredTestEventId>): List<Event> {
-        return ids.map {
-            val storedEvent = batch?.getTestEvent(it) ?: cradle.getEventSuspend(it)?.asSingle().also { println("AAAAAAAAAAAAAA") }
+        return ids.mapNotNull {
+            val storedEvent =
+                batch?.getTestEvent(it) ?: cradle.getEventSuspend(it)?.asSingle()
+
             if (storedEvent == null) {
-                logger.error { "unable to find event '$it'" }
-                throw CradleEventNotFoundException("$it is not a valid id")
+                logger.error { "unable to find event '$it'. It is not a valid id" }
+                null
+            } else {
+                fromStoredEvent(storedEvent, batch)
             }
-            fromStoredEvent(storedEvent, batch)
         }
     }
 
     suspend fun fromIds(batchId: StoredTestEventId?, ids: List<StoredTestEventId>): List<Event> {
 
-        val batch = batchId?.let {cradle.getEventSuspend(it)?.asBatch() }
+        val batch = batchId?.let { cradle.getEventSuspend(it)?.asBatch() }
 
         if (batchId != null && batch == null) {
             logger.error { "unable to find batch with id '$batchId' referenced in event '$ids'- this is a bug" }
         }
 
         return fromBatch(batch, ids)
+    }
+
+    suspend fun fromSingleIdsProcessed(batch: List<StoredTestEventId>): List<Event> {
+        val requestIds = batch.map { it }.toSet()
+        val completedEvents =
+            cradle.getCompletedEventSuspend(requestIds).map { it.asSingle() }.associateBy { it.id }
+
+        return coroutineScope {
+            batch.mapNotNull {
+                val storedEvent = completedEvents[it]
+
+                if (storedEvent == null) {
+                    logger.error { "unable to find event '$it'. It is not a valid id" }
+                    null
+                } else {
+                    async { fromStoredEvent(storedEvent, null) }
+                }
+            }
+        }.awaitAll()
+    }
+
+
+    suspend fun fromBatchIdsProcessed(batch: List<Pair<StoredTestEventId, List<StoredTestEventId>>>): List<List<Event>> {
+        val requestIds = batch.map { it.first }.toSet()
+        val completedEvents =
+            cradle.getCompletedEventSuspend(requestIds).map { it.asBatch() }.associateBy { it.id }
+
+        return coroutineScope {
+            batch.map {
+                val storedEventBatch = completedEvents[it.first]
+                async { fromBatch(storedEventBatch, it.second) }
+            }
+        }.awaitAll()
     }
 
 
@@ -93,7 +124,6 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
             storedEvent.id.let {
                 try {
                     cradle.getMessageIdsSuspend(it).map(Any::toString).toSet()
-                    Collections.emptySet<String>()
                 } catch (e: Exception) {
                     KotlinLogging.logger { }
                         .error(e) { "unable to get messages attached to event (id=${storedEvent.id})" }

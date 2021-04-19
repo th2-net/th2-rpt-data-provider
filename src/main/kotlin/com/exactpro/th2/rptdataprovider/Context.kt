@@ -68,7 +68,8 @@ class Context(
         cradleService,
         eventProducer,
         configuration.dbRetryDelay.value.toLong(),
-        configuration.sseSearchDelay.value.toLong()
+        configuration.sseSearchDelay.value.toLong(),
+        configuration.eventSearchChunkSize.value.toInt()
     ),
 
     val codecCache: CodecCache = CodecCache(configuration),

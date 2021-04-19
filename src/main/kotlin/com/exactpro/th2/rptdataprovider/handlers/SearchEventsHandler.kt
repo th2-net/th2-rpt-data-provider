@@ -48,12 +48,15 @@ import java.time.ZoneOffset
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.CoroutineContext
+import kotlin.math.max
+import kotlin.math.min
 
 class SearchEventsHandler(
     private val cradle: CradleService,
     private val eventProducer: EventProducer,
     private val dbRetryDelay: Long,
-    private val sseSearchDelay: Long
+    private val sseSearchDelay: Long,
+    private val eventSearchChunkSize: Int
 ) {
     companion object {
         private val logger = KotlinLogging.logger { }
@@ -116,28 +119,49 @@ class SearchEventsHandler(
     }
 
     private suspend fun prepareNonBatchedEvent(
-        metadata: StoredTestEventMetadata,
+        metadata: List<StoredTestEventMetadata>,
         parentEventCounter: ParentEventCounter
     ): List<Pair<EventTreeNode, Event?>> {
-        return EventTreeNode(null, metadata).let { eventTreeNode ->
-            parentEventCounter.checkCountAndGet(eventTreeNode)?.let {
-                listOf(Pair(it, eventProducer.fromId(ProviderEventId(null, metadata.id))))
-            } ?: emptyList()
+        return metadata.mapNotNull {
+            parentEventCounter.checkCountAndGet(EventTreeNode(null, it))
+        }.let { eventTreesNodes ->
+            eventTreesNodes.zip(eventProducer.fromSingleIdsProcessed(eventTreesNodes.map { it.id.eventId }))
         }
     }
 
     private suspend fun prepareBatchedEvent(
-        metadata: StoredTestEventMetadata,
+        metadata: List<StoredTestEventMetadata>,
         parentEventCounter: ParentEventCounter,
-        searchDirection: TimeRelation
-    ): List<Pair<EventTreeNode, Event?>>? {
-        return metadata.tryToGetTestEvents(searchDirection)?.let { events ->
-            events.mapNotNull { event ->
-                parentEventCounter.checkCountAndGet(
-                    EventTreeNode(metadata.batchMetadata, event)
-                )
+        searchDirection: TimeRelation,
+        timestampFrom: Instant,
+        timestampTo: Instant
+    ): List<Pair<EventTreeNode, Event?>> {
+        return metadata.zip(metadata.map { it.tryToGetTestEvents(searchDirection) }).let { eventsWithBatch ->
+            eventsWithBatch.map { (batch, events) ->
+                batch to events?.mapNotNull {
+                    parentEventCounter.checkCountAndGet(EventTreeNode(batch.batchMetadata, it))
+                }
             }.let { eventTreeNodes ->
-                eventTreeNodes.zip(eventProducer.fromIds(metadata.id, eventTreeNodes.map { it.id.eventId }))
+                val notNullEvents = eventTreeNodes.filter { it.second != null }
+
+                val parsedEvents = eventProducer.fromBatchIdsProcessed(
+                    notNullEvents.map { (batch, events) -> batch.id to events!!.map { it.id.eventId } }
+                ).flatten()
+
+                notNullEvents.flatMap { it.second!! }.zip(parsedEvents).toMutableList().apply {
+                    addAll(
+                        eventTreeNodes.filter { it.second == null }
+                            .flatMap { (batch, _) ->
+                                getDirectBatchedChildren(
+                                    batch.id,
+                                    timestampFrom,
+                                    timestampTo,
+                                    parentEventCounter,
+                                    searchDirection
+                                )
+                            }
+                    )
+                }
             }
         }
     }
@@ -152,6 +176,7 @@ class SearchEventsHandler(
         }
     }
 
+    @FlowPreview
     @ExperimentalCoroutinesApi
     private suspend fun getEventFlow(
         parentEvent: String?,
@@ -166,22 +191,28 @@ class SearchEventsHandler(
                 val eventsCollection =
                     databaseRequestRetry(dbRetryDelay) {
                         getEventsSuspend(parentEvent, timestampFrom, timestampTo, searchDirection)
-                    }
+                    }.asSequence().chunked(eventSearchChunkSize)
+
                 for (event in eventsCollection)
                     emit(event)
             }
                 .map { metadata ->
                     async(parentContext) {
-                        if (metadata.isBatch) {
-                            prepareBatchedEvent(metadata, parentEventCounter, searchDirection)
-                                ?: getDirectBatchedChildren(
-                                    metadata.id, timestampFrom, timestampTo,
-                                    parentEventCounter, searchDirection
+                        metadata.groupBy { it.isBatch }.flatMap { entry ->
+                            if (entry.key) {
+                                prepareBatchedEvent(
+                                    entry.value,
+                                    parentEventCounter,
+                                    searchDirection,
+                                    timestampFrom,
+                                    timestampTo
                                 )
-                        } else {
-                            prepareNonBatchedEvent(metadata, parentEventCounter)
-                        }
-                    }.also { parentContext.ensureActive() }
+                            } else {
+                                prepareNonBatchedEvent(entry.value, parentEventCounter)
+                            }
+                        }.sortedBy { it.first.startTimestamp }
+                            .also { parentContext.ensureActive() }
+                    }
                 }
                 .buffer(BUFFERED)
         }
@@ -339,7 +370,7 @@ class SearchEventsHandler(
         timestampTo: Instant,
         parentEventCounter: ParentEventCounter,
         searchDirection: TimeRelation
-    ): List<Pair<EventTreeNode, Event?>> {
+    ): List<Pair<EventTreeNode, Event>> {
 
         val batch = cradle.getEventSuspend(batchId)?.asBatch()
 
@@ -360,4 +391,3 @@ class SearchEventsHandler(
             .let { if (searchDirection == AFTER) it else it.reversed() }
     }
 }
-
