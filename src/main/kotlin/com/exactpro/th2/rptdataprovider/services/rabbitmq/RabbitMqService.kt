@@ -199,7 +199,7 @@ class RabbitMqService(private val configuration: Configuration) {
                     try {
                         configuration.messageRouterRawBatch.sendAll(batch, firstId?.connectionId?.sessionAlias)
                         logger.debug { "codec request published $requestDebugInfo" }
-                    } catch (e: IOException) {
+                    } catch (e: Exception) {
                         logger.error(e) { "cannot send message $requestDebugInfo" }
                     }
                 }

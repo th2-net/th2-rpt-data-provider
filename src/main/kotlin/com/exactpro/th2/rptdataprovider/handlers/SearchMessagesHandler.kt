@@ -248,7 +248,7 @@ class SearchMessagesHandler(
                 } while (canGetData)
             }
                 .takeWhile {
-                    it.message!!.timestamp.let { timestamp ->
+                    it.message.timestamp.let { timestamp ->
                         if (request.searchDirection == AFTER) {
                             request.endTimestamp == null || timestamp.isBeforeOrEqual(request.endTimestamp)
                         } else {
