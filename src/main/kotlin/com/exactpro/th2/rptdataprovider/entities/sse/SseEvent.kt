@@ -17,6 +17,7 @@
 package com.exactpro.th2.rptdataprovider.entities.sse
 
 import com.exactpro.th2.rptdataprovider.asStringSuspend
+import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -34,8 +35,8 @@ enum class EventType {
 
 data class LastScannedObjectInfo(var id: String = "", var timestamp: Long = 0, var scanCounter: Long = 0) {
 
-    fun update(event: EventTreeNode, scanCnt: AtomicLong) {
-        id = event.eventId
+    fun update(event: BaseEventEntity, scanCnt: AtomicLong) {
+        id = event.id.toString()
         timestamp = event.startTimestamp.toEpochMilli()
         scanCounter = scanCnt.incrementAndGet()
     }

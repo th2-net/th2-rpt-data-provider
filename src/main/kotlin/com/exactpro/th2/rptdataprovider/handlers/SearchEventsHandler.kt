@@ -24,9 +24,10 @@ import com.exactpro.cradle.testevents.StoredTestEventBatchMetadata
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.rptdataprovider.*
+import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.responses.Event
+import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
@@ -41,6 +42,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel.Factory.BUFFERED
 import kotlinx.coroutines.flow.*
 import mu.KotlinLogging
+import org.ehcache.core.spi.store.Store
 import java.io.Writer
 import java.time.Instant
 import java.time.LocalTime
@@ -48,8 +50,6 @@ import java.time.ZoneOffset
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.CoroutineContext
-import kotlin.math.max
-import kotlin.math.min
 
 class SearchEventsHandler(
     private val cradle: CradleService,
@@ -75,21 +75,21 @@ class SearchEventsHandler(
             limitForParent = limitForParent
         )
 
-        fun checkCountAndGet(eventTreeNode: EventTreeNode): EventTreeNode? {
-            if (limitForParent == null || eventTreeNode.parentId == null) return eventTreeNode
-            val count = parentEventCounter!![eventTreeNode.parentId!!]
+        fun checkCountAndGet(event: BaseEventEntity): BaseEventEntity? {
+            if (limitForParent == null || event.parentEventId == null) return event
+            val count = parentEventCounter!![event.parentEventId.toString()]
             return if (count?.let { it.get() < limitForParent } != false) {
-                eventTreeNode
+                event
             } else {
                 null
             }
         }
 
-        fun update(event: EventTreeNode) {
+        fun update(event: BaseEventEntity) {
             if (limitForParent == null) return
 
-            event.parentId?.let { parentId ->
-                parentEventCounter!!.getOrPut(parentId, { AtomicLong(0) }).also {
+            event.parentEventId?.let { parentId ->
+                parentEventCounter!!.getOrPut(parentId.toString(), { AtomicLong(0) }).also {
                     it.incrementAndGet()
                 }
             }
@@ -120,45 +120,45 @@ class SearchEventsHandler(
 
     private suspend fun prepareNonBatchedEvent(
         metadata: List<StoredTestEventMetadata>,
-        parentEventCounter: ParentEventCounter
-    ): List<Pair<EventTreeNode, Event?>> {
+        parentEventCounter: ParentEventCounter,
+        request: SseEventSearchRequest
+    ): List<BaseEventEntity> {
         return metadata.mapNotNull {
-            parentEventCounter.checkCountAndGet(EventTreeNode(null, it))
+            parentEventCounter.checkCountAndGet(eventProducer.fromEventMetadata(it, null))
         }.let { eventTreesNodes ->
-            eventTreesNodes.zip(eventProducer.fromSingleIdsProcessed(eventTreesNodes.map { it.id.eventId }))
+            eventProducer.fromSingleEventsProcessed(eventTreesNodes, request.filterPredicate)
         }
     }
 
     private suspend fun prepareBatchedEvent(
         metadata: List<StoredTestEventMetadata>,
         parentEventCounter: ParentEventCounter,
-        searchDirection: TimeRelation,
         timestampFrom: Instant,
-        timestampTo: Instant
-    ): List<Pair<EventTreeNode, Event?>> {
-        return metadata.zip(metadata.map { it.tryToGetTestEvents(searchDirection) }).let { eventsWithBatch ->
+        timestampTo: Instant,
+        request: SseEventSearchRequest
+    ): List<BaseEventEntity> {
+        return metadata.map { it to it.tryToGetTestEvents(request.searchDirection) }.let { eventsWithBatch ->
             eventsWithBatch.map { (batch, events) ->
-                batch to events?.mapNotNull {
-                    parentEventCounter.checkCountAndGet(EventTreeNode(batch.batchMetadata, it))
+                batch.id to events?.mapNotNull {
+                    parentEventCounter.checkCountAndGet(
+                        eventProducer.fromEventMetadata(
+                            StoredTestEventMetadata(it),
+                            batch.batchMetadata
+                        )
+                    )
                 }
             }.let { eventTreeNodes ->
-                val notNullEvents = eventTreeNodes.filter { it.second != null }
+                val notNullEvents = eventTreeNodes.mapNotNull {
+                    if (it.second?.isNotEmpty() == true) it.first to it.second!! else null
+                }
 
-                val parsedEvents = eventProducer.fromBatchIdsProcessed(
-                    notNullEvents.map { (batch, events) -> batch.id to events!!.map { it.id.eventId } }
-                ).flatten()
+                val parsedEvents = eventProducer.fromBatchIdsProcessed(notNullEvents, request.filterPredicate)
 
-                notNullEvents.flatMap { it.second!! }.zip(parsedEvents).toMutableList().apply {
+                parsedEvents.toMutableList().apply {
                     addAll(
                         eventTreeNodes.filter { it.second == null }
                             .flatMap { (batch, _) ->
-                                getDirectBatchedChildren(
-                                    batch.id,
-                                    timestampFrom,
-                                    timestampTo,
-                                    parentEventCounter,
-                                    searchDirection
-                                )
+                                getDirectBatchedChildren(batch, timestampFrom, timestampTo, parentEventCounter, request)
                             }
                     )
                 }
@@ -166,31 +166,27 @@ class SearchEventsHandler(
         }
     }
 
-    private fun StoredTestEventMetadata.tryToGetTestEvents(timeRelation: TimeRelation): Collection<BatchedStoredTestEventMetadata>? {
-        return try {
-            this.batchMetadata?.testEvents?.let {
-                if (timeRelation == AFTER) it else it.reversed()
-            }
-        } catch (e: IOException) {
-            null
+    private fun StoredTestEventMetadata.tryToGetTestEvents(timeRelation: TimeRelation):
+            Collection<BatchedStoredTestEventMetadata>? {
+        return this.tryToGetTestEvents()?.let {
+            if (timeRelation == AFTER) it else it.reversed()
         }
     }
 
     @FlowPreview
     @ExperimentalCoroutinesApi
     private suspend fun getEventFlow(
-        parentEvent: String?,
+        request: SseEventSearchRequest,
         timestampFrom: Instant,
         timestampTo: Instant,
         parentContext: CoroutineContext,
-        parentEventCounter: ParentEventCounter,
-        searchDirection: TimeRelation
-    ): Flow<Deferred<List<Pair<EventTreeNode, Event?>>>> {
+        parentEventCounter: ParentEventCounter
+    ): Flow<Deferred<List<BaseEventEntity>>> {
         return coroutineScope {
             flow {
                 val eventsCollection =
                     databaseRequestRetry(dbRetryDelay) {
-                        getEventsSuspend(parentEvent, timestampFrom, timestampTo, searchDirection)
+                        getEventsSuspend(request.parentEvent, timestampFrom, timestampTo, request.searchDirection)
                     }.asSequence().chunked(eventSearchChunkSize)
 
                 for (event in eventsCollection)
@@ -203,14 +199,14 @@ class SearchEventsHandler(
                                 prepareBatchedEvent(
                                     entry.value,
                                     parentEventCounter,
-                                    searchDirection,
                                     timestampFrom,
-                                    timestampTo
+                                    timestampTo,
+                                    request
                                 )
                             } else {
-                                prepareNonBatchedEvent(entry.value, parentEventCounter)
+                                prepareNonBatchedEvent(entry.value, parentEventCounter, request)
                             }
-                        }.sortedBy { it.first.startTimestamp }
+                        }.sortedBy { it.startTimestamp }
                             .also { parentContext.ensureActive() }
                     }
                 }
@@ -319,31 +315,31 @@ class SearchEventsHandler(
                         delay(sseSearchDelay * 1000)
 
                     getEventFlow(
-                        request.parentEvent, timestamp.first, timestamp.second,
-                        coroutineContext, parentEventCounter, request.searchDirection
+                        request, timestamp.first, timestamp.second,
+                        coroutineContext, parentEventCounter
                     ).collect { emit(it) }
                 }
             }
                 .map { it.await() }
                 .flatMapConcat { it.asFlow() }
-                .filter { it.first.eventId != request.resumeFromId }
-                .takeWhile { pair ->
+                .filter { it.id.toString() != request.resumeFromId }
+                .takeWhile { event ->
                     request.endTimestamp?.let {
                         if (request.searchDirection == AFTER) {
-                            pair.first.startTimestamp.isBeforeOrEqual(it)
+                            event.startTimestamp.isBeforeOrEqual(it)
                         } else {
-                            pair.first.startTimestamp.isAfterOrEqual(it)
+                            event.startTimestamp.isAfterOrEqual(it)
                         }
                     } ?: true
                 }
-                .onEach { (event, _) ->
+                .onEach { event ->
                     lastScannedObject.update(event, scanCnt)
                     processedEventCount.inc()
                 }
-                .filter { request.filterPredicate.apply(it.second!!) }
+                .filter { request.filterPredicate.apply(it) }
                 .let {
                     if (parentEventCounter.limitForParent != null) {
-                        it.onEach { (event, _) -> parentEventCounter.update(event) }
+                        it.onEach { event -> parentEventCounter.update(event) }
                     } else {
                         it
                     }
@@ -357,7 +353,7 @@ class SearchEventsHandler(
                     it?.let { throwable -> throw throwable }
                 }.collect {
                     coroutineContext.ensureActive()
-                    writer.eventWrite(SseEvent.build(jacksonMapper, it.first, lastEventId))
+                    writer.eventWrite(SseEvent.build(jacksonMapper, it.convertToEventTreeNode(), lastEventId))
                 }
         }
     }
@@ -369,8 +365,8 @@ class SearchEventsHandler(
         timestampFrom: Instant,
         timestampTo: Instant,
         parentEventCounter: ParentEventCounter,
-        searchDirection: TimeRelation
-    ): List<Pair<EventTreeNode, Event>> {
+        request: SseEventSearchRequest
+    ): List<BaseEventEntity> {
 
         val batch = cradle.getEventSuspend(batchId)?.asBatch()
 
@@ -378,16 +374,10 @@ class SearchEventsHandler(
             ?: throw CradleEventNotFoundException("unable to get test events of batch '$batchId'"))
             .filter { it.startTimestamp.isAfter(timestampFrom) && it.startTimestamp.isBefore(timestampTo) }
             .mapNotNull { testEvent ->
-                val batchMetadata = StoredTestEventBatchMetadata(batch)
-
-                val eventTreeNode = EventTreeNode(
-                    batchMetadata,
-                    BatchedStoredTestEventMetadata(testEvent, batchMetadata)
-                )
-                parentEventCounter.checkCountAndGet(eventTreeNode)
+                parentEventCounter.checkCountAndGet(eventProducer.fromStoredEvent(testEvent, batch))
             }.let { events ->
-                events.zip(eventProducer.fromBatch(batch, events.map { it.id.eventId }))
+                eventProducer.fromBatchIdsProcessed(listOf(batch.id to events), request.filterPredicate)
             }
-            .let { if (searchDirection == AFTER) it else it.reversed() }
+            .let { if (request.searchDirection == AFTER) it else it.reversed() }
     }
 }

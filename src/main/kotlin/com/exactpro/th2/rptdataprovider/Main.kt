@@ -308,7 +308,7 @@ class Main(args: Array<String>) {
                         call, context, "get single event", notModifiedCacheControl, probe,
                         false, call.parameters.toMap()
                     ) {
-                        eventCache.getOrPut(call.parameters["id"]!!)
+                        eventCache.getOrPut(call.parameters["id"]!!).convertToEvent()
                     }
                 }
 

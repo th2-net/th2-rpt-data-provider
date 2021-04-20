@@ -16,7 +16,10 @@
 
 package com.exactpro.th2.rptdataprovider
 
+import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageFilter
+import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
+import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.prometheus.client.Gauge
@@ -26,6 +29,7 @@ import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.withContext
 import mu.KotlinLogging
+import java.io.IOException
 import java.io.Writer
 import java.time.Instant
 import java.util.concurrent.Executors
@@ -164,4 +168,13 @@ suspend fun <E> ReceiveChannel<E>.receiveAvailable(): List<E> {
         next = poll()
     }
     return allMessages
+}
+
+
+fun StoredTestEventMetadata.tryToGetTestEvents(): Collection<BatchedStoredTestEventMetadata>? {
+    return try {
+        this.batchMetadata?.testEvents
+    } catch (e: IOException) {
+        null
+    }
 }

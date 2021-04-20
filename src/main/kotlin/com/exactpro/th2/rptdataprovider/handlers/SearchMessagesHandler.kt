@@ -290,7 +290,6 @@ class SearchMessagesHandler(
                 ).collect { emit(it) }
             }.map {
                 async {
-                    println("AAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
                     val parsedMessage = it.getParsedMessage()
                     messageCache.put(parsedMessage.messageId, parsedMessage)
                     Pair(parsedMessage, request.filterPredicate.apply(parsedMessage))

@@ -27,6 +27,7 @@ import com.exactpro.th2.rptdataprovider.entities.filters.events.*
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.AttachedEventFilters
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageTypeFilter
+import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.handlers.SearchEventsHandler
@@ -93,7 +94,7 @@ class Context(
         configuration.sseSearchDelay.value.toLong()
     ),
 
-    val eventFiltersPredicateFactory: PredicateFactory<Event> = PredicateFactory(
+    val eventFiltersPredicateFactory: PredicateFactory<BaseEventEntity> = PredicateFactory(
         mapOf(
             AttachedMessageFilter.filterInfo to AttachedMessageFilter.Companion::build,
             EventTypeFilter.filterInfo to EventTypeFilter.Companion::build,
