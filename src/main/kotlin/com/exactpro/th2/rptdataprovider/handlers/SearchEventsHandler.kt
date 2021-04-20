@@ -196,18 +196,18 @@ class SearchEventsHandler(
                     async(parentContext) {
                         metadata.groupBy { it.isBatch }.flatMap { entry ->
                             if (entry.key) {
-                                prepareBatchedEvent(
-                                    entry.value,
-                                    parentEventCounter,
-                                    timestampFrom,
-                                    timestampTo,
-                                    request
+                                prepareBatchedEvent(entry.value, parentEventCounter,
+                                    timestampFrom, timestampTo, request
                                 )
                             } else {
                                 prepareNonBatchedEvent(entry.value, parentEventCounter, request)
                             }
-                        }.sortedBy { it.startTimestamp }
-                            .also { parentContext.ensureActive() }
+                        }.let { events ->
+                            if (request.searchDirection == AFTER)
+                                events.sortedBy { it.startTimestamp }
+                            else
+                                events.sortedByDescending { it.startTimestamp }
+                        }.also { parentContext.ensureActive() }
                     }
                 }
                 .buffer(BUFFERED)
