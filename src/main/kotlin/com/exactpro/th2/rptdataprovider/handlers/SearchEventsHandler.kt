@@ -137,7 +137,7 @@ class SearchEventsHandler(
         timestampTo: Instant,
         request: SseEventSearchRequest
     ): List<BaseEventEntity> {
-        return metadata.map { it to it.tryToGetTestEvents(request.searchDirection) }.let { eventsWithBatch ->
+        return metadata.map { it to it.tryToGetTestEvents() }.let { eventsWithBatch ->
             eventsWithBatch.map { (batch, events) ->
                 batch.id to events?.mapNotNull {
                     parentEventCounter.checkCountAndGet(
@@ -166,12 +166,6 @@ class SearchEventsHandler(
         }
     }
 
-    private fun StoredTestEventMetadata.tryToGetTestEvents(timeRelation: TimeRelation):
-            Collection<BatchedStoredTestEventMetadata>? {
-        return this.tryToGetTestEvents()?.let {
-            if (timeRelation == AFTER) it else it.reversed()
-        }
-    }
 
     @FlowPreview
     @ExperimentalCoroutinesApi
@@ -378,6 +372,5 @@ class SearchEventsHandler(
             }.let { events ->
                 eventProducer.fromBatchIdsProcessed(listOf(batch.id to events), request.filterPredicate)
             }
-            .let { if (request.searchDirection == AFTER) it else it.reversed() }
     }
 }
