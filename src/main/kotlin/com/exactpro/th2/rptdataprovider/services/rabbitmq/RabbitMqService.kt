@@ -51,28 +51,13 @@ class RabbitMqService(private val configuration: Configuration) {
 
     private val receiveChannel = configuration.messageRouterParsedBatch.subscribeAll(
         MessageListener { _, decodedBatch ->
-            decodedBatch.messagesList.groupBy { it.metadata.id.sequence }.forEach { (_, messages) ->
-
-                val messageId = messages.first().metadata.id.run {
-                    when (subsequenceCount) {
-                        0 -> this
-                        else -> toBuilder().clearSubsequence().build()
-                    }
-                }
+            decodedBatch.messagesList.forEach { message ->
+                val messageId = message.metadata.id
 
                 decodeRequests.remove(messageId)?.let { match ->
+
                     match.forEach {
-                        GlobalScope.launch {
-                            val message = when (messages.size) {
-                                1 -> messages[0]
-                                else -> messages[0].toBuilder().run {
-                                    messages.drop(1).forEach { mergeFrom(it) }
-                                    metadataBuilder.messageType = messages.joinToString("/") { it.metadata.messageType }
-                                    build()
-                                }
-                            }
-                            it.sendMessage(message)
-                        }
+                        GlobalScope.launch { it.sendMessage(message) }
                     }
                 }
             }
@@ -81,7 +66,6 @@ class RabbitMqService(private val configuration: Configuration) {
         },
         "from_codec"
     )
-
 
     private val messageDecoder = GlobalScope.launch {
         decodeMessage()
