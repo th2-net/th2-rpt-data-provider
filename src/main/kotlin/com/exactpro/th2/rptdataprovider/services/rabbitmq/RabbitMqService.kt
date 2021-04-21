@@ -16,21 +16,22 @@
 
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
+import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.schema.message.MessageListener
 import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
-import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatch
 import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.receiveAvailable
-import io.ktor.utils.io.errors.*
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.*
+import kotlinx.coroutines.selects.whileSelect
 import mu.KotlinLogging
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentSkipListSet
+import kotlinx.coroutines.channels.ClosedReceiveChannelException as ClosedReceiveChannelException1
 
 class RabbitMqService(private val configuration: Configuration) {
 
@@ -43,7 +44,7 @@ class RabbitMqService(private val configuration: Configuration) {
     private val rabbitBatchMergeFrequency = configuration.rabbitBatchMergeFrequency.value.toLong()
     private val rabbitBatchMergeBuffer = configuration.rabbitBatchMergeBuffer.value.toInt()
 
-    private val messageBuffer: Channel<Pair<MessageBatch, List<MessageRequest>>> = Channel(rabbitBatchMergeBuffer)
+    private val messageBuffer: Channel<Pair<StoredMessageBatch, List<MessageRequest>>> = Channel(rabbitBatchMergeBuffer)
 
     private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
 
@@ -82,9 +83,13 @@ class RabbitMqService(private val configuration: Configuration) {
         "from_codec"
     )
 
-
     private val messageDecoder = GlobalScope.launch {
-        decodeMessage()
+        for (i in 1..8) {
+            launch {
+
+                decodeMessage()
+            }
+        }
     }
 
 
@@ -95,14 +100,14 @@ class RabbitMqService(private val configuration: Configuration) {
     }
 
 
-    private fun getRequestDebugInfo(batches: List<Pair<MessageBatch, List<MessageRequest>>>): List<String> {
+    private fun getRequestDebugInfo(batches: List<Pair<StoredMessageBatch, List<MessageRequest>>>): List<String> {
         return batches.map { (messageBatch, _) ->
             let {
                 val session = messageBatch.id.streamName
                 val direction = messageBatch.id.direction
-                val firstSeqNum = messageBatch.batch.firstOrNull()?.index
-                val lastSeqNum = messageBatch.batch.lastOrNull()?.index
-                val count = messageBatch.batch.size
+                val firstSeqNum = messageBatch.firstMessage?.index
+                val lastSeqNum = messageBatch.lastMessage?.index
+                val count = messageBatch.messageCount
 
                 "(session=$session direction=$direction firstSeqNum=$firstSeqNum lastSeqNum=$lastSeqNum count=$count)"
             }
@@ -119,7 +124,7 @@ class RabbitMqService(private val configuration: Configuration) {
                     batches.forEach { getOrPut(it.first.id.streamName, { mutableListOf() }).addAll(it.second) }
                 }
 
-                val requestDebugInfo = getRequestDebugInfo(batches)
+              //  val requestDebugInfo = getRequestDebugInfo(batches)
 
                 val requests = batches.flatMap { it.second }.groupBy { it.id }
 
@@ -133,11 +138,11 @@ class RabbitMqService(private val configuration: Configuration) {
                 try {
                     withTimeout(responseTimeout) {
                         requests.values.flatten().map { async { it.get() } }.awaitAll()
-                            .also { logger.debug { "codec response received $requestDebugInfo" } }
+                            //.also { logger.debug { "codec response received $requestDebugInfo" } }
                     }
                 } catch (e: TimeoutCancellationException) {
                     withContext(NonCancellable) {
-                        logger.error { "unable to parse messages $requestDebugInfo - timed out after $responseTimeout milliseconds" }
+                        logger.error { "unable to parse messages requestDebugInfo - timed out after $responseTimeout milliseconds" }
                         requests.map { request ->
                             decodeRequests.remove(request.key)
                             request.value
@@ -157,9 +162,9 @@ class RabbitMqService(private val configuration: Configuration) {
         }
     }
 
-    suspend fun decodeBatch(messageBatch: MessageBatch): List<MessageRequest> {
+    suspend fun decodeBatch(messageBatch: StoredMessageBatch): List<MessageRequest> {
         return withContext(Dispatchers.IO) {
-            val rawBatch = messageBatch.batch
+            val rawBatch = messageBatch.messages
                 .map { RawMessage.parseFrom(it.content) }
                 .map { MessageRequest.build(it) }
 
@@ -207,3 +212,29 @@ class RabbitMqService(private val configuration: Configuration) {
         }
     }
 }
+
+
+@InternalCoroutinesApi
+fun <T> CoroutineScope.chunked(size: Int, time: Long): ReceiveChannel<List<T>> =
+    produce<List<T>>(onCompletion =ReceiveChannel().consumes()) {
+        while (true) { // this loop goes over each chunk
+            val chunk = mutableListOf<T>() // current chunk
+            val ticker = ticker(time) // time-limit for this chunk
+            try {
+                whileSelect {
+                    ticker.onReceive {
+                        false  // done with chunk when timer ticks, takes priority over received elements
+                    }
+                    this@chunked.onReceive {
+                        chunk += it
+                        chunk.size < size // continue whileSelect if chunk is not full
+                    }
+                }
+            } catch (e: ClosedReceiveChannelException1) {
+                return@produce // that is normal exception when the source channel is over -- just stop
+            } finally {
+                ticker.cancel() // release ticker (we don't need it anymore as we wait for the first tick only)
+                if (chunk.isNotEmpty()) send(chunk) // send non-empty chunk on exit from whileSelect
+            }
+        }
+    }

@@ -21,12 +21,12 @@ import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.TimeRelation.AFTER
 import com.exactpro.cradle.TimeRelation.BEFORE
 import com.exactpro.cradle.messages.StoredMessage
+import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.cache.MessageCache
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatch
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
@@ -328,13 +328,13 @@ class SearchMessagesHandler(
         limit: Int,
         timelineDirection: TimeRelation,
         isFirstPull: Boolean
-    ): Iterable<StoredMessage> {
+    ): Iterable<StoredMessageBatch> {
 
         logger.debug { "pulling more messages (id=$startId limit=$limit direction=$timelineDirection)" }
 
         if (startId == null) return emptyList()
 
-        return cradle.getMessagesSuspend(
+        return cradle.getMessagesBatchesSuspend(
             StoredMessageFilterBuilder().apply {
                 streamName().isEqualTo(startId.streamName)
                 direction().isEqualTo(startId.direction)
@@ -365,21 +365,20 @@ class SearchMessagesHandler(
         limit: Int,
         timelineDirection: TimeRelation,
         isFirstPull: Boolean
-    ): Iterable<MessageWrapper> {
-        val messageBatchMap = mutableMapOf<String, MessageBatch>()
+    ): List<MessageWrapper> {
         return coroutineScope {
             databaseRequestRetry(dbRetryDelay) {
                 pullMore(startId, limit, timelineDirection, isFirstPull)
-            }.map { message ->
+            }.map { batch ->
                 async {
-                    val batch = messageBatchMap[message.id.toString()]
-                        ?: MessageBatch.build(cradle.getMessageBatchSuspend(message.id)).also {
-                            messageBatchMap.putAll(it.batch.map { m -> m.id.toString() to it })
-                        }
-
-                    MessageWrapper.build(message) { messageProducer.fromRawMessage(batch) }
+                    val parsedFuture = CoroutineScope(Dispatchers.Default).async {
+                        messageProducer.fromRawMessage(batch)
+                    }
+                    batch.messages.map { message ->
+                        MessageWrapper.build(message, parsedFuture)
+                    }
                 }
-            }.awaitAll()
+            }.awaitAll().flatten()
         }
     }
 
@@ -406,31 +405,27 @@ class SearchMessagesHandler(
         logger.debug { "pulling more messages (streams=${streamsInfo} direction=$timelineDirection perStreamLimit=$perStreamLimit)" }
         return coroutineScope {
             val startIdStream = messageId?.let { Pair(it.streamName, it.direction) }
-            streamsInfo
-                .map { stream ->
-                    async {
+            streamsInfo.map { stream ->
+                async {
+                    val pulled =
                         pullMoreWrapped(stream.lastElement, perStreamLimit, timelineDirection, stream.isFirstPull)
-                            .toList()
-                            .let { list ->
-                                dropUntilInRangeInOppositeDirection(startTimestamp, list, timelineDirection).let {
-                                    stream.update(list.size, perStreamLimit, timelineDirection, it)
-                                    if (stream.stream == startIdStream) {
-                                        it.filterNot { m -> m.message.id == messageId }
-                                    } else {
-                                        it
-                                    }
-                                }
-                            }
-                    }
-                }.awaitAll()
-                .flatten()
-                .let { list ->
-                    if (timelineDirection == AFTER) {
-                        list.sortedBy { it.message.timestamp }
-                    } else {
-                        list.sortedByDescending { it.message.timestamp }
+
+                    dropUntilInRangeInOppositeDirection(startTimestamp, pulled, timelineDirection).let {
+                        stream.update(pulled.size, perStreamLimit, timelineDirection, it)
+                        if (stream.stream == startIdStream) {
+                            it.filterNot { m -> m.message.id == messageId }
+                        } else {
+                            it
+                        }
                     }
                 }
+            }.awaitAll().flatten().let { list ->
+                if (timelineDirection == AFTER) {
+                    list.sortedBy { it.message.timestamp }
+                } else {
+                    list.sortedByDescending { it.message.timestamp }
+                }
+            }
         }
     }
 }
