@@ -52,7 +52,7 @@ data class SseEventSearchRequest(
         endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
         resumeFromId = parameters["resumeFromId"]?.firstOrNull(),
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt(),
-        limitForParent = parameters["limitForParent"]?.firstOrNull()?.toLong(),
+        limitForParent = parameters["limitForParent"]?.firstOrNull()?.toLong() ?: 51L,
         keepOpen = parameters["keepOpen"]?.firstOrNull()?.toBoolean() ?: false
     )
 
