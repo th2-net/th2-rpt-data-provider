@@ -24,6 +24,7 @@ import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.th2.common.message.toTimestamp
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.cache.MessageCache
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
@@ -45,6 +46,7 @@ import java.time.LocalTime
 import java.time.ZoneOffset
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
+import kotlin.system.measureTimeMillis
 
 class SearchMessagesHandler(
     private val cradle: CradleService,
@@ -367,6 +369,7 @@ class SearchMessagesHandler(
         isFirstPull: Boolean
     ): List<MessageWrapper> {
         return coroutineScope {
+
             databaseRequestRetry(dbRetryDelay) {
                 pullMore(startId, limit, timelineDirection, isFirstPull)
             }.map { batch ->
@@ -383,15 +386,38 @@ class SearchMessagesHandler(
     }
 
 
+    private fun isInFuture(wrapper: MessageWrapper, startTimestamp: Instant, streamInfo: StreamInfo): Boolean {
+        return wrapper.message.timestamp.isAfterOrEqual(startTimestamp) &&
+                streamInfo.lastElement?.let {
+                    if (streamInfo.isFirstPull) {
+                        wrapper.message.index >= it.index
+                    } else {
+                        wrapper.message.index > it.index
+                    }
+                } ?: true
+    }
+
+    private fun isInPast(wrapper: MessageWrapper, startTimestamp: Instant, streamInfo: StreamInfo): Boolean {
+        return wrapper.message.timestamp.isBeforeOrEqual(startTimestamp) &&
+                streamInfo.lastElement?.let {
+                    if (streamInfo.isFirstPull) {
+                        wrapper.message.index <= it.index
+                    } else {
+                        wrapper.message.index < it.index
+                    }
+                } ?: true
+    }
+
     private fun dropUntilInRangeInOppositeDirection(
         startTimestamp: Instant,
+        streamInfo: StreamInfo,
         storedMessages: List<MessageWrapper>,
         timelineDirection: TimeRelation
     ): List<MessageWrapper> {
         return if (timelineDirection == AFTER) {
-            storedMessages.filter { it.message.timestamp.isAfterOrEqual(startTimestamp) }
+            storedMessages.filter { isInFuture(it, startTimestamp, streamInfo) }
         } else {
-            storedMessages.filter { it.message.timestamp.isBeforeOrEqual(startTimestamp) }
+            storedMessages.filter { isInPast(it, startTimestamp, streamInfo) }
         }
     }
 
@@ -406,11 +432,11 @@ class SearchMessagesHandler(
         return coroutineScope {
             val startIdStream = messageId?.let { Pair(it.streamName, it.direction) }
             streamsInfo.map { stream ->
-                async {
+             //   async {
                     val pulled =
                         pullMoreWrapped(stream.lastElement, perStreamLimit, timelineDirection, stream.isFirstPull)
 
-                    dropUntilInRangeInOppositeDirection(startTimestamp, pulled, timelineDirection).let {
+                    dropUntilInRangeInOppositeDirection(startTimestamp, stream, pulled, timelineDirection).let {
                         stream.update(pulled.size, perStreamLimit, timelineDirection, it)
                         if (stream.stream == startIdStream) {
                             it.filterNot { m -> m.message.id == messageId }
@@ -418,8 +444,9 @@ class SearchMessagesHandler(
                             it
                         }
                     }
-                }
-            }.awaitAll().flatten().let { list ->
+              //  }
+            }//.awaitAll()
+            .flatten().let { list ->
                 if (timelineDirection == AFTER) {
                     list.sortedBy { it.message.timestamp }
                 } else {

@@ -24,10 +24,9 @@ import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.prometheus.client.Gauge
 import io.prometheus.client.Histogram
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.asCoroutineDispatcher
-import kotlinx.coroutines.channels.ReceiveChannel
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.*
+import kotlinx.coroutines.selects.whileSelect
 import mu.KotlinLogging
 import java.io.IOException
 import java.io.Writer
@@ -163,10 +162,13 @@ suspend fun <E> ReceiveChannel<E>.receiveAvailable(): List<E> {
     val allMessages = mutableListOf<E>()
     allMessages.add(receive())
     var next = poll()
-    while (next != null) {
+    var cnt = 0
+    while (next != null && cnt < 400) {
         allMessages.add(next)
         next = poll()
+        cnt++
     }
+    if (next != null) allMessages.add(next)
     return allMessages
 }
 
@@ -178,3 +180,31 @@ fun StoredTestEventMetadata.tryToGetTestEvents(): Collection<BatchedStoredTestEv
         null
     }
 }
+
+
+@ObsoleteCoroutinesApi
+@ExperimentalCoroutinesApi
+@InternalCoroutinesApi
+fun <T> ReceiveChannel<T>.chunked(size: Int, time: Long, capacity: Int = 1000) =
+    GlobalScope.produce<List<T>>(onCompletion = consumes()) {
+        while (true) {
+            val chunk = ArrayList<T>(size)
+            val ticker = ticker(time)
+            try {
+                whileSelect {
+                    ticker.onReceive {
+                        false
+                    }
+                    this@chunked.onReceive {
+                        chunk += it
+                        chunk.size < size
+                    }
+                }
+            } catch (e: ClosedReceiveChannelException) {
+                return@produce
+            } finally {
+                ticker.cancel()
+                if (chunk.isNotEmpty()) send(chunk)
+            }
+        }
+    }

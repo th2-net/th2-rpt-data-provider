@@ -66,16 +66,6 @@ class CradleService(configuration: Configuration) {
     private val storage = cradleManager.storage
     private val linker = cradleManager.storage.testEventsMessagesLinker
 
-    private val s = CoroutineScope(Dispatchers.Default).launch {
-        val tt = getMessagesBatchesSuspend(StoredMessageFilterBuilder().apply {
-            index().isGreaterThan(1614164386439431992)
-            direction().isEqualTo(Direction.SECOND)
-            streamName().isEqualTo("arfq01fix03")
-            limit(1000)
-        }.build()).toList()
-        val res = tt.filter { it.messageCount > 1 }
-        println(res)
-    }
 
     private val cradleDispatcher = Executors.newFixedThreadPool(cradleDispatcherPoolSize).asCoroutineDispatcher()
 

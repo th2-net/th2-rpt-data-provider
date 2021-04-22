@@ -22,16 +22,15 @@ import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.schema.message.MessageListener
 import com.exactpro.th2.rptdataprovider.Metrics
+import com.exactpro.th2.rptdataprovider.chunked
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.receiveAvailable
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.*
-import kotlinx.coroutines.selects.whileSelect
+import kotlinx.coroutines.channels.Channel
 import mu.KotlinLogging
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentSkipListSet
-import kotlinx.coroutines.channels.ClosedReceiveChannelException as ClosedReceiveChannelException1
 
 class RabbitMqService(private val configuration: Configuration) {
 
@@ -44,7 +43,13 @@ class RabbitMqService(private val configuration: Configuration) {
     private val rabbitBatchMergeFrequency = configuration.rabbitBatchMergeFrequency.value.toLong()
     private val rabbitBatchMergeBuffer = configuration.rabbitBatchMergeBuffer.value.toInt()
 
-    private val messageBuffer: Channel<Pair<StoredMessageBatch, List<MessageRequest>>> = Channel(rabbitBatchMergeBuffer)
+    private val messageBuffer = Channel<Pair<StoredMessageBatch, List<MessageRequest>>>(rabbitBatchMergeBuffer)
+
+    @ExperimentalCoroutinesApi
+    @ObsoleteCoroutinesApi
+    @InternalCoroutinesApi
+    private val messageBufferReceiver = messageBuffer.chunked(400, rabbitBatchMergeFrequency)
+
 
     private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
 
@@ -52,28 +57,13 @@ class RabbitMqService(private val configuration: Configuration) {
 
     private val receiveChannel = configuration.messageRouterParsedBatch.subscribeAll(
         MessageListener { _, decodedBatch ->
-            decodedBatch.messagesList.groupBy { it.metadata.id.sequence }.forEach { (_, messages) ->
-
-                val messageId = messages.first().metadata.id.run {
-                    when (subsequenceCount) {
-                        0 -> this
-                        else -> toBuilder().clearSubsequence().build()
-                    }
-                }
+            decodedBatch.messagesList.forEach { message ->
+                val messageId = message.metadata.id
 
                 decodeRequests.remove(messageId)?.let { match ->
+
                     match.forEach {
-                        GlobalScope.launch {
-                            val message = when (messages.size) {
-                                1 -> messages[0]
-                                else -> messages[0].toBuilder().run {
-                                    messages.drop(1).forEach { mergeFrom(it) }
-                                    metadataBuilder.messageType = messages.joinToString("/") { it.metadata.messageType }
-                                    build()
-                                }
-                            }
-                            it.sendMessage(message)
-                        }
+                        GlobalScope.launch { it.sendMessage(message) }
                     }
                 }
             }
@@ -83,10 +73,45 @@ class RabbitMqService(private val configuration: Configuration) {
         "from_codec"
     )
 
+//    private val receiveChannel = configuration.messageRouterParsedBatch.subscribeAll(
+//        MessageListener { _, decodedBatch ->
+//            decodedBatch.messagesList.groupBy { it.metadata.id.sequence }.forEach { (_, messages) ->
+//
+//                val messageId = messages.first().metadata.id.run {
+//                    when (subsequenceCount) {
+//                        0 -> this
+//                        else -> toBuilder().clearSubsequence().build()
+//                    }
+//                }
+//
+//                decodeRequests.remove(messageId)?.let { match ->
+//                    match.forEach {
+//                        GlobalScope.launch {
+//                            val message = when (messages.size) {
+//                                1 -> messages[0]
+//                                else -> messages[0].toBuilder().run {
+//                                    messages.drop(1).forEach { mergeFrom(it) }
+//                                    metadataBuilder.messageType = messages.joinToString("/") { it.metadata.messageType }
+//                                    build()
+//                                }
+//                            }
+//                            it.sendMessage(message)
+//                        }
+//                    }
+//                }
+//            }
+//
+//            logger.debug { "${decodeRequests.size} decode requests remaining" }
+//        },
+//        "from_codec"
+//    )
+
+    @ObsoleteCoroutinesApi
+    @ExperimentalCoroutinesApi
+    @InternalCoroutinesApi
     private val messageDecoder = GlobalScope.launch {
         for (i in 1..8) {
             launch {
-
                 decodeMessage()
             }
         }
@@ -115,16 +140,19 @@ class RabbitMqService(private val configuration: Configuration) {
     }
 
 
+    @ExperimentalCoroutinesApi
+    @ObsoleteCoroutinesApi
+    @InternalCoroutinesApi
     private suspend fun decodeMessage() {
         coroutineScope {
             while (true) {
-                val batches = messageBuffer.receiveAvailable()
+                val batches = messageBufferReceiver.receive()
 
                 val batchesMap = mutableMapOf<String, MutableList<MessageRequest>>().apply {
                     batches.forEach { getOrPut(it.first.id.streamName, { mutableListOf() }).addAll(it.second) }
                 }
 
-              //  val requestDebugInfo = getRequestDebugInfo(batches)
+                    //   val requestDebugInfo = getRequestDebugInfo(batches)
 
                 val requests = batches.flatMap { it.second }.groupBy { it.id }
 
@@ -138,7 +166,7 @@ class RabbitMqService(private val configuration: Configuration) {
                 try {
                     withTimeout(responseTimeout) {
                         requests.values.flatten().map { async { it.get() } }.awaitAll()
-                            //.also { logger.debug { "codec response received $requestDebugInfo" } }
+                         //   .also { logger.debug { "codec response received $requestDebugInfo" } }
                     }
                 } catch (e: TimeoutCancellationException) {
                     withContext(NonCancellable) {
@@ -157,7 +185,7 @@ class RabbitMqService(private val configuration: Configuration) {
                     }
                 }
 
-                delay(rabbitBatchMergeFrequency)
+               // delay(rabbitBatchMergeFrequency)
             }
         }
     }
@@ -213,28 +241,3 @@ class RabbitMqService(private val configuration: Configuration) {
     }
 }
 
-
-@InternalCoroutinesApi
-fun <T> CoroutineScope.chunked(size: Int, time: Long): ReceiveChannel<List<T>> =
-    produce<List<T>>(onCompletion =ReceiveChannel().consumes()) {
-        while (true) { // this loop goes over each chunk
-            val chunk = mutableListOf<T>() // current chunk
-            val ticker = ticker(time) // time-limit for this chunk
-            try {
-                whileSelect {
-                    ticker.onReceive {
-                        false  // done with chunk when timer ticks, takes priority over received elements
-                    }
-                    this@chunked.onReceive {
-                        chunk += it
-                        chunk.size < size // continue whileSelect if chunk is not full
-                    }
-                }
-            } catch (e: ClosedReceiveChannelException1) {
-                return@produce // that is normal exception when the source channel is over -- just stop
-            } finally {
-                ticker.cancel() // release ticker (we don't need it anymore as we wait for the first tick only)
-                if (chunk.isNotEmpty()) send(chunk) // send non-empty chunk on exit from whileSelect
-            }
-        }
-    }
