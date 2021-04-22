@@ -73,14 +73,14 @@ data class BaseEventEntity(
 
     fun convertToEvent(): Event {
         return Event(
-            batchId = batchId.toString(),
+            batchId = batchId?.toString(),
             isBatched = batchId != null,
             eventId = id.toString(),
             eventName = eventName,
             eventType = eventType,
             startTimestamp = startTimestamp,
             endTimestamp = endTimestamp,
-            parentEventId = parentEventId.toString(),
+            parentEventId = parentEventId?.toString(),
             successful = successful,
             attachedMessageIds = attachedMessageIds,
             body = body
