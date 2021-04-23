@@ -17,10 +17,9 @@
 package com.exactpro.th2.rptdataprovider.entities.responses
 
 import com.exactpro.cradle.messages.StoredMessage
+import com.exactpro.cradle.messages.StoredMessageBatchId
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.rptdataprovider.services.rabbitmq.MessageRequest
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
 import java.time.Instant
 
 data class MessageWrapper(
@@ -29,18 +28,18 @@ data class MessageWrapper(
     private val result: Deferred<ParsedMessageBatch>
 ) {
     companion object {
-        suspend fun build(message: StoredMessage, parseMessageBatch: suspend () -> ParsedMessageBatch): MessageWrapper {
+        suspend fun build(message: StoredMessage, parseMessageBatch: Deferred<ParsedMessageBatch>): MessageWrapper {
             return MessageWrapper(
                 id = message.id,
                 message = message,
-                result = CoroutineScope(Dispatchers.Default).async {
-                    parseMessageBatch.invoke()
-                })
+                result = parseMessageBatch
+            )
         }
     }
 
     suspend fun getParsedMessage(): Message {
-        return result.await().batch.first { it.id == id }
+        val parsedBatch = result.await()
+        return  parsedBatch.batch.getValue(id)
     }
 }
 
@@ -65,7 +64,7 @@ data class MessageBatch(
 
 
 data class ParsedMessageBatch(
-    val id: StoredMessageId,
-    val batch: Collection<Message>
+    val id: StoredMessageBatchId,
+    val batch: Map<StoredMessageId, Message>
 )
 

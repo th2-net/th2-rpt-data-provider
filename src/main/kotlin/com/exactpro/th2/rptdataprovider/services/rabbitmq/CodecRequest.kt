@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
+import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.th2.common.grpc.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -77,3 +78,10 @@ data class MessageRequest(
         return requestId.compareTo(other.requestId)
     }
 }
+
+
+data class BatchRequest(
+    val batch: StoredMessageBatch,
+    val requests: List<MessageRequest>,
+    val context: CoroutineScope
+)

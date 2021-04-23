@@ -19,16 +19,12 @@ package com.exactpro.th2.rptdataprovider.handlers
 
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.TimeRelation.AFTER
-import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
-import com.exactpro.cradle.testevents.StoredTestEventBatchMetadata
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.rptdataprovider.*
-import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
-import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
@@ -42,7 +38,6 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel.Factory.BUFFERED
 import kotlinx.coroutines.flow.*
 import mu.KotlinLogging
-import org.ehcache.core.spi.store.Store
 import java.io.Writer
 import java.time.Instant
 import java.time.LocalTime
@@ -190,7 +185,8 @@ class SearchEventsHandler(
                     async(parentContext) {
                         metadata.groupBy { it.isBatch }.flatMap { entry ->
                             if (entry.key) {
-                                prepareBatchedEvent(entry.value, parentEventCounter,
+                                prepareBatchedEvent(
+                                    entry.value, parentEventCounter,
                                     timestampFrom, timestampTo, request
                                 )
                             } else {
