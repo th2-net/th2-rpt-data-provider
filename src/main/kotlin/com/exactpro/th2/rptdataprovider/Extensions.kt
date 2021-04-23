@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider
 
-import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageFilter
 import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
@@ -26,10 +25,15 @@ import io.prometheus.client.Gauge
 import io.prometheus.client.Histogram
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.selects.whileSelect
 import mu.KotlinLogging
 import java.io.IOException
 import java.io.Writer
+import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.Executors
 import kotlin.coroutines.coroutineContext
@@ -162,13 +166,10 @@ suspend fun <E> ReceiveChannel<E>.receiveAvailable(): List<E> {
     val allMessages = mutableListOf<E>()
     allMessages.add(receive())
     var next = poll()
-    var cnt = 0
-    while (next != null && cnt < 400) {
+    while (next != null) {
         allMessages.add(next)
         next = poll()
-        cnt++
     }
-    if (next != null) allMessages.add(next)
     return allMessages
 }
 
@@ -186,7 +187,7 @@ fun StoredTestEventMetadata.tryToGetTestEvents(): Collection<BatchedStoredTestEv
 @ExperimentalCoroutinesApi
 @InternalCoroutinesApi
 fun <T> ReceiveChannel<T>.chunked(size: Int, time: Long, capacity: Int = 1000) =
-    GlobalScope.produce<List<T>>(onCompletion = consumes()) {
+    GlobalScope.produce<List<T>>(capacity = capacity, onCompletion = consumes()) {
         while (true) {
             val chunk = ArrayList<T>(size)
             val ticker = ticker(time)
@@ -208,3 +209,39 @@ fun <T> ReceiveChannel<T>.chunked(size: Int, time: Long, capacity: Int = 1000) =
             }
         }
     }
+
+@InternalCoroutinesApi
+@ExperimentalCoroutinesApi
+@ObsoleteCoroutinesApi
+fun <T> Flow<T>.chunked(size: Int, duration: Duration): Flow<List<T>> {
+    return flow {
+        coroutineScope {
+            val buffer = ArrayList<T>(size)
+            val ticker = ticker(duration.toMillis())
+            try {
+                val upstreamValues = produce { collect { send(it) } }
+
+                whileSelect {
+                    ticker.onReceive {
+                        false
+                    }
+                    upstreamValues.onReceive {
+                        buffer += it
+                        buffer.size < size
+                    }
+                }
+
+                if (buffer.isNotEmpty()) {
+                    emit(buffer.toList())
+                    buffer.clear()
+                }
+
+            } catch (e: ClosedReceiveChannelException) {
+                return@coroutineScope
+            } finally {
+                if (buffer.isNotEmpty()) emit(buffer.toList())
+                ticker.cancel()
+            }
+        }
+    }
+}
