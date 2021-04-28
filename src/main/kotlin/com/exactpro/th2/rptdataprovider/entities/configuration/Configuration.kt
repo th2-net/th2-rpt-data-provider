@@ -40,7 +40,7 @@ class CustomConfigurationClass {
     val enableCaching: Boolean = true
     val notModifiedObjectsLifetime: Int = 3600
     val rarelyModifiedObjects: Int = 500
-    val maxMessagesLimit: Int = 100
+    val maxMessagesLimit: Int = 500
     val messageSearchPipelineBuffer: Int = 25
     val sseEventSearchStep: Long = 200
     val keepAliveTimeout: Long = 5000
@@ -50,8 +50,8 @@ class CustomConfigurationClass {
 
     val sseSearchDelay: Long = 5
     val rabbitBatchMergeFrequency: Long = 200
-    val rabbitBatchMergeBuffer: Long = 20
-    val rabbitMergedBatchSize: Long = 500
+    val rabbitBatchMergeBuffer: Long = 500
+    val rabbitMergedBatchSize: Long = 64
     val decodeMessageConsumerCount: Int = 8
 
     val eventSearchChunkSize: Int = 64
