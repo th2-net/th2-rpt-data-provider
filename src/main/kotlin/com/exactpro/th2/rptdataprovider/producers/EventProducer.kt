@@ -21,7 +21,6 @@ import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType.*
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
-import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.tryToGetTestEvents
@@ -151,14 +150,14 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
 
     fun fromEventMetadata(
         storedEvent: StoredTestEventMetadata,
-        batch: StoredTestEventBatchMetadata?
+        batch: StoredTestEventMetadata?
     ): BaseEventEntity {
         return BaseEventEntity(
             storedEvent,
             ProviderEventId(batch?.id, storedEvent.id),
             batch?.id,
             storedEvent.parentId?.let { parentId ->
-                if (batch?.let { storedEvent.tryToGetTestEvents()?.firstOrNull { it.id == parentId } } != null) {
+                if (batch?.tryToGetTestEvents()?.firstOrNull { it.id == parentId }  != null) {
                     ProviderEventId(batch?.id, parentId)
                 } else {
                     ProviderEventId(null, parentId)

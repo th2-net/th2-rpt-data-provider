@@ -138,7 +138,7 @@ class SearchEventsHandler(
                     parentEventCounter.checkCountAndGet(
                         eventProducer.fromEventMetadata(
                             StoredTestEventMetadata(it),
-                            batch.batchMetadata
+                            batch
                         )
                     )
                 }
