@@ -17,7 +17,6 @@
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
 import com.exactpro.cradle.messages.StoredMessageBatch
-import com.exactpro.th2.common.grpc.Direction
 import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.common.grpc.RawMessageBatch
@@ -26,14 +25,14 @@ import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.chunked
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.logMetrics
-import com.exactpro.th2.rptdataprovider.receiveAvailable
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import mu.KotlinLogging
+import org.apache.commons.lang3.exception.ExceptionUtils
+import java.io.IOException
+import java.lang.Exception
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentSkipListSet
-import java.util.concurrent.atomic.AtomicLong
-import kotlin.random.Random
 
 class RabbitMqService(private val configuration: Configuration) {
 
@@ -84,12 +83,6 @@ class RabbitMqService(private val configuration: Configuration) {
     @ExperimentalCoroutinesApi
     @InternalCoroutinesApi
     private val messageDecoder = GlobalScope.launch {
-        launch {
-            while (true) {
-                println(decodeRequests.size)
-                delay(5000)
-            }
-        }
         for (i in 1..decodeMessageConsumerCount) {
             launch {
                 decodeMessage()
@@ -137,23 +130,30 @@ class RabbitMqService(private val configuration: Configuration) {
 
                 val requests = batches.flatMap { it.requests }
 
-//                batchesMap.map { messages ->
-//                    val batch = mergeBatches(messages)
-//                    sendMessageBatchToRabbit(batch, requestsMaps.getValue(messages.key))
-//                }
-
                 try {
-                    withTimeout(responseTimeout * 200) {
-                        delay(Random.nextLong(0, 100))
-//                        requests.map { async { it.get() } }.awaitAll()
-//                            .also { logger.debug { "codec response received $requestDebugInfo" } }
+                    batchesMap.map { messages ->
+                        val batch = mergeBatches(messages)
+                        sendMessageBatchToRabbit(batch, requestsMaps.getValue(messages.key))
                     }
-                } catch (e: TimeoutCancellationException) {
+
+                    withTimeout(responseTimeout) {
+                        requests.map { async { it.get() } }.awaitAll()
+                            .also { logger.debug { "codec response received $requestDebugInfo" } }
+                    }
+                } catch (e: Exception) {
                     withContext(NonCancellable) {
-                        logger.error { "unable to parse messages $requestDebugInfo - timed out after $responseTimeout milliseconds" }
-                        requests.map { request ->
+                        when (e) {
+                            is TimeoutCancellationException ->
+                                logger.error { "unable to parse messages $requestDebugInfo - timed out after $responseTimeout milliseconds" }
+                            else -> {
+                                logger.error(e) { "exception when send message $requestDebugInfo" }
+                                val rootCause = ExceptionUtils.getRootCause(e)
+                                requests.forEach { it.exception = rootCause }
+                            }
+                        }
+
+                        requests.onEach { request ->
                             decodeRequests.remove(request.id)
-                            request
                         }.forEach {
                             try {
                                 it.sendMessage(null)
@@ -161,7 +161,6 @@ class RabbitMqService(private val configuration: Configuration) {
                                 logger.error { "cancelled channel from message: '${it.rawMessage.metadata.id}'" }
                             }
                         }
-                        requests.forEach { if (!it.messageIsSend) it.sendMessage(null) }
                     }
                 }
             }
@@ -177,6 +176,7 @@ class RabbitMqService(private val configuration: Configuration) {
             messageBuffer.send(BatchRequest(messageBatch, rawBatch, this))
 
             rawBatch.map { async { it.get(); it } }.awaitAll()
+                .onEach { message -> message.exception?.let { throw it } }
         }
     }
 
@@ -209,9 +209,8 @@ class RabbitMqService(private val configuration: Configuration) {
                 if (!alreadyRequested) {
                     try {
                         configuration.messageRouterRawBatch.sendAll(batch, firstId?.connectionId?.sessionAlias)
-                        configuration.messageRouterRawBatch.sendAll(batch, firstId?.connectionId?.sessionAlias)
                         logger.debug { "codec request published $requestDebugInfo" }
-                    } catch (e: Exception) {
+                    } catch (e: IOException) {
                         logger.error(e) { "cannot send message $requestDebugInfo" }
                     }
                 }
