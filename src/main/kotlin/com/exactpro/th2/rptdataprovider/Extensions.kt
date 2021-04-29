@@ -20,6 +20,7 @@ import com.exactpro.cradle.messages.StoredMessageFilter
 import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
+import com.exactpro.th2.rptdataprovider.services.rabbitmq.BatchRequest
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.prometheus.client.Gauge
 import io.prometheus.client.Histogram
@@ -185,11 +186,12 @@ fun StoredTestEventMetadata.tryToGetTestEvents(): Collection<BatchedStoredTestEv
 @ObsoleteCoroutinesApi
 @ExperimentalCoroutinesApi
 @InternalCoroutinesApi
-fun <T> ReceiveChannel<T>.chunked(size: Int, time: Long, capacity: Int = 1000) =
-    GlobalScope.produce<List<T>>(capacity = capacity, onCompletion = consumes()) {
+fun ReceiveChannel<BatchRequest>.chunked(size: Int, time: Long, capacity: Int = 1000) =
+    GlobalScope.produce<List<BatchRequest>>(capacity = capacity, onCompletion = consumes()) {
         while (true) {
-            val chunk = ArrayList<T>(size)
+            val chunk = ArrayList<BatchRequest>()
             val ticker = ticker(time)
+            var messageCount = 0
             try {
                 whileSelect {
                     ticker.onReceive {
@@ -197,7 +199,8 @@ fun <T> ReceiveChannel<T>.chunked(size: Int, time: Long, capacity: Int = 1000) =
                     }
                     this@chunked.onReceive {
                         chunk += it
-                        chunk.size < size
+                        messageCount += it.batch.messageCount
+                        messageCount < size
                     }
                 }
             } catch (e: ClosedReceiveChannelException) {

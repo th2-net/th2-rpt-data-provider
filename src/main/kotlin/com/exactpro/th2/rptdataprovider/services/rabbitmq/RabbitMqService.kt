@@ -25,6 +25,7 @@ import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.chunked
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.logMetrics
+import com.exactpro.th2.rptdataprovider.logTime
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import mu.KotlinLogging
@@ -188,13 +189,13 @@ class RabbitMqService(private val configuration: Configuration) {
 
     suspend fun decodeBatch(messageBatch: StoredMessageBatch): List<MessageRequest> {
         return coroutineScope {
+            val rawBatch = messageBatch.messages
+                .map { RawMessage.parseFrom(it.content) }
+                .map { MessageRequest.build(it) }
+
+            messageBuffer.send(BatchRequest(messageBatch, rawBatch, this))
+
             logMetrics(rabbitMqMessageParseMetrics) {
-                val rawBatch = messageBatch.messages
-                    .map { RawMessage.parseFrom(it.content) }
-                    .map { MessageRequest.build(it) }
-
-                messageBuffer.send(BatchRequest(messageBatch, rawBatch, this))
-
                 rawBatch.map { async { it.get(); it } }.awaitAll()
                     .onEach { message -> message.exception?.let { throw it } }
             }
