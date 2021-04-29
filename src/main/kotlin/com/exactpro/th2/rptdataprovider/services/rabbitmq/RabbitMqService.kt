@@ -85,7 +85,7 @@ class RabbitMqService(private val configuration: Configuration) {
     @ExperimentalCoroutinesApi
     @InternalCoroutinesApi
     private val messageDecoder = GlobalScope.launch {
-        for (i in 1..decodeMessageConsumerCount) {
+        repeat(decodeMessageConsumerCount) {
             launch {
                 decodeMessage()
             }
