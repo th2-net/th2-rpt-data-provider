@@ -16,17 +16,21 @@
 
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
-import com.exactpro.th2.common.grpc.*
+import com.exactpro.cradle.messages.StoredMessageBatch
+import com.exactpro.th2.common.grpc.Message
+import com.exactpro.th2.common.grpc.MessageID
+import com.exactpro.th2.common.grpc.RawMessage
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import java.util.UUID
+import java.util.*
 
 data class MessageRequest(
     val id: MessageID,
     val rawMessage: RawMessage,
     private val channel: Channel<Message?>,
     private val result: Deferred<Message?>,
-    private val requestId: UUID = UUID.randomUUID()
+    private val requestId: UUID = UUID.randomUUID(),
+    var exception: Throwable? = null
 ) : Comparable<MessageRequest> {
 
     var messageIsSend: Boolean = false
@@ -77,3 +81,10 @@ data class MessageRequest(
         return requestId.compareTo(other.requestId)
     }
 }
+
+
+data class BatchRequest(
+    val batch: StoredMessageBatch,
+    val requests: List<MessageRequest>,
+    val context: CoroutineScope
+)
