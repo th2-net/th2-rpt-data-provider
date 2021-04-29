@@ -65,21 +65,36 @@ class RabbitMqService(private val configuration: Configuration) {
 
     private val receiveChannel = configuration.messageRouterParsedBatch.subscribeAll(
         MessageListener { _, decodedBatch ->
-            decodedBatch.messagesList.forEach { message ->
+            decodedBatch.messagesList.groupBy { it.metadata.id.sequence }.forEach { (_, messages) ->
 
-                val messageId = message.metadata.id
+                val messageId = messages.first().metadata.id.run {
+                    when (subsequenceCount) {
+                        0 -> this
+                        else -> toBuilder().clearSubsequence().build()
+                    }
+                }
 
                 decodeRequests.remove(messageId)?.let { match ->
                     match.forEach {
-                        GlobalScope.launch { it.sendMessage(message) }
+                        GlobalScope.launch {
+                            val message = when (messages.size) {
+                                1 -> messages[0]
+                                else -> messages[0].toBuilder().run {
+                                    messages.drop(1).forEach { mergeFrom(it) }
+                                    metadataBuilder.messageType = messages.joinToString("/") { it.metadata.messageType }
+                                    build()
+                                }
+                            }
+                            it.sendMessage(message)
+                        }
                     }
                 }
             }
-
             logger.debug { "${decodeRequests.size} decode requests remaining" }
         },
         "from_codec"
     )
+
 
     @ObsoleteCoroutinesApi
     @ExperimentalCoroutinesApi
