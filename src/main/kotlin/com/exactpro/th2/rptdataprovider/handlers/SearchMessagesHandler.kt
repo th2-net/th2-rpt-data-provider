@@ -438,7 +438,7 @@ class SearchMessagesHandler(
         logger.debug { "pulling more messages (streams=${streamsInfo} direction=$timelineDirection perStreamLimit=$perStreamLimit)" }
         return coroutineScope {
             val startIdStream = messageId?.let { Pair(it.streamName, it.direction) }
-            streamsInfo.map { stream ->
+            streamsInfo.flatMap { stream ->
                 val pulled =
                     pullMoreWrapped(
                         stream.lastElement, perStreamLimit, timelineDirection,
@@ -453,7 +453,7 @@ class SearchMessagesHandler(
                         it
                     }
                 }
-            }.flatten().let { list ->
+            }.let { list ->
                 if (timelineDirection == AFTER) {
                     list.sortedBy { it.message.timestamp }
                 } else {
