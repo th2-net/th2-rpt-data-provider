@@ -439,21 +439,24 @@ class SearchMessagesHandler(
         return coroutineScope {
             val startIdStream = messageId?.let { Pair(it.streamName, it.direction) }
             streamsInfo.map { stream ->
-                val pulled =
-                    pullMoreWrapped(
-                        stream.lastElement, perStreamLimit, timelineDirection,
-                        stream.isFirstPull, parentContext
-                    )
+                async {
+                    val pulled =
+                        pullMoreWrapped(
+                            stream.lastElement, perStreamLimit, timelineDirection,
+                            stream.isFirstPull, parentContext
+                        )
 
-                dropUntilInRangeInOppositeDirection(startTimestamp, stream, pulled, timelineDirection).let {
-                    stream.update(pulled.size, perStreamLimit, timelineDirection, it)
-                    if (stream.stream == startIdStream) {
-                        it.filterNot { m -> m.message.id == messageId }
-                    } else {
-                        it
+                    dropUntilInRangeInOppositeDirection(startTimestamp, stream, pulled, timelineDirection).let {
+                        stream.update(pulled.size, perStreamLimit, timelineDirection, it)
+                        if (stream.stream == startIdStream) {
+                            it.filterNot { m -> m.message.id == messageId }
+                        } else {
+                            it
+                        }
                     }
                 }
-            }.flatten().let { list ->
+            }.awaitAll()
+                .flatten().let { list ->
                 if (timelineDirection == AFTER) {
                     list.sortedBy { it.message.timestamp }
                 } else {
