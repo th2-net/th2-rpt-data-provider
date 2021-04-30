@@ -135,15 +135,16 @@ class RabbitMqService(private val configuration: Configuration) {
 
                 try {
                     logMetrics(rabbitMqBatchParseMetrics) {
-                        batchesMap.map { messages ->
-                            val batch = mergeBatches(messages)
-                            sendMessageBatchToRabbit(batch, requestsMaps.getValue(messages.key))
-                        }
-
-                        withTimeout(responseTimeout) {
-                            requests.map { async { it.get() } }.awaitAll()
-                                .also { logger.debug { "codec response received $requestDebugInfo" } }
-                        }
+                        requests.forEach { it.sendMessage(null) }
+//                        batchesMap.map { messages ->
+//                            val batch = mergeBatches(messages)
+//                            sendMessageBatchToRabbit(batch, requestsMaps.getValue(messages.key))
+//                        }
+//
+//                        withTimeout(responseTimeout) {
+//                            requests.map { async { it.get() } }.awaitAll()
+//                                .also { logger.debug { "codec response received $requestDebugInfo" } }
+//                        }
                     }
                 } catch (e: Exception) {
                     withContext(NonCancellable) {
