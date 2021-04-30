@@ -21,17 +21,18 @@ import com.exactpro.th2.rptdataprovider.entities.filters.Filter
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
+import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
 class EventStatusFilter private constructor(
     private var status: Boolean, override var negative: Boolean = false
-) : Filter<Event> {
+) : Filter<BaseEventEntity> {
     companion object {
         private const val failedStatus = "failed"
         private const val passedStatus = "passed"
 
-        suspend fun build(requestMap: Map<String, List<String>>, cradleService: CradleService): Filter<Event> {
+        suspend fun build(requestMap: Map<String, List<String>>, cradleService: CradleService): Filter<BaseEventEntity> {
             val status = requestMap["${filterInfo.name}-value"]?.first()?.toLowerCase()
                 ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
 
@@ -55,7 +56,7 @@ class EventStatusFilter private constructor(
         )
     }
 
-    override fun match(element: Event): Boolean {
+    override fun match(element: BaseEventEntity): Boolean {
         return negative.xor(status == element.successful)
     }
 

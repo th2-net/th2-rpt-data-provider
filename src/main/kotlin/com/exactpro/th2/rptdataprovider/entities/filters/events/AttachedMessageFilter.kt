@@ -21,7 +21,10 @@ import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestExcept
 import com.exactpro.th2.rptdataprovider.entities.filters.Filter
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
+import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType
+import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType.*
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
+import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
@@ -29,11 +32,11 @@ class AttachedMessageFilter private constructor(
     private var eventIds: Set<String>,
     override var negative: Boolean
 ) :
-    Filter<Event> {
+    Filter<BaseEventEntity> {
 
     companion object {
 
-        suspend fun build(requestMap: Map<String, List<String>>, cradleService: CradleService): Filter<Event> {
+        suspend fun build(requestMap: Map<String, List<String>>, cradleService: CradleService): Filter<BaseEventEntity> {
             return AttachedMessageFilter(
                 negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false,
                 eventIds = requestMap["${filterInfo.name}-values"]
@@ -55,13 +58,14 @@ class AttachedMessageFilter private constructor(
                         "arfq01fix01:second:1604492791034943949"
                     )
                 )
-            }
+            },
+            NEED_ATTACHED_MESSAGES
         )
     }
 
 
-    override fun match(element: Event): Boolean {
-        return negative.xor(eventIds.contains(element.eventId))
+    override fun match(element: BaseEventEntity): Boolean {
+        return negative.xor(eventIds.contains(element.id.toString()))
     }
 
     override fun getInfo(): FilterInfo {

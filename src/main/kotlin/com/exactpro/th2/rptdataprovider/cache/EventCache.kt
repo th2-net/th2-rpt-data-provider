@@ -17,6 +17,7 @@
 package com.exactpro.th2.rptdataprovider.cache
 
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
+import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import mu.KotlinLogging
@@ -32,7 +33,7 @@ class EventCache(private val timeout: Long, size: Long, private val eventProduce
     private val cacheManager = CacheManagerBuilder.newCacheManagerBuilder().build(true)
     private val logger = KotlinLogging.logger { }
 
-    data class CachedEvent(val event: Event, val isBatched: Boolean, val cachedAt: Instant)
+    data class CachedEvent(val event: BaseEventEntity, val isBatched: Boolean, val cachedAt: Instant)
 
     private val cache: Cache<String, CachedEvent> = cacheManager.createCache(
         "events",
@@ -43,7 +44,7 @@ class EventCache(private val timeout: Long, size: Long, private val eventProduce
         ).build()
     )
 
-    private fun put(id: String, event: Event) {
+    private fun put(id: String, event: BaseEventEntity) {
         if (!cache.containsKey(id)) {
             cache.put(id, CachedEvent(event, event.isBatched, Instant.now()))
         }
@@ -63,11 +64,11 @@ class EventCache(private val timeout: Long, size: Long, private val eventProduce
         }
     }
 
-    fun get(id: String): Event? {
+    fun get(id: String): BaseEventEntity? {
         return validateAndReturn(id)?.event
     }
 
-    suspend fun getOrPut(id: String): Event {
+    suspend fun getOrPut(id: String): BaseEventEntity {
         return validateAndReturn(id)?.event
             ?: eventProducer.fromId(ProviderEventId(id)).also {
                 put(id, it)

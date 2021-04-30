@@ -20,16 +20,19 @@ import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestExcept
 import com.exactpro.th2.rptdataprovider.entities.filters.Filter
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
+import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType
+import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType.NEED_BODY
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
+import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
 class EventBodyFilter private constructor(
     private var body: List<String>, override var negative: Boolean = false
-) : Filter<Event> {
+) : Filter<BaseEventEntity> {
 
     companion object {
-        suspend fun build(requestMap: Map<String, List<String>>, cradleService: CradleService): Filter<Event> {
+        suspend fun build(requestMap: Map<String, List<String>>, cradleService: CradleService): Filter<BaseEventEntity> {
             return EventBodyFilter(
                 negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false,
                 body = requestMap["${filterInfo.name}-values"]
@@ -43,11 +46,12 @@ class EventBodyFilter private constructor(
             mutableListOf<Parameter>().apply {
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("values", FilterParameterType.STRING_LIST, null, "FGW, ..."))
-            }
+            },
+            NEED_BODY
         )
     }
 
-    override fun match(element: Event): Boolean {
+    override fun match(element: BaseEventEntity): Boolean {
         return negative.xor(body.any { item ->
             element.body?.toLowerCase()?.contains(item.toLowerCase()) ?: false
         })
