@@ -34,12 +34,13 @@ class CustomConfigurationClass {
     var ioDispatcherThreadPoolSize: Int = 10
     var codecResponseTimeout: Int = 6000
     var codecCacheSize: Int = 100
+    var codecBatchesCacheSize: Int = 100
+
     var checkRequestsAliveDelay: Long = 2000
     val enableCaching: Boolean = true
     val notModifiedObjectsLifetime: Int = 3600
     val rarelyModifiedObjects: Int = 500
-    val frequentlyModifiedObjects: Int = 100
-    val maxMessagesLimit: Int = 100
+    val maxMessagesLimit: Int = 500
     val messageSearchPipelineBuffer: Int = 25
     val sseEventSearchStep: Long = 200
     val keepAliveTimeout: Long = 5000
@@ -48,10 +49,17 @@ class CustomConfigurationClass {
     val cradleDispatcherPoolSize: Long = 1
 
     val sseSearchDelay: Long = 5
+    val rabbitBatchMergeFrequency: Long = 200
+    val rabbitBatchMergeBuffer: Long = 500
+    val rabbitMergedBatchSize: Long = 16
+    val decodeMessageConsumerCount: Int = 64
+
+    val eventSearchChunkSize: Int = 64
 
     override fun toString(): String {
-        return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, clientCacheTimeout=$clientCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, codecResponseTimeout=$codecResponseTimeout, codecCacheSize=$codecCacheSize, checkRequestsAliveDelay=$checkRequestsAliveDelay, enableCaching=$enableCaching, notModifiedObjectsLifetime=$notModifiedObjectsLifetime, rarelyModifiedObjects=$rarelyModifiedObjects, frequentlyModifiedObjects=$frequentlyModifiedObjects, maxMessagesLimit=$maxMessagesLimit, messageSearchPipelineBuffer=$messageSearchPipelineBuffer, sseEventSearchStep=$sseEventSearchStep, keepAliveTimeout=$keepAliveTimeout, dbRetryDelay=$dbRetryDelay, cradleDispatcherPoolSize=$cradleDispatcherPoolSize, sseSearchDelay=$sseSearchDelay)"
+        return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, clientCacheTimeout=$clientCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, codecResponseTimeout=$codecResponseTimeout, codecCacheSize=$codecCacheSize, codecBatchesCacheSize=$codecBatchesCacheSize, checkRequestsAliveDelay=$checkRequestsAliveDelay, enableCaching=$enableCaching, notModifiedObjectsLifetime=$notModifiedObjectsLifetime, rarelyModifiedObjects=$rarelyModifiedObjects, maxMessagesLimit=$maxMessagesLimit, messageSearchPipelineBuffer=$messageSearchPipelineBuffer, sseEventSearchStep=$sseEventSearchStep, keepAliveTimeout=$keepAliveTimeout, dbRetryDelay=$dbRetryDelay, cradleDispatcherPoolSize=$cradleDispatcherPoolSize, sseSearchDelay=$sseSearchDelay, rabbitBatchMergeFrequency=$rabbitBatchMergeFrequency, rabbitBatchMergeBuffer=$rabbitBatchMergeBuffer, rabbitMergedBatchSize=$rabbitMergedBatchSize, decodeMessageConsumerCount=$decodeMessageConsumerCount, eventSearchChunkSize=$eventSearchChunkSize)"
     }
+
 }
 
 class Configuration(args: Array<String>) {
@@ -103,6 +111,11 @@ class Configuration(args: Array<String>) {
         "100"
     )
 
+    val codecBatchesCacheSize: Variable = Variable(
+        "codecBatchesCacheSize", customConfiguration.codecBatchesCacheSize.toString(),
+        "100"
+    )
+
     val ioDispatcherThreadPoolSize: Variable =
         Variable("ioDispatcherThreadPoolSize", customConfiguration.ioDispatcherThreadPoolSize.let {
             if (it < 10) logger.warn { "The optimal value of the ioDispatcherThreadPoolSize is 10. Current: $it" }
@@ -115,8 +128,6 @@ class Configuration(args: Array<String>) {
         Variable("notModifiedObjectsLifetime", customConfiguration.notModifiedObjectsLifetime.toString(), "3600")
     val rarelyModifiedObjects: Variable =
         Variable("rarelyModifiedObjects", customConfiguration.rarelyModifiedObjects.toString(), "500")
-    val frequentlyModifiedObjects: Variable =
-        Variable("frequentlyModifiedObjects", customConfiguration.frequentlyModifiedObjects.toString(), "100")
 
     val checkRequestsAliveDelay: Variable =
         Variable("checkRequestsAliveDelay", customConfiguration.checkRequestsAliveDelay.toString(), "2000")
@@ -138,5 +149,21 @@ class Configuration(args: Array<String>) {
     val cradleDispatcherPoolSize: Variable =
         Variable("cradleDispatcherPoolSize", customConfiguration.cradleDispatcherPoolSize.toString(), "2")
 
+
     val sseSearchDelay: Variable = Variable("sseSearchDelay", customConfiguration.sseSearchDelay.toString(), "5")
+
+    val rabbitBatchMergeFrequency: Variable =
+        Variable("rabbitBatchMergeFrequency", customConfiguration.rabbitBatchMergeFrequency.toString(), "200")
+
+    val rabbitBatchMergeBuffer: Variable =
+        Variable("rabbitBatchMergeBuffer", customConfiguration.rabbitBatchMergeBuffer.toString(), "20")
+
+    val eventSearchChunkSize: Variable =
+        Variable("eventSearchChunkSize", customConfiguration.eventSearchChunkSize.toString(), "64")
+
+    val rabbitMergedBatchSize: Variable =
+        Variable("rabbitMergedBatchSize", customConfiguration.rabbitMergedBatchSize.toString(), "64")
+
+    val decodeMessageConsumerCount: Variable =
+        Variable("decodeMessageConsumerCount", customConfiguration.decodeMessageConsumerCount.toString(), "64")
 }

@@ -17,6 +17,7 @@
 package com.exactpro.th2.rptdataprovider.entities.filters.info
 
 import com.fasterxml.jackson.annotation.JsonFormat
+import com.fasterxml.jackson.annotation.JsonIgnore
 
 @JsonFormat(shape = JsonFormat.Shape.OBJECT)
 enum class FilterParameterType(val value: String) {
@@ -27,6 +28,16 @@ enum class FilterParameterType(val value: String) {
     }
 }
 
+enum class FilterSpecialType {
+    ORDINARY, NEED_BODY, NEED_ATTACHED_MESSAGES, NEED_ATTACHED_EVENTS;
+}
+
 data class Parameter(val name: String, val type: FilterParameterType, val defaultValue: Any?, val hint: String?)
 
-data class FilterInfo(val name: String, val hint: String?, val parameters: List<Parameter>)
+data class FilterInfo(
+    val name: String,
+    val hint: String?,
+    val parameters: List<Parameter>,
+    @JsonIgnore
+    val filterSpecialType: FilterSpecialType = FilterSpecialType.ORDINARY
+)

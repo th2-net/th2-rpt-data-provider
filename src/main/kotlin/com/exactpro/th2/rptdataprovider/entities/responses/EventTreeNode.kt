@@ -18,7 +18,6 @@ package com.exactpro.th2.rptdataprovider.entities.responses
 
 import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventBatchMetadata
-import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ParseEventTreeNodeException
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
@@ -31,25 +30,14 @@ data class EventTreeNode(
 
     val eventName: String,
     val eventType: String,
-    var successful: Boolean,
+    val successful: Boolean,
     val startTimestamp: Instant,
-    val childList: MutableSet<EventTreeNode>,
-    var filtered: Boolean,
 
     @JsonIgnore
     var parentEventId: ProviderEventId?,
 
     @JsonIgnore
-    val id: ProviderEventId,
-
-    @JsonIgnore
-    val batch: StoredTestEventBatchMetadata?,
-
-    @JsonIgnore
-    val batchedEvent: StoredTestEventMetadata?,
-
-    @JsonIgnore
-    val nonBatchedEvent: BatchedStoredTestEventMetadata?
+    val id: ProviderEventId
 ) {
 
     val eventId: String
@@ -66,14 +54,11 @@ data class EventTreeNode(
     constructor(
         batch: StoredTestEventBatchMetadata?,
         nonBatchedEvent: StoredTestEventMetadata?,
-        batchedEvent: BatchedStoredTestEventMetadata?,
-        filtered: Boolean
+        batchedEvent: BatchedStoredTestEventMetadata?
     ) : this(
         batch = batch,
         batchedEvent = nonBatchedEvent,
         nonBatchedEvent = batchedEvent,
-        filtered = filtered,
-
         providerEventId = ProviderEventId(
             batch?.id, nonBatchedEvent?.id ?: batchedEvent?.id ?: throw ParseEventTreeNodeException(error)
         ),
@@ -91,7 +76,6 @@ data class EventTreeNode(
         batch: StoredTestEventBatchMetadata?,
         batchedEvent: StoredTestEventMetadata?,
         nonBatchedEvent: BatchedStoredTestEventMetadata?,
-        filtered: Boolean,
         providerEventId: ProviderEventId,
         parentEventId: ProviderEventId?
     ) : this(
@@ -105,56 +89,16 @@ data class EventTreeNode(
         ?: throw ParseEventTreeNodeException(error),
 
         startTimestamp = batchedEvent?.startTimestamp ?: nonBatchedEvent?.startTimestamp
-        ?: throw ParseEventTreeNodeException(error),
-
-        childList = mutableSetOf<EventTreeNode>(),
-        filtered = filtered,
-        batch = batch,
-        batchedEvent = batchedEvent,
-        nonBatchedEvent = nonBatchedEvent
-    )
-
-    constructor(batch: StoredTestEventBatchMetadata?, event: StoredTestEventMetadata, filtered: Boolean) : this(
-        batch, event, null, filtered
-    )
-
-    constructor(batch: StoredTestEventBatchMetadata?, event: BatchedStoredTestEventMetadata, filtered: Boolean) : this(
-        batch, null, event, filtered
+        ?: throw ParseEventTreeNodeException(error)
     )
 
     constructor(batch: StoredTestEventBatchMetadata?, event: StoredTestEventMetadata) : this(
-        batch, event, null, true
+        batch, event, null
     )
 
     constructor(batch: StoredTestEventBatchMetadata?, event: BatchedStoredTestEventMetadata) : this(
-        batch, null, event, true
+        batch, null, event
     )
-
-    constructor(event: Event) : this(
-        id = ProviderEventId(event.eventId),
-        parentEventId = event.parentEventId?.let { ProviderEventId(it) },
-        eventName = event.eventName,
-        eventType = event.eventType ?: "",
-        successful = event.successful,
-        startTimestamp = event.startTimestamp,
-        childList = mutableSetOf<EventTreeNode>(),
-        filtered = false,
-        batch = null,
-        batchedEvent = null,
-        nonBatchedEvent = null
-    )
-
-
-    fun addChild(child: EventTreeNode) {
-
-        // this is a dirty hack to fail the parent if it didn't already happen properly
-        if (this.successful && !child.successful) {
-            logger.error { "inconsistent cradle data - parent event '${this.id}' is not failed, but it has at least one failed child '${child.id}'" }
-            this.successful = false
-        }
-
-        childList.add(child)
-    }
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

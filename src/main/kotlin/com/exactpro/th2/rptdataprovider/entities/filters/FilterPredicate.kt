@@ -16,11 +16,25 @@
 
 package com.exactpro.th2.rptdataprovider.entities.filters
 
-class FilterPredicate<T>(private val filters: List<Filter<T>>) {
+import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType
+
+class FilterPredicate<T>(private val filters: List<Filter<T>>, private val specialTypes: List<FilterSpecialType>) {
+
+    constructor(filters: List<Filter<T>>) : this(
+        filters = filters,
+        specialTypes = filters.map { it.getInfo().filterSpecialType }
+    )
+
+
     fun apply(element: T): Boolean {
         if (isEmpty()) return true
         return filters.all { it.match(element) }
     }
+
+    fun getSpecialTypes(): List<FilterSpecialType> {
+        return specialTypes
+    }
+
     fun isEmpty(): Boolean {
         return filters.isEmpty()
     }

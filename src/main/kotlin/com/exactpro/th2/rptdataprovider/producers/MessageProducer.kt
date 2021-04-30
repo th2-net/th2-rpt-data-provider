@@ -17,25 +17,31 @@
 package com.exactpro.th2.rptdataprovider.producers
 
 import com.exactpro.cradle.messages.StoredMessage
+import com.exactpro.cradle.messages.StoredMessageBatch
+import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.common.grpc.Direction
-import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.grpc.RawMessage
-import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.rptdataprovider.cache.CodecCache
+import com.exactpro.th2.rptdataprovider.cache.CodecCacheBatches
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
+import com.exactpro.th2.rptdataprovider.entities.responses.ParsedMessageBatch
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
+import com.exactpro.th2.rptdataprovider.services.rabbitmq.MessageRequest
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import com.google.protobuf.InvalidProtocolBufferException
 import com.google.protobuf.util.JsonFormat
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.buffer
+import kotlinx.coroutines.flow.flow
 import mu.KotlinLogging
 import java.util.*
 
 class MessageProducer(
     private val cradle: CradleService,
     private val rabbitMqService: RabbitMqService,
-    private val codecCache: CodecCache
+    private val codecCache: CodecCache,
+    private val codecCacheBatches: CodecCacheBatches
 ) {
 
     companion object {
@@ -56,21 +62,6 @@ class MessageProducer(
         }
     }
 
-    private suspend fun getProcessedMessage(rawMessage: StoredMessage): com.exactpro.th2.common.grpc.Message? {
-        return cradle.getProcessedMessageSuspend(rawMessage.id)?.let { storedMessage ->
-            storedMessage.content?.let {
-                try {
-                    com.exactpro.th2.common.grpc.Message.parseFrom(it)
-                } catch (e: Exception) {
-                    logger.error {
-                        "unable to parse message (id=${storedMessage.id}) - invalid data (${String(storedMessage.content)})"
-                    }
-                    null
-                }
-            }
-        } ?: parseMessage(rawMessage)
-    }
-
     private suspend fun getFieldName(parsedRawMessage: RawMessage?): String? {
         return try {
             parsedRawMessage?.metadata?.getField(messageProtocolDescriptor).toString()
@@ -84,64 +75,69 @@ class MessageProducer(
         return protocolName?.contains(TYPE_IMAGE) ?: false
     }
 
-    suspend fun fromRawMessage(rawMessage: StoredMessage): Message {
-        val parsedRawMessage = parseRawMessage(rawMessage)
-        val parsedRawMessageProtocol = getFieldName(parsedRawMessage)
-        val processed = if (!isImage(parsedRawMessageProtocol)) getProcessedMessage(rawMessage) else null
+    suspend fun fromRawMessage(messageBatch: StoredMessageBatch): ParsedMessageBatch {
+        return coroutineScope {
+            codecCacheBatches.get(messageBatch.id.toString())?.let {
+                return@coroutineScope it
+            }
 
-        return Message(
-            rawMessage,
-            processed?.let { JsonFormat.printer().print(processed) },
-            parsedRawMessage?.let {
-                Base64.getEncoder().encodeToString(it.body.toByteArray())
-            },
-            processed?.metadata?.messageType ?: parsedRawMessageProtocol ?: ""
-        )
+            val parsedRawMessage = messageBatch.messages.map { parseRawMessage(it) }
+            val parsedRawMessageProtocol = parsedRawMessage.firstOrNull()?.let { getFieldName(it) }
+
+            val processed: List<MessageRequest>? =
+                if (!isImage(parsedRawMessageProtocol)) parseMessage(messageBatch) else null
+
+            return@coroutineScope ParsedMessageBatch(messageBatch.id,
+                messageBatch.messages.mapIndexed { i, rawMessage ->
+                    Message(
+                        rawMessage,
+                        processed?.get(i)?.get()?.let { JsonFormat.printer().print(it) },
+                        parsedRawMessage[i]?.let {
+                            Base64.getEncoder().encodeToString(it.body.toByteArray())
+                        },
+                        processed?.get(i)?.get()?.metadata?.messageType ?: parsedRawMessageProtocol ?: ""
+                    ).also { codecCache.put(it.messageId, it) }
+                }.associateBy { it.id }
+            ).also {
+                codecCacheBatches.put(it.id.toString(), it)
+            }
+        }
     }
 
-    private suspend fun parseMessage(message: StoredMessage): com.exactpro.th2.common.grpc.Message? {
-        return codecCache.get(message.id.toString())
-            ?: let {
-                val messages = cradle.getMessageBatchSuspend(message.id)
+    private suspend fun parseMessage(batch: StoredMessageBatch): List<MessageRequest>? {
 
-                if (messages.isEmpty()) {
-                    logger.error { "unable to parse message '${message.id}' - message batch does not exist or is empty" }
-                    return null
-                }
-
-                val batch = RawMessageBatch.newBuilder().addAllMessages(
-                    messages
-                        .sortedBy { it.timestamp }
-                        .map { RawMessage.parseFrom(it.content) }
-                        .toList()
-                ).build()
-
-                try {
-                    rabbitMqService.decodeMessage(batch)
-                        .onEach { codecCache.put(getId(it.metadata.id).toString(), it) }
-                        .firstOrNull { message.id == getId(it.metadata.id) }
-                } catch (e: IllegalStateException) {
-                    logger.error(e) { "unable to parse message '${message.id}'" }
+        if (batch.isEmpty) {
+            logger.error { "unable to parse message '${batch.id}' - message batch does not exist or is empty" }
+            return null
+        }
+        return coroutineScope {
+            rabbitMqService.decodeBatch(batch).toList().let {
+                if (it.isEmpty()) {
+                    logger.error { "Decoded batch can not be empty. Batch: ${batch.id}" }
                     null
-                } ?: let {
-                    logger.error { "unable to parse message '${message.id}'" }
-                    null
+                } else {
+                    it
                 }
             }
+        }
     }
 
-    private fun getId(id: MessageID): StoredMessageId {
-        val direction =
-            if (id.direction == Direction.FIRST) com.exactpro.cradle.Direction.FIRST else com.exactpro.cradle.Direction.SECOND
-
-        return StoredMessageId(id.connectionId.sessionAlias, direction, id.sequence)
-    }
 
     suspend fun fromId(id: StoredMessageId): Message {
 
-        return fromRawMessage(
-            cradle.getMessageSuspend(id)
-                ?: throw CradleMessageNotFoundException("message '${id}' does not exist in cradle")
-        )
+        codecCache.get(id.toString())?.let { return it }
+
+        val rawBatchNullable = cradle.getMessagesBatchesSuspend(
+            StoredMessageFilterBuilder()
+                .streamName().isEqualTo(id.streamName)
+                .direction().isEqualTo(id.direction)
+                .index().isEqualTo(id.index)
+                .build()
+        ).firstOrNull()?.let { if (it.isEmpty) null else it }
+
+        return rawBatchNullable?.let { rawBatch ->
+            (codecCacheBatches.get(rawBatch.id.toString()) ?: fromRawMessage(rawBatch)).batch[id]
+        } ?: throw CradleMessageNotFoundException("message '${id}' does not exist in cradle")
     }
 }
+
