@@ -84,7 +84,7 @@ class MessageProducer(
             val parsedRawMessage = messageBatch.messages.map { parseRawMessage(it) }
             val parsedRawMessageProtocol = null //parsedRawMessage.firstOrNull()?.let { getFieldName(it) }
 
-            val processed: List<MessageRequest>? = null//parseMessage(messageBatch)
+            val processed: List<MessageRequest>? = parseMessage(messageBatch)
                // if (!isImage(parsedRawMessageProtocol)) parseMessage(messageBatch) else null
 
             return@coroutineScope ParsedMessageBatch(messageBatch.id,
