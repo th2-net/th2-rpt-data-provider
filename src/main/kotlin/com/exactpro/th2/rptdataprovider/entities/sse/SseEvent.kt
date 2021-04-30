@@ -18,6 +18,7 @@ package com.exactpro.th2.rptdataprovider.entities.sse
 
 import com.exactpro.th2.rptdataprovider.asStringSuspend
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
+import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -64,6 +65,13 @@ data class SseEvent(val data: String = "empty data", val event: EventType? = nul
             )
         }
 
+        suspend fun build(jacksonMapper: ObjectMapper, event: Event, counter: AtomicLong): SseEvent {
+            return SseEvent(
+                jacksonMapper.asStringSuspend(event),
+                EventType.EVENT,
+                counter.incrementAndGet().toString()
+            )
+        }
         suspend fun build(jacksonMapper: ObjectMapper, message: Message, counter: AtomicLong): SseEvent {
             return SseEvent(
                 jacksonMapper.asStringSuspend(message),

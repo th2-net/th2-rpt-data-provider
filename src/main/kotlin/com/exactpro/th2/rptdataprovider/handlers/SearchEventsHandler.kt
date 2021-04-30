@@ -265,6 +265,7 @@ class SearchEventsHandler(
 
         var isSearchInFuture = false
         val isSearchNext = request.searchDirection == AFTER
+
         var timeIntervals = getTimeIntervals(request, sseEventSearchStep, initTimestamp).iterator()
 
         return sequence {
@@ -348,13 +349,21 @@ class SearchEventsHandler(
                 }.onCompletion {
                     coroutineContext.cancelChildren()
                     it?.let { throwable -> throw throwable }
-                }.collect {
-                    coroutineContext.ensureActive()
-                    writer.eventWrite(SseEvent.build(jacksonMapper, it.convertToEventTreeNode(), lastEventId))
+                }.let { eventFlow ->
+                    if (request.metadataOnly) {
+                        eventFlow.collect {
+                            coroutineContext.ensureActive()
+                            writer.eventWrite(SseEvent.build(jacksonMapper, it.convertToEventTreeNode(), lastEventId))
+                        }
+                    } else {
+                        eventFlow.collect {
+                            coroutineContext.ensureActive()
+                            writer.eventWrite(SseEvent.build(jacksonMapper, it.convertToEvent(), lastEventId))
+                        }
+                    }
                 }
         }
     }
-
 
     // this is a fallback that should be deprecated after migration to cradle 1.6
     private suspend fun getDirectBatchedChildren(
