@@ -302,7 +302,7 @@ class SearchEventsHandler(
 
         var isSearchInFuture = false
         val keepOpen = request.keepOpen
-        val isSearchNext = request.searchDirection == TimeRelation.AFTER
+        val isSearchNext = request.searchDirection == AFTER
 
         var timeIntervals = getTimeIntervals(request, sseEventSearchStep, initTimestamp).iterator()
 
@@ -390,9 +390,18 @@ class SearchEventsHandler(
                 }.onCompletion {
                     coroutineContext.cancelChildren()
                     it?.let { throwable -> throw throwable }
-                }.collect {
-                    coroutineContext.ensureActive()
-                    writer.eventWrite(SseEvent.build(jacksonMapper, it.first, lastEventId))
+                }.let { eventFlow ->
+                    if (request.metadataOnly) {
+                        eventFlow.collect {
+                            coroutineContext.ensureActive()
+                            writer.eventWrite(SseEvent.build(jacksonMapper, it.first, lastEventId))
+                        }
+                    } else {
+                        eventFlow.collect {
+                            coroutineContext.ensureActive()
+                            writer.eventWrite(SseEvent.build(jacksonMapper, it.second!!, lastEventId))
+                        }
+                    }
                 }
         }
     }
