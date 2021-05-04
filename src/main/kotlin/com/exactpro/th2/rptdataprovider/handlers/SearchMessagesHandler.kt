@@ -69,14 +69,22 @@ class SearchMessagesHandler(
     data class StreamInfo(val stream: Pair<String, Direction>, val keepOpen: Boolean) {
         var lastElement: StoredMessageId? = null
             private set
+        var lastElementTime: Instant? = null
+            private set
         var isFirstPull: Boolean = true
             private set
 
-        constructor(stream: Pair<String, Direction>, startId: StoredMessageId?, keepOpen: Boolean) : this(
+        constructor(
+            stream: Pair<String, Direction>,
+            startId: StoredMessageId?,
+            time: Instant?,
+            keepOpen: Boolean
+        ) : this(
             stream = stream,
             keepOpen = keepOpen
         ) {
             lastElement = startId
+            lastElementTime = time
         }
 
         fun update(
@@ -86,7 +94,10 @@ class SearchMessagesHandler(
             filteredIdsList: List<MessageWrapper>
         ) {
             val streamIsEmpty = size < perStreamLimit
-            lastElement = changeStreamMessageIndex(streamIsEmpty, filteredIdsList, timelineDirection)
+            changeStreamMessageIndex(streamIsEmpty, filteredIdsList, timelineDirection).let {
+                lastElement = it.first
+                lastElementTime = it.second
+            }
             isFirstPull = false
         }
 
@@ -95,12 +106,17 @@ class SearchMessagesHandler(
             streamIsEmpty: Boolean,
             filteredIdsList: List<MessageWrapper>,
             timelineDirection: TimeRelation
-        ): StoredMessageId? {
+        ): Pair<StoredMessageId?, Instant?> {
             return if (timelineDirection == AFTER) {
-                filteredIdsList.lastOrNull()?.message?.id
-                    ?: if (keepOpen) lastElement else null
+                filteredIdsList.lastOrNull()?.message?.let { it.id to it.timestamp }
+                    ?: if (keepOpen) lastElement to lastElementTime else null to null
             } else {
-                if (!streamIsEmpty) filteredIdsList.firstOrNull()?.message?.id else null
+                if (!streamIsEmpty) {
+                    val lastMessage = filteredIdsList.firstOrNull()?.message
+                    lastMessage?.id to lastMessage?.timestamp
+                } else {
+                    null to null
+                }
             }
         }
     }
@@ -188,7 +204,7 @@ class SearchMessagesHandler(
         streamList: List<String>?,
         timestamp: Instant,
         keepOpen: Boolean = false
-    ): List<StreamInfo> {
+    ): MutableList<StreamInfo> {
 
         return mutableListOf<StreamInfo>().apply {
             for (stream in streamList ?: emptyList()) {
@@ -198,15 +214,15 @@ class SearchMessagesHandler(
 
                     if (storedMessageId != null) {
                         val messageBatch = cradle.getMessageBatchSuspend(storedMessageId)
+                        val nearestMessage = getNearestMessage(messageBatch, timelineDirection, timestamp)
                         add(
                             StreamInfo(
-                                Pair(stream, direction),
-                                getNearestMessage(messageBatch, timelineDirection, timestamp)?.id,
-                                keepOpen
+                                Pair(stream, direction), nearestMessage?.id,
+                                nearestMessage?.timestamp, keepOpen
                             )
                         )
                     } else {
-                        add(StreamInfo(Pair(stream, direction), null, keepOpen))
+                        add(StreamInfo(Pair(stream, direction), null, null, keepOpen))
                     }
                 }
             }
@@ -217,7 +233,7 @@ class SearchMessagesHandler(
     @FlowPreview
     private suspend fun getMessageStream(
         request: SseMessageSearchRequest,
-        streamsInfo: List<StreamInfo>,
+        streamsInfo: MutableList<StreamInfo>,
         initLimit: Int,
         messageId: StoredMessageId?,
         startTimestamp: Instant,
@@ -231,6 +247,8 @@ class SearchMessagesHandler(
                 do {
                     if (isSearchInFuture)
                         delay(sseSearchDelay * 1000)
+
+                    streamsInfo.sortBy { it.lastElementTime }
 
                     val data = pullMoreMerged(
                         streamsInfo, request.searchDirection,
@@ -439,11 +457,10 @@ class SearchMessagesHandler(
         return coroutineScope {
             val startIdStream = messageId?.let { Pair(it.streamName, it.direction) }
             streamsInfo.flatMap { stream ->
-                val pulled =
-                    pullMoreWrapped(
-                        stream.lastElement, perStreamLimit, timelineDirection,
-                        stream.isFirstPull, parentContext
-                    )
+                val pulled = pullMoreWrapped(
+                    stream.lastElement, perStreamLimit, timelineDirection,
+                    stream.isFirstPull, parentContext
+                )
 
                 dropUntilInRangeInOppositeDirection(startTimestamp, stream, pulled, timelineDirection).let {
                     stream.update(pulled.size, perStreamLimit, timelineDirection, it)
