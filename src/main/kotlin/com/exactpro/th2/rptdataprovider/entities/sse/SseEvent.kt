@@ -22,11 +22,12 @@ import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.ktor.util.*
+import org.apache.commons.lang3.exception.ExceptionUtils
 import java.util.concurrent.atomic.AtomicLong
 
 
 enum class EventType {
-    MESSAGE, EVENT, CLOSE, ERROR, KEEP_ALIVE;
+    MESSAGE, EVENT, CLOSE, ERROR, KEEP_ALIVE, WARNING;
 
     override fun toString(): String {
         return super.toString().toLowerCase()
@@ -89,6 +90,15 @@ data class SseEvent(val data: String = "empty data", val event: EventType? = nul
             return SseEvent(
                 jacksonMapper.asStringSuspend(ExceptionInfo(e.javaClass.name, e.rootCause?.message ?: e.toString())),
                 event = EventType.ERROR
+            )
+        }
+
+        suspend fun build(error: Throwable, counter: AtomicLong): SseEvent {
+            val cause = ExceptionUtils.getRootCause(error)
+            return SseEvent(
+                "Message parse error: $cause",
+                event = EventType.WARNING,
+                metadata = counter.incrementAndGet().toString()
             )
         }
     }

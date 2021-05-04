@@ -19,8 +19,12 @@ package com.exactpro.th2.rptdataprovider.entities.responses
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageBatchId
 import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.th2.rptdataprovider.entities.exceptions.ParseMessageException
+import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import kotlinx.coroutines.*
+import java.lang.Exception
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicBoolean
 
 data class MessageWrapper(
     val id: StoredMessageId,
@@ -39,7 +43,12 @@ data class MessageWrapper(
 
     suspend fun getParsedMessage(): Message {
         val parsedBatch = result.await()
-        return  parsedBatch.batch.getValue(id)
+        return parsedBatch.batch.getValue(id)
+    }
+
+    suspend fun getParsedErrors(): List<Throwable>? {
+        val parsedBatch = result.await()
+        return parsedBatch.getOrThrowErrors()
     }
 }
 
@@ -65,6 +74,20 @@ data class MessageBatch(
 
 data class ParsedMessageBatch(
     val id: StoredMessageBatchId,
-    val batch: Map<StoredMessageId, Message>
-)
+    val batch: Map<StoredMessageId, Message>,
+    val errors: List<Throwable>?
+) {
+    private var alreadyGet = AtomicBoolean(false)
+
+    fun getOrThrowErrors(): List<Throwable>? {
+        return if (!alreadyGet.get()) {
+            alreadyGet.set(true)
+            errors?.onEach {
+                if (it !is ParseMessageException) throw it
+            }
+        } else {
+            null
+        }
+    }
+}
 

@@ -32,8 +32,6 @@ import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import com.google.protobuf.InvalidProtocolBufferException
 import com.google.protobuf.util.JsonFormat
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.buffer
-import kotlinx.coroutines.flow.flow
 import mu.KotlinLogging
 import java.util.*
 
@@ -68,20 +66,24 @@ class MessageProducer(
             val parsedRawMessage = messageBatch.messages.map { parseRawMessage(it) }
 
             val processed: List<MessageRequest>? = parseMessage(messageBatch)
+            val errors = processed?.mapNotNull { it.exception }
 
             return@coroutineScope ParsedMessageBatch(messageBatch.id,
                 messageBatch.messages.mapIndexed { i, rawMessage ->
                     Message(
                         rawMessage,
-                        processed?.get(i)?.get()?.let { JsonFormat.printer().print(it) },
+                        processed?.get(i)?.getMessage()?.let { JsonFormat.printer().print(it) },
                         parsedRawMessage[i]?.let {
                             Base64.getEncoder().encodeToString(it.body.toByteArray())
                         },
-                        processed?.get(i)?.get()?.metadata?.messageType ?: ""
+                        processed?.get(i)?.getMessage()?.metadata?.messageType ?: ""
                     ).also { codecCache.put(it.messageId, it) }
-                }.associateBy { it.id }
+                }.associateBy { it.id },
+                errors
             ).also {
-                codecCacheBatches.put(it.id.toString(), it)
+                if (errors?.isEmpty() == true) {
+                    codecCacheBatches.put(it.id.toString(), it)
+                }
             }
         }
     }
