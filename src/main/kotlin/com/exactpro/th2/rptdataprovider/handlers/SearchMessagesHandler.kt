@@ -317,13 +317,16 @@ class SearchMessagesHandler(
                 async {
                     val parsedMessage = it.getParsedMessage()
                     messageCache.put(parsedMessage.messageId, parsedMessage)
-                    Pair(parsedMessage, request.filterPredicate.apply(parsedMessage))
+                    Pair(it, request.filterPredicate.apply(parsedMessage))
                 }.also { coroutineContext.ensureActive() }
             }
                 .buffer(messageSearchPipelineBuffer)
                 .map { it.await() }
                 .onEach { (message, _) ->
-                    lastScannedObject.update(message, scanCnt)
+                    lastScannedObject.update(message.getParsedMessage(), scanCnt)
+                    message.getParsedErrors()?.let { errors ->
+                        errors.forEach { writer.eventWrite(SseEvent.build(it, scanCnt)) }
+                    }
                     processedMessageCount.inc()
                 }
                 .filter { it.second }
@@ -341,7 +344,7 @@ class SearchMessagesHandler(
                 .collect {
                     coroutineContext.ensureActive()
                     writer.eventWrite(
-                        SseEvent.build(jacksonMapper, it, lastEventId)
+                        SseEvent.build(jacksonMapper, it.getParsedMessage(), lastEventId)
                     )
                 }
         }

@@ -58,7 +58,7 @@ data class MessageRequest(
         messageIsSend = true
     }
 
-    suspend fun get(): Message? {
+    suspend fun getMessage(): Message? {
         return result.await()
     }
 

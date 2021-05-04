@@ -24,11 +24,11 @@ import com.exactpro.th2.common.schema.message.MessageListener
 import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.chunked
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
+import com.exactpro.th2.rptdataprovider.entities.exceptions.ParseMessageException
 import com.exactpro.th2.rptdataprovider.logMetrics
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import mu.KotlinLogging
-import org.apache.commons.lang3.exception.ExceptionUtils
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentSkipListSet
@@ -154,21 +154,26 @@ class RabbitMqService(private val configuration: Configuration) {
                         }
 
                         withTimeout(responseTimeout) {
-                            requests.map { async { it.get() } }.awaitAll()
+                            requests.map { async { it.getMessage() } }.awaitAll()
                                 .also { logger.debug { "codec response received $requestDebugInfo" } }
                         }
                     }
                 } catch (e: Exception) {
                     withContext(NonCancellable) {
-                        when (e) {
+
+                        val exception = when (e) {
                             is TimeoutCancellationException ->
-                                logger.error { "unable to parse messages $requestDebugInfo - timed out after $responseTimeout milliseconds" }
+                                "unable to parse messages $requestDebugInfo - timed out after $responseTimeout milliseconds".let {
+                                    logger.error { it }
+                                    ParseMessageException(it)
+                                }
                             else -> {
                                 logger.error(e) { "exception when send message $requestDebugInfo" }
-                                val rootCause = ExceptionUtils.getRootCause(e)
-                                requests.forEach { it.exception = rootCause }
+                                e
                             }
                         }
+
+                        requests.forEach { it.exception = exception }
 
                         requests.onEach { request ->
                             decodeRequests.remove(request.id)
@@ -194,8 +199,7 @@ class RabbitMqService(private val configuration: Configuration) {
             messageBuffer.send(BatchRequest(messageBatch, rawBatch, this))
 
             logMetrics(rabbitMqMessageParseMetrics) {
-                rawBatch.map { async { it.get(); it } }.awaitAll()
-                    .onEach { message -> message.exception?.let { throw it } }
+                rawBatch.map { async { it.getMessage(); it } }.awaitAll()
             }
         } ?: emptyList()
     }
