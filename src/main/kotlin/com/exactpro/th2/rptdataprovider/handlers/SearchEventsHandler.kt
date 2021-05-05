@@ -45,6 +45,7 @@ import java.time.ZoneOffset
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.CoroutineContext
+import kotlin.math.log
 
 class SearchEventsHandler(
     private val cradle: CradleService,
@@ -93,7 +94,7 @@ class SearchEventsHandler(
 
 
     private suspend fun getEventsSuspend(
-        parentEvent: String?,
+        parentEvent: ProviderEventId?,
         timestampFrom: Instant,
         timestampTo: Instant,
         searchDirection: TimeRelation
@@ -101,7 +102,7 @@ class SearchEventsHandler(
         return coroutineScope {
             if (parentEvent != null) {
                 cradle.getEventsSuspend(
-                    ProviderEventId(parentEvent).eventId,
+                    parentEvent.eventId,
                     timestampFrom,
                     timestampTo
                 )
@@ -132,32 +133,34 @@ class SearchEventsHandler(
         timestampTo: Instant,
         request: SseEventSearchRequest
     ): List<BaseEventEntity> {
-        return metadata.map { it to it.tryToGetTestEvents() }.let { eventsWithBatch ->
+        return metadata.map { it to it.tryToGetTestEvents(request.parentEvent?.eventId) }.let { eventsWithBatch ->
             eventsWithBatch.map { (batch, events) ->
                 batch.id to events?.mapNotNull {
                     parentEventCounter.checkCountAndGet(
-                        eventProducer.fromEventMetadata(
-                            StoredTestEventMetadata(it),
-                            batch
-                        )
+                        eventProducer.fromEventMetadata(StoredTestEventMetadata(it), batch)
                     )
                 }
-            }.let { eventTreeNodes ->
-                val notNullEvents = eventTreeNodes.mapNotNull {
-                    if (it.second?.isNotEmpty() == true) it.first to it.second!! else null
-                }
+            }.filter { it.second?.isNotEmpty() ?: true }
+                .let { eventTreeNodes ->
+                    val notNullEvents = eventTreeNodes.mapNotNull { (batch, events) ->
+                        events?.let { batch to it }
+                    }
+                    val nullEvents = eventTreeNodes.filter { it.second == null }
 
-                val parsedEvents = eventProducer.fromBatchIdsProcessed(notNullEvents, request.filterPredicate)
+                    val parsedEvents = eventProducer.fromBatchIdsProcessed(notNullEvents, request.filterPredicate)
 
-                parsedEvents.toMutableList().apply {
-                    addAll(
-                        eventTreeNodes.filter { it.second == null }
-                            .flatMap { (batch, _) ->
-                                getDirectBatchedChildren(batch, timestampFrom, timestampTo, parentEventCounter, request)
+                    parsedEvents.toMutableList().apply {
+                        addAll(
+                            nullEvents.flatMap { (batch, _) ->
+                                getDirectBatchedChildren(batch,
+                                    timestampFrom,
+                                    timestampTo,
+                                    parentEventCounter,
+                                    request)
                             }
-                    )
+                        )
+                    }
                 }
-            }
         }
     }
 
@@ -329,11 +332,15 @@ class SearchEventsHandler(
                 .filter { request.filterPredicate.apply(it) }
                 .let {
                     if (parentEventCounter.limitForParent != null) {
-                        it.onEach { event -> parentEventCounter.update(event) }
+                        it
+                            .filter { event -> parentEventCounter.checkCountAndGet(event) != null }
+                            .onEach { event -> parentEventCounter.update(event) }
+
                     } else {
                         it
                     }
-                }.let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
+                }
+                .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
                 .onStart {
                     launch {
                         keepAlive.invoke(writer, lastScannedObject, lastEventId)
@@ -357,12 +364,12 @@ class SearchEventsHandler(
         parentEventCounter: ParentEventCounter,
         request: SseEventSearchRequest
     ): List<BaseEventEntity> {
-
         val batch = cradle.getEventSuspend(batchId)?.asBatch()
 
         return (batch?.testEvents
             ?: throw CradleEventNotFoundException("unable to get test events of batch '$batchId'"))
             .filter { it.startTimestamp.isAfter(timestampFrom) && it.startTimestamp.isBefore(timestampTo) }
+            .filter { request.parentEvent?.eventId?.let { id -> it.id == id } ?: true }
             .mapNotNull { testEvent ->
                 parentEventCounter.checkCountAndGet(eventProducer.fromStoredEvent(testEvent, batch))
             }.let { events ->
