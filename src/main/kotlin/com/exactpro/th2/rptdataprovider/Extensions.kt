@@ -178,12 +178,14 @@ suspend fun <E> ReceiveChannel<E>.receiveAvailable(): List<E> {
 fun StoredTestEventMetadata.tryToGetTestEvents(parentEventId: StoredTestEventId? = null): Collection<BatchedStoredTestEventMetadata>? {
     return try {
         this.batchMetadata?.testEvents?.let { events ->
-            parentEventId?.let { parentId ->
-                events.filter { it.id == parentId }
+            if (parentEventId != null) {
+                events.filter { it.id == parentEventId }
+            } else {
+                events
             }
         }
     } catch (e: IOException) {
-        logger.error(e) {  }
+        logger.error(e) { }
         null
     }
 }
