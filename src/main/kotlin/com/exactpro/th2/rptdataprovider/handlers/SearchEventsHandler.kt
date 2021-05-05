@@ -265,7 +265,6 @@ class SearchEventsHandler(
 
         var isSearchInFuture = false
         val isSearchNext = request.searchDirection == AFTER
-
         var timeIntervals = getTimeIntervals(request, sseEventSearchStep, initTimestamp).iterator()
 
         return sequence {

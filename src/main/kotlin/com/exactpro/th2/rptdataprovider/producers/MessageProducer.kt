@@ -46,9 +46,6 @@ class MessageProducer(
 
     companion object {
         private val logger = KotlinLogging.logger { }
-        private val messageProtocolDescriptor =
-            RawMessage.getDescriptor().findFieldByName("metadata").messageType.findFieldByName("protocol")
-        private val TYPE_IMAGE = "image"
     }
 
     private suspend fun parseRawMessage(rawMessage: StoredMessage): RawMessage? {
@@ -62,19 +59,6 @@ class MessageProducer(
         }
     }
 
-    private suspend fun getFieldName(parsedRawMessage: RawMessage?): String? {
-        return try {
-            parsedRawMessage?.metadata?.getField(messageProtocolDescriptor).toString()
-        } catch (e: Exception) {
-            logger.error(e) { "Field: '${messageProtocolDescriptor.name}' does not exist in message: $parsedRawMessage " }
-            null
-        }
-    }
-
-    private fun isImage(protocolName: String?): Boolean {
-        return protocolName?.contains(TYPE_IMAGE) ?: false
-    }
-
     suspend fun fromRawMessage(messageBatch: StoredMessageBatch): ParsedMessageBatch {
         return coroutineScope {
             codecCacheBatches.get(messageBatch.id.toString())?.let {
@@ -82,10 +66,8 @@ class MessageProducer(
             }
 
             val parsedRawMessage = messageBatch.messages.map { parseRawMessage(it) }
-            val parsedRawMessageProtocol = parsedRawMessage.firstOrNull()?.let { getFieldName(it) }
 
-            val processed: List<MessageRequest>? =
-                if (!isImage(parsedRawMessageProtocol)) parseMessage(messageBatch) else null
+            val processed: List<MessageRequest>? = parseMessage(messageBatch)
 
             return@coroutineScope ParsedMessageBatch(messageBatch.id,
                 messageBatch.messages.mapIndexed { i, rawMessage ->
@@ -95,7 +77,7 @@ class MessageProducer(
                         parsedRawMessage[i]?.let {
                             Base64.getEncoder().encodeToString(it.body.toByteArray())
                         },
-                        processed?.get(i)?.get()?.metadata?.messageType ?: parsedRawMessageProtocol ?: ""
+                        processed?.get(i)?.get()?.metadata?.messageType ?: ""
                     ).also { codecCache.put(it.messageId, it) }
                 }.associateBy { it.id }
             ).also {
@@ -140,4 +122,3 @@ class MessageProducer(
         } ?: throw CradleMessageNotFoundException("message '${id}' does not exist in cradle")
     }
 }
-
