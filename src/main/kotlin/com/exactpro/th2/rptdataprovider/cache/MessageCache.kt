@@ -16,12 +16,10 @@
 
 package com.exactpro.th2.rptdataprovider.cache
 
-import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
-
 import mu.KotlinLogging
 import org.ehcache.Cache
 import org.ehcache.config.builders.CacheConfigurationBuilder
@@ -56,14 +54,6 @@ class MessageCache(configuration: Configuration, private val messageProducer: Me
             ?: messageProducer.fromId(StoredMessageId.fromString(id)).also {
                 logger.debug { "Message cache miss for id=$id" }
                 put(id, it)
-            }
-    }
-
-    suspend fun getOrPut(rawMessage: StoredMessage): Message {
-        return cache.get(rawMessage.id.toString())
-            ?: messageProducer.fromRawMessage(rawMessage).also {
-                logger.debug { "Message cache miss for id=${rawMessage.id}" }
-                put(rawMessage.id.toString(), it)
             }
     }
 }
