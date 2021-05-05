@@ -19,13 +19,15 @@ package com.exactpro.th2.rptdataprovider.entities.requests
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
+import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
+import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import java.time.Instant
 
 data class SseEventSearchRequest(
-    val filterPredicate: FilterPredicate<Event>,
+    val filterPredicate: FilterPredicate<BaseEventEntity>,
     val startTimestamp: Instant?,
-    val parentEvent: String?,
+    val parentEvent: ProviderEventId?,
     val searchDirection: TimeRelation,
     val endTimestamp: Instant?,
     val resumeFromId: String?,
@@ -43,10 +45,10 @@ data class SseEventSearchRequest(
         }
     }
 
-    constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<Event>) : this(
+    constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<BaseEventEntity>) : this(
         filterPredicate = filterPredicate,
         startTimestamp = parameters["startTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
-        parentEvent = parameters["parentEvent"]?.firstOrNull(),
+        parentEvent = parameters["parentEvent"]?.firstOrNull()?.let { ProviderEventId(it) },
         searchDirection = parameters["searchDirection"]?.firstOrNull()?.let {
             asCradleTimeRelation(it)
         } ?: TimeRelation.AFTER,
