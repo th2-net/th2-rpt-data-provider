@@ -64,20 +64,18 @@ class RabbitMqService(private val configuration: Configuration) {
 
     private val receiveChannel = configuration.messageRouterParsedBatch.subscribeAll(
         MessageListener { _, decodedBatch ->
-            GlobalScope.launch {
-                decodedBatch.messagesList.forEach { message ->
+            decodedBatch.messagesList.forEach { message ->
 
-                    val messageId = message.metadata.id
+                val messageId = message.metadata.id
 
-                    decodeRequests.remove(messageId)?.let { match ->
-                        match.forEach {
-                            GlobalScope.launch { it.sendMessage(message) }
-                        }
+                decodeRequests.remove(messageId)?.let { match ->
+                    match.forEach {
+                        GlobalScope.launch { it.sendMessage(message) }
                     }
                 }
-
-                logger.debug { "${decodeRequests.size} decode requests remaining" }
             }
+
+            logger.debug { "${decodeRequests.size} decode requests remaining" }
         },
         "from_codec"
     )
