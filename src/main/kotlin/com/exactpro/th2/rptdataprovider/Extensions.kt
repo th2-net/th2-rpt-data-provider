@@ -18,6 +18,7 @@ package com.exactpro.th2.rptdataprovider
 
 import com.exactpro.cradle.messages.StoredMessageFilter
 import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
+import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.BatchRequest
@@ -174,10 +175,15 @@ suspend fun <E> ReceiveChannel<E>.receiveAvailable(): List<E> {
 }
 
 
-fun StoredTestEventMetadata.tryToGetTestEvents(): Collection<BatchedStoredTestEventMetadata>? {
+fun StoredTestEventMetadata.tryToGetTestEvents(parentEventId: StoredTestEventId? = null): Collection<BatchedStoredTestEventMetadata>? {
     return try {
-        this.batchMetadata?.testEvents
+        this.batchMetadata?.testEvents?.let { events ->
+            parentEventId?.let { parentId ->
+                events.filter { it.id == parentId }
+            }
+        }
     } catch (e: IOException) {
+        logger.error(e) {  }
         null
     }
 }
