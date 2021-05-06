@@ -17,9 +17,12 @@
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
 import com.exactpro.cradle.messages.StoredMessageBatch
+import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.common.grpc.RawMessageBatch
+import com.exactpro.th2.common.message.addFields
+import com.exactpro.th2.common.message.messageType
 import com.exactpro.th2.common.schema.message.MessageListener
 import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.chunked
@@ -62,6 +65,24 @@ class RabbitMqService(private val configuration: Configuration) {
 
     private val decodeRequests = ConcurrentHashMap<MessageID, ConcurrentSkipListSet<MessageRequest>>()
 
+    private fun isMessageTypeUnique(messages: List<Message>): Boolean {
+        val messageTypes = messages.map { it.messageType }.toSet()
+        return messageTypes.size == messages.size
+    }
+
+    private fun mergeMessagesBody(messages: List<Message>): Map<String, Message.Builder> {
+        return if (isMessageTypeUnique(messages)) {
+            messages.associate {
+                it.messageType to Message.newBuilder().addFields(it.fieldsMap)
+            }
+        } else {
+            messages.associate {
+                val id = "${it.messageType}-${it.metadata.id.subsequenceList.joinToString("-")}"
+                id to Message.newBuilder().addFields(it.fieldsMap)
+            }
+        }
+    }
+
     private val receiveChannel = configuration.messageRouterParsedBatch.subscribeAll(
         MessageListener { _, decodedBatch ->
             decodedBatch.messagesList.groupBy { it.metadata.id.sequence }.forEach { (_, messages) ->
@@ -81,6 +102,8 @@ class RabbitMqService(private val configuration: Configuration) {
                                 else -> messages[0].toBuilder().run {
                                     messages.drop(1).forEach { mergeFrom(it) }
                                     metadataBuilder.messageType = messages.joinToString("/") { it.metadata.messageType }
+                                    clearFields()
+                                    addFields(mergeMessagesBody(messages))
                                     build()
                                 }
                             }
@@ -93,7 +116,6 @@ class RabbitMqService(private val configuration: Configuration) {
         },
         "from_codec"
     )
-
 
     @ObsoleteCoroutinesApi
     @ExperimentalCoroutinesApi
