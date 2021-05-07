@@ -72,12 +72,19 @@ class SearchEventsHandler(
         )
 
         fun checkCountAndGet(event: BaseEventEntity): BaseEventEntity? {
-            if (limitForParent == null || event.parentEventId == null) return event
+            if (limitForParent == null || event.parentEventId == null)
+                return event
+
             val count = parentEventCounter!![event.parentEventId.toString()]
-            return if (count?.let { it.get() < limitForParent } != false) {
-                event
+            return if (count != null) {
+                if (count.get() <= limitForParent) {
+                    event
+                } else {
+                    parentEventCounter.putIfAbsent(event.id.toString(), AtomicLong(Long.MAX_VALUE))
+                    null
+                }
             } else {
-                null
+                event
             }
         }
 
@@ -85,8 +92,12 @@ class SearchEventsHandler(
             if (limitForParent == null) return
 
             event.parentEventId?.let { parentId ->
-                parentEventCounter!!.getOrPut(parentId.toString(), { AtomicLong(0) }).also {
-                    it.incrementAndGet()
+                parentEventCounter!!.getOrPut(parentId.toString(), { AtomicLong(0) }).also { parentCount ->
+                    if (parentCount.get() <= limitForParent) {
+                        parentCount.incrementAndGet()
+                    } else {
+                        parentEventCounter.putIfAbsent(event.id.toString(), AtomicLong(Long.MAX_VALUE))
+                    }
                 }
             }
         }
@@ -334,8 +345,8 @@ class SearchEventsHandler(
                 .let {
                     if (parentEventCounter.limitForParent != null) {
                         it
-                            .filter { event -> parentEventCounter.checkCountAndGet(event) != null }
                             .onEach { event -> parentEventCounter.update(event) }
+                            .filter { event -> parentEventCounter.checkCountAndGet(event) != null }
 
                     } else {
                         it
