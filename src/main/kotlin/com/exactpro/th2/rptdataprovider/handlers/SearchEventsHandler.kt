@@ -388,7 +388,7 @@ class SearchEventsHandler(
         return (batch?.testEvents
             ?: throw CradleEventNotFoundException("unable to get test events of batch '$batchId'"))
             .filter { it.startTimestamp.isAfter(timestampFrom) && it.startTimestamp.isBefore(timestampTo) }
-            .filter { request.parentEvent?.eventId?.let { id -> it.id == id } ?: true }
+            .filter { request.parentEvent?.eventId?.let { id -> it.parentId == id } ?: true }
             .mapNotNull { testEvent ->
                 parentEventCounter.checkCountAndGet(eventProducer.fromStoredEvent(testEvent, batch))
             }.let { events ->
