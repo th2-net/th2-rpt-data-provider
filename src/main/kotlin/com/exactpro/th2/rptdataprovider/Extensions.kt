@@ -179,7 +179,7 @@ fun StoredTestEventMetadata.tryToGetTestEvents(parentEventId: StoredTestEventId?
     return try {
         this.batchMetadata?.testEvents?.let { events ->
             if (parentEventId != null) {
-                events.filter { it.id == parentEventId }
+                events.filter { it.parentId == parentEventId }
             } else {
                 events
             }
