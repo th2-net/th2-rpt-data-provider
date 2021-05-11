@@ -20,6 +20,7 @@ import com.exactpro.cradle.testevents.*
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType.*
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
+import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
@@ -110,16 +111,16 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
 
     suspend fun fromBatchIdsProcessed(
         eventsMetadata: List<Pair<StoredTestEventId, List<BaseEventEntity>>>,
-        filterPredicate: FilterPredicate<BaseEventEntity>
+        request: SseEventSearchRequest
     ): List<BaseEventEntity> {
         return eventsMetadata.let { events ->
-            if (filterPredicate.getSpecialTypes().contains(NEED_BODY)) {
+            if (!request.metadataOnly || request.filterPredicate.getSpecialTypes().contains(NEED_BODY)) {
                 fromBatchIdsProcessed(events)
             } else {
                 events.flatMap { it.second }
             }
         }.let {
-            if (filterPredicate.getSpecialTypes().contains(NEED_ATTACHED_MESSAGES)) {
+            if (!request.metadataOnly || request.filterPredicate.getSpecialTypes().contains(NEED_ATTACHED_MESSAGES)) {
                 setAttachedMessage(it)
             } else {
                 it
@@ -130,16 +131,16 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
 
     suspend fun fromSingleEventsProcessed(
         eventsMetadata: List<BaseEventEntity>,
-        filterPredicate: FilterPredicate<BaseEventEntity>
+        request: SseEventSearchRequest
     ): List<BaseEventEntity> {
         return eventsMetadata.let {
-            if (filterPredicate.getSpecialTypes().contains(NEED_BODY)) {
+            if (!request.metadataOnly || request.filterPredicate.getSpecialTypes().contains(NEED_BODY)) {
                 fromSingleIdsProcessed(it)
             } else {
                 it
             }
         }.let {
-            if (filterPredicate.getSpecialTypes().contains(NEED_ATTACHED_MESSAGES)) {
+            if (!request.metadataOnly || request.filterPredicate.getSpecialTypes().contains(NEED_ATTACHED_MESSAGES)) {
                 setAttachedMessage(it)
             } else {
                 it
