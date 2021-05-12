@@ -22,6 +22,8 @@ import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
+import com.exactpro.th2.rptdataprovider.grpc.GrpcEventSearchRequest
+import com.exactpro.th2.rptdataprovider.grpc.TimeRelation.*
 import java.time.Instant
 
 data class SseEventSearchRequest(
@@ -58,6 +60,42 @@ data class SseEventSearchRequest(
         keepOpen = parameters["keepOpen"]?.firstOrNull()?.toBoolean() ?: false,
         limitForParent = parameters["limitForParent"]?.firstOrNull()?.toLong(),
         metadataOnly = parameters["metadataOnly"]?.firstOrNull()?.toBoolean() ?: true
+    )
+
+    constructor(request: GrpcEventSearchRequest, filterPredicate: FilterPredicate<BaseEventEntity>) : this(
+        filterPredicate = filterPredicate,
+        startTimestamp = if (request.hasStartTimestamp())
+            request.startTimestamp.let {
+                Instant.ofEpochSecond(it.seconds, it.nanos.toLong())
+            } else null,
+        parentEvent = if (request.hasParentEvent()) {
+            ProviderEventId(request.parentEvent.id)
+        } else null,
+        searchDirection = request.searchDirection.let {
+            when (it) {
+                PREVIOUS -> TimeRelation.BEFORE
+                else -> TimeRelation.AFTER
+            }
+        },
+        endTimestamp = if (request.hasEndTimestamp())
+            request.endTimestamp.let {
+                Instant.ofEpochSecond(it.seconds, it.nanos.toLong())
+            } else null,
+        resumeFromId = if (request.hasResumeFromId()) {
+            request.resumeFromId.id
+        } else null,
+        resultCountLimit = if (request.hasResultCountLimit()) {
+            request.resultCountLimit.value
+        } else null,
+        keepOpen = if (request.hasKeepOpen()) {
+            request.keepOpen.value
+        } else false,
+        limitForParent = if (request.hasLimitForParent()) {
+            request.limitForParent.value
+        } else null,
+        metadataOnly = if (request.hasMetadataOnly()) {
+            request.metadataOnly.value
+        } else true
     )
 
     private fun checkEndTimestamp() {

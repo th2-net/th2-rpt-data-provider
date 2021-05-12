@@ -20,7 +20,9 @@ import com.exactpro.cradle.CradleManager
 import com.exactpro.th2.common.grpc.MessageBatch
 import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.schema.factory.CommonFactory
+import com.exactpro.th2.common.schema.grpc.router.GrpcRouter
 import com.exactpro.th2.common.schema.message.MessageRouter
+import com.exactpro.th2.rptdataprovider.grpc.RptDataProviderGrpcHandler
 import mu.KotlinLogging
 
 class CustomConfigurationClass {
@@ -59,7 +61,6 @@ class CustomConfigurationClass {
     override fun toString(): String {
         return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, clientCacheTimeout=$clientCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, codecResponseTimeout=$codecResponseTimeout, codecCacheSize=$codecCacheSize, codecBatchesCacheSize=$codecBatchesCacheSize, checkRequestsAliveDelay=$checkRequestsAliveDelay, enableCaching=$enableCaching, notModifiedObjectsLifetime=$notModifiedObjectsLifetime, rarelyModifiedObjects=$rarelyModifiedObjects, maxMessagesLimit=$maxMessagesLimit, messageSearchPipelineBuffer=$messageSearchPipelineBuffer, sseEventSearchStep=$sseEventSearchStep, keepAliveTimeout=$keepAliveTimeout, dbRetryDelay=$dbRetryDelay, cradleDispatcherPoolSize=$cradleDispatcherPoolSize, sseSearchDelay=$sseSearchDelay, rabbitBatchMergeFrequency=$rabbitBatchMergeFrequency, rabbitBatchMergeBuffer=$rabbitBatchMergeBuffer, rabbitMergedBatchSize=$rabbitMergedBatchSize, decodeMessageConsumerCount=$decodeMessageConsumerCount, eventSearchChunkSize=$eventSearchChunkSize)"
     }
-
 }
 
 class Configuration(args: Array<String>) {
@@ -79,6 +80,8 @@ class Configuration(args: Array<String>) {
     val messageRouterParsedBatch: MessageRouter<MessageBatch>
         get() = configurationFactory.messageRouterParsedBatch
 
+    val grpcRouter: GrpcRouter
+        get() = configurationFactory.grpcRouter
 
     private val customConfiguration =
         configurationFactory.getCustomConfiguration(CustomConfigurationClass::class.java)

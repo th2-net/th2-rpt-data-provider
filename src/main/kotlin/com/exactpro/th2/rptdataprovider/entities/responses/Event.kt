@@ -16,9 +16,18 @@
 
 package com.exactpro.th2.rptdataprovider.entities.responses
 
+import com.exactpro.cradle.Direction.FIRST
+import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.testevents.StoredTestEventWithContent
-import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
+import com.exactpro.th2.common.grpc.ConnectionID
+import com.exactpro.th2.common.grpc.EventID
+import com.exactpro.th2.common.grpc.EventStatus.FAILED
+import com.exactpro.th2.common.grpc.EventStatus.SUCCESS
+import com.exactpro.th2.common.grpc.MessageID
+import com.exactpro.th2.rptdataprovider.convertToProto
+import com.exactpro.th2.rptdataprovider.grpc.RptEvent
 import com.fasterxml.jackson.annotation.JsonRawValue
+import com.google.protobuf.ByteString
 import java.time.Instant
 
 data class Event(
@@ -38,6 +47,42 @@ data class Event(
     @JsonRawValue
     val body: String?
 ) {
+
+    private fun convertMessageIdToProto(attachedMessageIds: Set<String>): List<MessageID> {
+        return attachedMessageIds.map { id ->
+            StoredMessageId.fromString(id).let {
+                MessageID.newBuilder()
+                    .setConnectionId(ConnectionID.newBuilder().setSessionAlias(it.streamName))
+                    .setDirection(
+                        if (it.direction == FIRST)
+                            com.exactpro.th2.common.grpc.Direction.FIRST
+                        else
+                            com.exactpro.th2.common.grpc.Direction.SECOND
+                    )
+                    .setSequence(it.index)
+                    .build()
+            }
+        }
+    }
+
+    fun convertToGrpcRptEvent(): RptEvent {
+        return RptEvent.newBuilder()
+            .setEventId(EventID.newBuilder().setId(eventId))
+            .setIsBatched(isBatched)
+            .setEventName(eventName)
+            .setStartTimestamp(startTimestamp.convertToProto())
+            .setSuccessful(if (successful) SUCCESS else FAILED)
+            .let { builder ->
+                batchId?.let { builder.setBatchId(EventID.newBuilder().setId(it)) }
+                eventType?.let { builder.setEventType(it) }
+                endTimestamp?.let { builder.setEndTimestamp(it.convertToProto()) }
+                parentEventId?.let { builder.setParentEventId(EventID.newBuilder().setId(it)) }
+                attachedMessageIds?.let { builder.addAllAttachedMessageIds(convertMessageIdToProto(it)) }
+                body?.let { builder.setBody(ByteString.copyFrom(it.toByteArray())) }
+                builder
+            }.build()
+    }
+
     constructor(
         stored: StoredTestEventWithContent,
         eventId: String,
@@ -58,4 +103,6 @@ data class Event(
         attachedMessageIds = messages,
         body = body
     )
+
+
 }
