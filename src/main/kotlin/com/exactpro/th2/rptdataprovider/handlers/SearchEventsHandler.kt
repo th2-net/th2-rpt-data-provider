@@ -45,7 +45,6 @@ import java.time.ZoneOffset
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.CoroutineContext
-import kotlin.math.log
 
 class SearchEventsHandler(
     private val cradle: CradleService,
@@ -311,6 +310,9 @@ class SearchEventsHandler(
 
             flow {
                 for ((isSearchInFuture, timestamp) in timeIntervals) {
+
+                    lastScannedObject.update(timestamp.first)
+
                     if (isSearchInFuture)
                         delay(sseSearchDelay * 1000)
 
