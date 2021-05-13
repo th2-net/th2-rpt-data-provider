@@ -32,22 +32,27 @@ repositories {
     mavenCentral()
 
     maven {
-        name 'Bintray'
-        url 'https://dl.bintray.com/exactpro/th2'
+        name 'Sonatype_snapshots'
+        url 'https://s01.oss.sonatype.org/content/repositories/snapshots/'
+    }
+
+    maven {
+        name 'Sonatype_releases'
+        url 'https://s01.oss.sonatype.org/content/repositories/releases/'
     }
 }
 
 dependencies {
-    api platform('com.exactpro.th2:bom:2.10.1')
+    api platform('com.exactpro.th2:bom:3.0.0')
 
     implementation 'org.slf4j:slf4j-api'
     implementation 'org.slf4j:slf4j-log4j12'
 
-    implementation 'com.exactpro.th2:grpc-common:3.0.0'
-    implementation 'com.exactpro.th2:common:3.12.0'
+    implementation 'com.exactpro.th2:grpc-common:3.1.2'
+    implementation 'com.exactpro.th2:common:3.13.4'
 
-    implementation 'com.exactpro.th2:cradle-core:2.9.0'
-    implementation 'com.exactpro.th2:cradle-cassandra:2.9.0'
+    implementation 'com.exactpro.th2:cradle-core:2.9.1'
+    implementation 'com.exactpro.th2:cradle-cassandra:2.9.1'
 
     implementation 'io.github.microutils:kotlin-logging:1.7.10'
 
@@ -73,13 +78,13 @@ dependencies {
 jar {
     manifest {
         attributes(
-                'Created-By': "${System.getProperty('java.version')} (${System.getProperty('java.vendor')})",
-                'Specification-Title': '',
-                'Specification-Vendor': 'Exactpro Systems LLC',
-                'Implementation-Title': project.archivesBaseName,
-                'Implementation-Vendor': 'Exactpro Systems LLC',
-                'Implementation-Vendor-Id': 'com.exactpro',
-                'Implementation-Version': project.version
+            'Created-By': "${System.getProperty('java.version')} (${System.getProperty('java.vendor')})",
+            'Specification-Title': '',
+            'Specification-Vendor': 'Exactpro Systems LLC',
+            'Implementation-Title': project.archivesBaseName,
+            'Implementation-Vendor': 'Exactpro Systems LLC',
+            'Implementation-Vendor-Id': 'com.exactpro',
+            'Implementation-Version': project.version
         )
     }
 }
