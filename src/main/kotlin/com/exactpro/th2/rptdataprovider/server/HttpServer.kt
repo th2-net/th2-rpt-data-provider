@@ -129,7 +129,9 @@ class HttpServer(private val context: Context) {
 
     @InternalAPI
     private suspend fun sendErrorCode(call: ApplicationCall, e: Exception, code: HttpStatusCode) {
-        call.respondText(e.rootCause?.message ?: e.toString(), ContentType.Text.Plain, code)
+        withContext(NonCancellable) {
+            call.respondText(e.rootCause?.message ?: e.toString(), ContentType.Text.Plain, code)
+        }
     }
 
     @InternalAPI
@@ -139,12 +141,14 @@ class HttpServer(private val context: Context) {
         e: Exception,
         code: HttpStatusCode
     ) {
-        if (probe) {
-            call.respondText(
-                jacksonMapper.writeValueAsString(null), ContentType.Application.Json
-            )
-        } else {
-            sendErrorCode(call, e, code)
+        withContext(NonCancellable) {
+            if (probe) {
+                call.respondText(
+                    jacksonMapper.writeValueAsString(null), ContentType.Application.Json
+                )
+            } else {
+                sendErrorCode(call, e, code)
+            }
         }
     }
 

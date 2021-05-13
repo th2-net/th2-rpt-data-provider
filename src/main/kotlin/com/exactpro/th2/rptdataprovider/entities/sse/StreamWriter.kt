@@ -78,7 +78,10 @@ class GrpcWriter(private val writer: StreamObserver<StreamResponse>) : StreamWri
     }
 
     override suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong) {
-        TODO("Not yet implemented")
+        writer.onNext(StreamResponse.newBuilder()
+            .setLastScannedObject(lastScannedObjectInfo.convertToGrpc())
+            .build())
+        counter.incrementAndGet()
     }
 
     override suspend fun write(event: Event, lastEventId: AtomicLong) {

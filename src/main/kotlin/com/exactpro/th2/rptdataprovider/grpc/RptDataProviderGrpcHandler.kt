@@ -87,31 +87,26 @@ class RptDataProviderGrpcHandler(private val context: Context) : RptDataProvider
 
     }
 
-
     val cradleService = this.context.cradleService
-
     private val eventCache = this.context.eventCache
     private val messageCache = this.context.messageCache
     private val jacksonMapper = context.jacksonMapper
     private val checkRequestAliveDelay = context.configuration.checkRequestsAliveDelay.value.toLong()
     private val keepAliveTimeout = context.configuration.keepAliveTimeout.value.toLong()
-    private val configuration = context.configuration
 
-    val notModifiedCacheControl = this.context.cacheControlNotModified
-    val rarelyModifiedCacheControl = this.context.cacheControlRarelyModified
-
-    val searchEventsHandler = this.context.searchEventsHandler
-    val searchMessagesHandler = this.context.searchMessagesHandler
+    private val searchEventsHandler = this.context.searchEventsHandler
+    private val searchMessagesHandler = this.context.searchMessagesHandler
 
     private val eventFiltersPredicateFactory = this.context.eventFiltersPredicateFactory
     private val messageFiltersPredicateFactory = this.context.messageFiltersPredicateFactory
 
-    val sseEventSearchStep = this.context.sseEventSearchStep
+    private val sseEventSearchStep = this.context.sseEventSearchStep
 
 
-    private suspend fun checkContext() {
+    private suspend fun checkContext(context: io.grpc.Context) {
         while (coroutineContext.isActive) {
-            if (io.grpc.Context.current().isCancelled)
+            println(context.isCancelled)
+            if (context.isCancelled)
                 throw ChannelClosedException("Channel is closed")
 
             delay(checkRequestAliveDelay)
@@ -136,26 +131,20 @@ class RptDataProviderGrpcHandler(private val context: Context) : RptDataProvider
         )
     }
 
-    private fun <T> sendErrorCodeOrEmptyJson(
-        probe: Boolean, responseObserver: StreamObserver<T>, e: Exception, status: Status
-    ) {
-        if (probe) {
-//            responseObserver.onNext(Empty.getDefaultInstance())
-//            responseObserver.onCompleted()
-        } else {
-            sendErrorCode(responseObserver, e, status)
-        }
+    private fun errorLogging(e: Exception, requestName: String, stringParameters: String, type: String) {
+        logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - $type" }
     }
 
     private fun <T> handleRequest(
         responseObserver: StreamObserver<T>,
         requestName: String,
-        probe: Boolean,
         useStream: Boolean,
         request: Any?,
-        calledFun: () -> Any
+        calledFun: suspend () -> Any
     ) {
         val stringParameters = request.toString()
+        val context = io.grpc.Context.current()
+
         CoroutineScope(Dispatchers.Default).launch {
             logMetrics(if (useStream) grpcStreamRequestsProcessedInParallelQuantity else grpcSingleRequestsProcessedInParallelQuantity) {
                 measureTimeMillis {
@@ -163,15 +152,15 @@ class RptDataProviderGrpcHandler(private val context: Context) : RptDataProvider
                     try {
                         if (useStream) streamRequestGet.inc() else singleRequestGet.inc()
                         try {
-                            val function = calledFun.invoke()
                             if (useStream) {
                                 @Suppress("UNCHECKED_CAST")
                                 handleSseRequest(
                                     responseObserver as StreamObserver<StreamResponse>,
-                                    function as Streaming
+                                    context,
+                                    calledFun.invoke() as Streaming
                                 )
                             } else {
-                                handleRestApiRequest(responseObserver, probe, function as suspend () -> T)
+                                handleRestApiRequest(responseObserver, context, calledFun as suspend () -> T)
                             }
                         } catch (e: Exception) {
                             throw ExceptionUtils.getRootCause(e) ?: e
@@ -179,45 +168,45 @@ class RptDataProviderGrpcHandler(private val context: Context) : RptDataProvider
                             if (useStream) streamRequestProcessed.inc() else singleRequestProcessed.inc()
                         }
                     } catch (e: InvalidRequestException) {
-                        logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - invalid request" }
+                        errorLogging(e, requestName, stringParameters, "invalid request")
+                        sendErrorCode(responseObserver, e, Status.INVALID_ARGUMENT)
                     } catch (e: CradleObjectNotFoundException) {
-                        logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - missing cradle data" }
+                        errorLogging(e, requestName, stringParameters, "missing cradle data")
+                        sendErrorCode(responseObserver, e, Status.NOT_FOUND)
                     } catch (e: ChannelClosedException) {
-                        logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - channel closed" }
+                        errorLogging(e, requestName, stringParameters, "channel closed")
+                        sendErrorCode(responseObserver, e, Status.DEADLINE_EXCEEDED)
+                    } catch (e: CradleIdException) {
+                        errorLogging(e, requestName, stringParameters, "unexpected cradle id exception")
+                        sendErrorCode(responseObserver, e, Status.INTERNAL)
                     } catch (e: Exception) {
-                        logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - unexpected exception" }
+                        errorLogging(e, requestName, stringParameters, "unexpected exception")
+                        sendErrorCode(responseObserver, e, Status.INTERNAL)
+                    } finally {
+                        if (!context.isCancelled) {
+                            responseObserver.onCompleted()
+                        }
                     }
-                }.let { logger.debug { "request '$requestName' with parameters '$stringParameters' handled - time=${it}ms" } }
+                }.let {
+                    logger.debug { "request '$requestName' with parameters '$stringParameters' handled - time=${it}ms" }
+                }
             }
         }
     }
 
     private suspend fun <T> handleRestApiRequest(
         responseObserver: StreamObserver<T>,
-        probe: Boolean,
+        context: io.grpc.Context,
         calledFun: suspend () -> T
     ) {
         coroutineScope {
             try {
                 launch {
-                    launch {
-                        checkContext()
-                    }
-                    responseObserver.onNext(calledFun.invoke())
-                    responseObserver.onCompleted()
-                    coroutineContext.cancelChildren()
-                }.join()
-            } catch (e: Exception) {
-                when (val exception = ExceptionUtils.getRootCause(e) ?: e) {
-                    is InvalidRequestException -> sendErrorCode(responseObserver, exception, Status.INVALID_ARGUMENT)
-                    is CradleObjectNotFoundException -> sendErrorCodeOrEmptyJson(
-                        probe, responseObserver, exception, Status.NOT_FOUND
-                    )
-                    is ChannelClosedException -> sendErrorCode(responseObserver, exception, Status.DEADLINE_EXCEEDED)
-                    is CradleIdException -> sendErrorCodeOrEmptyJson(probe, responseObserver, e, Status.INTERNAL)
-                    else -> sendErrorCode(responseObserver, exception as Exception, Status.INTERNAL)
+                    checkContext(context)
                 }
-                throw e
+                responseObserver.onNext(calledFun.invoke())
+            } finally {
+                coroutineContext.cancelChildren()
             }
         }
     }
@@ -228,60 +217,52 @@ class RptDataProviderGrpcHandler(private val context: Context) : RptDataProvider
     @InternalAPI
     private suspend fun handleSseRequest(
         responseObserver: StreamObserver<StreamResponse>,
+        context: io.grpc.Context,
         calledFun: suspend (StreamWriter, suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit) -> Unit
     ) {
         coroutineScope {
-            launch {
-                try {
-                    launch {
-                        checkContext()
-                    }
-                    calledFun.invoke(GrpcWriter(responseObserver), ::keepAlive)
-                } catch (e: Exception) {
-                    val rootCause = ExceptionUtils.getRootCause(e)
-                    responseObserver.onError(rootCause)
-                } finally {
-                    responseObserver.onCompleted()
+            try {
+                launch {
+                    checkContext(context)
                 }
+                calledFun.invoke(GrpcWriter(responseObserver), ::keepAlive)
+            } finally {
                 coroutineContext.cancelChildren()
-            }.join()
+            }
         }
     }
 
 
     override fun getEvent(request: EventID, responseObserver: StreamObserver<RptEvent>) {
-        handleRequest(responseObserver, "get event", probe = true, useStream = false, request = request) {
-            suspend fun(): RptEvent {
-                return eventCache.getOrPut(request.id)
-                    .convertToEvent()
-                    .convertToGrpcRptEvent()
-            }
+        handleRequest(responseObserver, "get event", useStream = false, request = request) {
+            eventCache.getOrPut(request.id)
+                .convertToEvent()
+                .convertToGrpcRptEvent()
         }
     }
 
 
     override fun getMessage(request: MessageID, responseObserver: StreamObserver<RptMessage>) {
-        handleRequest(responseObserver, "get message", probe = true, useStream = false, request = request) {
-            suspend fun(): RptMessage {
-                return messageCache.getOrPut(
-                    StoredMessageId(
-                        request.connectionId.sessionAlias,
-                        if (request.direction == Direction.FIRST) FIRST else SECOND,
-                        request.sequence
-                    ).toString()
-                ).convertToGrpcRptMessage()
-            }
+        handleRequest(responseObserver, "get message", useStream = false, request = request) {
+            messageCache.getOrPut(
+                StoredMessageId(
+                    request.connectionId.sessionAlias,
+                    if (request.direction == Direction.FIRST) FIRST else SECOND,
+                    request.sequence
+                ).toString()
+            ).convertToGrpcRptMessage()
         }
     }
 
 
-    override fun getMessageStreams(request: Empty, responseObserver: StreamObserver<StringList>) {
-        handleRequest(responseObserver, "get message streams", probe = false, useStream = false, request = request) {
-            suspend fun(): StringList {
-                return StringList.newBuilder()
-                    .addAllListString(cradleService.getMessageStreams())
-                    .build()
-            }
+    override fun getMessageStreams(request: com.google.protobuf.Empty, responseObserver: StreamObserver<StringList>) {
+        handleRequest(responseObserver,
+            "get message streams",
+            useStream = false,
+            request = request) {
+            StringList.newBuilder()
+                .addAllListString(cradleService.getMessageStreams())
+                .build()
         }
     }
 
@@ -290,8 +271,14 @@ class RptDataProviderGrpcHandler(private val context: Context) : RptDataProvider
         grpcRequest: GrpcMessageSearchRequest,
         responseObserver: StreamObserver<StreamResponse>
     ) {
-        handleRequest(responseObserver, "grpc search message", probe = false, useStream = true, request = grpcRequest) {
-            suspend fun(w: StreamWriter, keepAlive: suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit) {
+        handleRequest(responseObserver,
+            "grpc search message",
+            useStream = true,
+            request = grpcRequest) {
+            suspend fun(
+                w: StreamWriter,
+                keepAlive: suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit
+            ) {
 
                 val filterPredicate = messageFiltersPredicateFactory.build(grpcRequest.filtersList)
                 val request = SseMessageSearchRequest(grpcRequest, filterPredicate)
@@ -307,9 +294,14 @@ class RptDataProviderGrpcHandler(private val context: Context) : RptDataProvider
         grpcRequest: GrpcEventSearchRequest,
         responseObserver: StreamObserver<StreamResponse>
     ) {
-        handleRequest(responseObserver, "grpc search events", probe = false, useStream = true, request = grpcRequest) {
-            suspend fun(w: StreamWriter, keepAlive: suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit) {
-
+        handleRequest(responseObserver,
+            "grpc search events",
+            useStream = true,
+            request = grpcRequest) {
+            suspend fun(
+                w: StreamWriter,
+                keepAlive: suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit
+            ) {
                 val filterPredicate = eventFiltersPredicateFactory.build(grpcRequest.filtersList)
                 val request = SseEventSearchRequest(grpcRequest, filterPredicate)
                 request.checkRequest()
@@ -319,81 +311,77 @@ class RptDataProviderGrpcHandler(private val context: Context) : RptDataProvider
         }
     }
 
-    override fun filtersSseMessages(request: Empty, responseObserver: StreamObserver<ListFilterName>) {
+    override fun filtersSseMessages(
+        request: com.google.protobuf.Empty,
+        responseObserver: StreamObserver<ListFilterName>
+    ) {
         handleRequest(responseObserver,
             "get message filters names",
-            probe = false,
             useStream = false,
             request = request) {
-            suspend fun(): ListFilterName {
-                return ListFilterName.newBuilder()
-                    .addAllFilterNames(
-                        messageFiltersPredicateFactory.getFiltersNames().map {
-                            FilterName.newBuilder().setFilterName(it).build()
-                        }
-                    ).build()
-            }
+            ListFilterName.newBuilder()
+                .addAllFilterNames(
+                    messageFiltersPredicateFactory.getFiltersNames().map {
+                        FilterName.newBuilder().setFilterName(it).build()
+                    }
+                ).build()
         }
     }
 
-    override fun filtersSseEvents(request: Empty, responseObserver: StreamObserver<ListFilterName>) {
+
+    override fun filtersSseEvents(
+        request: com.google.protobuf.Empty,
+        responseObserver: StreamObserver<ListFilterName>
+    ) {
         handleRequest(responseObserver,
             "get event filters names",
-            probe = false,
             useStream = false,
             request = request) {
-            suspend fun(): ListFilterName {
-                return ListFilterName.newBuilder()
-                    .addAllFilterNames(
-                        eventFiltersPredicateFactory.getFiltersNames().map {
-                            FilterName.newBuilder().setFilterName(it).build()
-                        }
-                    ).build()
-            }
+            ListFilterName.newBuilder()
+                .addAllFilterNames(
+                    eventFiltersPredicateFactory.getFiltersNames().map {
+                        FilterName.newBuilder().setFilterName(it).build()
+                    }
+                ).build()
         }
     }
 
     override fun filterSseEvents(request: FilterName, responseObserver: StreamObserver<FilterInfo>) {
-        handleRequest(responseObserver, "get event filters", probe = false, useStream = false, request = request) {
-            suspend fun(): FilterInfo {
-                return eventFiltersPredicateFactory.getFilterInfo(request.filterName).convertToProto()
-            }
+        handleRequest(responseObserver, "get event filters", useStream = false, request = request) {
+            eventFiltersPredicateFactory.getFilterInfo(request.filterName).convertToProto()
         }
     }
 
     override fun filterSseMessages(request: FilterName, responseObserver: StreamObserver<FilterInfo>) {
-        handleRequest(responseObserver, "get message filters", probe = false, useStream = false, request = request) {
-            suspend fun(): FilterInfo {
-                return messageFiltersPredicateFactory.getFilterInfo(request.filterName).convertToProto()
-            }
+        handleRequest(responseObserver,
+            "get message filters",
+            useStream = false,
+            request = request) {
+            messageFiltersPredicateFactory.getFilterInfo(request.filterName).convertToProto()
         }
     }
 
     override fun matchEvent(request: MatchRequest, responseObserver: StreamObserver<IsMatched>) {
-        handleRequest(responseObserver, "match event", probe = false, useStream = false, request = request) {
-            suspend fun(): IsMatched {
-                val filterPredicate = eventFiltersPredicateFactory.build(request.filtersList)
-                return IsMatched.newBuilder().setIsMatched(
-                    filterPredicate.apply(eventCache.getOrPut(request.eventId.id))
-                ).build()
-            }
+        handleRequest(responseObserver, "match event", useStream = false, request = request) {
+            val filterPredicate = eventFiltersPredicateFactory.build(request.filtersList)
+            IsMatched.newBuilder().setIsMatched(
+                filterPredicate.apply(eventCache.getOrPut(request.eventId.id))
+            ).build()
         }
     }
 
     override fun matchMessage(request: MatchRequest, responseObserver: StreamObserver<IsMatched>) {
-        handleRequest(responseObserver, "match message", probe = false, useStream = false, request = request) {
-            suspend fun(): IsMatched {
-                val filterPredicate = messageFiltersPredicateFactory.build(request.filtersList)
-                return IsMatched.newBuilder().setIsMatched(
-                    filterPredicate.apply(messageCache.getOrPut(
-                        StoredMessageId(
-                            request.messageId.connectionId.sessionAlias,
-                            if (request.messageId.direction == Direction.FIRST) FIRST else SECOND,
-                            request.messageId.sequence
-                        ).toString()
-                    ))
-                ).build()
-            }
+        handleRequest(responseObserver, "match message", useStream = false, request = request) {
+            val filterPredicate = messageFiltersPredicateFactory.build(request.filtersList)
+            IsMatched.newBuilder().setIsMatched(
+                filterPredicate.apply(messageCache.getOrPut(
+                    StoredMessageId(
+                        request.messageId.connectionId.sessionAlias,
+                        if (request.messageId.direction == Direction.FIRST) FIRST else SECOND,
+                        request.messageId.sequence
+                    ).toString()
+                ))
+            ).build()
         }
     }
 }

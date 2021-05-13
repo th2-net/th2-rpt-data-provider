@@ -22,6 +22,7 @@ import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.google.protobuf.Timestamp
 import io.ktor.util.*
 import java.util.concurrent.atomic.AtomicLong
 
@@ -46,6 +47,14 @@ data class LastScannedObjectInfo(var id: String = "", var timestamp: Long = 0, v
         id = message.id.toString()
         timestamp = message.timestamp.toEpochMilli()
         scanCounter = scanCnt.incrementAndGet()
+    }
+
+    fun convertToGrpc(): com.exactpro.th2.rptdataprovider.grpc.LastScannedObjectInfo {
+        return com.exactpro.th2.rptdataprovider.grpc.LastScannedObjectInfo.newBuilder()
+            .setId(id)
+            .setTimestampMillis(timestamp)
+            .setScanCounter(scanCounter)
+            .build()
     }
 }
 
