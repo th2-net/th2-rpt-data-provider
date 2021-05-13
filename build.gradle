@@ -39,7 +39,6 @@ repositories {
         name 'Sonatype_releases'
         url 'https://s01.oss.sonatype.org/content/repositories/releases/'
     }
-
 }
 
 dependencies {
