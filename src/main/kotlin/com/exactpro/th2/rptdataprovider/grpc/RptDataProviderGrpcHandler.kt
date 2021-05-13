@@ -162,6 +162,8 @@ class RptDataProviderGrpcHandler(private val context: Context) : RptDataProvider
                             } else {
                                 handleRestApiRequest(responseObserver, context, calledFun as suspend () -> T)
                             }
+
+                            responseObserver.onCompleted()
                         } catch (e: Exception) {
                             throw ExceptionUtils.getRootCause(e) ?: e
                         } finally {
@@ -182,10 +184,6 @@ class RptDataProviderGrpcHandler(private val context: Context) : RptDataProvider
                     } catch (e: Exception) {
                         errorLogging(e, requestName, stringParameters, "unexpected exception")
                         sendErrorCode(responseObserver, e, Status.INTERNAL)
-                    } finally {
-                        if (!context.isCancelled) {
-                            responseObserver.onCompleted()
-                        }
                     }
                 }.let {
                     logger.debug { "request '$requestName' with parameters '$stringParameters' handled - time=${it}ms" }
