@@ -76,13 +76,13 @@ dependencies {
 jar {
     manifest {
         attributes(
-                'Created-By': "${System.getProperty('java.version')} (${System.getProperty('java.vendor')})",
-                'Specification-Title': '',
-                'Specification-Vendor': 'Exactpro Systems LLC',
-                'Implementation-Title': project.archivesBaseName,
-                'Implementation-Vendor': 'Exactpro Systems LLC',
-                'Implementation-Vendor-Id': 'com.exactpro',
-                'Implementation-Version': project.version
+            'Created-By': "${System.getProperty('java.version')} (${System.getProperty('java.vendor')})",
+            'Specification-Title': '',
+            'Specification-Vendor': 'Exactpro Systems LLC',
+            'Implementation-Title': project.archivesBaseName,
+            'Implementation-Vendor': 'Exactpro Systems LLC',
+            'Implementation-Vendor-Id': 'com.exactpro',
+            'Implementation-Version': project.version
         )
     }
 }
