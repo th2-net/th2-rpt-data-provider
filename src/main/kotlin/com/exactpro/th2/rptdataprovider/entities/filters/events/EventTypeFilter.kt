@@ -18,6 +18,7 @@ package com.exactpro.th2.rptdataprovider.entities.filters.events
 
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.Filter
+import com.exactpro.th2.rptdataprovider.entities.filters.FilterRequest
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
@@ -31,11 +32,10 @@ class EventTypeFilter private constructor(
 ) : Filter<BaseEventEntity> {
 
     companion object {
-
-        suspend fun build(requestMap: Map<String, List<String>>, cradleService: CradleService): Filter<BaseEventEntity> {
+        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<BaseEventEntity> {
             return EventTypeFilter(
-                negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false,
-                type = requestMap["${filterInfo.name}-values"]
+                negative = filterRequest.isNegative(),
+                type = filterRequest.getValues()
                     ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
             )
         }

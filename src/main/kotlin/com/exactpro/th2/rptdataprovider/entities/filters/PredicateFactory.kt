@@ -22,7 +22,7 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import mu.KotlinLogging
 
 class PredicateFactory<T>(
-    private val filters: Map<FilterInfo, suspend (Map<String, List<String>>, CradleService) -> Filter<T>>,
+    private val filters: Map<FilterInfo, suspend (FilterRequest, CradleService) -> Filter<T>>,
     private val cradleService: CradleService
 ) {
 
@@ -32,7 +32,7 @@ class PredicateFactory<T>(
 
     private var containedFiltersInfo: Map<String, FilterInfo> = mapOf()
 
-    private var containedFiltersInit: Map<String, suspend (Map<String, List<String>>, CradleService) -> Filter<T>>
+    private var containedFiltersInit: Map<String, suspend (FilterRequest, CradleService) -> Filter<T>>
 
     init {
         containedFiltersInfo = filters.entries.associate {
@@ -48,7 +48,18 @@ class PredicateFactory<T>(
             for (filterName in requestMap["filters"] ?: emptyList()) {
                 val constructor = containedFiltersInit[filterName]
                     ?: throw InvalidRequestException("Incorrect filter name '$filterName'")
-                add(constructor(requestMap, cradleService))
+                add(constructor(HttpFilter(filterName, requestMap), cradleService))
+            }
+        }
+        return FilterPredicate(filtersList)
+    }
+
+    suspend fun build(filters: List<com.exactpro.th2.rptdataprovider.grpc.Filter>): FilterPredicate<T> {
+        val filtersList = mutableListOf<Filter<T>>().apply {
+            for (filter in filters) {
+                val constructor = containedFiltersInit[filter.name.filterName]
+                    ?: throw InvalidRequestException("Incorrect filter name '${filter.name.filterName}'")
+                add(constructor(GrpcFilter(filter.name.filterName, filter), cradleService))
             }
         }
         return FilterPredicate(filtersList)

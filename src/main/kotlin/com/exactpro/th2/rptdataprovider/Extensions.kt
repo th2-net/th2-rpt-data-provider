@@ -23,6 +23,7 @@ import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.BatchRequest
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.google.protobuf.Timestamp
 import io.prometheus.client.Gauge
 import io.prometheus.client.Histogram
 import kotlinx.coroutines.*
@@ -254,4 +255,12 @@ fun <T> Flow<T>.chunked(size: Int, duration: Duration): Flow<List<T>> {
             }
         }
     }
+}
+
+
+fun Instant.convertToProto(): Timestamp {
+    return Timestamp.newBuilder()
+        .setNanos(this.nano)
+        .setSeconds(this.epochSecond)
+        .build()
 }
