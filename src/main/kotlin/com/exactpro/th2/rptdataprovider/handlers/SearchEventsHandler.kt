@@ -133,7 +133,7 @@ class SearchEventsHandler(
         return metadata.mapNotNull {
             parentEventCounter.checkCountAndGet(eventProducer.fromEventMetadata(it, null))
         }.let { eventTreesNodes ->
-            eventProducer.fromSingleEventsProcessed(eventTreesNodes, request.filterPredicate)
+            eventProducer.fromSingleEventsProcessed(eventTreesNodes, request)
         }
     }
 
@@ -158,16 +158,12 @@ class SearchEventsHandler(
                     }
                     val nullEvents = eventTreeNodes.filter { it.second == null }
 
-                    val parsedEvents = eventProducer.fromBatchIdsProcessed(notNullEvents, request.filterPredicate)
+                    val parsedEvents = eventProducer.fromBatchIdsProcessed(notNullEvents, request)
 
                     parsedEvents.toMutableList().apply {
                         addAll(
                             nullEvents.flatMap { (batch, _) ->
-                                getDirectBatchedChildren(batch,
-                                    timestampFrom,
-                                    timestampTo,
-                                    parentEventCounter,
-                                    request)
+                                getDirectBatchedChildren(batch, timestampFrom, timestampTo, parentEventCounter, request)
                             }
                         )
                     }
@@ -392,7 +388,7 @@ class SearchEventsHandler(
             .mapNotNull { testEvent ->
                 parentEventCounter.checkCountAndGet(eventProducer.fromStoredEvent(testEvent, batch))
             }.let { events ->
-                eventProducer.fromBatchIdsProcessed(listOf(batch.id to events), request.filterPredicate)
+                eventProducer.fromBatchIdsProcessed(listOf(batch.id to events), request)
             }
     }
 }
