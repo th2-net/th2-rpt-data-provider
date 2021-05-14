@@ -5,8 +5,8 @@ on:
     branches:
     - master
     - version-*
-#     paths:
-#    - gradle.properties
+    paths:
+    - gradle.properties
 
 jobs:
   build:
