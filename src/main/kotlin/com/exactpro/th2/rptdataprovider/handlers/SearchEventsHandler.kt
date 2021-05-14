@@ -45,7 +45,6 @@ import java.time.ZoneOffset
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.CoroutineContext
-import kotlin.math.log
 
 class SearchEventsHandler(
     private val cradle: CradleService,
@@ -133,7 +132,7 @@ class SearchEventsHandler(
         return metadata.mapNotNull {
             parentEventCounter.checkCountAndGet(eventProducer.fromEventMetadata(it, null))
         }.let { eventTreesNodes ->
-            eventProducer.fromSingleEventsProcessed(eventTreesNodes, request.filterPredicate)
+            eventProducer.fromSingleEventsProcessed(eventTreesNodes, request)
         }
     }
 
@@ -158,16 +157,12 @@ class SearchEventsHandler(
                     }
                     val nullEvents = eventTreeNodes.filter { it.second == null }
 
-                    val parsedEvents = eventProducer.fromBatchIdsProcessed(notNullEvents, request.filterPredicate)
+                    val parsedEvents = eventProducer.fromBatchIdsProcessed(notNullEvents, request)
 
                     parsedEvents.toMutableList().apply {
                         addAll(
                             nullEvents.flatMap { (batch, _) ->
-                                getDirectBatchedChildren(batch,
-                                    timestampFrom,
-                                    timestampTo,
-                                    parentEventCounter,
-                                    request)
+                                getDirectBatchedChildren(batch, timestampFrom, timestampTo, parentEventCounter, request)
                             }
                         )
                     }
@@ -316,6 +311,9 @@ class SearchEventsHandler(
 
             flow {
                 for ((isSearchInFuture, timestamp) in timeIntervals) {
+
+                    lastScannedObject.update(timestamp.first)
+
                     if (isSearchInFuture)
                         delay(sseSearchDelay * 1000)
 
@@ -393,7 +391,7 @@ class SearchEventsHandler(
             .mapNotNull { testEvent ->
                 parentEventCounter.checkCountAndGet(eventProducer.fromStoredEvent(testEvent, batch))
             }.let { events ->
-                eventProducer.fromBatchIdsProcessed(listOf(batch.id to events), request.filterPredicate)
+                eventProducer.fromBatchIdsProcessed(listOf(batch.id to events), request)
             }
     }
 }
