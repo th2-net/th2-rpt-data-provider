@@ -309,7 +309,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : RptDataProvider
         }
     }
 
-    override fun filtersSseMessages(
+    override fun getMessagesFilters(
         request: com.google.protobuf.Empty,
         responseObserver: StreamObserver<ListFilterName>
     ) {
@@ -327,7 +327,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : RptDataProvider
     }
 
 
-    override fun filtersSseEvents(
+    override fun getEventsFilters(
         request: com.google.protobuf.Empty,
         responseObserver: StreamObserver<ListFilterName>
     ) {
@@ -344,15 +344,15 @@ class RptDataProviderGrpcHandler(private val context: Context) : RptDataProvider
         }
     }
 
-    override fun filterSseEvents(request: FilterName, responseObserver: StreamObserver<FilterInfo>) {
-        handleRequest(responseObserver, "get event filters", useStream = false, request = request) {
+    override fun getEventFilterInfo(request: FilterName, responseObserver: StreamObserver<FilterInfo>) {
+        handleRequest(responseObserver, "get event filter info", useStream = false, request = request) {
             eventFiltersPredicateFactory.getFilterInfo(request.filterName).convertToProto()
         }
     }
 
-    override fun filterSseMessages(request: FilterName, responseObserver: StreamObserver<FilterInfo>) {
+    override fun getMessageFilterInfo(request: FilterName, responseObserver: StreamObserver<FilterInfo>) {
         handleRequest(responseObserver,
-            "get message filters",
+            "get message filter info",
             useStream = false,
             request = request) {
             messageFiltersPredicateFactory.getFilterInfo(request.filterName).convertToProto()
