@@ -17,12 +17,14 @@
 package com.exactpro.th2.rptdataprovider.entities.sse
 
 import com.exactpro.th2.rptdataprovider.asStringSuspend
+import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.ktor.util.*
+import java.time.Instant
 import java.util.concurrent.atomic.AtomicLong
 
 
@@ -35,6 +37,10 @@ enum class EventType {
 }
 
 data class LastScannedObjectInfo(var id: String = "", var timestamp: Long = 0, var scanCounter: Long = 0) {
+
+    fun update(lastTimestamp: Instant) {
+        timestamp = lastTimestamp.toEpochMilli()
+    }
 
     fun update(event: BaseEventEntity, scanCnt: AtomicLong) {
         id = event.id.toString()
