@@ -58,7 +58,7 @@ class PredicateFactory<T>(
         val filtersList = mutableListOf<Filter<T>>().apply {
             for (filter in filters) {
                 val constructor = containedFiltersInit[filter.name.filterName]
-                    ?: throw InvalidRequestException("Incorrect filter name '${filter.name}'")
+                    ?: throw InvalidRequestException("Incorrect filter name '${filter.name.filterName}'")
                 add(constructor(GrpcFilter(filter.name.filterName, filter), cradleService))
             }
         }

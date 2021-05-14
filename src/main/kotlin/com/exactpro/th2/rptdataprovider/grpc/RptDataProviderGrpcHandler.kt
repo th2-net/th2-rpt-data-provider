@@ -32,6 +32,8 @@ import com.exactpro.th2.rptdataprovider.entities.sse.GrpcWriter
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
+import com.google.protobuf.MessageOrBuilder
+import com.google.protobuf.TextFormat
 import io.grpc.Status
 import io.grpc.stub.StreamObserver
 import io.ktor.server.engine.*
@@ -139,10 +141,10 @@ class RptDataProviderGrpcHandler(private val context: Context) : RptDataProvider
         responseObserver: StreamObserver<T>,
         requestName: String,
         useStream: Boolean,
-        request: Any?,
+        request: MessageOrBuilder?,
         calledFun: suspend () -> Any
     ) {
-        val stringParameters = request.toString()
+        val stringParameters = request?.let { TextFormat.shortDebugString(request) } ?: ""
         val context = io.grpc.Context.current()
 
         CoroutineScope(Dispatchers.Default).launch {
