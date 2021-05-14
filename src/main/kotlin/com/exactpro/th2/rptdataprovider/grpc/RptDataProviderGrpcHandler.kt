@@ -107,7 +107,6 @@ class RptDataProviderGrpcHandler(private val context: Context) : RptDataProvider
 
     private suspend fun checkContext(context: io.grpc.Context) {
         while (coroutineContext.isActive) {
-            println(context.isCancelled)
             if (context.isCancelled)
                 throw ChannelClosedException("Channel is closed")
 
