@@ -228,6 +228,7 @@ spec:
     cradleDispatcherPoolSize: 1 // number of threads in the cradle dispatcher
     sseSearchDelay: 5 // the number of seconds by which the search to the future is delayed when keepOpen = true
 
+    getEventsLimit: 100 // the maximum number of events that can be requested in the getEvents method
   pins: // pins are used to communicate with codec components to parse message data
     - name: to_codec
       connection-type: mq
