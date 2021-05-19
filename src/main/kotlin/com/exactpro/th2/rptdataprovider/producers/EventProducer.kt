@@ -29,6 +29,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import mu.KotlinLogging
+import org.ehcache.core.spi.store.Store
 import java.util.*
 
 class EventProducer(private val cradle: CradleService, private val mapper: ObjectMapper) {
@@ -53,36 +54,53 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
         }
     }
 
-
     private suspend fun fromSingleIdsProcessed(batch: List<BaseEventEntity>): List<BaseEventEntity> {
-        val requestIds = batch.map { it.id.eventId }.toSet()
+        return coroutineScope {
+            batch.zip(fromSingle(batch.map { it.id })).mapNotNull { (baseEventEntity, event) ->
+                event?.let { setBody(it, baseEventEntity) }
+            }
+        }
+    }
+
+    private suspend fun fromSingle(batch: List<ProviderEventId>): List<StoredTestEventWithContent?> {
+        val requestIds = batch.map { it.eventId }.toSet()
         val completedEvents =
             cradle.getCompletedEventSuspend(requestIds).map { it.asSingle() }.associateBy { it.id }
 
         return coroutineScope {
-            batch.mapNotNull {
-                val storedEvent = completedEvents[it.id.eventId]
-
+            batch.map {
+                val storedEvent = completedEvents[it.eventId]
                 if (storedEvent == null) {
                     logger.error { "unable to find event '$it'. It is not a valid id" }
                     null
                 } else {
-                    setBody(storedEvent, it)
+                    storedEvent
                 }
             }
         }
     }
 
     private suspend fun fromBatch(batch: StoredTestEventBatch?, ids: List<BaseEventEntity>): List<BaseEventEntity> {
-        return ids.mapNotNull {
+        return coroutineScope {
+            ids.zip(fromBatchIds(batch, ids.map { it.id })).mapNotNull { (baseEventEntity, event) ->
+                event?.let { setBody(it, baseEventEntity) }
+            }
+        }
+    }
+
+    private suspend fun fromBatchIds(
+        batch: StoredTestEventBatch?,
+        ids: List<ProviderEventId>
+    ): List<StoredTestEventWithContent?> {
+        return ids.map {
             val storedEvent =
-                batch?.getTestEvent(it.id.eventId) ?: cradle.getEventSuspend(it.id.eventId)?.asSingle()
+                batch?.getTestEvent(it.eventId) ?: cradle.getEventSuspend(it.eventId)?.asSingle()
 
             if (storedEvent == null) {
                 logger.error { "unable to find event '$it'. It is not a valid id" }
                 null
             } else {
-                setBody(storedEvent, it)
+                storedEvent
             }
         }
     }
@@ -107,6 +125,35 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
             setAttachedMessage(listOf(it)).first()
         }
     }
+
+    suspend fun fromIds(ids: List<ProviderEventId>): List<BaseEventEntity> {
+        val batchOrSingle = ids.groupBy { it.batchId }
+        val singleEvents = batchOrSingle[null]
+            ?.let { fromSingle(it).filterNotNull() }
+            ?.map { setBody(it, fromStoredEvent(it, null)) }
+            ?: emptyList()
+
+        val batchedEvents = batchOrSingle.keys
+            .filterNotNull()
+            .map { StoredTestEventId(it.toString()) }
+            .toSet()
+            .let { batchIds ->
+                val batches = cradle.getCompletedEventSuspend(batchIds)
+                    .map { event -> event.asBatch() }
+                    .associateBy { it.id }
+
+                batchIds.flatMap { batchId ->
+                    val storedEventBatch = batches[batchId]
+                    val storedEventIds = batchOrSingle.getValue(batchId)
+                    fromBatchIds(storedEventBatch, storedEventIds).mapNotNull { storedEvent ->
+                        storedEvent?.let { setBody(it, fromStoredEvent(it, storedEventBatch)) }
+                    }
+                }
+            }
+
+        return setAttachedMessage(singleEvents + batchedEvents)
+    }
+
 
     suspend fun fromBatchIdsProcessed(
         eventsMetadata: List<Pair<StoredTestEventId, List<BaseEventEntity>>>,
@@ -157,7 +204,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
             ProviderEventId(batch?.id, storedEvent.id),
             batch?.id,
             storedEvent.parentId?.let { parentId ->
-                if (batch?.tryToGetTestEvents()?.firstOrNull { it.id == parentId }  != null) {
+                if (batch?.tryToGetTestEvents()?.firstOrNull { it.id == parentId } != null) {
                     ProviderEventId(batch?.id, parentId)
                 } else {
                     ProviderEventId(null, parentId)
