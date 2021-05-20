@@ -291,7 +291,7 @@ class Main(args: Array<String>) {
 
         val sseEventSearchStep = this.context.sseEventSearchStep
 
-        val getEventsLimit = this.context.configuration.getEventsLimit.value.toInt()
+        val getEventsLimit = this.context.configuration.eventSearchChunkSize.value.toInt()
 
         System.setProperty(IO_PARALLELISM_PROPERTY_NAME, configuration.ioDispatcherThreadPoolSize.value)
 
