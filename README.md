@@ -228,7 +228,17 @@ spec:
     cradleDispatcherPoolSize: 1 // number of threads in the cradle dispatcher
     sseSearchDelay: 5 // the number of seconds by which the search to the future is delayed when keepOpen = true
 
-    getEventsLimit: 100 // the maximum number of events that can be requested in the getEvents method
+    getEventsLimit: 100 // the maximum number of events that can be requested in the getEvents methodf
+
+    rabbitBatchMergeFrequency: 200 // messages are packed into batches after a given time (rabbitBatchMergeFrequency) or when the maximum batch size is reached (rabbitMergedBatchSize)
+    rabbitMergedBatchSize: 16      // 
+    
+    rabbitBatchMergeBuffer: 500 // size of the message batch buffer 
+    
+    decodeMessageConsumerCount: 64 // number of batch handlers running in parallel
+
+    eventSearchChunkSize: 64 // the size of event chunks during sse search and the maximum size of the batch of messages upon request getEvents
+
   pins: // pins are used to communicate with codec components to parse message data
     - name: to_codec
       connection-type: mq
