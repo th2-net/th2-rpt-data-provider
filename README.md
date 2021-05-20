@@ -64,7 +64,6 @@ Message object example:
 }
 ```
 
-    
 ### SSE
 
 ##### Filters API
@@ -124,6 +123,22 @@ As example:
 - `limitForParent` - number - How many children for each parent do we want to request. Default `not limited`.
 - `keepOpen` - boolean - If the search has reached the current moment, is it necessary to wait further for the appearance of new data. Default `false`.
 - `metadataOnly` - boolean - Receive only metadata (`true`) or entire event (`false`). Default `true`.
+
+Event metadata object example (in sse):
+```
+{
+    "type": "eventTreeNode",
+    "eventId": "e21de910-fd30-11ea-8896-d7538a286e60",
+    "parentId": "e21de910-gc89-11ea-8345-d7538a286e60", 
+    "eventName": "Send 'OrderMassCancelRequest' message",
+    "eventType": "sendMessage",
+    "successful": true,
+    "startTimestamp": {
+        "nano": 209190000,
+        "epochSecond": 1600819698
+    },
+}
+```
 
 - `FILTERS`:
 - `attachedMessageId` - Filters the events that are linked to the specified message id. Parameters: `values` - text, `negative` - boolean. If `true`, will match events that do not match those specified attached message id. If `false`, will match the events by their attached message id. Defaults to `false`.  
