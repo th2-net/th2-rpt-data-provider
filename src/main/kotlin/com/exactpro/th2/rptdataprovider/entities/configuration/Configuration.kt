@@ -166,4 +166,5 @@ class Configuration(args: Array<String>) {
 
     val decodeMessageConsumerCount: Variable =
         Variable("decodeMessageConsumerCount", customConfiguration.decodeMessageConsumerCount.toString(), "64")
+
 }
