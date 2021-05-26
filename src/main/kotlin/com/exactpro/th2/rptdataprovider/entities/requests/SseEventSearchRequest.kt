@@ -21,9 +21,8 @@ import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestExcept
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
-import com.exactpro.th2.rptdataprovider.entities.responses.Event
-import com.exactpro.th2.rptdataprovider.grpc.GrpcEventSearchRequest
-import com.exactpro.th2.rptdataprovider.grpc.TimeRelation.*
+import com.exactpro.th2.dataprovider.grpc.EventSearchRequest
+import com.exactpro.th2.dataprovider.grpc.TimeRelation.*
 import java.time.Instant
 
 data class SseEventSearchRequest(
@@ -62,7 +61,7 @@ data class SseEventSearchRequest(
         metadataOnly = parameters["metadataOnly"]?.firstOrNull()?.toBoolean() ?: true
     )
 
-    constructor(request: GrpcEventSearchRequest, filterPredicate: FilterPredicate<BaseEventEntity>) : this(
+    constructor(request: EventSearchRequest, filterPredicate: FilterPredicate<BaseEventEntity>) : this(
         filterPredicate = filterPredicate,
         startTimestamp = if (request.hasStartTimestamp())
             request.startTimestamp.let {

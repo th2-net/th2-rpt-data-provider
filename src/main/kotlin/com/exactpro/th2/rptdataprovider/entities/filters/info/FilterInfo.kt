@@ -16,9 +16,9 @@
 
 package com.exactpro.th2.rptdataprovider.entities.filters.info
 
-import com.exactpro.th2.rptdataprovider.grpc.FilterInfo
-import com.exactpro.th2.rptdataprovider.grpc.FilterName
-import com.exactpro.th2.rptdataprovider.grpc.StringList
+import com.exactpro.th2.dataprovider.grpc.FilterInfo
+import com.exactpro.th2.dataprovider.grpc.FilterName
+import com.exactpro.th2.dataprovider.grpc.StringList
 import com.fasterxml.jackson.annotation.JsonFormat
 import com.fasterxml.jackson.annotation.JsonIgnore
 
@@ -26,19 +26,19 @@ import com.fasterxml.jackson.annotation.JsonIgnore
 enum class FilterParameterType(
     val value: String,
     @JsonIgnore
-    private val grpcType: com.exactpro.th2.rptdataprovider.grpc.FilterParameterType
+    private val grpcType: com.exactpro.th2.dataprovider.grpc.FilterParameterType
 ) {
-    NUMBER("number", com.exactpro.th2.rptdataprovider.grpc.FilterParameterType.NUMBER),
-    BOOLEAN("boolean", com.exactpro.th2.rptdataprovider.grpc.FilterParameterType.BOOLEAN),
-    STRING("string", com.exactpro.th2.rptdataprovider.grpc.FilterParameterType.STRING),
-    STRING_LIST("string[]", com.exactpro.th2.rptdataprovider.grpc.FilterParameterType.STRING_LIST);
+    NUMBER("number", com.exactpro.th2.dataprovider.grpc.FilterParameterType.NUMBER),
+    BOOLEAN("boolean", com.exactpro.th2.dataprovider.grpc.FilterParameterType.BOOLEAN),
+    STRING("string", com.exactpro.th2.dataprovider.grpc.FilterParameterType.STRING),
+    STRING_LIST("string[]", com.exactpro.th2.dataprovider.grpc.FilterParameterType.STRING_LIST);
 
     override fun toString(): String {
         return value
     }
 
     @JsonIgnore
-    fun toProto(): com.exactpro.th2.rptdataprovider.grpc.FilterParameterType {
+    fun toProto(): com.exactpro.th2.dataprovider.grpc.FilterParameterType {
         return grpcType
     }
 }
@@ -65,8 +65,8 @@ data class Parameter(val name: String, val type: FilterParameterType, val defaul
         }
     }
 
-    fun convertToProto(): com.exactpro.th2.rptdataprovider.grpc.Parameter {
-        return com.exactpro.th2.rptdataprovider.grpc.Parameter.newBuilder()
+    fun convertToProto(): com.exactpro.th2.dataprovider.grpc.Parameter {
+        return com.exactpro.th2.dataprovider.grpc.Parameter.newBuilder()
             .setName(name)
             .setType(type.toProto())
             .let { builder ->

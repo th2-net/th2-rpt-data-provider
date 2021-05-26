@@ -55,8 +55,8 @@ data class LastScannedObjectInfo(var id: String = "", var timestamp: Long = 0, v
         scanCounter = scanCnt.incrementAndGet()
     }
 
-    fun convertToGrpc(): com.exactpro.th2.rptdataprovider.grpc.LastScannedObjectInfo {
-        return com.exactpro.th2.rptdataprovider.grpc.LastScannedObjectInfo.newBuilder()
+    fun convertToGrpc(): com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo {
+        return com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo.newBuilder()
             .setId(id)
             .setTimestampMillis(timestamp)
             .setScanCounter(scanCounter)

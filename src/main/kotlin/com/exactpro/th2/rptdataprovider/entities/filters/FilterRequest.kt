@@ -17,7 +17,8 @@
 
 package com.exactpro.th2.rptdataprovider.entities.filters
 
-import com.exactpro.th2.rptdataprovider.grpc.Filter
+import com.exactpro.th2.dataprovider.grpc.Filter
+
 
 interface FilterRequest {
     fun getName(): String

@@ -23,6 +23,7 @@ import com.exactpro.cradle.utils.CradleIdException
 import com.exactpro.th2.common.grpc.Direction
 import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.grpc.MessageID
+import com.exactpro.th2.dataprovider.grpc.*
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
@@ -53,7 +54,7 @@ private typealias Streaming =
 @EngineAPI
 @InternalAPI
 @ExperimentalCoroutinesApi
-class RptDataProviderGrpcHandler(private val context: Context) : RptDataProviderGrpc.RptDataProviderImplBase() {
+class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrpc.DataProviderImplBase() {
 
     companion object {
 
@@ -232,16 +233,16 @@ class RptDataProviderGrpcHandler(private val context: Context) : RptDataProvider
     }
 
 
-    override fun getEvent(request: EventID, responseObserver: StreamObserver<RptEvent>) {
+    override fun getEvent(request: EventID, responseObserver: StreamObserver<EventData>) {
         handleRequest(responseObserver, "get event", useStream = false, request = request) {
             eventCache.getOrPut(request.id)
                 .convertToEvent()
-                .convertToGrpcRptEvent()
+                .convertToGrpcEventData()
         }
     }
 
 
-    override fun getMessage(request: MessageID, responseObserver: StreamObserver<RptMessage>) {
+    override fun getMessage(request: MessageID, responseObserver: StreamObserver<MessageData>) {
         handleRequest(responseObserver, "get message", useStream = false, request = request) {
             messageCache.getOrPut(
                 StoredMessageId(
@@ -249,7 +250,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : RptDataProvider
                     if (request.direction == Direction.FIRST) FIRST else SECOND,
                     request.sequence
                 ).toString()
-            ).convertToGrpcRptMessage()
+            ).convertToGrpcMessageData()
         }
     }
 
@@ -266,8 +267,8 @@ class RptDataProviderGrpcHandler(private val context: Context) : RptDataProvider
     }
 
     @FlowPreview
-    override fun searchSseMessages(
-        grpcRequest: GrpcMessageSearchRequest,
+    override fun searchMessages(
+        grpcRequest: MessageSearchRequest,
         responseObserver: StreamObserver<StreamResponse>
     ) {
         handleRequest(responseObserver,
@@ -289,8 +290,8 @@ class RptDataProviderGrpcHandler(private val context: Context) : RptDataProvider
     }
 
     @FlowPreview
-    override fun searchSseEvents(
-        grpcRequest: GrpcEventSearchRequest,
+    override fun searchEvents(
+        grpcRequest: EventSearchRequest,
         responseObserver: StreamObserver<StreamResponse>
     ) {
         handleRequest(responseObserver,

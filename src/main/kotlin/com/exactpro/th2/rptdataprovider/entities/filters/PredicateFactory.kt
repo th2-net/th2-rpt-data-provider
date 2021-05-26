@@ -54,7 +54,7 @@ class PredicateFactory<T>(
         return FilterPredicate(filtersList)
     }
 
-    suspend fun build(filters: List<com.exactpro.th2.rptdataprovider.grpc.Filter>): FilterPredicate<T> {
+    suspend fun build(filters: List<com.exactpro.th2.dataprovider.grpc.Filter>): FilterPredicate<T> {
         val filtersList = mutableListOf<Filter<T>>().apply {
             for (filter in filters) {
                 val constructor = containedFiltersInit[filter.name.filterName]

@@ -16,11 +16,11 @@
 
 package com.exactpro.th2.rptdataprovider.entities.sse
 
+import com.exactpro.th2.dataprovider.grpc.StreamResponse
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.eventWrite
-import com.exactpro.th2.rptdataprovider.grpc.StreamResponse
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.grpc.stub.StreamObserver
 import java.io.Writer
@@ -65,14 +65,14 @@ class SseWriter(private val writer: Writer, private val jacksonMapper: ObjectMap
 class GrpcWriter(private val writer: StreamObserver<StreamResponse>) : StreamWriter {
     override suspend fun write(event: EventTreeNode, counter: AtomicLong) {
         writer.onNext(StreamResponse.newBuilder()
-            .setEventTreeNode(event.convertToGrpcRptEventTreeNode())
+            .setEventMetadata(event.convertToGrpcEventMetadata())
             .build())
         counter.incrementAndGet()
     }
 
     override suspend fun write(message: Message, counter: AtomicLong) {
         writer.onNext(StreamResponse.newBuilder()
-            .setMessage(message.convertToGrpcRptMessage())
+            .setMessage(message.convertToGrpcMessageData())
             .build())
         counter.incrementAndGet()
     }
@@ -86,7 +86,7 @@ class GrpcWriter(private val writer: StreamObserver<StreamResponse>) : StreamWri
 
     override suspend fun write(event: Event, lastEventId: AtomicLong) {
         writer.onNext(StreamResponse.newBuilder()
-            .setEvent(event.convertToGrpcRptEvent())
+            .setEvent(event.convertToGrpcEventData())
             .build())
         lastEventId.incrementAndGet()
     }

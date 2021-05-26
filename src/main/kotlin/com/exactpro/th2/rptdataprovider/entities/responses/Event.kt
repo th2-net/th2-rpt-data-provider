@@ -24,8 +24,8 @@ import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.grpc.EventStatus.FAILED
 import com.exactpro.th2.common.grpc.EventStatus.SUCCESS
 import com.exactpro.th2.common.grpc.MessageID
+import com.exactpro.th2.dataprovider.grpc.EventData
 import com.exactpro.th2.rptdataprovider.convertToProto
-import com.exactpro.th2.rptdataprovider.grpc.RptEvent
 import com.fasterxml.jackson.annotation.JsonRawValue
 import com.google.protobuf.ByteString
 import java.time.Instant
@@ -65,8 +65,8 @@ data class Event(
         }
     }
 
-    fun convertToGrpcRptEvent(): RptEvent {
-        return RptEvent.newBuilder()
+    fun convertToGrpcEventData(): EventData {
+        return EventData.newBuilder()
             .setEventId(EventID.newBuilder().setId(eventId))
             .setIsBatched(isBatched)
             .setEventName(eventName)

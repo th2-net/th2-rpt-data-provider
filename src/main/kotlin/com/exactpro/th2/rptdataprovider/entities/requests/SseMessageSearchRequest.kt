@@ -19,15 +19,12 @@ import com.exactpro.cradle.Direction.*
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.Direction
+import com.exactpro.th2.dataprovider.grpc.MessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
-import com.exactpro.th2.rptdataprovider.grpc.GrpcMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.grpc.TimeRelation.*
-import java.security.Timestamp
+import com.exactpro.th2.dataprovider.grpc.TimeRelation.*
 import java.time.Instant
-import java.util.concurrent.TimeUnit
-import kotlin.math.min
 
 data class SseMessageSearchRequest(
     val filterPredicate: FilterPredicate<Message>,
@@ -64,7 +61,7 @@ data class SseMessageSearchRequest(
         keepOpen = parameters["keepOpen"]?.firstOrNull()?.toBoolean() ?: false
     )
 
-    constructor(request: GrpcMessageSearchRequest, filterPredicate: FilterPredicate<Message>) : this(
+    constructor(request: MessageSearchRequest, filterPredicate: FilterPredicate<Message>) : this(
         filterPredicate = filterPredicate,
         startTimestamp = if (request.hasStartTimestamp())
             request.startTimestamp.let {
