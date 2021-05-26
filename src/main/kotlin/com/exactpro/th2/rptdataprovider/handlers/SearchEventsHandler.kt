@@ -111,11 +111,13 @@ class SearchEventsHandler(
     ): Iterable<StoredTestEventMetadata> {
         return coroutineScope {
             if (parentEvent != null) {
-                cradle.getEventsSuspend(
-                    parentEvent.eventId,
-                    timestampFrom,
-                    timestampTo
-                )
+                if (parentEvent.batchId != null) {
+                    cradle.getEventSuspend(parentEvent.batchId)?.let {
+                        listOf(StoredTestEventMetadata(it.asBatch()))
+                    } ?: emptyList()
+                } else {
+                    cradle.getEventsSuspend(parentEvent.eventId, timestampFrom, timestampTo)
+                }
             } else {
                 cradle.getEventsSuspend(timestampFrom, timestampTo)
             }.let {
@@ -321,6 +323,9 @@ class SearchEventsHandler(
                         request, timestamp.first, timestamp.second,
                         coroutineContext, parentEventCounter
                     ).collect { emit(it) }
+
+                    if (request.parentEvent?.batchId != null)
+                        break
                 }
             }
                 .map { it.await() }
