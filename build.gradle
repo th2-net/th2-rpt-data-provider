@@ -31,7 +31,6 @@ version release_version
 repositories {
     mavenCentral()
     jcenter()
-    mavenLocal()
     maven {
         name 'Sonatype_snapshots'
         url 'https://s01.oss.sonatype.org/content/repositories/snapshots/'
