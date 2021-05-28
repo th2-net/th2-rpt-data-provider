@@ -291,6 +291,8 @@ class HttpServer(private val context: Context) {
 
         val sseEventSearchStep = this.context.sseEventSearchStep
 
+        val getEventsLimit = this.context.configuration.eventSearchChunkSize.value.toInt()
+
         System.setProperty(IO_PARALLELISM_PROPERTY_NAME, configuration.ioDispatcherThreadPoolSize.value)
 
         embeddedServer(Netty, configuration.port.value.toInt()) {
@@ -309,6 +311,23 @@ class HttpServer(private val context: Context) {
                         false, call.parameters.toMap()
                     ) {
                         eventCache.getOrPut(call.parameters["id"]!!).convertToEvent()
+                    }
+                }
+
+                get("/events") {
+                    val queryParametersMap = call.request.queryParameters.toMap()
+                    handleRequest(
+                        call, context, "get single event", notModifiedCacheControl, false,
+                        false, queryParametersMap
+                    ) {
+                        val ids = queryParametersMap["ids"]
+                        when {
+                            ids.isNullOrEmpty() ->
+                                throw InvalidRequestException("Ids set must not be empty: $ids")
+                            ids.size > getEventsLimit ->
+                                throw InvalidRequestException("Too many id in request: ${ids.size}, max is: $getEventsLimit")
+                            else -> eventCache.getOrPutMany(ids.toSet()).map { it.convertToEvent() }
+                        }
                     }
                 }
 

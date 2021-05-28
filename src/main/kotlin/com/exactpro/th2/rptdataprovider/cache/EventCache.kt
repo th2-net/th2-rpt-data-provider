@@ -18,7 +18,6 @@ package com.exactpro.th2.rptdataprovider.cache
 
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
-import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import mu.KotlinLogging
 import org.ehcache.Cache
@@ -74,5 +73,22 @@ class EventCache(private val timeout: Long, size: Long, private val eventProduce
                 put(id, it)
                 logger.debug { "Event cache miss for id=$id" }
             }
+    }
+
+    suspend fun getOrPutMany(ids: Set<String>): List<BaseEventEntity> {
+        return mutableListOf<BaseEventEntity>().apply {
+            val needRequest = mutableListOf<String>()
+            ids.forEach { id ->
+                validateAndReturn(id)?.event?.let {
+                    add(it)
+                } ?: needRequest.add(id)
+            }
+
+            eventProducer.fromIds(needRequest.map { ProviderEventId(it) }).forEach {
+                add(it)
+                put(it.id.toString(), it)
+                logger.debug { "Event cache miss for id=${it.id}" }
+            }
+        }
     }
 }
