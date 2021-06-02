@@ -35,6 +35,15 @@ Event object example:
 }
 ```
 
+`http://localhost:8080/events` - returns list of events with the specified ids (at a time you can request no more
+ `eventSearchChunkSize`)
+- `ids` - text, one or more event ids **Required**
+
+```
+Example:
+    http://localhost:8082/events/?ids=first_id&ids=second_id
+``` 
+
 
 `http://localhost:8080/message/{id}` - returns a single message with the specified id
 
@@ -55,47 +64,6 @@ Message object example:
 }
 ```
 
-
-
-`http://localhost:8080/search/events` - returns an array of event metadata that matches the filter. Accepts following query parameters:
-- `attachedMessageId` - text - Filters the events that are linked to the specified message id.
-- `timestampFrom` - number, unix timestamp in milliseconds - Sets the lower limit of the time window. **Required**.
-- `timestampTo` - number, unix timestamp in milliseconds - Sets the upper limit of the time window. **Required**.
-- `name` - text, accepts multiple values - Will match the events which name contains one of the given substrings. Case-insensitive.
-- `type` - text, accepts multiple values - Will match the events which type contains one of the given substrings. Case-insensitive.
-- `flat` - boolean - If `true`, returns the result as a flat list of event ids. If `false`, returns them as a list of event metadata object trees. Metadata tree will contain parent event objects as long as at least one of their direct or indirect children matches the filter. So, the resulting tree will preserve the hierarchy without the irrelevant branches.
-- `parentEvent` - text - Filters the events that has a specified parent event id.
-- `probe` - boolean - If `true`, returns empty json instead error response. Default `false`.
-
-Event metadata object example:
-```
-{
-    "eventId": "e21de910-fd30-11ea-8896-d7538a286e60",
-    "eventName": "Send 'OrderMassCancelRequest' message",
-    "eventType": "sendMessage",
-    "successful": true,
-    "startTimestamp": {
-        "nano": 209190000,
-        "epochSecond": 1600819698
-    },
-    "childList": [], // may contain an array of the simillar metadata objects
-    "filtered": true // is set to 'false' if an event does not match the given filter
-}
-```
-
-`http://localhost:8080/search/messages` - returns an array of message ids that match the filter. Accepts following query parameters:
-- `attachedEventId` - text - Filters the messages that are linked to the specified event id.
-- `timestampFrom` - number, unix timestamp in milliseconds - Sets the lower limit of the time window.
-- `timestampTo` - number, unix timestamp in milliseconds - Sets the upper limit of the time window..
-- `stream` - text, accepts multiple values - Sets the stream ids to search in. Case-sensitive. **Required**.
-- `messageType` - text, accepts multiple values - Will match the messages by their full type name. Case-sensitive. Is very slow at the moment.
-- `limit` - number - Sets the maximum amount of messages to return. Can be used for pagination. Defaults to `100`.
-- `timelineDirection` - `next`/`previous` - Sets the lookup direction. Can be used for pagination. Defaults to `next`.
-- `messageId` - text - Sets the message id to start the lookup from. Can be used for pagination.
-- `idsOnly` - boolean - If `true` returns list of message ids instead messages else return full messages. Default `true`.
-- `probe` - boolean - If `true`, returns empty json instead error response. Default `false`.
-
-    
 ### SSE
 
 ##### Filters API
@@ -155,6 +123,22 @@ As example:
 - `limitForParent` - number - How many children for each parent do we want to request. Default `not limited`.
 - `keepOpen` - boolean - If the search has reached the current moment, is it necessary to wait further for the appearance of new data. Default `false`.
 - `metadataOnly` - boolean - Receive only metadata (`true`) or entire event (`false`). Default `true`.
+
+Event metadata object example (in sse):
+```
+{
+    "type": "eventTreeNode",
+    "eventId": "e21de910-fd30-11ea-8896-d7538a286e60",
+    "parentId": "e21de910-gc89-11ea-8345-d7538a286e60", 
+    "eventName": "Send 'OrderMassCancelRequest' message",
+    "eventType": "sendMessage",
+    "successful": true,
+    "startTimestamp": {
+        "nano": 209190000,
+        "epochSecond": 1600819698
+    },
+}
+```
 
 - `FILTERS`:
 - `attachedMessageId` - Filters the events that are linked to the specified message id. Parameters: `values` - text, `negative` - boolean. If `true`, will match events that do not match those specified attached message id. If `false`, will match the events by their attached message id. Defaults to `false`.  
