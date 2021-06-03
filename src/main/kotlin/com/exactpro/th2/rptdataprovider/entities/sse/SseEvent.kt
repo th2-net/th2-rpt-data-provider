@@ -22,6 +22,7 @@ import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
+import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.ktor.util.*
 import java.time.Instant
@@ -29,7 +30,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 
 enum class EventType {
-    MESSAGE, EVENT, CLOSE, ERROR, KEEP_ALIVE;
+    MESSAGE, EVENT, CLOSE, ERROR, KEEP_ALIVE, MESSAGE_IDS;
 
     override fun toString(): String {
         return super.toString().toLowerCase()
@@ -78,6 +79,7 @@ data class SseEvent(val data: String = "empty data", val event: EventType? = nul
                 counter.incrementAndGet().toString()
             )
         }
+
         suspend fun build(jacksonMapper: ObjectMapper, message: Message, counter: AtomicLong): SseEvent {
             return SseEvent(
                 jacksonMapper.asStringSuspend(message),
@@ -103,6 +105,20 @@ data class SseEvent(val data: String = "empty data", val event: EventType? = nul
             return SseEvent(
                 jacksonMapper.asStringSuspend(ExceptionInfo(e.javaClass.name, e.rootCause?.message ?: e.toString())),
                 event = EventType.ERROR
+            )
+        }
+
+        suspend fun build(
+            jacksonMapper: ObjectMapper,
+            streamsInfo: List<SearchMessagesHandler.StreamInfo>
+        ): SseEvent {
+            return SseEvent(
+                jacksonMapper.asStringSuspend(
+                    mapOf(
+                        "messageIds" to streamsInfo.associate { it.stream to it.lastElement?.toString() }
+                    )
+                ),
+                event = EventType.MESSAGE_IDS
             )
         }
     }
