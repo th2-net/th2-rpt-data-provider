@@ -79,7 +79,6 @@ class SearchEventsHandler(
                 if (count.get() <= limitForParent) {
                     event
                 } else {
-                    parentEventCounter.putIfAbsent(event.id.toString(), AtomicLong(Long.MAX_VALUE))
                     null
                 }
             } else {
