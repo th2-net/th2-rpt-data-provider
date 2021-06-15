@@ -74,28 +74,13 @@ class SearchEventsHandler(
             if (limitForParent == null || event.parentEventId == null)
                 return event
 
-            val count = parentEventCounter!![event.parentEventId.toString()]
-            return if (count != null) {
-                if (count.get() <= limitForParent) {
+            return parentEventCounter!!.getOrPut(event.parentEventId.toString(), { AtomicLong(1) }).let { parentCount ->
+                if (parentCount.get() <= limitForParent) {
+                    parentCount.incrementAndGet()
                     event
                 } else {
+                    parentEventCounter.putIfAbsent(event.id.toString(), AtomicLong(Long.MAX_VALUE))
                     null
-                }
-            } else {
-                event
-            }
-        }
-
-        fun update(event: BaseEventEntity) {
-            if (limitForParent == null) return
-
-            event.parentEventId?.let { parentId ->
-                parentEventCounter!!.getOrPut(parentId.toString(), { AtomicLong(0) }).also { parentCount ->
-                    if (parentCount.get() <= limitForParent) {
-                        parentCount.incrementAndGet()
-                    } else {
-                        parentEventCounter.putIfAbsent(event.id.toString(), AtomicLong(Long.MAX_VALUE))
-                    }
                 }
             }
         }
@@ -338,10 +323,7 @@ class SearchEventsHandler(
                 .filter { request.filterPredicate.apply(it) }
                 .let {
                     if (parentEventCounter.limitForParent != null) {
-                        it
-                            .onEach { event -> parentEventCounter.update(event) }
-                            .filter { event -> parentEventCounter.checkCountAndGet(event) != null }
-
+                        it.filter { event -> parentEventCounter.checkCountAndGet(event) != null }
                     } else {
                         it
                     }
