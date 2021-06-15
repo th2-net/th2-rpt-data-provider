@@ -127,11 +127,10 @@ class SearchEventsHandler(
 
     private suspend fun prepareNonBatchedEvent(
         metadata: List<StoredTestEventMetadata>,
-        parentEventCounter: ParentEventCounter,
         request: SseEventSearchRequest
     ): List<BaseEventEntity> {
-        return metadata.mapNotNull {
-            parentEventCounter.checkCountAndGet(eventProducer.fromEventMetadata(it, null))
+        return metadata.map {
+            eventProducer.fromEventMetadata(it, null)
         }.let { eventTreesNodes ->
             eventProducer.fromSingleEventsProcessed(eventTreesNodes, request)
         }
@@ -139,17 +138,14 @@ class SearchEventsHandler(
 
     private suspend fun prepareBatchedEvent(
         metadata: List<StoredTestEventMetadata>,
-        parentEventCounter: ParentEventCounter,
         timestampFrom: Instant,
         timestampTo: Instant,
         request: SseEventSearchRequest
     ): List<BaseEventEntity> {
         return metadata.map { it to it.tryToGetTestEvents(request.parentEvent?.eventId) }.let { eventsWithBatch ->
             eventsWithBatch.map { (batch, events) ->
-                batch.id to events?.mapNotNull {
-                    parentEventCounter.checkCountAndGet(
-                        eventProducer.fromEventMetadata(StoredTestEventMetadata(it), batch)
-                    )
+                batch.id to events?.map {
+                    eventProducer.fromEventMetadata(StoredTestEventMetadata(it), batch)
                 }
             }.filter { it.second?.isNotEmpty() ?: true }
                 .let { eventTreeNodes ->
@@ -163,7 +159,7 @@ class SearchEventsHandler(
                     parsedEvents.toMutableList().apply {
                         addAll(
                             nullEvents.flatMap { (batch, _) ->
-                                getDirectBatchedChildren(batch, timestampFrom, timestampTo, parentEventCounter, request)
+                                getDirectBatchedChildren(batch, timestampFrom, timestampTo, request)
                             }
                         )
                     }
@@ -178,8 +174,7 @@ class SearchEventsHandler(
         request: SseEventSearchRequest,
         timestampFrom: Instant,
         timestampTo: Instant,
-        parentContext: CoroutineContext,
-        parentEventCounter: ParentEventCounter
+        parentContext: CoroutineContext
     ): Flow<Deferred<List<BaseEventEntity>>> {
         return coroutineScope {
             flow {
@@ -196,11 +191,10 @@ class SearchEventsHandler(
                         metadata.groupBy { it.isBatch }.flatMap { entry ->
                             if (entry.key) {
                                 prepareBatchedEvent(
-                                    entry.value, parentEventCounter,
-                                    timestampFrom, timestampTo, request
+                                    entry.value, timestampFrom, timestampTo, request
                                 )
                             } else {
-                                prepareNonBatchedEvent(entry.value, parentEventCounter, request)
+                                prepareNonBatchedEvent(entry.value, request)
                             }
                         }.let { events ->
                             if (request.searchDirection == AFTER)
@@ -319,8 +313,7 @@ class SearchEventsHandler(
                         delay(sseSearchDelay * 1000)
 
                     getEventFlow(
-                        request, timestamp.first, timestamp.second,
-                        coroutineContext, parentEventCounter
+                        request, timestamp.first, timestamp.second, coroutineContext
                     ).collect { emit(it) }
 
                     if (request.parentEvent?.batchId != null)
@@ -383,7 +376,6 @@ class SearchEventsHandler(
         batchId: StoredTestEventId,
         timestampFrom: Instant,
         timestampTo: Instant,
-        parentEventCounter: ParentEventCounter,
         request: SseEventSearchRequest
     ): List<BaseEventEntity> {
         val batch = cradle.getEventSuspend(batchId)?.asBatch()
@@ -392,8 +384,8 @@ class SearchEventsHandler(
             ?: throw CradleEventNotFoundException("unable to get test events of batch '$batchId'"))
             .filter { it.startTimestamp.isAfter(timestampFrom) && it.startTimestamp.isBefore(timestampTo) }
             .filter { request.parentEvent?.eventId?.let { id -> it.parentId == id } ?: true }
-            .mapNotNull { testEvent ->
-                parentEventCounter.checkCountAndGet(eventProducer.fromStoredEvent(testEvent, batch))
+            .map { testEvent ->
+                eventProducer.fromStoredEvent(testEvent, batch)
             }.let { events ->
                 eventProducer.fromBatchIdsProcessed(listOf(batch.id to events), request)
             }
