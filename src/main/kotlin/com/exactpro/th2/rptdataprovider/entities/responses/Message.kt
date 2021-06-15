@@ -59,19 +59,9 @@ data class Message(
         sessionId = rawStoredMessage.streamName ?: ""
     )
 
-
-    private fun getMessageId(): MessageID {
-        return MessageID.newBuilder()
-            .setSequence(id.index)
-            .setDirection(if (id.direction == com.exactpro.cradle.Direction.FIRST) FIRST else SECOND)
-            .setConnectionId(ConnectionID.newBuilder()
-                .setSessionAlias(id.streamName))
-            .build()
-    }
-
     fun convertToGrpcMessageData(): MessageData {
         return MessageData.newBuilder()
-            .setMessageId(getMessageId())
+            .setMessageId(id.convertToProto())
             .setTimestamp(timestamp.convertToProto())
             .setDirection(if (id.direction == com.exactpro.cradle.Direction.FIRST) FIRST else SECOND)
             .setSessionId(ConnectionID.newBuilder().setSessionAlias(id.streamName))

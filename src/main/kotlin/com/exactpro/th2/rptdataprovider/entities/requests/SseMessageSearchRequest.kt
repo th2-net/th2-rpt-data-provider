@@ -34,7 +34,8 @@ data class SseMessageSearchRequest(
     val endTimestamp: Instant?,
     val resumeFromId: String?,
     val resultCountLimit: Int?,
-    val keepOpen: Boolean
+    val keepOpen: Boolean,
+    val resumeFromIdsList: List<StoredMessageId>?
 ) {
 
     companion object {
@@ -57,6 +58,7 @@ data class SseMessageSearchRequest(
         } ?: TimeRelation.AFTER,
         endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
         resumeFromId = parameters["resumeFromId"]?.firstOrNull(),
+        resumeFromIdsList = parameters["messageId"]?.map { StoredMessageId.fromString(it) },
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt(),
         keepOpen = parameters["keepOpen"]?.firstOrNull()?.toBoolean() ?: false
     )
@@ -100,7 +102,17 @@ data class SseMessageSearchRequest(
 
         keepOpen = if (request.hasKeepOpen()) {
             request.keepOpen.value
-        } else false
+        } else false,
+
+        resumeFromIdsList = if (request.resumeMessageIdsList.isNotEmpty()) {
+            request.resumeMessageIdsList.map {
+                StoredMessageId(
+                    it.connectionId.sessionAlias,
+                    if (it.direction == Direction.FIRST) FIRST else SECOND,
+                    it.sequence
+                )
+            }
+        } else null
     )
 
     private fun checkEndTimestamp() {

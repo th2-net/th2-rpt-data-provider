@@ -16,15 +16,21 @@
 
 package com.exactpro.th2.rptdataprovider.entities.sse
 
+import com.exactpro.th2.common.grpc.MessageID
+import com.exactpro.th2.dataprovider.grpc.Stream
 import com.exactpro.th2.dataprovider.grpc.StreamResponse
+import com.exactpro.th2.dataprovider.grpc.StreamsInfo
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
+import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
 import com.exactpro.th2.rptdataprovider.eventWrite
+import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.grpc.stub.StreamObserver
 import java.io.Writer
 import java.util.concurrent.atomic.AtomicLong
+
 
 interface StreamWriter {
 
@@ -33,6 +39,8 @@ interface StreamWriter {
     suspend fun write(message: Message, counter: AtomicLong)
 
     suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong)
+
+    suspend fun write(streamInfo: MutableList<StreamInfo>)
 
     suspend fun write(event: Event, lastEventId: AtomicLong)
 
@@ -51,6 +59,10 @@ class SseWriter(private val writer: Writer, private val jacksonMapper: ObjectMap
 
     override suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong) {
         writer.eventWrite(SseEvent.build(jacksonMapper, lastScannedObjectInfo, counter))
+    }
+
+    override suspend fun write(streamInfo: MutableList<StreamInfo>) {
+        writer.eventWrite(SseEvent.build(jacksonMapper, streamInfo))
     }
 
     override suspend fun write(event: Event, lastEventId: AtomicLong) {
@@ -89,6 +101,16 @@ class GrpcWriter(private val writer: StreamObserver<StreamResponse>) : StreamWri
             .setEvent(event.convertToGrpcEventData())
             .build())
         lastEventId.incrementAndGet()
+    }
+
+    override suspend fun write(streamInfo: MutableList<StreamInfo>) {
+        writer.onNext(
+            StreamResponse.newBuilder().setStreamInfo(
+                StreamsInfo.newBuilder().addAllStreams(
+                    streamInfo.map { it.convertToProto() }
+                ).build()
+            ).build()
+        )
     }
 
     override suspend fun closeWriter() {
