@@ -18,6 +18,12 @@ package com.exactpro.th2.rptdataprovider.entities.responses
 
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.th2.common.grpc.ConnectionID
+import com.exactpro.th2.common.grpc.Direction.FIRST
+import com.exactpro.th2.common.grpc.Direction.SECOND
+import com.exactpro.th2.common.grpc.MessageID
+import com.exactpro.th2.dataprovider.grpc.MessageData
+import com.exactpro.th2.rptdataprovider.convertToProto
 import com.exactpro.th2.rptdataprovider.entities.internal.Direction
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.annotation.JsonRawValue
@@ -52,4 +58,19 @@ data class Message(
         timestamp = rawStoredMessage.timestamp ?: Instant.ofEpochMilli(0),
         sessionId = rawStoredMessage.streamName ?: ""
     )
+
+    fun convertToGrpcMessageData(): MessageData {
+        return MessageData.newBuilder()
+            .setMessageId(id.convertToProto())
+            .setTimestamp(timestamp.convertToProto())
+            .setDirection(if (id.direction == com.exactpro.cradle.Direction.FIRST) FIRST else SECOND)
+            .setSessionId(ConnectionID.newBuilder().setSessionAlias(id.streamName))
+            .setMessageType(messageType)
+            .let { builder ->
+                body?.let { builder.setBody(body) }
+                bodyBase64?.let { builder.setBodyBase64(bodyBase64) }
+                builder
+            }
+            .build()
+    }
 }

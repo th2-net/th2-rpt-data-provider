@@ -28,8 +28,9 @@ import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.cache.MessageCache
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
+import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
-import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
+import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
@@ -38,8 +39,6 @@ import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import mu.KotlinLogging
-import org.ehcache.core.spi.store.Store
-import java.io.Writer
 import java.lang.Integer.min
 import java.time.Instant
 import java.time.LocalTime
@@ -62,66 +61,6 @@ class SearchMessagesHandler(
         private val processedMessageCount = Counter.build(
             "processed_message_count", "Count of processed Message"
         ).register()
-    }
-
-    data class StreamInfo(val stream: Pair<String, Direction>, val keepOpen: Boolean, val startTimestamp: Instant) {
-        var lastElement: StoredMessageId? = null
-            private set
-        var lastElementTime: Instant? = null
-            private set
-        var isFirstPull: Boolean = true
-            private set
-
-
-        constructor(
-            stream: Pair<String, Direction>,
-            startId: StoredMessageId?,
-            time: Instant?,
-            keepOpen: Boolean,
-            startTimestamp: Instant,
-            firstPull: Boolean = true
-        ) : this(
-            stream = stream,
-            keepOpen = keepOpen,
-            startTimestamp = startTimestamp
-        ) {
-            lastElement = startId
-            lastElementTime = time
-            isFirstPull = firstPull
-        }
-
-        fun update(
-            size: Int,
-            perStreamLimit: Int,
-            timelineDirection: TimeRelation,
-            filteredIdsList: List<MessageWrapper>
-        ) {
-            val streamIsEmpty = size < perStreamLimit
-            changeStreamMessageIndex(streamIsEmpty, filteredIdsList, timelineDirection).let {
-                lastElement = it.first
-                lastElementTime = it.second
-            }
-            isFirstPull = false
-        }
-
-
-        private fun changeStreamMessageIndex(
-            streamIsEmpty: Boolean,
-            filteredIdsList: List<MessageWrapper>,
-            timelineDirection: TimeRelation
-        ): Pair<StoredMessageId?, Instant?> {
-            return if (timelineDirection == AFTER) {
-                filteredIdsList.lastOrNull()?.message?.let { it.id to it.timestamp }
-                    ?: if (keepOpen) lastElement to lastElementTime else null to null
-            } else {
-                if (!streamIsEmpty) {
-                    val lastMessage = filteredIdsList.firstOrNull()?.message
-                    lastMessage?.id to lastMessage?.timestamp
-                } else {
-                    null to null
-                }
-            }
-        }
     }
 
     private fun nextDay(timestamp: Instant, timelineDirection: TimeRelation): Instant {
@@ -274,7 +213,6 @@ class SearchMessagesHandler(
         messageId: StoredMessageId?,
         parentContext: CoroutineScope
     ): Flow<MessageWrapper> {
-
         return coroutineScope {
             flow {
                 var limit = min(maxMessagesLimit, initLimit)
@@ -319,14 +257,13 @@ class SearchMessagesHandler(
         }
     }
 
-
     @FlowPreview
     @ExperimentalCoroutinesApi
     suspend fun searchMessagesSse(
         request: SseMessageSearchRequest,
         jacksonMapper: ObjectMapper,
-        keepAlive: suspend (Writer, lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong) -> Unit,
-        writer: Writer
+        keepAlive: suspend (StreamWriter, lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong) -> Unit,
+        writer: StreamWriter
     ) {
         withContext(coroutineContext) {
             val startMessageCountLimit = 25
@@ -366,15 +303,13 @@ class SearchMessagesHandler(
                     }
                 }
                 .onCompletion {
-                    writer.eventWrite(SseEvent.build(jacksonMapper, streamsInfo))
+                    writer.write(streamsInfo)
                     coroutineContext.cancelChildren()
                     it?.let { throwable -> throw throwable }
                 }
                 .collect {
                     coroutineContext.ensureActive()
-                    writer.eventWrite(
-                        SseEvent.build(jacksonMapper, it, lastEventId)
-                    )
+                    writer.write(it, lastEventId)
                 }
         }
     }
@@ -425,7 +360,6 @@ class SearchMessagesHandler(
         searchContext: CoroutineScope
     ): List<MessageWrapper> {
         return coroutineScope {
-
             databaseRequestRetry(dbRetryDelay) {
                 pullMore(startId, limit, timelineDirection, isFirstPull)
             }.map { batch ->
@@ -440,7 +374,6 @@ class SearchMessagesHandler(
             }.awaitAll().flatten()
         }
     }
-
 
     private fun isInFuture(wrapper: MessageWrapper, streamInfo: StreamInfo): Boolean {
         return wrapper.message.timestamp.isAfterOrEqual(streamInfo.startTimestamp) &&

@@ -19,6 +19,10 @@ package com.exactpro.th2.rptdataprovider.entities.responses
 import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventBatchMetadata
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
+import com.exactpro.th2.common.grpc.EventID
+import com.exactpro.th2.common.grpc.EventStatus
+import com.exactpro.th2.dataprovider.grpc.EventMetadata
+import com.exactpro.th2.rptdataprovider.convertToProto
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ParseEventTreeNodeException
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.fasterxml.jackson.annotation.JsonIgnore
@@ -114,4 +118,19 @@ data class EventTreeNode(
     override fun hashCode(): Int {
         return id.eventId.hashCode()
     }
+
+
+    fun convertToGrpcEventMetadata(): EventMetadata {
+        return EventMetadata.newBuilder()
+            .setEventId(EventID.newBuilder().setId(eventId))
+            .setEventName(eventName)
+            .setEventType(eventType)
+            .setStartTimestamp(startTimestamp.convertToProto())
+            .setSuccessful(if (successful) EventStatus.SUCCESS else EventStatus.FAILED)
+            .let { builder ->
+                parentEventId?.let { builder.setParentEventId(EventID.newBuilder().setId(parentId)) }
+                builder
+            }.build()
+    }
+
 }

@@ -15,14 +15,16 @@
  ******************************************************************************/
 package com.exactpro.th2.rptdataprovider.entities.requests
 
+import com.exactpro.cradle.Direction.*
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.th2.common.grpc.Direction
+import com.exactpro.th2.dataprovider.grpc.MessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
-import java.security.Timestamp
+import com.exactpro.th2.dataprovider.grpc.TimeRelation.*
 import java.time.Instant
-import java.util.concurrent.TimeUnit
 
 data class SseMessageSearchRequest(
     val filterPredicate: FilterPredicate<Message>,
@@ -59,6 +61,58 @@ data class SseMessageSearchRequest(
         resumeFromIdsList = parameters["messageId"]?.map { StoredMessageId.fromString(it) },
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt(),
         keepOpen = parameters["keepOpen"]?.firstOrNull()?.toBoolean() ?: false
+    )
+
+    constructor(request: MessageSearchRequest, filterPredicate: FilterPredicate<Message>) : this(
+        filterPredicate = filterPredicate,
+        startTimestamp = if (request.hasStartTimestamp())
+            request.startTimestamp.let {
+                Instant.ofEpochSecond(it.seconds, it.nanos.toLong())
+            } else null,
+
+        stream = if (request.hasStream()) {
+            request.stream.listStringList
+        } else emptyList<String>(),
+
+        searchDirection = request.searchDirection.let {
+            when (it) {
+                PREVIOUS -> TimeRelation.BEFORE
+                else -> TimeRelation.AFTER
+            }
+        },
+
+        endTimestamp = if (request.hasEndTimestamp())
+            request.endTimestamp.let {
+                Instant.ofEpochSecond(it.seconds, it.nanos.toLong())
+            } else null,
+
+        resumeFromId = if (request.hasResumeFromId()) {
+            request.resumeFromId.let {
+                StoredMessageId(
+                    it.connectionId.sessionAlias,
+                    if (it.direction == Direction.FIRST) FIRST else SECOND,
+                    it.sequence
+                ).toString()
+            }
+        } else null,
+
+        resultCountLimit = if (request.hasResultCountLimit()) {
+            request.resultCountLimit.value
+        } else null,
+
+        keepOpen = if (request.hasKeepOpen()) {
+            request.keepOpen.value
+        } else false,
+
+        resumeFromIdsList = if (request.resumeMessageIdsList.isNotEmpty()) {
+            request.resumeMessageIdsList.map {
+                StoredMessageId(
+                    it.connectionId.sessionAlias,
+                    if (it.direction == Direction.FIRST) FIRST else SECOND,
+                    it.sequence
+                )
+            }
+        } else null
     )
 
     private fun checkEndTimestamp() {

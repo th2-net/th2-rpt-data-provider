@@ -35,6 +35,15 @@ Event object example:
 }
 ```
 
+`http://localhost:8080/events` - returns list of events with the specified ids (at a time you can request no more
+ `eventSearchChunkSize`)
+- `ids` - text, one or more event ids **Required**
+
+```
+Example:
+    http://localhost:8082/events/?ids=first_id&ids=second_id
+``` 
+
 
 `http://localhost:8080/message/{id}` - returns a single message with the specified id
 
