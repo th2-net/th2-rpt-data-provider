@@ -29,8 +29,7 @@ group 'com.exactpro.th2'
 version release_version
 
 repositories {
-//    mavenCentral()
-    mavenLocal()
+    mavenCentral()
     jcenter()
     maven {
         name 'Sonatype_snapshots'

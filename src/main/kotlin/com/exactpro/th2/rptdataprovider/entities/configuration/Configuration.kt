@@ -20,6 +20,7 @@ import com.exactpro.cradle.CradleManager
 import com.exactpro.th2.common.grpc.MessageBatch
 import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.schema.factory.CommonFactory
+import com.exactpro.th2.common.schema.grpc.configuration.GrpcConfiguration
 import com.exactpro.th2.common.schema.grpc.router.GrpcRouter
 import com.exactpro.th2.common.schema.message.MessageRouter
 import com.exactpro.th2.rptdataprovider.grpc.RptDataProviderGrpcHandler
@@ -79,6 +80,9 @@ class Configuration(args: Array<String>) {
 
     val messageRouterParsedBatch: MessageRouter<MessageBatch>
         get() = configurationFactory.messageRouterParsedBatch
+
+    val grpcConfig: GrpcConfiguration
+        get() = configurationFactory.grpcConfiguration
 
     val grpcRouter: GrpcRouter
         get() = configurationFactory.grpcRouter
