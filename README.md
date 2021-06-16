@@ -122,7 +122,9 @@ As example:
 - `endTimestamp` - number, unix timestamp in milliseconds - Sets the timestamp to which the search will be performed, starting with `startTimestamp`. When `searchDirection` is `previous`, `endTimestamp` must be less then `startTimestamp`. Defaults to `null` (the search is carried out endlessly into the past or the future).
 - `limitForParent` - number - How many children for each parent do we want to request. Default `not limited`.
 - `keepOpen` - boolean - If the search has reached the current moment, is it necessary to wait further for the appearance of new data. Default `false`.
-- `metadataOnly` - boolean - Receive only metadata (`true`) or entire event (`false`). Default `true`.
+- `metadataOnly` - boolean - Receive only metadata (`true`) or entire event (`false`) (without `attachedMessageIds`). Default `true`.
+- `attachedMessages`- boolean - If the `metadataOnly` is `false` additionally load `attachedMessageIds`. Default `false`.
+
 
 Event metadata object example (in sse):
 ```
@@ -157,6 +159,7 @@ Event metadata object example (in sse):
 - `resultCountLimit` - number - Sets the maximum amount of messages to return. Defaults to `100`.
 - `endTimestamp` - number, unix timestamp in milliseconds - Sets the timestamp to which the search will be performed, starting with `startTimestamp`. When `searchDirection` is `previous`, `endTimestamp` must be less then `startTimestamp`. Defaults to `null` (the search is carried out endlessly into the past or the future).
 - `keepOpen` - boolean - If the search has reached the current moment, is it necessary to wait further for the appearance of new data. Default `false`.
+- `messageId` - text, accepts multiple values - List of message IDs to restore search. If given, it has the highest priority and ignores `stream` (uses streams from ids), `startTimestamp` and `resumeFromId`. Defaults to `null`
 
 - `FILTERS`:
 
