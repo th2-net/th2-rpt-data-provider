@@ -31,10 +31,10 @@ import kotlinx.coroutines.launch
 @ExperimentalCoroutinesApi
 fun main(args: Array<String>) {
     val context = Context(args)
-    GlobalScope.launch {
+//    GlobalScope.launch {
         HttpServer(context).run()
-    }
-    GlobalScope.launch {
-        GrpcServer(context)
-    }
+//    }
+//    GlobalScope.launch {
+//        GrpcServer(context)
+//    }
 }
