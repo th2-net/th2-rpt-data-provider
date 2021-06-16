@@ -34,7 +34,8 @@ data class SseEventSearchRequest(
     val resultCountLimit: Int?,
     val keepOpen: Boolean,
     val limitForParent: Long?,
-    val metadataOnly: Boolean
+    val metadataOnly: Boolean,
+    val attachedMessages: Boolean
 ) {
     companion object {
         private fun asCradleTimeRelation(value: String): TimeRelation {
@@ -57,7 +58,8 @@ data class SseEventSearchRequest(
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt(),
         keepOpen = parameters["keepOpen"]?.firstOrNull()?.toBoolean() ?: false,
         limitForParent = parameters["limitForParent"]?.firstOrNull()?.toLong(),
-        metadataOnly = parameters["metadataOnly"]?.firstOrNull()?.toBoolean() ?: true
+        metadataOnly = parameters["metadataOnly"]?.firstOrNull()?.toBoolean() ?: true,
+        attachedMessages = parameters["attachedMessages"]?.firstOrNull()?.toBoolean() ?: false
     )
 
     private fun checkEndTimestamp() {
