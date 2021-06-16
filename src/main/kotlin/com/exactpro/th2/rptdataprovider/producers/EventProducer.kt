@@ -167,7 +167,8 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
                 events.flatMap { it.second }
             }
         }.let {
-            if (!request.metadataOnly || request.filterPredicate.getSpecialTypes().contains(NEED_ATTACHED_MESSAGES)) {
+            if (!request.metadataOnly && request.attachedMessages
+                || request.filterPredicate.getSpecialTypes().contains(NEED_ATTACHED_MESSAGES)) {
                 setAttachedMessage(it)
             } else {
                 it
@@ -187,7 +188,8 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
                 it
             }
         }.let {
-            if (!request.metadataOnly || request.filterPredicate.getSpecialTypes().contains(NEED_ATTACHED_MESSAGES)) {
+            if (!request.metadataOnly && request.attachedMessages
+                || request.filterPredicate.getSpecialTypes().contains(NEED_ATTACHED_MESSAGES)) {
                 setAttachedMessage(it)
             } else {
                 it
