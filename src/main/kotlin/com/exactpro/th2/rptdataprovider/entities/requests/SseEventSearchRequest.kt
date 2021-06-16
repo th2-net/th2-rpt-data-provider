@@ -96,7 +96,10 @@ data class SseEventSearchRequest(
         } else null,
         metadataOnly = if (request.hasMetadataOnly()) {
             request.metadataOnly.value
-        } else true
+        } else true,
+        attachedMessages = if (request.hasAttachedMessages()) {
+            request.attachedMessages.value
+        } else false
     )
 
     private fun checkEndTimestamp() {

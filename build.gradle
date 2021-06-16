@@ -29,7 +29,8 @@ group 'com.exactpro.th2'
 version release_version
 
 repositories {
-    mavenCentral()
+//    mavenCentral()
+    mavenLocal()
     jcenter()
     maven {
         name 'Sonatype_snapshots'
@@ -53,7 +54,7 @@ dependencies {
     implementation group: 'net.jpountz.lz4', name: 'lz4', version: '1.3.0'
     implementation 'com.exactpro.th2:cradle-core:2.13.0-TH2_1791-795623964-SNAPSHOT'
     implementation 'com.exactpro.th2:cradle-cassandra:2.13.0-TH2_1791-795623964-SNAPSHOT'
-    implementation "com.exactpro.th2:grpc-data-provider:0.0.1"
+    implementation "com.exactpro.th2:grpc-data-provider:0.0.3"
 
     implementation 'io.github.microutils:kotlin-logging:1.7.10'
 
