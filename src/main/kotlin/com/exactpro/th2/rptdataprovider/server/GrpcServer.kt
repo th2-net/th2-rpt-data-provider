@@ -34,7 +34,7 @@ class GrpcServer(private val context: Context) {
 
     init {
         this.server.start()
-        LOGGER.info("${GrpcServer::class.java.simpleName} started. ${context.configuration.grpcConfig.serverConfiguration}")
+        LOGGER.info("${GrpcServer::class.java.simpleName} started. ${context.configuration.grpcConfig}")
     }
 
     companion object {
