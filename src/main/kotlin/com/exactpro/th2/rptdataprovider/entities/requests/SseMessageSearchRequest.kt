@@ -104,8 +104,8 @@ data class SseMessageSearchRequest(
             request.keepOpen.value
         } else false,
 
-        resumeFromIdsList = if (request.resumeMessageIdsList.isNotEmpty()) {
-            request.resumeMessageIdsList.map {
+        resumeFromIdsList = if (request.messageIdList.isNotEmpty()) {
+            request.messageIdList.map {
                 StoredMessageId(
                     it.connectionId.sessionAlias,
                     if (it.direction == Direction.FIRST) FIRST else SECOND,
@@ -128,8 +128,8 @@ data class SseMessageSearchRequest(
     }
 
     private fun checkStartPoint() {
-        if (startTimestamp == null && resumeFromId == null)
-            throw InvalidRequestException("One of the 'startTimestamp' or 'resumeFromId' must not be null")
+        if (startTimestamp == null && resumeFromId == null && resumeFromIdsList == null)
+            throw InvalidRequestException("One of the 'startTimestamp' or 'resumeFromId' or 'messageId' must not be null")
     }
 
     fun checkRequest() {
