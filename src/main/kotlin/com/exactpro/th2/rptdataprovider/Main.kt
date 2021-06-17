@@ -24,6 +24,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
+import java.lang.IllegalArgumentException
 
 
 @FlowPreview
@@ -32,10 +33,17 @@ import kotlinx.coroutines.launch
 @ExperimentalCoroutinesApi
 fun main(args: Array<String>) {
     val context = Context(args)
-    GlobalScope.launch {
-        HttpServer(context).run()
-    }
-    GlobalScope.launch {
-        GrpcServer(context)
+    when (val type = context.configuration.serverType.value) {
+        "http" -> {
+            GlobalScope.launch {
+                HttpServer(context).run()
+            }
+        }
+        "grpc" -> {
+            GlobalScope.launch {
+                GrpcServer(context)
+            }
+        }
+        else -> throw IllegalArgumentException("Unsupported server type: $type. Valid types is 'http' or 'grpc'")
     }
 }
