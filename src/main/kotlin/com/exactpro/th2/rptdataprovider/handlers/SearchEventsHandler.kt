@@ -256,7 +256,9 @@ class SearchEventsHandler(
         return sequence {
             while (timeIntervals.hasNext()) {
                 val timestamp = timeIntervals.next()
-                if (!isSearchInFuture && isSearchNext && timestamp.second.isAfter(Instant.now())) {
+                if (!isSearchInFuture && isSearchNext
+                    && timestamp.second.isAfter(maxInstant(Instant.now(), request.endTimestamp ?: Instant.MIN))
+                ) {
                     if (request.keepOpen) {
                         timeIntervals = getTimeIntervals(request, sseSearchDelay, timestamp.first).iterator()
                         isSearchInFuture = true
