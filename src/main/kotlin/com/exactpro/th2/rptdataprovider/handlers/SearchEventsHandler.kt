@@ -263,6 +263,7 @@ class SearchEventsHandler(
                         isSearchInFuture = true
                         continue
                     } else {
+                        yield(isSearchInFuture to timestamp)
                         return@sequence
                     }
                 }
