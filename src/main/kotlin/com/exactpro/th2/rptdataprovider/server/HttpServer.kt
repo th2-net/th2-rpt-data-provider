@@ -213,8 +213,7 @@ class HttpServer(private val context: Context) {
                 launch {
                     checkContext(context)
                 }
-                call.response.cacheControl(CacheControl.NoCache(null))
-                call.response.header("Cache-Control", "no-transform")
+                call.response.headers.append(HttpHeaders.CacheControl, "no-cache, no-store")
                 call.respondTextWriter(contentType = ContentType.Text.EventStream) {
                     try {
                         calledFun.invoke(SseWriter(this, jacksonMapper), ::keepAlive)
