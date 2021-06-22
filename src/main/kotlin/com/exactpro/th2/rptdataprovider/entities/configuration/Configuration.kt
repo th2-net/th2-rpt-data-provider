@@ -24,6 +24,7 @@ import com.exactpro.th2.common.schema.grpc.configuration.GrpcConfiguration
 import com.exactpro.th2.common.schema.grpc.router.GrpcRouter
 import com.exactpro.th2.common.schema.message.MessageRouter
 import com.exactpro.th2.rptdataprovider.grpc.RptDataProviderGrpcHandler
+import com.exactpro.th2.rptdataprovider.server.ServerType
 import mu.KotlinLogging
 
 class CustomConfigurationClass {
@@ -59,7 +60,7 @@ class CustomConfigurationClass {
 
     val eventSearchChunkSize: Int = 64
 
-    val serverType: String = "http"
+    val serverType: ServerType = ServerType.HTTP
 
     override fun toString(): String {
         return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, clientCacheTimeout=$clientCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, codecResponseTimeout=$codecResponseTimeout, codecCacheSize=$codecCacheSize, codecBatchesCacheSize=$codecBatchesCacheSize, checkRequestsAliveDelay=$checkRequestsAliveDelay, enableCaching=$enableCaching, notModifiedObjectsLifetime=$notModifiedObjectsLifetime, rarelyModifiedObjects=$rarelyModifiedObjects, maxMessagesLimit=$maxMessagesLimit, messageSearchPipelineBuffer=$messageSearchPipelineBuffer, sseEventSearchStep=$sseEventSearchStep, keepAliveTimeout=$keepAliveTimeout, dbRetryDelay=$dbRetryDelay, cradleDispatcherPoolSize=$cradleDispatcherPoolSize, sseSearchDelay=$sseSearchDelay, rabbitBatchMergeFrequency=$rabbitBatchMergeFrequency, rabbitBatchMergeBuffer=$rabbitBatchMergeBuffer, rabbitMergedBatchSize=$rabbitMergedBatchSize, decodeMessageConsumerCount=$decodeMessageConsumerCount, eventSearchChunkSize=$eventSearchChunkSize, serverType='$serverType')"
@@ -177,6 +178,6 @@ class Configuration(args: Array<String>) {
         Variable("decodeMessageConsumerCount", customConfiguration.decodeMessageConsumerCount.toString(), "64")
 
     val serverType: Variable =
-        Variable("serverType", customConfiguration.serverType, "http")
+        Variable("serverType", customConfiguration.serverType.toString(), "HTTP")
 
 }

@@ -17,13 +17,15 @@ package com.exactpro.th2.rptdataprovider
 
 import com.exactpro.th2.rptdataprovider.server.GrpcServer
 import com.exactpro.th2.rptdataprovider.server.HttpServer
+import com.exactpro.th2.rptdataprovider.server.ServerType
+import com.exactpro.th2.rptdataprovider.server.ServerType.GRPC
+import com.exactpro.th2.rptdataprovider.server.ServerType.HTTP
 import io.ktor.server.engine.*
 import io.ktor.util.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
-import java.lang.IllegalArgumentException
 
 @FlowPreview
 @EngineAPI
@@ -31,17 +33,16 @@ import java.lang.IllegalArgumentException
 @ExperimentalCoroutinesApi
 fun main(args: Array<String>) {
     val context = Context(args)
-    when (val type = context.configuration.serverType.value) {
-        "http" -> {
+    when (ServerType.valueOf(context.configuration.serverType.value)) {
+        HTTP -> {
             GlobalScope.launch {
                 HttpServer(context).run()
             }
         }
-        "grpc" -> {
+        GRPC -> {
             GlobalScope.launch {
                 GrpcServer(context)
             }
         }
-        else -> throw IllegalArgumentException("Unsupported server type: $type. Valid types is 'http' or 'grpc'")
     }
 }
