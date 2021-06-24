@@ -20,6 +20,7 @@ import com.exactpro.cradle.Direction
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.dataprovider.grpc.Stream
+import com.exactpro.th2.rptdataprovider.cradleDirectionToGrpc
 import com.exactpro.th2.rptdataprovider.convertToProto
 import java.time.Instant
 
@@ -84,10 +85,9 @@ data class StreamInfo(val stream: Pair<String, Direction>, val keepOpen: Boolean
 
     fun convertToProto(): Stream {
         return Stream.newBuilder()
-            .setDirection(if (stream.second == Direction.FIRST) com.exactpro.th2.common.grpc.Direction.FIRST else com.exactpro.th2.common.grpc.Direction.SECOND)
-            .setSession(stream.first).let { builder ->
+            .setDirection(cradleDirectionToGrpc(stream.second))
+            .setSession(stream.first).also { builder ->
                 lastElement?.let { builder.setLastId(it.convertToProto()) }
-                builder
             }.build()
     }
 }

@@ -69,10 +69,9 @@ data class Parameter(val name: String, val type: FilterParameterType, val defaul
         return com.exactpro.th2.dataprovider.grpc.Parameter.newBuilder()
             .setName(name)
             .setType(type.toProto())
-            .let { builder ->
+            .also { builder ->
                 getDefaultValue()?.let { builder.setDefaultValue(it) }
                 hint?.let { builder.setHint(it) }
-                builder
             }.build()
     }
 }
@@ -88,9 +87,8 @@ data class FilterInfo(
         return FilterInfo.newBuilder()
             .setName(FilterName.newBuilder().setFilterName(name))
             .addAllParameters(parameters.map { it.convertToProto() })
-            .let { builder ->
+            .also { builder ->
                 hint?.let { builder.setHint(it) }
-                builder
             }.build()
     }
 }

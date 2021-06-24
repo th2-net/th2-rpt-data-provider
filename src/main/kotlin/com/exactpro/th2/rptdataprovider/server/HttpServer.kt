@@ -165,11 +165,11 @@ class HttpServer(private val context: Context) {
         vararg parameters: Any?,
         calledFun: suspend () -> Any
     ) {
-        val stringParameters = parameters.contentDeepToString()
+        val stringParameters = lazy { parameters.contentDeepToString() }
         logMetrics(if (useSse) sseRequestsProcessedInParallelQuantity else restRequestsProcessedInParallelQuantity) {
             coroutineScope {
                 measureTimeMillis {
-                    logger.debug { "handling '$requestName' request with parameters '$stringParameters'" }
+                    logger.debug { "handling '$requestName' request with parameters '${stringParameters.value}'" }
                     try {
                         if (useSse) sseRequestGet.inc() else restRequestGet.inc()
                         try {
@@ -186,15 +186,15 @@ class HttpServer(private val context: Context) {
                             if (useSse) sseRequestProcessed.inc() else restRequestProcessed.inc()
                         }
                     } catch (e: InvalidRequestException) {
-                        logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - invalid request" }
+                        logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - invalid request" }
                     } catch (e: CradleObjectNotFoundException) {
-                        logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - missing cradle data" }
+                        logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - missing cradle data" }
                     } catch (e: ChannelClosedException) {
-                        logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - channel closed" }
+                        logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - channel closed" }
                     } catch (e: Exception) {
-                        logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - unexpected exception" }
+                        logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - unexpected exception" }
                     }
-                }.let { logger.debug { "request '$requestName' with parameters '$stringParameters' handled - time=${it}ms" } }
+                }.let { logger.debug { "request '$requestName' with parameters '${stringParameters.value}' handled - time=${it}ms" } }
             }
         }
     }

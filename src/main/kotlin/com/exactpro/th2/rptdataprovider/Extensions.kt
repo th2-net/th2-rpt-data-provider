@@ -22,8 +22,8 @@ import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.common.grpc.ConnectionID
-import com.exactpro.th2.common.grpc.Direction
 import com.exactpro.th2.common.grpc.MessageID
+import com.exactpro.th2.common.message.toTimestamp
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.BatchRequest
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -262,18 +262,10 @@ fun <T> Flow<T>.chunked(size: Int, duration: Duration): Flow<List<T>> {
 }
 
 
-fun Instant.convertToProto(): Timestamp {
-    return Timestamp.newBuilder()
-        .setNanos(this.nano)
-        .setSeconds(this.epochSecond)
-        .build()
-}
-
-
 fun StoredMessageId.convertToProto(): MessageID {
     return MessageID.newBuilder()
         .setSequence(index)
-        .setDirection(if (direction == com.exactpro.cradle.Direction.FIRST) Direction.FIRST else Direction.SECOND)
+        .setDirection(cradleDirectionToGrpc(direction))
         .setConnectionId(ConnectionID.newBuilder().setSessionAlias(streamName))
         .build()
 }
