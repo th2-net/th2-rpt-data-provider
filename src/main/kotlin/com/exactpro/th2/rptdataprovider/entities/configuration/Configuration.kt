@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,8 @@ import com.exactpro.th2.common.schema.factory.CommonFactory
 import com.exactpro.th2.common.schema.grpc.configuration.GrpcEndpointConfiguration
 import com.exactpro.th2.common.schema.grpc.router.GrpcRouter
 import com.exactpro.th2.common.schema.message.MessageRouter
+import com.exactpro.th2.rptdataprovider.grpc.RptDataProviderGrpcHandler
+import com.exactpro.th2.rptdataprovider.server.ServerType
 import mu.KotlinLogging
 
 class CustomConfigurationClass {
@@ -58,10 +60,10 @@ class CustomConfigurationClass {
 
     val eventSearchChunkSize: Int = 64
 
-    val serverType: String = "http"
+    val serverType: ServerType = ServerType.HTTP
 
     override fun toString(): String {
-        return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, clientCacheTimeout=$clientCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, codecResponseTimeout=$codecResponseTimeout, codecCacheSize=$codecCacheSize, codecBatchesCacheSize=$codecBatchesCacheSize, checkRequestsAliveDelay=$checkRequestsAliveDelay, enableCaching=$enableCaching, notModifiedObjectsLifetime=$notModifiedObjectsLifetime, rarelyModifiedObjects=$rarelyModifiedObjects, maxMessagesLimit=$maxMessagesLimit, messageSearchPipelineBuffer=$messageSearchPipelineBuffer, sseEventSearchStep=$sseEventSearchStep, keepAliveTimeout=$keepAliveTimeout, dbRetryDelay=$dbRetryDelay, cradleDispatcherPoolSize=$cradleDispatcherPoolSize, sseSearchDelay=$sseSearchDelay, rabbitBatchMergeFrequency=$rabbitBatchMergeFrequency, rabbitBatchMergeBuffer=$rabbitBatchMergeBuffer, rabbitMergedBatchSize=$rabbitMergedBatchSize, decodeMessageConsumerCount=$decodeMessageConsumerCount, eventSearchChunkSize=$eventSearchChunkSize, serverType='$serverType')"
+        return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, clientCacheTimeout=$clientCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, codecResponseTimeout=$codecResponseTimeout, codecCacheSize=$codecCacheSize, codecBatchesCacheSize=$codecBatchesCacheSize, checkRequestsAliveDelay=$checkRequestsAliveDelay, enableCaching=$enableCaching, notModifiedObjectsLifetime=$notModifiedObjectsLifetime, rarelyModifiedObjects=$rarelyModifiedObjects, maxMessagesLimit=$maxMessagesLimit, messageSearchPipelineBuffer=$messageSearchPipelineBuffer, sseEventSearchStep=$sseEventSearchStep, keepAliveTimeout=$keepAliveTimeout, dbRetryDelay=$dbRetryDelay, cradleDispatcherPoolSize=$cradleDispatcherPoolSize, sseSearchDelay=$sseSearchDelay, rabbitBatchMergeFrequency=$rabbitBatchMergeFrequency, rabbitBatchMergeBuffer=$rabbitBatchMergeBuffer, rabbitMergedBatchSize=$rabbitMergedBatchSize, decodeMessageConsumerCount=$decodeMessageConsumerCount, eventSearchChunkSize=$eventSearchChunkSize, serverType=$serverType)"
     }
 }
 
@@ -176,6 +178,6 @@ class Configuration(args: Array<String>) {
         Variable("decodeMessageConsumerCount", customConfiguration.decodeMessageConsumerCount.toString(), "64")
 
     val serverType: Variable =
-        Variable("serverType", customConfiguration.serverType, "http")
+        Variable("serverType", customConfiguration.serverType.toString(), "HTTP")
 
 }

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,8 +21,8 @@ import com.exactpro.cradle.testevents.StoredTestEventBatchMetadata
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.grpc.EventStatus
+import com.exactpro.th2.common.message.toTimestamp
 import com.exactpro.th2.dataprovider.grpc.EventMetadata
-import com.exactpro.th2.rptdataprovider.convertToProto
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ParseEventTreeNodeException
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.fasterxml.jackson.annotation.JsonIgnore
@@ -125,11 +125,10 @@ data class EventTreeNode(
             .setEventId(EventID.newBuilder().setId(eventId))
             .setEventName(eventName)
             .setEventType(eventType)
-            .setStartTimestamp(startTimestamp.convertToProto())
+            .setStartTimestamp(startTimestamp.toTimestamp())
             .setSuccessful(if (successful) EventStatus.SUCCESS else EventStatus.FAILED)
-            .let { builder ->
+            .also { builder ->
                 parentEventId?.let { builder.setParentEventId(EventID.newBuilder().setId(parentId)) }
-                builder
             }.build()
     }
 

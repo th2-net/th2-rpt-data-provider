@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import com.exactpro.cradle.Direction
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.dataprovider.grpc.Stream
+import com.exactpro.th2.rptdataprovider.cradleDirectionToGrpc
 import com.exactpro.th2.rptdataprovider.convertToProto
 import java.time.Instant
 
@@ -84,10 +85,9 @@ data class StreamInfo(val stream: Pair<String, Direction>, val keepOpen: Boolean
 
     fun convertToProto(): Stream {
         return Stream.newBuilder()
-            .setDirection(if (stream.second == Direction.FIRST) com.exactpro.th2.common.grpc.Direction.FIRST else com.exactpro.th2.common.grpc.Direction.SECOND)
-            .setSession(stream.first).let { builder ->
+            .setDirection(cradleDirectionToGrpc(stream.second))
+            .setSession(stream.first).also { builder ->
                 lastElement?.let { builder.setLastId(it.convertToProto()) }
-                builder
             }.build()
     }
 }

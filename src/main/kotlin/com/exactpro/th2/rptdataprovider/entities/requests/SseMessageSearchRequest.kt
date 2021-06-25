@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestExcept
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.dataprovider.grpc.TimeRelation.*
+import com.exactpro.th2.rptdataprovider.grpcDirectionToCradle
 import java.time.Instant
 
 data class SseMessageSearchRequest(
@@ -90,7 +91,7 @@ data class SseMessageSearchRequest(
             request.resumeFromId.let {
                 StoredMessageId(
                     it.connectionId.sessionAlias,
-                    if (it.direction == Direction.FIRST) FIRST else SECOND,
+                    grpcDirectionToCradle(it.direction),
                     it.sequence
                 ).toString()
             }
@@ -108,7 +109,7 @@ data class SseMessageSearchRequest(
             request.messageIdList.map {
                 StoredMessageId(
                     it.connectionId.sessionAlias,
-                    if (it.direction == Direction.FIRST) FIRST else SECOND,
+                    grpcDirectionToCradle(it.direction),
                     it.sequence
                 )
             }

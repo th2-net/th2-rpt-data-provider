@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -69,10 +69,9 @@ data class Parameter(val name: String, val type: FilterParameterType, val defaul
         return com.exactpro.th2.dataprovider.grpc.Parameter.newBuilder()
             .setName(name)
             .setType(type.toProto())
-            .let { builder ->
+            .also { builder ->
                 getDefaultValue()?.let { builder.setDefaultValue(it) }
                 hint?.let { builder.setHint(it) }
-                builder
             }.build()
     }
 }
@@ -88,9 +87,8 @@ data class FilterInfo(
         return FilterInfo.newBuilder()
             .setName(FilterName.newBuilder().setFilterName(name))
             .addAllParameters(parameters.map { it.convertToProto() })
-            .let { builder ->
+            .also { builder ->
                 hint?.let { builder.setHint(it) }
-                builder
             }.build()
     }
 }

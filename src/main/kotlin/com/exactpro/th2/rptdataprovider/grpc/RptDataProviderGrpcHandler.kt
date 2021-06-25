@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,15 +16,13 @@
 
 package com.exactpro.th2.rptdataprovider.grpc
 
-import com.exactpro.cradle.Direction.FIRST
-import com.exactpro.cradle.Direction.SECOND
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.utils.CradleIdException
-import com.exactpro.th2.common.grpc.Direction
 import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.dataprovider.grpc.*
-import com.exactpro.th2.rptdataprovider.*
+import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
@@ -32,6 +30,8 @@ import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchReques
 import com.exactpro.th2.rptdataprovider.entities.sse.GrpcWriter
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
+import com.exactpro.th2.rptdataprovider.grpcDirectionToCradle
+import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import com.google.protobuf.MessageOrBuilder
 import com.google.protobuf.TextFormat
@@ -144,13 +144,13 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
         request: MessageOrBuilder?,
         calledFun: suspend () -> Any
     ) {
-        val stringParameters = request?.let { TextFormat.shortDebugString(request) } ?: ""
+        val stringParameters = lazy { request?.let { TextFormat.shortDebugString(request) } ?: "" }
         val context = io.grpc.Context.current()
 
         CoroutineScope(Dispatchers.Default).launch {
             logMetrics(if (useStream) grpcStreamRequestsProcessedInParallelQuantity else grpcSingleRequestsProcessedInParallelQuantity) {
                 measureTimeMillis {
-                    logger.debug { "handling '$requestName' request with parameters '$stringParameters'" }
+                    logger.debug { "handling '$requestName' request with parameters '${stringParameters.value}'" }
                     try {
                         if (useStream) streamRequestGet.inc() else singleRequestGet.inc()
                         try {
@@ -172,19 +172,19 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
                             if (useStream) streamRequestProcessed.inc() else singleRequestProcessed.inc()
                         }
                     } catch (e: InvalidRequestException) {
-                        errorLogging(e, requestName, stringParameters, "invalid request")
+                        errorLogging(e, requestName, stringParameters.value, "invalid request")
                         sendErrorCode(responseObserver, e, Status.INVALID_ARGUMENT)
                     } catch (e: CradleObjectNotFoundException) {
-                        errorLogging(e, requestName, stringParameters, "missing cradle data")
+                        errorLogging(e, requestName, stringParameters.value, "missing cradle data")
                         sendErrorCode(responseObserver, e, Status.NOT_FOUND)
                     } catch (e: ChannelClosedException) {
-                        errorLogging(e, requestName, stringParameters, "channel closed")
+                        errorLogging(e, requestName, stringParameters.value, "channel closed")
                         sendErrorCode(responseObserver, e, Status.DEADLINE_EXCEEDED)
                     } catch (e: CradleIdException) {
-                        errorLogging(e, requestName, stringParameters, "unexpected cradle id exception")
+                        errorLogging(e, requestName, stringParameters.value, "unexpected cradle id exception")
                         sendErrorCode(responseObserver, e, Status.INTERNAL)
                     } catch (e: Exception) {
-                        errorLogging(e, requestName, stringParameters, "unexpected exception")
+                        errorLogging(e, requestName, stringParameters.value, "unexpected exception")
                         sendErrorCode(responseObserver, e, Status.INTERNAL)
                     }
                 }.let {
@@ -218,7 +218,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     private suspend fun handleSseRequest(
         responseObserver: StreamObserver<StreamResponse>,
         context: io.grpc.Context,
-        calledFun: suspend (StreamWriter, suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit) -> Unit
+        calledFun: Streaming
     ) {
         coroutineScope {
             try {
@@ -247,7 +247,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
             messageCache.getOrPut(
                 StoredMessageId(
                     request.connectionId.sessionAlias,
-                    if (request.direction == Direction.FIRST) FIRST else SECOND,
+                    grpcDirectionToCradle(request.direction),
                     request.sequence
                 ).toString()
             ).convertToGrpcMessageData()
@@ -377,7 +377,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
                 filterPredicate.apply(messageCache.getOrPut(
                     StoredMessageId(
                         request.messageId.connectionId.sessionAlias,
-                        if (request.messageId.direction == Direction.FIRST) FIRST else SECOND,
+                        grpcDirectionToCradle(request.messageId.direction),
                         request.messageId.sequence
                     ).toString()
                 ))

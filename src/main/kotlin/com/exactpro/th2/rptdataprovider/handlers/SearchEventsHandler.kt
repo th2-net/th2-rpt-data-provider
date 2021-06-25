@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -256,12 +256,15 @@ class SearchEventsHandler(
         return sequence {
             while (timeIntervals.hasNext()) {
                 val timestamp = timeIntervals.next()
-                if (!isSearchInFuture && isSearchNext && timestamp.second.isAfter(Instant.now())) {
+                if (!isSearchInFuture && isSearchNext
+                    && timestamp.second.isAfter(maxInstant(Instant.now(), request.endTimestamp ?: Instant.MIN))
+                ) {
                     if (request.keepOpen) {
                         timeIntervals = getTimeIntervals(request, sseSearchDelay, timestamp.first).iterator()
                         isSearchInFuture = true
                         continue
                     } else {
+                        yield(isSearchInFuture to timestamp)
                         return@sequence
                     }
                 }

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider.entities.responses
 
-import com.exactpro.cradle.Direction.FIRST
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.testevents.StoredTestEventWithContent
 import com.exactpro.th2.common.grpc.ConnectionID
@@ -24,8 +23,9 @@ import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.grpc.EventStatus.FAILED
 import com.exactpro.th2.common.grpc.EventStatus.SUCCESS
 import com.exactpro.th2.common.grpc.MessageID
+import com.exactpro.th2.common.message.toTimestamp
 import com.exactpro.th2.dataprovider.grpc.EventData
-import com.exactpro.th2.rptdataprovider.convertToProto
+import com.exactpro.th2.rptdataprovider.cradleDirectionToGrpc
 import com.fasterxml.jackson.annotation.JsonRawValue
 import com.google.protobuf.ByteString
 import java.time.Instant
@@ -53,12 +53,7 @@ data class Event(
             StoredMessageId.fromString(id).let {
                 MessageID.newBuilder()
                     .setConnectionId(ConnectionID.newBuilder().setSessionAlias(it.streamName))
-                    .setDirection(
-                        if (it.direction == FIRST)
-                            com.exactpro.th2.common.grpc.Direction.FIRST
-                        else
-                            com.exactpro.th2.common.grpc.Direction.SECOND
-                    )
+                    .setDirection(cradleDirectionToGrpc(it.direction))
                     .setSequence(it.index)
                     .build()
             }
@@ -70,16 +65,15 @@ data class Event(
             .setEventId(EventID.newBuilder().setId(eventId))
             .setIsBatched(isBatched)
             .setEventName(eventName)
-            .setStartTimestamp(startTimestamp.convertToProto())
+            .setStartTimestamp(startTimestamp.toTimestamp())
             .setSuccessful(if (successful) SUCCESS else FAILED)
-            .let { builder ->
+            .also { builder ->
                 batchId?.let { builder.setBatchId(EventID.newBuilder().setId(it)) }
                 eventType?.let { builder.setEventType(it) }
-                endTimestamp?.let { builder.setEndTimestamp(it.convertToProto()) }
+                endTimestamp?.let { builder.setEndTimestamp(it.toTimestamp()) }
                 parentEventId?.let { builder.setParentEventId(EventID.newBuilder().setId(it)) }
                 attachedMessageIds?.let { builder.addAllAttachedMessageIds(convertMessageIdToProto(it)) }
                 body?.let { builder.setBody(ByteString.copyFrom(it.toByteArray())) }
-                builder
             }.build()
     }
 

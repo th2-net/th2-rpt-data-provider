@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,7 +34,9 @@ class GrpcServer(private val context: Context) {
 
     init {
         this.server.start()
-        LOGGER.info("${GrpcServer::class.java.simpleName} started. ${context.configuration.grpcConfig}")
+        LOGGER.info("${GrpcServer::class.java.simpleName} started. " +
+                "Host: '${context.configuration.grpcConfig.host}' " +
+                "port: '${context.configuration.grpcConfig.port}'")
     }
 
     companion object {
