@@ -18,6 +18,7 @@ package com.exactpro.th2.rptdataprovider.entities.filters.events
 
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.Filter
+import com.exactpro.th2.rptdataprovider.entities.filters.FilterRequest
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
@@ -32,8 +33,8 @@ class EventStatusFilter private constructor(
         private const val failedStatus = "failed"
         private const val passedStatus = "passed"
 
-        suspend fun build(requestMap: Map<String, List<String>>, cradleService: CradleService): Filter<BaseEventEntity> {
-            val status = requestMap["${filterInfo.name}-value"]?.first()?.toLowerCase()
+        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<BaseEventEntity> {
+            val status = filterRequest.getValues()?.first()?.toLowerCase()
                 ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
 
             if (failedStatus != status && passedStatus != status) {
@@ -41,7 +42,7 @@ class EventStatusFilter private constructor(
             }
 
             return EventStatusFilter(
-                negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false,
+                negative = filterRequest.isNegative(),
                 status = status == passedStatus
             )
         }
