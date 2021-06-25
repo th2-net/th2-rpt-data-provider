@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ package com.exactpro.th2.rptdataprovider.entities.filters.events
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.Filter
+import com.exactpro.th2.rptdataprovider.entities.filters.FilterRequest
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType
@@ -31,15 +32,14 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 class AttachedMessageFilter private constructor(
     private var eventIds: Set<String>,
     override var negative: Boolean
-) :
-    Filter<BaseEventEntity> {
+) : Filter<BaseEventEntity> {
 
     companion object {
+        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<BaseEventEntity> {
 
-        suspend fun build(requestMap: Map<String, List<String>>, cradleService: CradleService): Filter<BaseEventEntity> {
             return AttachedMessageFilter(
-                negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false,
-                eventIds = requestMap["${filterInfo.name}-values"]
+                negative = filterRequest.isNegative(),
+                eventIds = filterRequest.getValues()
                     ?.flatMap { cradleService.getEventIdsSuspend(StoredMessageId.fromString(it)) }
                     ?.map { it.toString() }
                     ?.toSet()

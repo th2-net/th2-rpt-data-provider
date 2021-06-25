@@ -35,6 +35,15 @@ Event object example:
 }
 ```
 
+`http://localhost:8080/events` - returns list of events with the specified ids (at a time you can request no more
+ `eventSearchChunkSize`)
+- `ids` - text, one or more event ids **Required**
+
+```
+Example:
+    http://localhost:8082/events/?ids=first_id&ids=second_id
+``` 
+
 
 `http://localhost:8080/message/{id}` - returns a single message with the specified id
 
@@ -109,7 +118,7 @@ As example:
 
 - `parentEvent` - text - Will match events with the specified parent element.
 - `searchDirection` - `next`/`previous` - Sets the lookup direction. Can be used for pagination. Defaults to `next`.
-- `resultCountLimit` - number - Sets the maximum amount of events to return. Defaults to `100`.
+- `resultCountLimit` - number - Sets the maximum amount of events to return. Defaults to `null (unlimited)`.
 - `endTimestamp` - number, unix timestamp in milliseconds - Sets the timestamp to which the search will be performed, starting with `startTimestamp`. When `searchDirection` is `previous`, `endTimestamp` must be less then `startTimestamp`. Defaults to `null` (the search is carried out endlessly into the past or the future).
 - `limitForParent` - number - How many children for each parent do we want to request. Default `not limited`.
 - `keepOpen` - boolean - If the search has reached the current moment, is it necessary to wait further for the appearance of new data. Default `false`.
@@ -147,7 +156,7 @@ Event metadata object example (in sse):
 
 - `stream` - text, accepts multiple values - Sets the stream ids to search in. Case-sensitive. **Required**. 
 - `searchDirection` - `next`/`previous` - Sets the lookup direction. Can be used for pagination. Defaults to `next`.
-- `resultCountLimit` - number - Sets the maximum amount of messages to return. Defaults to `100`.
+- `resultCountLimit` - number - Sets the maximum amount of messages to return. Defaults to `null (unlimited)`.
 - `endTimestamp` - number, unix timestamp in milliseconds - Sets the timestamp to which the search will be performed, starting with `startTimestamp`. When `searchDirection` is `previous`, `endTimestamp` must be less then `startTimestamp`. Defaults to `null` (the search is carried out endlessly into the past or the future).
 - `keepOpen` - boolean - If the search has reached the current moment, is it necessary to wait further for the appearance of new data. Default `false`.
 - `messageId` - text, accepts multiple values - List of message IDs to restore search. If given, it has the highest priority and ignores `stream` (uses streams from ids), `startTimestamp` and `resumeFromId`. Defaults to `null`
@@ -216,6 +225,8 @@ spec:
     decodeMessageConsumerCount: 64 // number of batch handlers running in parallel
 
     eventSearchChunkSize: 64 // the size of event chunks during sse search and the maximum size of the batch of messages upon request getEvents
+
+    serverType: HTTP // provider server type. Allows 'HTTP' and 'GRPC' (case sensetive). 
 
   pins: // pins are used to communicate with codec components to parse message data
     - name: to_codec

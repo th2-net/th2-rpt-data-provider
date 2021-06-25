@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,8 @@ import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestExcept
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
-import com.exactpro.th2.rptdataprovider.entities.responses.Event
+import com.exactpro.th2.dataprovider.grpc.EventSearchRequest
+import com.exactpro.th2.dataprovider.grpc.TimeRelation.*
 import java.time.Instant
 
 data class SseEventSearchRequest(
@@ -60,6 +61,45 @@ data class SseEventSearchRequest(
         limitForParent = parameters["limitForParent"]?.firstOrNull()?.toLong(),
         metadataOnly = parameters["metadataOnly"]?.firstOrNull()?.toBoolean() ?: true,
         attachedMessages = parameters["attachedMessages"]?.firstOrNull()?.toBoolean() ?: false
+    )
+
+    constructor(request: EventSearchRequest, filterPredicate: FilterPredicate<BaseEventEntity>) : this(
+        filterPredicate = filterPredicate,
+        startTimestamp = if (request.hasStartTimestamp())
+            request.startTimestamp.let {
+                Instant.ofEpochSecond(it.seconds, it.nanos.toLong())
+            } else null,
+        parentEvent = if (request.hasParentEvent()) {
+            ProviderEventId(request.parentEvent.id)
+        } else null,
+        searchDirection = request.searchDirection.let {
+            when (it) {
+                PREVIOUS -> TimeRelation.BEFORE
+                else -> TimeRelation.AFTER
+            }
+        },
+        endTimestamp = if (request.hasEndTimestamp())
+            request.endTimestamp.let {
+                Instant.ofEpochSecond(it.seconds, it.nanos.toLong())
+            } else null,
+        resumeFromId = if (request.hasResumeFromId()) {
+            request.resumeFromId.id
+        } else null,
+        resultCountLimit = if (request.hasResultCountLimit()) {
+            request.resultCountLimit.value
+        } else null,
+        keepOpen = if (request.hasKeepOpen()) {
+            request.keepOpen.value
+        } else false,
+        limitForParent = if (request.hasLimitForParent()) {
+            request.limitForParent.value
+        } else null,
+        metadataOnly = if (request.hasMetadataOnly()) {
+            request.metadataOnly.value
+        } else true,
+        attachedMessages = if (request.hasAttachedMessages()) {
+            request.attachedMessages.value
+        } else false
     )
 
     private fun checkEndTimestamp() {

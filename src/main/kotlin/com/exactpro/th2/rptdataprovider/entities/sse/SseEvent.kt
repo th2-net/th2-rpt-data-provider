@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,12 +17,7 @@
 package com.exactpro.th2.rptdataprovider.entities.sse
 
 import com.exactpro.th2.rptdataprovider.asStringSuspend
-import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
-import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
-import com.exactpro.th2.rptdataprovider.entities.responses.Event
-import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
-import com.exactpro.th2.rptdataprovider.entities.responses.Message
-import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
+import com.exactpro.th2.rptdataprovider.entities.responses.*
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.ktor.util.*
 import java.time.Instant
@@ -53,6 +48,14 @@ data class LastScannedObjectInfo(var id: String = "", var timestamp: Long = 0, v
         id = message.id.toString()
         timestamp = message.timestamp.toEpochMilli()
         scanCounter = scanCnt.incrementAndGet()
+    }
+
+    fun convertToGrpc(): com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo {
+        return com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo.newBuilder()
+            .setId(id)
+            .setTimestampMillis(timestamp)
+            .setScanCounter(scanCounter)
+            .build()
     }
 }
 
@@ -108,10 +111,7 @@ data class SseEvent(val data: String = "empty data", val event: EventType? = nul
             )
         }
 
-        suspend fun build(
-            jacksonMapper: ObjectMapper,
-            streamsInfo: List<SearchMessagesHandler.StreamInfo>
-        ): SseEvent {
+        suspend fun build(jacksonMapper: ObjectMapper, streamsInfo: List<StreamInfo>): SseEvent {
             return SseEvent(
                 jacksonMapper.asStringSuspend(
                     mapOf(

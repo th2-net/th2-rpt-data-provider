@@ -14,14 +14,8 @@
  * limitations under the License.
  ******************************************************************************/
 
-package com.exactpro.th2.rptdataprovider.entities.filters
+package com.exactpro.th2.rptdataprovider.server
 
-import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
-import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
-
-
-interface Filter<T> {
-    val negative: Boolean
-    fun match(element: T): Boolean
-    fun getInfo(): FilterInfo
+enum class ServerType {
+    HTTP, GRPC;
 }

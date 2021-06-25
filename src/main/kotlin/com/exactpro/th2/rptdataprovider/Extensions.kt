@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,12 +17,17 @@
 package com.exactpro.th2.rptdataprovider
 
 import com.exactpro.cradle.messages.StoredMessageFilter
+import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
+import com.exactpro.th2.common.grpc.ConnectionID
+import com.exactpro.th2.common.grpc.MessageID
+import com.exactpro.th2.common.message.toTimestamp
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.BatchRequest
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.google.protobuf.Timestamp
 import io.prometheus.client.Gauge
 import io.prometheus.client.Histogram
 import kotlinx.coroutines.*
@@ -254,4 +259,13 @@ fun <T> Flow<T>.chunked(size: Int, duration: Duration): Flow<List<T>> {
             }
         }
     }
+}
+
+
+fun StoredMessageId.convertToProto(): MessageID {
+    return MessageID.newBuilder()
+        .setSequence(index)
+        .setDirection(cradleDirectionToGrpc(direction))
+        .setConnectionId(ConnectionID.newBuilder().setSessionAlias(streamName))
+        .build()
 }

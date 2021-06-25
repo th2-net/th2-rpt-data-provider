@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,17 @@
  ******************************************************************************/
 package com.exactpro.th2.rptdataprovider.entities.requests
 
+import com.exactpro.cradle.Direction.*
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.th2.common.grpc.Direction
+import com.exactpro.th2.dataprovider.grpc.MessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
-import java.security.Timestamp
+import com.exactpro.th2.dataprovider.grpc.TimeRelation.*
+import com.exactpro.th2.rptdataprovider.grpcDirectionToCradle
 import java.time.Instant
-import java.util.concurrent.TimeUnit
 
 data class SseMessageSearchRequest(
     val filterPredicate: FilterPredicate<Message>,
@@ -61,6 +64,58 @@ data class SseMessageSearchRequest(
         keepOpen = parameters["keepOpen"]?.firstOrNull()?.toBoolean() ?: false
     )
 
+    constructor(request: MessageSearchRequest, filterPredicate: FilterPredicate<Message>) : this(
+        filterPredicate = filterPredicate,
+        startTimestamp = if (request.hasStartTimestamp())
+            request.startTimestamp.let {
+                Instant.ofEpochSecond(it.seconds, it.nanos.toLong())
+            } else null,
+
+        stream = if (request.hasStream()) {
+            request.stream.listStringList
+        } else emptyList<String>(),
+
+        searchDirection = request.searchDirection.let {
+            when (it) {
+                PREVIOUS -> TimeRelation.BEFORE
+                else -> TimeRelation.AFTER
+            }
+        },
+
+        endTimestamp = if (request.hasEndTimestamp())
+            request.endTimestamp.let {
+                Instant.ofEpochSecond(it.seconds, it.nanos.toLong())
+            } else null,
+
+        resumeFromId = if (request.hasResumeFromId()) {
+            request.resumeFromId.let {
+                StoredMessageId(
+                    it.connectionId.sessionAlias,
+                    grpcDirectionToCradle(it.direction),
+                    it.sequence
+                ).toString()
+            }
+        } else null,
+
+        resultCountLimit = if (request.hasResultCountLimit()) {
+            request.resultCountLimit.value
+        } else null,
+
+        keepOpen = if (request.hasKeepOpen()) {
+            request.keepOpen.value
+        } else false,
+
+        resumeFromIdsList = if (request.messageIdList.isNotEmpty()) {
+            request.messageIdList.map {
+                StoredMessageId(
+                    it.connectionId.sessionAlias,
+                    grpcDirectionToCradle(it.direction),
+                    it.sequence
+                )
+            }
+        } else null
+    )
+
     private fun checkEndTimestamp() {
         if (endTimestamp == null || startTimestamp == null) return
 
@@ -74,8 +129,8 @@ data class SseMessageSearchRequest(
     }
 
     private fun checkStartPoint() {
-        if (startTimestamp == null && resumeFromId == null)
-            throw InvalidRequestException("One of the 'startTimestamp' or 'resumeFromId' must not be null")
+        if (startTimestamp == null && resumeFromId == null && resumeFromIdsList == null)
+            throw InvalidRequestException("One of the 'startTimestamp' or 'resumeFromId' or 'messageId' must not be null")
     }
 
     fun checkRequest() {

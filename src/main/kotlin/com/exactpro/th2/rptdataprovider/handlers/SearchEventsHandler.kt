@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
+import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
@@ -151,7 +152,6 @@ class SearchEventsHandler(
                 }
         }
     }
-
 
     @FlowPreview
     @ExperimentalCoroutinesApi
@@ -279,8 +279,8 @@ class SearchEventsHandler(
         request: SseEventSearchRequest,
         jacksonMapper: ObjectMapper,
         sseEventSearchStep: Long,
-        keepAlive: suspend (Writer, LastScannedObjectInfo, AtomicLong) -> Unit,
-        writer: Writer
+        keepAlive: suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit,
+        writer: StreamWriter
     ) {
         coroutineScope {
             val lastScannedObject = LastScannedObjectInfo()
@@ -343,17 +343,18 @@ class SearchEventsHandler(
                     if (request.metadataOnly) {
                         eventFlow.collect {
                             coroutineContext.ensureActive()
-                            writer.eventWrite(SseEvent.build(jacksonMapper, it.convertToEventTreeNode(), lastEventId))
+                            writer.write(it.convertToEventTreeNode(), lastEventId)
                         }
                     } else {
                         eventFlow.collect {
                             coroutineContext.ensureActive()
-                            writer.eventWrite(SseEvent.build(jacksonMapper, it.convertToEvent(), lastEventId))
+                            writer.write(it.convertToEvent(), lastEventId)
                         }
                     }
                 }
         }
     }
+
 
     // this is a fallback that should be deprecated after migration to cradle 1.6
     private suspend fun getDirectBatchedChildren(
