@@ -22,12 +22,10 @@ import com.exactpro.th2.rptdataprovider.server.ServerType.GRPC
 import com.exactpro.th2.rptdataprovider.server.ServerType.HTTP
 import io.ktor.server.engine.*
 import io.ktor.util.*
-
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
-import java.lang.IllegalArgumentException
 
 @FlowPreview
 @EngineAPI
