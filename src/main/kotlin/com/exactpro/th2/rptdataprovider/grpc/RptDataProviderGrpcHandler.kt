@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,16 +16,13 @@
 
 package com.exactpro.th2.rptdataprovider.grpc
 
-import com.exactpro.cradle.Direction.FIRST
-import com.exactpro.cradle.Direction.SECOND
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.utils.CradleIdException
-import com.exactpro.th2.common.grpc.Direction
 import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.grpc.MessageID
-import com.exactpro.th2.common.message.toTimestamp
 import com.exactpro.th2.dataprovider.grpc.*
-import com.exactpro.th2.rptdataprovider.*
+import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
@@ -33,21 +30,19 @@ import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchReques
 import com.exactpro.th2.rptdataprovider.entities.sse.GrpcWriter
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
+import com.exactpro.th2.rptdataprovider.grpcDirectionToCradle
+import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
-import com.google.protobuf.DynamicMessage
 import com.google.protobuf.MessageOrBuilder
 import com.google.protobuf.TextFormat
-import com.google.protobuf.Timestamp
 import io.grpc.Status
 import io.grpc.stub.StreamObserver
 import io.ktor.server.engine.*
 import io.ktor.util.*
 import io.prometheus.client.Counter
-import jnr.posix.Times
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import org.apache.commons.lang3.exception.ExceptionUtils
-import java.time.Instant
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
