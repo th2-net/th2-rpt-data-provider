@@ -131,7 +131,7 @@ class MessageProducer(
                             cradle.getEventIdsSuspend(it).map(Any::toString).toSet()
                         } catch (e: Exception) {
                             KotlinLogging.logger { }
-                                .error(e) { "unable to get messages attached to event (id=${message.id})" }
+                                .error(e) { "unable to get events attached to message (id=${message.id})" }
 
                             Collections.emptySet<String>()
                         }
