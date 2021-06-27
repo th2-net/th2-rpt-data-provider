@@ -224,7 +224,7 @@ class SearchMessagesHandler(
                     streamsInfo.sortBy { it.lastElementTime }
 
                     val data = pullMoreMerged(
-                        streamsInfo, request.searchDirection,
+                        streamsInfo, request,
                         limit, messageId, parentContext
                     )
 
@@ -355,17 +355,17 @@ class SearchMessagesHandler(
     private suspend fun pullMoreWrapped(
         startId: StoredMessageId?,
         limit: Int,
-        timelineDirection: TimeRelation,
+        request: SseMessageSearchRequest,
         isFirstPull: Boolean,
         searchContext: CoroutineScope
     ): List<MessageWrapper> {
         return coroutineScope {
             databaseRequestRetry(dbRetryDelay) {
-                pullMore(startId, limit, timelineDirection, isFirstPull)
+                pullMore(startId, limit, request.searchDirection, isFirstPull)
             }.map { batch ->
                 async {
                     val parsedFuture = searchContext.async {
-                        messageProducer.fromRawMessage(batch)
+                        messageProducer.fromRawMessage(batch, request)
                     }
                     batch.messages.map { message ->
                         MessageWrapper.build(message, parsedFuture)
@@ -411,22 +411,27 @@ class SearchMessagesHandler(
 
     private suspend fun pullMoreMerged(
         streamsInfo: List<StreamInfo>,
-        timelineDirection: TimeRelation,
+        request: SseMessageSearchRequest,
         perStreamLimit: Int,
         messageId: StoredMessageId?,
         parentContext: CoroutineScope
     ): List<MessageWrapper> {
-        logger.debug { "pulling more messages (streams=${streamsInfo} direction=$timelineDirection perStreamLimit=$perStreamLimit)" }
+        logger.debug { "pulling more messages (streams=${streamsInfo} direction=${request.searchDirection} perStreamLimit=$perStreamLimit)" }
         return coroutineScope {
             val startIdStream = messageId?.let { Pair(it.streamName, it.direction) }
             streamsInfo.flatMap { stream ->
                 val pulled = pullMoreWrapped(
-                    stream.lastElement, perStreamLimit, timelineDirection,
+                    stream.lastElement, perStreamLimit, request,
                     stream.isFirstPull, parentContext
                 )
+<<<<<<< HEAD
 
                 dropUntilInRangeInOppositeDirection(stream, pulled, timelineDirection).let {
                     stream.update(pulled.size, perStreamLimit, timelineDirection, it)
+=======
+                dropUntilInRangeInOppositeDirection(stream, pulled, request.searchDirection).let {
+                    stream.update(pulled.size, perStreamLimit, request.searchDirection, it)
+>>>>>>> add_event_ids_in_message
                     if (stream.stream == startIdStream) {
                         it.filterNot { m -> m.message.id == messageId }
                     } else {
@@ -434,7 +439,7 @@ class SearchMessagesHandler(
                     }
                 }
             }.let { list ->
-                if (timelineDirection == AFTER) {
+                if (request.searchDirection == AFTER) {
                     list.sortedBy { it.message.timestamp }
                 } else {
                     list.sortedByDescending { it.message.timestamp }
