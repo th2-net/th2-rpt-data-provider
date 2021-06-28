@@ -18,24 +18,28 @@ package com.exactpro.th2.rptdataprovider.entities.filters.messages
 
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.Filter
+import com.exactpro.th2.rptdataprovider.entities.filters.FilterRequest
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
+import mu.KotlinLogging
 import java.util.*
 
 class MessageBodyBinaryFilter private constructor(
-    private var body: List<String>,
+    private var bodyBinary: List<String>,
     override var negative: Boolean = false
 ) : Filter<Message> {
 
     companion object {
-        suspend fun build(requestMap: Map<String, List<String>>, cradleService: CradleService): Filter<Message> {
+        private val logger = KotlinLogging.logger { }
+
+        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<Message> {
             return MessageBodyBinaryFilter(
-                negative = requestMap["${filterInfo.name}-negative"]?.first()?.toBoolean() ?: false,
-                body = requestMap["${filterInfo.name}-values"]
-                    ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
+                negative = filterRequest.isNegative(),
+                bodyBinary = filterRequest.getValues()
+                    ?: throw InvalidRequestException("'${MessageBodyFilter.filterInfo.name}-values' cannot be empty")
             )
         }
 
@@ -44,15 +48,22 @@ class MessageBodyBinaryFilter private constructor(
             "matches messages whose binary body contains one of the specified tokens",
             mutableListOf<Parameter>().apply {
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
-                add(Parameter("values", FilterParameterType.STRING_LIST, null, "383d 4649, ..."))
+                add(Parameter("values", FilterParameterType.STRING_LIST, null, "FGW, ..."))
             }
         )
     }
 
     override fun match(element: Message): Boolean {
-        return negative.xor(body.any { item ->
-            String(Base64.getDecoder().decode(element.bodyBase64)).toLowerCase()?.contains(item.toLowerCase()) ?: false
-        })
+        return try {
+            negative.xor(bodyBinary.any { item ->
+                String(Base64.getDecoder().decode(element.bodyBase64)).toLowerCase().contains(item.toLowerCase())
+            })
+        } catch (e: Exception) {
+            logger.warn(e) {}
+            false
+        }
+
+
     }
 
     override fun getInfo(): FilterInfo {
