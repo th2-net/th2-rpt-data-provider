@@ -424,14 +424,8 @@ class SearchMessagesHandler(
                     stream.lastElement, perStreamLimit, request,
                     stream.isFirstPull, parentContext
                 )
-<<<<<<< HEAD
-
-                dropUntilInRangeInOppositeDirection(stream, pulled, timelineDirection).let {
-                    stream.update(pulled.size, perStreamLimit, timelineDirection, it)
-=======
                 dropUntilInRangeInOppositeDirection(stream, pulled, request.searchDirection).let {
                     stream.update(pulled.size, perStreamLimit, request.searchDirection, it)
->>>>>>> add_event_ids_in_message
                     if (stream.stream == startIdStream) {
                         it.filterNot { m -> m.message.id == messageId }
                     } else {
