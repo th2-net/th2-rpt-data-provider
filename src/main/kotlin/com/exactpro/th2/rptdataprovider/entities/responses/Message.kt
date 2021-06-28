@@ -36,7 +36,7 @@ data class Message(
     val sessionId: String,
     val messageType: String,
 
-    val attachedEventIds: Set<String>?,
+    val attachedEventIds: Set<String>,
 
     @JsonRawValue
     val body: String?,
@@ -56,7 +56,7 @@ data class Message(
         jsonBody: String?,
         base64Body: String?,
         messageType: String,
-        events: Set<String>?
+        events: Set<String>
     ) : this(
         bodyBase64 = base64Body,
         body = jsonBody,
@@ -75,14 +75,10 @@ data class Message(
             .setDirection(cradleDirectionToGrpc(id.direction))
             .setSessionId(ConnectionID.newBuilder().setSessionAlias(id.streamName))
             .setMessageType(messageType)
+            .addAllAttachedEventIds(attachedEventIds.map { EventID.newBuilder().setId(it).build() })
             .also { builder ->
                 body?.let { builder.setBody(body) }
                 bodyBase64?.let { builder.setBodyBase64(bodyBase64) }
-                attachedEventIds?.let { ids ->
-                    builder.addAllAttachedEventIds(ids.map {
-                        EventID.newBuilder().setId(it).build()
-                    })
-                }
             }.build()
     }
 }

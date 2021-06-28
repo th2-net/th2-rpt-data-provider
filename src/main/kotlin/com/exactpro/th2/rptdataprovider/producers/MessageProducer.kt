@@ -91,7 +91,7 @@ class MessageProducer(
                             Base64.getEncoder().encodeToString(it.body.toByteArray())
                         },
                         processed?.get(i)?.get()?.metadata?.messageType ?: "",
-                        attachedEvents?.get(i)
+                        attachedEvents?.get(i) ?: emptySet()
                     ).also { codecCache.put(it.messageId, it) }
                 }.associateBy { it.id },
                 needAttachEvents

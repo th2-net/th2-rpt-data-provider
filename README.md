@@ -61,6 +61,7 @@ Message object example:
   "messageType": "OrderMassCancelReport",
   "body": {}, // parsed data
   "bodyBase64": "" // base64-encoded binary data
+  "attachedEventIds": []
 }
 ```
 
@@ -160,6 +161,8 @@ Event metadata object example (in sse):
 - `endTimestamp` - number, unix timestamp in milliseconds - Sets the timestamp to which the search will be performed, starting with `startTimestamp`. When `searchDirection` is `previous`, `endTimestamp` must be less then `startTimestamp`. Defaults to `null` (the search is carried out endlessly into the past or the future).
 - `keepOpen` - boolean - If the search has reached the current moment, is it necessary to wait further for the appearance of new data. Default `false`.
 - `messageId` - text, accepts multiple values - List of message IDs to restore search. If given, it has the highest priority and ignores `stream` (uses streams from ids), `startTimestamp` and `resumeFromId`. Defaults to `null`
+- `attachedEvents`- boolean - If `true`, additionally load `attachedEventIds`. Default `false`.
+
 
 - `FILTERS`:
 
