@@ -27,13 +27,15 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
 class MessageBodyFilter private constructor(
     private var body: List<String>,
-    override var negative: Boolean = false
+    override var negative: Boolean = false,
+    override var conjunct: Boolean = false
 ) : Filter<Message> {
 
     companion object {
         suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<Message> {
             return MessageBodyFilter(
                 negative = filterRequest.isNegative(),
+                conjunct = filterRequest.isConjunct(),
                 body = filterRequest.getValues()
                     ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
             )
@@ -44,15 +46,17 @@ class MessageBodyFilter private constructor(
             "matches messages whose body contains one of the specified tokens",
             mutableListOf<Parameter>().apply {
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
+                add(Parameter("conjunct", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("values", FilterParameterType.STRING_LIST, null, "FGW, ..."))
             }
         )
     }
 
     override fun match(element: Message): Boolean {
-        return negative.xor(body.any { item ->
+        val predicate: (String) -> Boolean = { item ->
             element.body?.toLowerCase()?.contains(item.toLowerCase()) ?: false
-        })
+        }
+        return negative.xor(if (conjunct) body.all(predicate) else body.any(predicate))
     }
 
     override fun getInfo(): FilterInfo {

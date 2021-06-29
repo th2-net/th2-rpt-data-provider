@@ -22,6 +22,7 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
 interface Filter<T> {
     val negative: Boolean
+    val conjunct: Boolean
     fun match(element: T): Boolean
     fun getInfo(): FilterInfo
 }

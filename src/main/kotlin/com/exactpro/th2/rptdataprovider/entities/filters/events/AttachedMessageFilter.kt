@@ -31,7 +31,8 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
 class AttachedMessageFilter private constructor(
     private var eventIds: Set<String>,
-    override var negative: Boolean
+    override var negative: Boolean,
+    override var conjunct: Boolean = false
 ) : Filter<BaseEventEntity> {
 
     companion object {

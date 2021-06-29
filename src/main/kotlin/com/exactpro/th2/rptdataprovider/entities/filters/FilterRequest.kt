@@ -23,6 +23,7 @@ import com.exactpro.th2.dataprovider.grpc.Filter
 interface FilterRequest {
     fun getName(): String
     fun isNegative(): Boolean
+    fun isConjunct(): Boolean
     fun getValues(): List<String>?
 }
 
@@ -33,6 +34,10 @@ data class HttpFilter(val filterName: String, val requestMap: Map<String, List<S
 
     override fun isNegative(): Boolean {
         return requestMap["$filterName-negative"]?.first()?.toBoolean() ?: false
+    }
+
+    override fun isConjunct(): Boolean {
+        return requestMap["$filterName-conjunct"]?.first()?.toBoolean() ?: false
     }
 
     override fun getValues(): List<String>? {
@@ -48,6 +53,14 @@ data class GrpcFilter(val filterName: String, val filter: Filter) : FilterReques
     override fun isNegative(): Boolean {
         return if (filter.hasNegative()) {
             filter.negative.value
+        } else {
+            false
+        }
+    }
+
+    override fun isConjunct(): Boolean {
+        return if (filter.hasConjunct()) {
+            filter.conjunct.value
         } else {
             false
         }
