@@ -23,17 +23,12 @@ plugins {
 
 ext {
     dockerImageVersion = release_version
-    sharedDir           = file("${project.rootDir}/shared")
 }
 
 group 'com.exactpro.th2'
 version release_version
 
 repositories {
-    maven {
-        name 'MavenLocal'
-        url sharedDir
-    }
     mavenCentral()
     maven {
         name 'Sonatype_snapshots'
