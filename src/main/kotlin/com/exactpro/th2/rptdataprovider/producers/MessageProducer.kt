@@ -130,8 +130,7 @@ class MessageProducer(
                         try {
                             cradle.getEventIdsSuspend(it).map(Any::toString).toSet()
                         } catch (e: Exception) {
-                            KotlinLogging.logger { }
-                                .error(e) { "unable to get events attached to message (id=${message.id})" }
+                            logger.error(e) { "unable to get events attached to message (id=${message.id})" }
 
                             Collections.emptySet<String>()
                         }
@@ -174,7 +173,7 @@ class MessageProducer(
         ).firstOrNull()?.let { if (it.isEmpty) null else it }
 
         return rawBatchNullable?.let { rawBatch ->
-            (codecCacheBatches.get(rawBatch.id.toString()) ?: parseRawMessageBatch(rawBatch, true)).batch[id]
+            (codecCacheBatches.get(rawBatch.id.toString()) ?: parseRawMessageBatch(rawBatch)).batch[id]
         } ?: throw CradleMessageNotFoundException("message '${id}' does not exist in cradle")
     }
 }

@@ -244,7 +244,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
 
     override fun getEvents(request: EventIds, responseObserver: StreamObserver<Events>) {
         handleRequest(responseObserver, "get events", useStream = false, request = request) {
-            val ids = request.idsList?.map { it.id }
+            val ids = request.idsList.map { it.id }
             when {
                 ids.isNullOrEmpty() ->
                     throw InvalidRequestException("Ids set must not be empty: $ids")
