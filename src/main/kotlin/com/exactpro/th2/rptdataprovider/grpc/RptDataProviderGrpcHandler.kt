@@ -96,6 +96,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     private val jacksonMapper = context.jacksonMapper
     private val checkRequestAliveDelay = context.configuration.checkRequestsAliveDelay.value.toLong()
     private val keepAliveTimeout = context.configuration.keepAliveTimeout.value.toLong()
+    private val getEventsLimit = this.context.configuration.eventSearchChunkSize.value.toInt()
 
     private val searchEventsHandler = this.context.searchEventsHandler
     private val searchMessagesHandler = this.context.searchMessagesHandler
@@ -241,6 +242,21 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
         }
     }
 
+    override fun getEvents(request: EventIds, responseObserver: StreamObserver<Events>) {
+        handleRequest(responseObserver, "get events", useStream = false, request = request) {
+            val ids = request.idsList.map { it.id }
+            when {
+                ids.isNullOrEmpty() ->
+                    throw InvalidRequestException("Ids set must not be empty: $ids")
+                ids.size > getEventsLimit ->
+                    throw InvalidRequestException("Too many id in request: ${ids.size}, max is: $getEventsLimit")
+                else -> eventCache.getOrPutMany(ids.toSet())
+                    .map { it.convertToEvent().convertToGrpcEventData() }
+            }.let {
+                Events.newBuilder().addAllEvents(it).build()
+            }
+        }
+    }
 
     override fun getMessage(request: MessageID, responseObserver: StreamObserver<MessageData>) {
         handleRequest(responseObserver, "get message", useStream = false, request = request) {

@@ -36,6 +36,7 @@ data class SseMessageSearchRequest(
     val resumeFromId: String?,
     val resultCountLimit: Int?,
     val keepOpen: Boolean,
+    val attachedEvents: Boolean,
     val resumeFromIdsList: List<StoredMessageId>?
 ) {
 
@@ -61,7 +62,8 @@ data class SseMessageSearchRequest(
         resumeFromId = parameters["resumeFromId"]?.firstOrNull(),
         resumeFromIdsList = parameters["messageId"]?.map { StoredMessageId.fromString(it) },
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt(),
-        keepOpen = parameters["keepOpen"]?.firstOrNull()?.toBoolean() ?: false
+        keepOpen = parameters["keepOpen"]?.firstOrNull()?.toBoolean() ?: false,
+        attachedEvents = parameters["attachedEvents"]?.firstOrNull()?.toBoolean() ?: false
     )
 
     constructor(request: MessageSearchRequest, filterPredicate: FilterPredicate<Message>) : this(
@@ -113,7 +115,10 @@ data class SseMessageSearchRequest(
                     it.sequence
                 )
             }
-        } else null
+        } else null,
+        attachedEvents = if (request.hasAttachedEvents()) {
+            request.attachedEvents.value
+        } else false
     )
 
     private fun checkEndTimestamp() {
