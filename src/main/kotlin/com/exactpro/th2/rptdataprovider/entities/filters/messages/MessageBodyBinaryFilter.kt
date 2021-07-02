@@ -29,7 +29,8 @@ import java.util.*
 
 class MessageBodyBinaryFilter private constructor(
     private var bodyBinary: List<String>,
-    override var negative: Boolean = false
+    override var negative: Boolean = false,
+    override var conjunct: Boolean = false
 ) : Filter<Message> {
 
     companion object {
@@ -38,6 +39,7 @@ class MessageBodyBinaryFilter private constructor(
         suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<Message> {
             return MessageBodyBinaryFilter(
                 negative = filterRequest.isNegative(),
+                conjunct = filterRequest.isConjunct(),
                 bodyBinary = filterRequest.getValues()
                     ?: throw InvalidRequestException("'${MessageBodyFilter.filterInfo.name}-values' cannot be empty")
             )
@@ -48,22 +50,22 @@ class MessageBodyBinaryFilter private constructor(
             "matches messages whose binary body contains one of the specified tokens",
             mutableListOf<Parameter>().apply {
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
+                add(Parameter("conjunct", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("values", FilterParameterType.STRING_LIST, null, "FGW, ..."))
             }
         )
     }
 
     override fun match(element: Message): Boolean {
+        val predicate: (String) -> Boolean = { item ->
+            String(Base64.getDecoder().decode(element.bodyBase64)).toLowerCase().contains(item.toLowerCase())
+        }
         return try {
-            negative.xor(bodyBinary.any { item ->
-                String(Base64.getDecoder().decode(element.bodyBase64)).toLowerCase().contains(item.toLowerCase())
-            })
+            negative.xor(if (conjunct) bodyBinary.all(predicate) else bodyBinary.any(predicate))
         } catch (e: Exception) {
             logger.warn(e) {}
             false
         }
-
-
     }
 
     override fun getInfo(): FilterInfo {

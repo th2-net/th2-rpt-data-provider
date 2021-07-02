@@ -37,8 +37,17 @@ class AttachedEventFilters private constructor(
         suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<Message> {
             return AttachedEventFilters(
                 negative = filterRequest.isNegative(),
+                conjunct = filterRequest.isConjunct(),
                 messagesFromAttachedId = filterRequest.getValues()
-                    ?.flatMap { cradleService.getMessageIdsSuspend(StoredTestEventId(it)) }
+                    ?.map { cradleService.getMessageIdsSuspend(StoredTestEventId(it)).toSet() }
+                    ?.reduce { set, element ->
+                        if (filterRequest.isConjunct()) {
+                            set intersect element
+                        } else {
+                            set union element
+                        }
+                    }
+                    ?.flatMap { listOf(it) }
                     ?.map { it.toString() }
                     ?.toSet()
                     ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
@@ -50,6 +59,7 @@ class AttachedEventFilters private constructor(
             "matches messages by one of the attached event id",
             mutableListOf<Parameter>().apply {
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
+                add(Parameter("conjunct", FilterParameterType.BOOLEAN, false, null))
                 add(
                     Parameter(
                         "values",
