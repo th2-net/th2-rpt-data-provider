@@ -23,6 +23,8 @@ import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.rptdataprovider.cache.CodecCache
 import com.exactpro.th2.rptdataprovider.cache.CodecCacheBatches
+import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.entities.responses.ParsedMessageBatch
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
@@ -31,9 +33,9 @@ import com.exactpro.th2.rptdataprovider.services.rabbitmq.MessageRequest
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import com.google.protobuf.InvalidProtocolBufferException
 import com.google.protobuf.util.JsonFormat
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.buffer
-import kotlinx.coroutines.flow.flow
 import mu.KotlinLogging
 import java.util.*
 
@@ -59,15 +61,26 @@ class MessageProducer(
         }
     }
 
-    suspend fun fromRawMessage(messageBatch: StoredMessageBatch): ParsedMessageBatch {
+    suspend fun fromRawMessage(messageBatch: StoredMessageBatch, request: SseMessageSearchRequest): ParsedMessageBatch {
+        return parseRawMessageBatch(messageBatch, request.attachedEvents)
+    }
+
+    private suspend fun parseRawMessageBatch(
+        messageBatch: StoredMessageBatch,
+        needAttachEvents: Boolean = true
+    ): ParsedMessageBatch {
         return coroutineScope {
             codecCacheBatches.get(messageBatch.id.toString())?.let {
-                return@coroutineScope it
+                if (!needAttachEvents || it.attachedEvents)
+                    return@coroutineScope it
             }
 
             val parsedRawMessage = messageBatch.messages.map { parseRawMessage(it) }
 
             val processed: List<MessageRequest>? = parseMessage(messageBatch)
+
+            val attachedEvents: List<Set<String>>? =
+                if (needAttachEvents) getAttachedEvents(messageBatch.messages) else null
 
             return@coroutineScope ParsedMessageBatch(messageBatch.id,
                 messageBatch.messages.mapIndexed { i, rawMessage ->
@@ -77,14 +90,37 @@ class MessageProducer(
                         parsedRawMessage[i]?.let {
                             Base64.getEncoder().encodeToString(it.body.toByteArray())
                         },
-                        processed?.get(i)?.get()?.metadata?.messageType ?: ""
+                        processed?.get(i)?.get()?.metadata?.messageType ?: "",
+                        attachedEvents?.get(i) ?: emptySet()
                     ).also { codecCache.put(it.messageId, it) }
-                }.associateBy { it.id }
+                }.associateBy { it.id },
+                needAttachEvents
             ).also {
                 codecCacheBatches.put(it.id.toString(), it)
             }
         }
     }
+
+    private suspend fun getAttachedEvents(
+        messages: MutableCollection<StoredMessage>
+    ): List<Set<String>> {
+        return coroutineScope {
+            messages.map { message ->
+                async {
+                    message.id.let {
+                        try {
+                            cradle.getEventIdsSuspend(it).map(Any::toString).toSet()
+                        } catch (e: Exception) {
+                            logger.error(e) { "unable to get events attached to message (id=${message.id})" }
+
+                            Collections.emptySet<String>()
+                        }
+                    }
+                }
+            }.awaitAll()
+        }
+    }
+
 
     private suspend fun parseMessage(batch: StoredMessageBatch): List<MessageRequest>? {
 
@@ -118,7 +154,7 @@ class MessageProducer(
         ).firstOrNull()?.let { if (it.isEmpty) null else it }
 
         return rawBatchNullable?.let { rawBatch ->
-            (codecCacheBatches.get(rawBatch.id.toString()) ?: fromRawMessage(rawBatch)).batch[id]
+            (codecCacheBatches.get(rawBatch.id.toString()) ?: parseRawMessageBatch(rawBatch)).batch[id]
         } ?: throw CradleMessageNotFoundException("message '${id}' does not exist in cradle")
     }
 }

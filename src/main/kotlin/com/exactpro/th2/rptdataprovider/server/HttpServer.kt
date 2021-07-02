@@ -411,7 +411,7 @@ class HttpServer(private val context: Context) {
 
                 get("match/event/{id}") {
                     val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, context, "search events sse", null, false, false, queryParametersMap) {
+                    handleRequest(call, context, "match event", null, false, false, queryParametersMap) {
                         val filterPredicate = eventFiltersPredicateFactory.build(queryParametersMap)
                         filterPredicate.apply(eventCache.getOrPut(call.parameters["id"]!!))
                     }
