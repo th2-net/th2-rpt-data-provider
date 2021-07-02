@@ -42,7 +42,7 @@ data class Event(
 
     val parentEventId: String?,
     val successful: Boolean,
-    val attachedMessageIds: Set<String>?,
+    val attachedMessageIds: Set<String>,
 
     @JsonRawValue
     val body: String?
@@ -67,12 +67,12 @@ data class Event(
             .setEventName(eventName)
             .setStartTimestamp(startTimestamp.toTimestamp())
             .setSuccessful(if (successful) SUCCESS else FAILED)
+            .addAllAttachedMessageIds(convertMessageIdToProto(attachedMessageIds))
             .also { builder ->
                 batchId?.let { builder.setBatchId(EventID.newBuilder().setId(it)) }
                 eventType?.let { builder.setEventType(it) }
                 endTimestamp?.let { builder.setEndTimestamp(it.toTimestamp()) }
                 parentEventId?.let { builder.setParentEventId(EventID.newBuilder().setId(it)) }
-                attachedMessageIds?.let { builder.addAllAttachedMessageIds(convertMessageIdToProto(it)) }
                 body?.let { builder.setBody(ByteString.copyFrom(it.toByteArray())) }
             }.build()
     }

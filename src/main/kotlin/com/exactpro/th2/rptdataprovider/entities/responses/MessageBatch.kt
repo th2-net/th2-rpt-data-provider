@@ -65,6 +65,7 @@ data class MessageBatch(
 
 data class ParsedMessageBatch(
     val id: StoredMessageBatchId,
-    val batch: Map<StoredMessageId, Message>
+    val batch: Map<StoredMessageId, Message>,
+    val attachedEvents: Boolean
 )
 
