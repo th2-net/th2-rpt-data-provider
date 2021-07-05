@@ -51,7 +51,6 @@ class AttachedMessageFilter private constructor(
                     ?.flatMap { listOf(it) }
                     ?.map { it.toString() }
                     ?.toSet()
-                    ?.toSet()
                     ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
             )
         }
