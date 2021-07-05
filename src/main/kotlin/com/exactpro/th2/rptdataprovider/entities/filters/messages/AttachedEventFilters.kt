@@ -40,8 +40,10 @@ class AttachedEventFilters private constructor(
                 conjunct = filterRequest.isConjunct(),
                 messagesFromAttachedId = filterRequest.getValues()
                     ?.map {
-                        cradleService.getMessageIdsSuspend(StoredTestEventId(it)
-                        ).map { id -> id.toString() }
+                        cradleService.getMessageIdsSuspend(
+                            StoredTestEventId(it)
+                        )
+                            .map { id -> id.toString() }
                             .toSet()
                     }
                     ?.reduce { set, element ->
