@@ -39,7 +39,11 @@ class AttachedEventFilters private constructor(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
                 messagesFromAttachedId = filterRequest.getValues()
-                    ?.map { cradleService.getMessageIdsSuspend(StoredTestEventId(it)).toSet() }
+                    ?.map {
+                        cradleService.getMessageIdsSuspend(StoredTestEventId(it)
+                        ).map { id -> id.toString() }
+                            .toSet()
+                    }
                     ?.reduce { set, element ->
                         if (filterRequest.isConjunct()) {
                             set intersect element
@@ -47,9 +51,6 @@ class AttachedEventFilters private constructor(
                             set union element
                         }
                     }
-                    ?.flatMap { listOf(it) }
-                    ?.map { it.toString() }
-                    ?.toSet()
                     ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
             )
         }
