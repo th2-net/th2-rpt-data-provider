@@ -28,7 +28,8 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
 class AttachedEventFilters private constructor(
     private var messagesFromAttachedId: Set<String>,
-    override var negative: Boolean = false
+    override var negative: Boolean = false,
+    override var conjunct: Boolean = false
 ) : Filter<Message> {
 
     companion object {
@@ -36,10 +37,22 @@ class AttachedEventFilters private constructor(
         suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<Message> {
             return AttachedEventFilters(
                 negative = filterRequest.isNegative(),
+                conjunct = filterRequest.isConjunct(),
                 messagesFromAttachedId = filterRequest.getValues()
-                    ?.flatMap { cradleService.getMessageIdsSuspend(StoredTestEventId(it)) }
-                    ?.map { it.toString() }
-                    ?.toSet()
+                    ?.map {
+                        cradleService.getMessageIdsSuspend(
+                            StoredTestEventId(it)
+                        )
+                            .map { id -> id.toString() }
+                            .toSet()
+                    }
+                    ?.reduce { set, element ->
+                        if (filterRequest.isConjunct()) {
+                            set intersect element
+                        } else {
+                            set union element
+                        }
+                    }
                     ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
             )
         }
@@ -49,6 +62,7 @@ class AttachedEventFilters private constructor(
             "matches messages by one of the attached event id",
             mutableListOf<Parameter>().apply {
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
+                add(Parameter("conjunct", FilterParameterType.BOOLEAN, false, null))
                 add(
                     Parameter(
                         "values",

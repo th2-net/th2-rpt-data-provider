@@ -42,7 +42,7 @@ fun main(args: Array<String>) {
         GRPC -> {
             GlobalScope.launch {
                 GrpcServer(context)
-            }
+            } 
         }
     }
 }
