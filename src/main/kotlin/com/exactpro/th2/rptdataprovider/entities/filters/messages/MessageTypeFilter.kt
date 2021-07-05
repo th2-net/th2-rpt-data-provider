@@ -27,13 +27,15 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
 class MessageTypeFilter(
     private var type: List<String>,
-    override var negative: Boolean = false
+    override var negative: Boolean = false,
+    override var conjunct: Boolean = false
 ) : Filter<Message> {
 
     companion object {
         suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<Message> {
             return MessageTypeFilter(
                 negative = filterRequest.isNegative(),
+                conjunct = filterRequest.isConjunct(),
                 type = filterRequest.getValues()
                     ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
             )
@@ -44,15 +46,17 @@ class MessageTypeFilter(
             "matches messages by one of the specified types",
             mutableListOf<Parameter>().apply {
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
+                add(Parameter("conjunct", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("values", FilterParameterType.STRING_LIST, null, "Heartbeat, ..."))
             }
         )
     }
 
     override fun match(element: Message): Boolean {
-        return negative.xor(type.any { item ->
+        val predicate: (String) -> Boolean = { item ->
             element.messageType.toLowerCase().contains(item.toLowerCase())
-        })
+        }
+        return negative.xor(if (conjunct) type.all(predicate) else type.any(predicate))
     }
 
     override fun getInfo(): FilterInfo {

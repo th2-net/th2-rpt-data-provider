@@ -37,7 +37,7 @@ fun main(args: Array<String>) {
         HTTP -> {
             GlobalScope.launch {
                 HttpServer(context).run()
-            }
+            } 
         }
         GRPC -> {
             GlobalScope.launch {
