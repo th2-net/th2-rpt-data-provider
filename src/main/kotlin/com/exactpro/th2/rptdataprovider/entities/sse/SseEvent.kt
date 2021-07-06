@@ -16,6 +16,8 @@
 
 package com.exactpro.th2.rptdataprovider.entities.sse
 
+import com.exactpro.cradle.Direction
+import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.asStringSuspend
 import com.exactpro.th2.rptdataprovider.entities.responses.*
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -116,6 +118,20 @@ data class SseEvent(val data: String = "empty data", val event: EventType? = nul
                 jacksonMapper.asStringSuspend(
                     mapOf(
                         "messageIds" to streamsInfo.associate { it.stream to it.lastElement?.toString() }
+                    )
+                ),
+                event = EventType.MESSAGE_IDS
+            )
+        }
+
+        suspend fun build(
+            jacksonMapper: ObjectMapper,
+            lastIdInStream: Map<Pair<String, Direction>, StoredMessageId?>
+        ): SseEvent {
+            return SseEvent(
+                jacksonMapper.asStringSuspend(
+                    mapOf(
+                        "messageIds" to lastIdInStream
                     )
                 ),
                 event = EventType.MESSAGE_IDS
