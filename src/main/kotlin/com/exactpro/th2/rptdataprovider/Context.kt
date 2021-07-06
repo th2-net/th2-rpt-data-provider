@@ -31,6 +31,7 @@ import com.exactpro.th2.rptdataprovider.entities.configuration.CustomConfigurati
 import com.exactpro.th2.rptdataprovider.entities.filters.PredicateFactory
 import com.exactpro.th2.rptdataprovider.entities.filters.events.*
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.AttachedEventFilters
+import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyBinaryFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageTypeFilter
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
@@ -121,7 +122,8 @@ class Context(
         mapOf(
             AttachedEventFilters.filterInfo to AttachedEventFilters.Companion::build,
             MessageTypeFilter.filterInfo to MessageTypeFilter.Companion::build,
-            MessageBodyFilter.filterInfo to MessageBodyFilter.Companion::build
+            MessageBodyFilter.filterInfo to MessageBodyFilter.Companion::build,
+            MessageBodyBinaryFilter.filterInfo to MessageBodyFilter.Companion::build
         ), cradleService
     ),
 

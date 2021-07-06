@@ -29,13 +29,14 @@ import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
 class EventBodyFilter private constructor(
-    private var body: List<String>, override var negative: Boolean = false
+    private var body: List<String>, override var negative: Boolean = false, override var conjunct: Boolean = false
 ) : Filter<BaseEventEntity> {
     companion object {
 
         suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<BaseEventEntity> {
             return EventBodyFilter(
                 negative = filterRequest.isNegative(),
+                conjunct = filterRequest.isConjunct(),
                 body = filterRequest.getValues()
                     ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
             )
@@ -46,6 +47,7 @@ class EventBodyFilter private constructor(
             "matches events whose body contains one of the specified tokens",
             mutableListOf<Parameter>().apply {
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
+                add(Parameter("conjunct", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("values", FilterParameterType.STRING_LIST, null, "FGW, ..."))
             },
             NEED_BODY
@@ -53,9 +55,10 @@ class EventBodyFilter private constructor(
     }
 
     override fun match(element: BaseEventEntity): Boolean {
-        return negative.xor(body.any { item ->
+        val predicate: (String) -> Boolean = { item ->
             element.body?.toLowerCase()?.contains(item.toLowerCase()) ?: false
-        })
+        }
+        return negative.xor(if (conjunct) body.all(predicate) else body.any(predicate))
     }
 
     override fun getInfo(): FilterInfo {

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  ******************************************************************************/
 
-package com.exactpro.th2.rptdataprovider.entities.filters.events
+package com.exactpro.th2.rptdataprovider.entities.filters.messages
 
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.Filter
@@ -22,47 +22,53 @@ import com.exactpro.th2.rptdataprovider.entities.filters.FilterRequest
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
-import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
-import com.exactpro.th2.rptdataprovider.entities.responses.Event
+import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
+import mu.KotlinLogging
+import java.util.*
 
-class EventStatusFilter private constructor(
-    private var status: Boolean, override var negative: Boolean = false, override var conjunct: Boolean = false
-) : Filter<BaseEventEntity> {
+class MessageBodyBinaryFilter private constructor(
+    private var bodyBinary: List<String>,
+    override var negative: Boolean = false,
+    override var conjunct: Boolean = false
+) : Filter<Message> {
+
     companion object {
-        private const val failedStatus = "failed"
-        private const val passedStatus = "passed"
+        private val logger = KotlinLogging.logger { }
 
-        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<BaseEventEntity> {
-            val status = filterRequest.getValues()?.first()?.toLowerCase()
-                ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
-
-            if (failedStatus != status && passedStatus != status) {
-                throw InvalidRequestException("'${filterInfo.name}-values' wrong value")
-            }
-
-            return EventStatusFilter(
+        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<Message> {
+            return MessageBodyBinaryFilter(
                 negative = filterRequest.isNegative(),
-                status = status == passedStatus
+                conjunct = filterRequest.isConjunct(),
+                bodyBinary = filterRequest.getValues()
+                    ?: throw InvalidRequestException("'${MessageBodyFilter.filterInfo.name}-values' cannot be empty")
             )
         }
 
         val filterInfo = FilterInfo(
-            "status",
-            "matches events by one of the status",
+            "bodyBinary",
+            "matches messages whose binary body contains one of the specified tokens",
             mutableListOf<Parameter>().apply {
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
-                add(Parameter("value", FilterParameterType.STRING, null, "Failed, Passed"))
+                add(Parameter("conjunct", FilterParameterType.BOOLEAN, false, null))
+                add(Parameter("values", FilterParameterType.STRING_LIST, null, "FGW, ..."))
             }
         )
     }
 
-    override fun match(element: BaseEventEntity): Boolean {
-        return negative.xor(status == element.successful)
+    override fun match(element: Message): Boolean {
+        val predicate: (String) -> Boolean = { item ->
+            String(Base64.getDecoder().decode(element.bodyBase64)).toLowerCase().contains(item.toLowerCase())
+        }
+        return try {
+            negative.xor(if (conjunct) bodyBinary.all(predicate) else bodyBinary.any(predicate))
+        } catch (e: Exception) {
+            logger.warn(e) {}
+            false
+        }
     }
 
     override fun getInfo(): FilterInfo {
         return filterInfo
     }
-
 }
