@@ -33,7 +33,7 @@ import java.time.Instant
 import java.util.concurrent.Executors
 import kotlin.coroutines.coroutineContext
 
-class CradleService(configuration: Configuration) {
+class CradleService(configuration: Configuration, private val cradleManager: CradleManager) {
 
     companion object {
         val logger = KotlinLogging.logger {}
@@ -59,7 +59,6 @@ class CradleService(configuration: Configuration) {
             Metrics("get_streams", "getStreams")
     }
 
-    private val cradleManager: CradleManager = configuration.cradleManager
 
     private val cradleDispatcherPoolSize = configuration.cradleDispatcherPoolSize.value.toInt()
 
