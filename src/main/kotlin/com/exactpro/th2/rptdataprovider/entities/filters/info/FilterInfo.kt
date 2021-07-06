@@ -50,7 +50,7 @@ enum class FilterSpecialType {
 
 data class Parameter(val name: String, val type: FilterParameterType, val defaultValue: Any?, val hint: String?) {
 
-    private fun getDefaultValue(): com.google.protobuf.Any? {
+    private fun convertAnyToProto(): com.google.protobuf.Any? {
         return defaultValue?.let {
             val message = when (type) {
                 FilterParameterType.NUMBER -> com.google.protobuf.Int64Value.newBuilder().setValue(it as Long)
@@ -70,7 +70,7 @@ data class Parameter(val name: String, val type: FilterParameterType, val defaul
             .setName(name)
             .setType(type.toProto())
             .also { builder ->
-                getDefaultValue()?.let { builder.setDefaultValue(it) }
+                convertAnyToProto()?.let { builder.setDefaultValue(it) }
                 hint?.let { builder.setHint(it) }
             }.build()
     }
