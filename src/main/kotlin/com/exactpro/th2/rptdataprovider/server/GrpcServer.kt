@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider.server
 
+import com.exactpro.th2.common.schema.grpc.router.GrpcRouter
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.grpc.RptDataProviderGrpcHandler
 import io.ktor.server.engine.*
@@ -27,20 +28,21 @@ import java.util.concurrent.TimeUnit
 @InternalAPI
 @EngineAPI
 @ExperimentalCoroutinesApi
-class GrpcServer(private val context: Context) {
+class GrpcServer(private val context: Context, grpcRouter: GrpcRouter) {
 
     private val reportDataProviderServer = RptDataProviderGrpcHandler(context)
-    private val server = context.configuration.grpcRouter.startServer(reportDataProviderServer)
 
-    init {
-        this.server.start()
-        LOGGER.info("${GrpcServer::class.java.simpleName} started. " +
-                "Host: '${context.configuration.grpcConfig.host}' " +
-                "port: '${context.configuration.grpcConfig.port}'")
-    }
+    private val server = grpcRouter.startServer(reportDataProviderServer)
 
     companion object {
         private val LOGGER = KotlinLogging.logger {}
+    }
+
+    fun start() {
+        this.server.start()
+        LOGGER.info("${GrpcServer::class.java.simpleName} started. " +
+                "Host: '${context.grpcConfig.serverConfiguration.host}' " +
+                "port: '${context.grpcConfig.serverConfiguration.port}'")
     }
 
     fun stop() {

@@ -17,11 +17,17 @@
 package com.exactpro.th2.rptdataprovider
 
 
+import com.exactpro.cradle.CradleManager
+import com.exactpro.th2.common.grpc.MessageBatch
+import com.exactpro.th2.common.grpc.RawMessageBatch
+import com.exactpro.th2.common.schema.grpc.configuration.GrpcRouterConfiguration
+import com.exactpro.th2.common.schema.message.MessageRouter
 import com.exactpro.th2.rptdataprovider.cache.CodecCache
 import com.exactpro.th2.rptdataprovider.cache.CodecCacheBatches
 import com.exactpro.th2.rptdataprovider.cache.EventCache
 import com.exactpro.th2.rptdataprovider.cache.MessageCache
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
+import com.exactpro.th2.rptdataprovider.entities.configuration.CustomConfigurationClass
 import com.exactpro.th2.rptdataprovider.entities.filters.PredicateFactory
 import com.exactpro.th2.rptdataprovider.entities.filters.events.*
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.AttachedEventFilters
@@ -29,7 +35,6 @@ import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyBin
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageTypeFilter
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
-import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.handlers.SearchEventsHandler
 import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
@@ -44,8 +49,8 @@ import io.ktor.http.*
 
 @Suppress("MemberVisibilityCanBePrivate")
 class Context(
-    val args: Array<String>,
-    val configuration: Configuration = Configuration(args),
+    val customConfigurationClass: CustomConfigurationClass,
+    val configuration: Configuration = Configuration(customConfigurationClass),
 
     val timeout: Long = configuration.responseTimeout.value.toLong(),
     val cacheTimeout: Long = configuration.serverCacheTimeout.value.toLong(),
@@ -56,12 +61,20 @@ class Context(
         .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
         .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES),
 
+    val cradleManager: CradleManager,
+    val messageRouterRawBatch: MessageRouter<RawMessageBatch>,
+    val messageRouterParsedBatch: MessageRouter<MessageBatch>,
+    val grpcConfig: GrpcRouterConfiguration,
+
     val cradleService: CradleService = CradleService(
-        configuration
+        configuration,
+        cradleManager
     ),
 
     val rabbitMqService: RabbitMqService = RabbitMqService(
-        configuration
+        configuration,
+        messageRouterParsedBatch,
+        messageRouterRawBatch
     ),
 
     val eventProducer: EventProducer = EventProducer(cradleService, jacksonMapper),
@@ -124,20 +137,22 @@ class Context(
     val cacheControlRarelyModified: CacheControl = configuration.rarelyModifiedObjects.value.toInt().let {
         cacheControlConfig(it, enableCaching)
     }
-)
-
-private fun cacheControlConfig(timeout: Int, enableCaching: Boolean): CacheControl {
-    return if (enableCaching) {
-        CacheControl.MaxAge(
-            visibility = CacheControl.Visibility.Public,
-            maxAgeSeconds = timeout,
-            mustRevalidate = false,
-            proxyRevalidate = false,
-            proxyMaxAgeSeconds = timeout
-        )
-    } else {
-        CacheControl.NoCache(
-            visibility = CacheControl.Visibility.Public
-        )
+) {
+    companion object {
+        private fun cacheControlConfig(timeout: Int, enableCaching: Boolean): CacheControl {
+            return if (enableCaching) {
+                CacheControl.MaxAge(
+                    visibility = CacheControl.Visibility.Public,
+                    maxAgeSeconds = timeout,
+                    mustRevalidate = false,
+                    proxyRevalidate = false,
+                    proxyMaxAgeSeconds = timeout
+                )
+            } else {
+                CacheControl.NoCache(
+                    visibility = CacheControl.Visibility.Public
+                )
+            }
+        }
     }
 }

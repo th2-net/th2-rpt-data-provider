@@ -20,7 +20,10 @@ import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.common.grpc.RawMessageBatch
+import com.exactpro.th2.common.grpc.*
+import com.exactpro.th2.common.message.addFields
 import com.exactpro.th2.common.schema.message.MessageListener
+import com.exactpro.th2.common.schema.message.MessageRouter
 import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.chunked
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
@@ -33,7 +36,11 @@ import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentSkipListSet
 
-class RabbitMqService(private val configuration: Configuration) {
+class RabbitMqService(
+    private val configuration: Configuration,
+    private val messageRouterParsedBatch: MessageRouter<MessageBatch>,
+    private val messageRouterRawBatch: MessageRouter<RawMessageBatch>
+) {
 
     companion object {
         val logger = KotlinLogging.logger { }
@@ -62,7 +69,7 @@ class RabbitMqService(private val configuration: Configuration) {
 
     private val decodeRequests = ConcurrentHashMap<MessageID, ConcurrentSkipListSet<MessageRequest>>()
 
-    private val receiveChannel = configuration.messageRouterParsedBatch.subscribeAll(
+    private val receiveChannel = messageRouterParsedBatch.subscribeAll(
         MessageListener { _, decodedBatch ->
             decodedBatch.messagesList.forEach { message ->
 
@@ -212,7 +219,7 @@ class RabbitMqService(private val configuration: Configuration) {
 
             if (!alreadyRequested) {
                 try {
-                    configuration.messageRouterRawBatch.sendAll(batch, firstId?.connectionId?.sessionAlias)
+                    messageRouterRawBatch.sendAll(batch, firstId?.connectionId?.sessionAlias)
                     logger.debug { "codec request published $requestDebugInfo" }
                 } catch (e: IOException) {
                     logger.error(e) { "cannot send message $requestDebugInfo" }

@@ -67,31 +67,11 @@ class CustomConfigurationClass {
     }
 }
 
-class Configuration(args: Array<String>) {
+class Configuration(customConfiguration: CustomConfigurationClass) {
 
     companion object {
         private val logger = KotlinLogging.logger { }
     }
-
-    private val configurationFactory = CommonFactory.createFromArguments(*args)
-
-    val cradleManager: CradleManager
-        get() = configurationFactory.cradleManager
-
-    val messageRouterRawBatch: MessageRouter<RawMessageBatch>
-        get() = configurationFactory.messageRouterRawBatch
-
-    val messageRouterParsedBatch: MessageRouter<MessageBatch>
-        get() = configurationFactory.messageRouterParsedBatch
-
-    val grpcConfig: GrpcEndpointConfiguration
-        get() = configurationFactory.grpcRouterConfiguration.serverConfiguration
-
-    val grpcRouter: GrpcRouter
-        get() = configurationFactory.grpcRouter
-
-    private val customConfiguration =
-        configurationFactory.getCustomConfiguration(CustomConfigurationClass::class.java)
 
     val hostname: Variable =
         Variable("hostname", customConfiguration.hostname, "localhost")
