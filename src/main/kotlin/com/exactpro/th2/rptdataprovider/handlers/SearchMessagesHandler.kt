@@ -275,10 +275,12 @@ class SearchMessagesHandler(
             val scanCnt = AtomicLong(0)
             val messageIdStored = request.resumeFromId?.let { StoredMessageId.fromString(it) }
             var streamsInfo: MutableList<StreamInfo> = mutableListOf()
+            var lastIdInStream: MutableMap<Pair<String, Direction>, StoredMessageId?> = mutableMapOf()
 
             flow {
 
                 streamsInfo = initStreamsInfo(request)
+                lastIdInStream = streamsInfo.associate { it.stream to it.lastElement } as MutableMap
 
                 getMessageStream(
                     request, streamsInfo, request.resultCountLimit ?: startMessageCountLimit,
@@ -295,6 +297,9 @@ class SearchMessagesHandler(
                 .map { it.await() }
                 .onEach { (message, _) ->
                     lastScannedObject.update(message, scanCnt)
+                    message.id.let {
+                        lastIdInStream[Pair(it.streamName, it.direction)] = it
+                    }
                     processedMessageCount.inc()
                 }
                 .filter { it.second }
@@ -306,7 +311,7 @@ class SearchMessagesHandler(
                     }
                 }
                 .onCompletion {
-                    writer.write(streamsInfo)
+                    writer.write(lastIdInStream)
                     coroutineContext.cancelChildren()
                     it?.let { throwable -> throw throwable }
                 }
