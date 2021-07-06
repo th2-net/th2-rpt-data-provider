@@ -292,8 +292,6 @@ class HttpServer(private val context: Context) {
 
         val getEventsLimit = this.context.configuration.eventSearchChunkSize.value.toInt()
 
-        System.setProperty(IO_PARALLELISM_PROPERTY_NAME, configuration.ioDispatcherThreadPoolSize.value)
-
         embeddedServer(Netty, configuration.port.value.toInt()) {
 
             install(Compression)
