@@ -63,6 +63,7 @@ class AttachedMessageFilter private constructor(
             "matches events by one of the attached message id",
             mutableListOf<Parameter>().apply {
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
+                add(Parameter("conjunct", FilterParameterType.BOOLEAN, false, null))
                 add(
                     Parameter(
                         "values", FilterParameterType.STRING_LIST, null,
