@@ -20,6 +20,7 @@ import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
+import com.exactpro.th2.rptdataprovider.handlers.messages.MessageStreamProducer
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.prometheus.client.Counter
 import kotlinx.coroutines.*
@@ -30,11 +31,7 @@ import kotlin.coroutines.coroutineContext
 
 class SearchMessagesHandler(private val context: Context) {
 
-    private val maxMessagesLimit = context.configuration.maxMessagesLimit.value.toInt()
     private val messageSearchPipelineBuffer = context.configuration.messageSearchPipelineBuffer.value.toInt()
-    private val dbRetryDelay = context.configuration.dbRetryDelay.value.toLong()
-    private val sseSearchDelay = context.configuration.sseSearchDelay.value.toLong()
-
 
     companion object {
         private val logger = KotlinLogging.logger { }
