@@ -20,6 +20,7 @@ import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
+import com.exactpro.th2.rptdataprovider.handlers.messages.MessageStreamProducer
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.prometheus.client.Counter
 import kotlinx.coroutines.*
