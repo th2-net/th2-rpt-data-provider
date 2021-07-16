@@ -32,9 +32,7 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundExcep
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
 import com.fasterxml.jackson.databind.ObjectMapper
-import io.prometheus.client.Collector
 import io.prometheus.client.Counter
-import jnr.ffi.annotations.In
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel.Factory.BUFFERED
 import kotlinx.coroutines.flow.*
