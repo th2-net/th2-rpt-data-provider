@@ -19,11 +19,9 @@ package com.exactpro.th2.rptdataprovider.entities.sse
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.asStringSuspend
-import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.responses.*
-import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
+import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.google.protobuf.Timestamp
 import io.ktor.util.*
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicLong

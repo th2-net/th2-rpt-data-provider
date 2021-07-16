@@ -98,15 +98,7 @@ class Context(
     ),
 
     val messageCache: MessageCache = MessageCache(configuration, messageProducer),
-    val searchMessagesHandler: SearchMessagesHandler = SearchMessagesHandler(
-        cradleService,
-        messageProducer,
-        messageCache,
-        configuration.maxMessagesLimit.value.toInt(),
-        configuration.messageSearchPipelineBuffer.value.toInt(),
-        configuration.dbRetryDelay.value.toLong(),
-        configuration.sseSearchDelay.value.toLong()
-    ),
+
 
     val eventFiltersPredicateFactory: PredicateFactory<BaseEventEntity> = PredicateFactory(
         mapOf(
@@ -138,6 +130,9 @@ class Context(
         cacheControlConfig(it, enableCaching)
     }
 ) {
+
+    val searchMessagesHandler: SearchMessagesHandler = SearchMessagesHandler(this)
+
     companion object {
         private fun cacheControlConfig(timeout: Int, enableCaching: Boolean): CacheControl {
             return if (enableCaching) {

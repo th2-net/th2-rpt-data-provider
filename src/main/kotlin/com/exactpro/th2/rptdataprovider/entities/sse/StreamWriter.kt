@@ -18,7 +18,6 @@ package com.exactpro.th2.rptdataprovider.entities.sse
 
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.dataprovider.grpc.Stream
 import com.exactpro.th2.dataprovider.grpc.StreamResponse
 import com.exactpro.th2.dataprovider.grpc.StreamsInfo
@@ -29,7 +28,6 @@ import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
 import com.exactpro.th2.rptdataprovider.eventWrite
-import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.grpc.stub.StreamObserver
 import java.io.Writer
@@ -44,9 +42,7 @@ interface StreamWriter {
 
     suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong)
 
-    suspend fun write(streamInfo: MutableList<StreamInfo>)
-
-    suspend fun write(lastIdInStream: Map<Pair<String, Direction>, StoredMessageId?>)
+    suspend fun write(streamInfo: List<StreamInfo>)
 
     suspend fun write(event: Event, lastEventId: AtomicLong)
 
@@ -67,12 +63,8 @@ class SseWriter(private val writer: Writer, private val jacksonMapper: ObjectMap
         writer.eventWrite(SseEvent.build(jacksonMapper, lastScannedObjectInfo, counter))
     }
 
-    override suspend fun write(streamInfo: MutableList<StreamInfo>) {
+    override suspend fun write(streamInfo: List<StreamInfo>) {
         writer.eventWrite(SseEvent.build(jacksonMapper, streamInfo))
-    }
-
-    override suspend fun write(lastIdInStream: Map<Pair<String, Direction>, StoredMessageId?>) {
-        writer.eventWrite(SseEvent.build(jacksonMapper, lastIdInStream))
     }
 
     override suspend fun write(event: Event, lastEventId: AtomicLong) {
@@ -113,27 +105,11 @@ class GrpcWriter(private val writer: StreamObserver<StreamResponse>) : StreamWri
         lastEventId.incrementAndGet()
     }
 
-    override suspend fun write(streamInfo: MutableList<StreamInfo>) {
+    override suspend fun write(streamInfo: List<StreamInfo>) {
         writer.onNext(
             StreamResponse.newBuilder().setStreamInfo(
                 StreamsInfo.newBuilder().addAllStreams(
                     streamInfo.map { it.convertToProto() }
-                ).build()
-            ).build()
-        )
-    }
-
-    override suspend fun write(lastIdInStream: Map<Pair<String, Direction>, StoredMessageId?>) {
-        writer.onNext(
-            StreamResponse.newBuilder().setStreamInfo(
-                StreamsInfo.newBuilder().addAllStreams(
-                    lastIdInStream.entries.map { (stream, lastElement) ->
-                        Stream.newBuilder()
-                            .setDirection(cradleDirectionToGrpc(stream.second))
-                            .setSession(stream.first).also { builder ->
-                                lastElement?.let { builder.setLastId(it.convertToProto()) }
-                            }.build()
-                    }
                 ).build()
             ).build()
         )
