@@ -77,50 +77,25 @@ data class MessagesBasket private constructor(
         }
     }
 
-
     private var lastElement: StoredMessageId? = startMessageId
-
-    var currentElement: MessageWrapper? = null
-        private set
 
     var lastTimestamp: Instant? = startTimestamp
         private set
-
 
     private val maxMessagesLimit = context.configuration.maxMessagesLimit.value.toInt()
     private var perStreamLimit = Integer.min(maxMessagesLimit, request.resultCountLimit ?: 25)
 
     private val messageStream: LinkedList<MessageWrapper> = LinkedList()
 
-
-    private fun changeStreamMessageIndex(
-        streamEmpty: Boolean,
-        filteredIdsList: List<MessageWrapper>
-    ): Pair<StoredMessageId?, Instant?> {
-
+    private fun changeStreamMessageIndex(filteredIdsList: List<MessageWrapper>): Pair<StoredMessageId?, Instant?> {
         val wrapper = filteredIdsList.lastOrNull()
-
-        return if (request.searchDirection == TimeRelation.AFTER) {
-            wrapper?.let { it.id to it.message.timestamp }
-                ?: if (request.keepOpen) {
-                    lastElement to lastTimestamp
-                } else {
-                    null to null
-                }
-        } else {
-            if (!streamEmpty) {
-                wrapper?.id to wrapper?.message?.timestamp
-            } else {
-                null to null
-            }
-        }
+        return wrapper?.let { it.id to it.message.timestamp } ?: lastElement to lastTimestamp
     }
-
 
     private suspend fun loadMoreMessage(): List<MessageWrapper> {
         return coroutineScope {
             streamProducer.pullMoreMessage(lastElement, perStreamLimit).also { messages ->
-                changeStreamMessageIndex(streamProducer.isStreamEmpty, messages).let {
+                changeStreamMessageIndex(messages).let {
                     lastElement = it.first
                     lastTimestamp = it.second
                 }
@@ -128,50 +103,30 @@ data class MessagesBasket private constructor(
         }
     }
 
-    private fun nextOrNull(): MessageWrapper? {
-        return messageStream.pollFirst()
-    }
-
     private suspend fun autoUpdateBasket() {
-        if (request.searchDirection == TimeRelation.AFTER) {
-            if (request.keepOpen || !streamProducer.isStreamEmpty) {
-                messageStream.addAll(loadMoreMessage())
-            }
-        } else {
-            if (!streamProducer.isStreamEmpty) {
-                messageStream.addAll(loadMoreMessage())
-            }
+        if (messageStream.isEmpty() && !streamProducer.isStreamEmpty) {
+            messageStream.addAll(loadMoreMessage())
         }
     }
 
-    private suspend fun nextMessageInStream(): MessageWrapper? {
-        if (messageStream.isEmpty()) {
+    suspend fun pop(): MessageWrapper? {
+        return coroutineScope {
             autoUpdateBasket()
+            messageStream.pollFirst()
         }
-        return nextOrNull()
     }
 
+    fun top(): MessageWrapper? {
+        return messageStream.peekFirst()
+    }
 
     suspend fun loadBasket() {
         if (messageStream.isEmpty()) {
             messageStream.addAll(loadMoreMessage())
         }
-        pop()
-    }
-
-    suspend fun pop(): MessageWrapper? {
-        return coroutineScope {
-            val oldMessage = currentElement
-            currentElement = nextMessageInStream()
-            oldMessage
-        }
-    }
-
-    fun top(): MessageWrapper? {
-        return currentElement
     }
 
     fun getStreamInfo(): StreamInfo {
-        return StreamInfo(stream, currentElement?.id)
+        return StreamInfo(stream, top()?.id)
     }
 }

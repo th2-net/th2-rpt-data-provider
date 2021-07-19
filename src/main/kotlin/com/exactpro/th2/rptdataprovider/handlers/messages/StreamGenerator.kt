@@ -147,7 +147,7 @@ class StreamGenerator(
 
 
     private fun isLessThenStart(wrapper: MessageWrapper, startId: StoredMessageId?): Boolean {
-        return wrapper.message.timestamp.isBefore(startTimestamp) &&
+        return wrapper.message.timestamp.isBefore(startTimestamp) ||
                 startId?.let {
                     if (isFirstPull) {
                         wrapper.message.index < it.index
@@ -158,7 +158,7 @@ class StreamGenerator(
     }
 
     private fun isGreaterThenStart(wrapper: MessageWrapper, startId: StoredMessageId?): Boolean {
-        return wrapper.message.timestamp.isAfter(startTimestamp) &&
+        return wrapper.message.timestamp.isAfter(startTimestamp) ||
                 startId?.let {
                     if (isFirstPull) {
                         wrapper.message.index > it.index
