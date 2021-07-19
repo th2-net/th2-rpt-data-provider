@@ -104,7 +104,7 @@ class BasketCreator(
         stream: String,
         direction: Direction,
         timelineDirection: TimeRelation,
-        daysInterval: Int = 1000
+        daysInterval: Int = 3
     ): StoredMessageId? {
         var daysChecking = daysInterval
         var isCurrentDay = true
