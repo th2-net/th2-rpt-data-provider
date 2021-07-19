@@ -16,13 +16,8 @@
 
 package com.exactpro.th2.rptdataprovider.entities.sse
 
-import com.exactpro.cradle.Direction
-import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.dataprovider.grpc.Stream
 import com.exactpro.th2.dataprovider.grpc.StreamResponse
 import com.exactpro.th2.dataprovider.grpc.StreamsInfo
-import com.exactpro.th2.rptdataprovider.convertToProto
-import com.exactpro.th2.rptdataprovider.cradleDirectionToGrpc
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
@@ -99,9 +94,11 @@ class GrpcWriter(private val writer: StreamObserver<StreamResponse>) : StreamWri
     }
 
     override suspend fun write(event: Event, lastEventId: AtomicLong) {
-        writer.onNext(StreamResponse.newBuilder()
-            .setEvent(event.convertToGrpcEventData())
-            .build())
+        writer.onNext(
+            StreamResponse.newBuilder()
+                .setEvent(event.convertToGrpcEventData())
+                .build()
+        )
         lastEventId.incrementAndGet()
     }
 
