@@ -99,9 +99,11 @@ class GrpcWriter(private val writer: StreamObserver<StreamResponse>) : StreamWri
     }
 
     override suspend fun write(event: Event, lastEventId: AtomicLong) {
-        writer.onNext(StreamResponse.newBuilder()
-            .setEvent(event.convertToGrpcEventData())
-            .build())
+        writer.onNext(
+            StreamResponse.newBuilder()
+                .setEvent(event.convertToGrpcEventData())
+                .build()
+        )
         lastEventId.incrementAndGet()
     }
 
