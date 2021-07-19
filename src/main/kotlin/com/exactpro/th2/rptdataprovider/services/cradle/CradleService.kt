@@ -19,19 +19,26 @@ package com.exactpro.th2.rptdataprovider.services.cradle
 
 import com.exactpro.cradle.CradleManager
 import com.exactpro.cradle.Direction
+import com.exactpro.cradle.Order
 import com.exactpro.cradle.TimeRelation
-import com.exactpro.cradle.messages.*
+import com.exactpro.cradle.messages.StoredMessage
+import com.exactpro.cradle.messages.StoredMessageBatch
+import com.exactpro.cradle.messages.StoredMessageFilter
+import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventWrapper
-import com.exactpro.th2.rptdataprovider.*
+import com.exactpro.th2.rptdataprovider.Metrics
+import com.exactpro.th2.rptdataprovider.convertToString
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
-import kotlinx.coroutines.*
+import com.exactpro.th2.rptdataprovider.logMetrics
+import com.exactpro.th2.rptdataprovider.logTime
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.future.await
+import kotlinx.coroutines.withContext
 import mu.KotlinLogging
 import java.time.Instant
 import java.util.concurrent.Executors
-import kotlin.coroutines.coroutineContext
 
 class CradleService(configuration: Configuration, private val cradleManager: CradleManager) {
 
@@ -78,11 +85,14 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
         }
     }
 
-    suspend fun getMessagesBatchesSuspend(filter: StoredMessageFilter): MutableIterable<StoredMessageBatch> {
+    suspend fun getMessagesBatchesSuspend(
+        filter: StoredMessageFilter,
+        order: Order = Order.DIRECT
+    ): MutableIterable<StoredMessageBatch> {
         return withContext(cradleDispatcher) {
             logMetrics(getMessagesBatches) {
                 logTime("getMessagesBatches (filter=${filter.convertToString()})") {
-                    storage.getMessagesBatchesAsync(filter).await()
+                    storage.getMessagesBatchesAsync(filter, order).await()
                 }
             } ?: listOf()
         }

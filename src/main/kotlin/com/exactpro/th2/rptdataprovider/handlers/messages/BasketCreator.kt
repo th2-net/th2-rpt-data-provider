@@ -14,22 +14,6 @@
  * limitations under the License.
  ******************************************************************************/
 
-/*******************************************************************************
- * Copyright 2021-2021 Exactpro (Exactpro Systems Limited)
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- ******************************************************************************/
-
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.cradle.Direction
@@ -74,7 +58,7 @@ class BasketCreator(
     }
 
 
-    private suspend fun getNearestMessage(
+    private fun getNearestMessage(
         messageBatch: Collection<StoredMessage>,
         timelineDirection: TimeRelation,
         timestamp: Instant
@@ -99,27 +83,40 @@ class BasketCreator(
         return null
     }
 
+    private fun getTimeSearchLimit(request: SseMessageSearchRequest): ((Instant) -> Boolean) {
+        if (request.searchDirection == TimeRelation.AFTER) {
+            val futureSearchLimit = nextDay(Instant.now(), TimeRelation.AFTER)
+            return { timestamp: Instant -> timestamp.isBefore(futureSearchLimit) }
+        } else {
+            return { timestamp -> true }
+        }
+    }
+
     private suspend fun getFirstMessageIdDifferentDays(
         startTimestamp: Instant,
         stream: String,
         direction: Direction,
-        timelineDirection: TimeRelation,
-        daysInterval: Int = 3
+        request: SseMessageSearchRequest
     ): StoredMessageId? {
-        var daysChecking = daysInterval
+        var daysChecking = request.lookupLimitDays
         var isCurrentDay = true
         var timestamp = startTimestamp
         var messageId: StoredMessageId? = null
-        while (messageId == null && daysChecking >= 0) {
+        val timeLimit = getTimeSearchLimit(request)
+
+        while (messageId == null && timeLimit(timestamp) && daysChecking?.let { it >= 0 } != false) {
             messageId =
                 if (isCurrentDay) {
                     getFirstMessageCurrentDay(timestamp, stream, direction)
                 } else {
-                    context.cradleService.getFirstMessageIdSuspend(timestamp, stream, direction, timelineDirection)
+                    context.cradleService.getFirstMessageIdSuspend(timestamp,
+                        stream,
+                        direction,
+                        request.searchDirection)
                 }
-            daysChecking -= 1
+            daysChecking = daysChecking?.dec()
             isCurrentDay = false
-            timestamp = nextDay(timestamp, timelineDirection)
+            timestamp = nextDay(timestamp, request.searchDirection)
         }
         return messageId
     }
@@ -149,7 +146,7 @@ class BasketCreator(
             for (stream in request.stream ?: emptyList()) {
                 for (direction in Direction.values()) {
                     val storedMessageId =
-                        getFirstMessageIdDifferentDays(timestamp, stream, direction, request.searchDirection)
+                        getFirstMessageIdDifferentDays(timestamp, stream, direction, request)
 
                     val streamInfo = Pair(stream, direction)
                     val isFirstPull = streamInfo != resumeIdStream
