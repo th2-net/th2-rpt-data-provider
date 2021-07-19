@@ -72,7 +72,7 @@ data class MessagesBasket private constructor(
                 context, stream, startMessageId,
                 startTimestamp, request, streamGenerator
             ).apply {
-                pop()
+                loadBasket()
             }
         }
     }
