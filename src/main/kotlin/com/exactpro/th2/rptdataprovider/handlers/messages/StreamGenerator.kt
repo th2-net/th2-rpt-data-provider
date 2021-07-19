@@ -14,25 +14,10 @@
  * limitations under the License.
  ******************************************************************************/
 
-/*******************************************************************************
- * Copyright 2021-2021 Exactpro (Exactpro Systems Limited)
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- ******************************************************************************/
-
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
-import com.exactpro.cradle.TimeRelation
+import com.exactpro.cradle.Order
+import com.exactpro.cradle.TimeRelation.AFTER
 import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
@@ -78,11 +63,13 @@ class StreamGenerator(
         private set
 
 
-    private suspend fun pullMore(startId: StoredMessageId?,limit: Int): Iterable<StoredMessageBatch> {
+    private suspend fun pullMore(startId: StoredMessageId?, limit: Int): Iterable<StoredMessageBatch> {
 
         logger.debug { "pulling more messages (id=$startId limit=$limit direction=${request.searchDirection})" }
 
         if (startId == null) return emptyList()
+
+        val searchAfter = request.searchDirection == AFTER
 
         return context.cradleService.getMessagesBatchesSuspend(
             StoredMessageFilterBuilder().apply {
@@ -90,7 +77,7 @@ class StreamGenerator(
                 direction().isEqualTo(startId.direction)
                 limit(limit)
 
-                if (request.searchDirection == TimeRelation.AFTER) {
+                if (searchAfter) {
                     index().let {
                         if (isFirstPull)
                             it.isGreaterThanOrEqualTo(startId.index)
@@ -105,7 +92,8 @@ class StreamGenerator(
                             it.isLessThan(startId.index)
                     }
                 }
-            }.build()
+            }.build(),
+            if (searchAfter) Order.DIRECT else Order.INVERSE
         )
     }
 
@@ -119,7 +107,9 @@ class StreamGenerator(
                     val parsedFuture = coroutineScope.async {
                         context.messageProducer.fromRawMessage(batch, request)
                     }
-                    batch.messages.map { message ->
+                    batch.messages.let {
+                        if (request.searchDirection == AFTER) it else it.reversed()
+                    }.map { message ->
                         MessageWrapper.build(message, parsedFuture)
                     }
                 }
@@ -133,14 +123,8 @@ class StreamGenerator(
 
     suspend fun pullMoreMessage(startId: StoredMessageId?, limit: Int): List<MessageWrapper> {
         return coroutineScope {
-            pullMoreWrapped(startId, limit).let { list ->
-                if (request.searchDirection == TimeRelation.AFTER) {
-                    list
-                } else {
-                    list.reversed()
-                }.let {
-                    dropUntilInRangeInOppositeDirection(startId, it)
-                }
+            pullMoreWrapped(startId, limit).let {
+                dropUntilInRangeInOppositeDirection(startId, it)
             }
         }
     }
@@ -173,7 +157,7 @@ class StreamGenerator(
         startId: StoredMessageId?,
         storedMessages: List<MessageWrapper>
     ): List<MessageWrapper> {
-        return if (request.searchDirection == TimeRelation.AFTER) {
+        return if (request.searchDirection == AFTER) {
             storedMessages.dropWhile { isLessThenStart(it, startId) }
         } else {
             storedMessages.dropWhile { isGreaterThenStart(it, startId) }
