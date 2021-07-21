@@ -20,6 +20,7 @@ import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.ConnectionID
 import com.exactpro.th2.common.grpc.EventID
+import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.common.message.toTimestamp
 import com.exactpro.th2.dataprovider.grpc.MessageData
 import com.exactpro.th2.rptdataprovider.convertToProto
@@ -44,7 +45,10 @@ data class Message(
     val bodyBase64: String?,
 
     @JsonIgnore
-    val id: StoredMessageId
+    val id: StoredMessageId,
+
+    @JsonIgnore
+    val message: Message?
 ) {
 
     val messageId: String
@@ -54,6 +58,7 @@ data class Message(
     constructor(
         rawStoredMessage: StoredMessage,
         jsonBody: String?,
+        message: Message?,
         base64Body: String?,
         messageType: String,
         events: Set<String>
@@ -65,7 +70,8 @@ data class Message(
         direction = Direction.fromStored(rawStoredMessage.direction ?: com.exactpro.cradle.Direction.FIRST),
         timestamp = rawStoredMessage.timestamp ?: Instant.ofEpochMilli(0),
         sessionId = rawStoredMessage.streamName ?: "",
-        attachedEventIds = events
+        attachedEventIds = events,
+        message = message
     )
 
     fun convertToGrpcMessageData(): MessageData {
@@ -79,6 +85,7 @@ data class Message(
             .also { builder ->
                 body?.let { builder.setBody(body) }
                 bodyBase64?.let { builder.setBodyBase64(bodyBase64) }
+                message?.let { builder.setMessage(it) }
             }.build()
     }
 }

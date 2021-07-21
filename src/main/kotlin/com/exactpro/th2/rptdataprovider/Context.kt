@@ -40,6 +40,7 @@ import com.exactpro.th2.rptdataprovider.handlers.SearchEventsHandler
 import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
+import com.exactpro.th2.rptdataprovider.server.ServerType
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import com.fasterxml.jackson.databind.DeserializationFeature
@@ -49,8 +50,9 @@ import io.ktor.http.*
 
 @Suppress("MemberVisibilityCanBePrivate")
 class Context(
-    val customConfigurationClass: CustomConfigurationClass,
-    val configuration: Configuration = Configuration(customConfigurationClass),
+    val configuration: Configuration,
+
+    val serverType: ServerType,
 
     val timeout: Long = configuration.responseTimeout.value.toLong(),
     val cacheTimeout: Long = configuration.serverCacheTimeout.value.toLong(),
@@ -91,6 +93,7 @@ class Context(
     val codecBatchesCache: CodecCacheBatches = CodecCacheBatches(configuration),
 
     val messageProducer: MessageProducer = MessageProducer(
+        serverType,
         cradleService,
         rabbitMqService,
         codecCache,
