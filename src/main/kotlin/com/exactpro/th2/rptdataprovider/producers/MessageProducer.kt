@@ -24,9 +24,10 @@ import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.rptdataprovider.cache.CodecCache
 import com.exactpro.th2.rptdataprovider.cache.CodecCacheBatches
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.entities.responses.ParsedMessageBatch
+import com.exactpro.th2.rptdataprovider.server.ServerType
+import com.exactpro.th2.rptdataprovider.server.ServerType.*
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.MessageRequest
@@ -40,6 +41,7 @@ import mu.KotlinLogging
 import java.util.*
 
 class MessageProducer(
+    private val serverType: ServerType,
     private val cradle: CradleService,
     private val rabbitMqService: RabbitMqService,
     private val codecCache: CodecCache,
@@ -84,13 +86,15 @@ class MessageProducer(
 
             return@coroutineScope ParsedMessageBatch(messageBatch.id,
                 messageBatch.messages.mapIndexed { i, rawMessage ->
+                    val parsedMessage = processed?.get(i)?.get()
                     Message(
                         rawMessage,
-                        processed?.get(i)?.get()?.let { JsonFormat.printer().print(it) },
+                        if (serverType == HTTP) parsedMessage?.let { JsonFormat.printer().print(it) } else null,
+                        if (serverType == GRPC) parsedMessage else null,
                         parsedRawMessage[i]?.let {
                             Base64.getEncoder().encodeToString(it.body.toByteArray())
                         },
-                        processed?.get(i)?.get()?.metadata?.messageType ?: "",
+                        parsedMessage?.metadata?.messageType ?: "",
                         attachedEvents?.get(i) ?: emptySet()
                     ).also { codecCache.put(it.messageId, it) }
                 }.associateBy { it.id },

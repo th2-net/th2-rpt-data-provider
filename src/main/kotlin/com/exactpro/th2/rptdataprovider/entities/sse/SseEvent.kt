@@ -131,7 +131,7 @@ data class SseEvent(val data: String = "empty data", val event: EventType? = nul
             return SseEvent(
                 jacksonMapper.asStringSuspend(
                     mapOf(
-                        "messageIds" to lastIdInStream
+                        "messageIds" to lastIdInStream.entries.associate { it.key to it.value?.toString() }
                     )
                 ),
                 event = EventType.MESSAGE_IDS
