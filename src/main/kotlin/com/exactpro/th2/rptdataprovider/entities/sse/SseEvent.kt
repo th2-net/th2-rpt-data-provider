@@ -23,6 +23,7 @@ import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.responses.*
 import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.google.gson.JsonObject
 import com.google.protobuf.Timestamp
 import io.ktor.util.*
 import java.time.Instant
@@ -93,6 +94,13 @@ data class SseEvent(val data: String = "empty data", val event: EventType? = nul
                 jacksonMapper.asStringSuspend(message),
                 EventType.MESSAGE,
                 counter.incrementAndGet().toString()
+            )
+        }
+
+        suspend fun build(jacksonMapper: ObjectMapper, message: JsonObject): SseEvent {
+            return SseEvent(
+                jacksonMapper.asStringSuspend(message),
+                EventType.MESSAGE
             )
         }
 
