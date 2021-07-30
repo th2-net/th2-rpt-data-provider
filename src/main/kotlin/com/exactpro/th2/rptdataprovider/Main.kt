@@ -15,26 +15,22 @@
  ******************************************************************************/
 package com.exactpro.th2.rptdataprovider
 
-import com.exactpro.cradle.CradleManager
-import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.metrics.liveness
 import com.exactpro.th2.common.metrics.readiness
 import com.exactpro.th2.common.schema.factory.CommonFactory
-import com.exactpro.th2.common.schema.grpc.configuration.GrpcConfiguration
-import com.exactpro.th2.common.schema.grpc.router.GrpcRouter
-import com.exactpro.th2.common.schema.message.MessageRouter
+import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.entities.configuration.CustomConfigurationClass
-import com.exactpro.th2.rptdataprovider.grpc.RptDataProviderGrpcHandler
 import com.exactpro.th2.rptdataprovider.server.GrpcServer
 import com.exactpro.th2.rptdataprovider.server.HttpServer
 import com.exactpro.th2.rptdataprovider.server.ServerType
 import com.exactpro.th2.rptdataprovider.server.ServerType.GRPC
 import com.exactpro.th2.rptdataprovider.server.ServerType.HTTP
-import com.fasterxml.jackson.databind.ObjectMapper
 import io.ktor.server.engine.*
 import io.ktor.util.*
 import kotlinx.atomicfu.locks.ReentrantLock
-import kotlinx.coroutines.*
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.IO_PARALLELISM_PROPERTY_NAME
 import mu.KotlinLogging
 import java.util.*
 import java.util.concurrent.ConcurrentLinkedDeque
@@ -62,8 +58,13 @@ class Main {
         configurationFactory = CommonFactory.createFromArguments(*args)
         resources += configurationFactory
 
+        val configuration =
+            Configuration(configurationFactory.getCustomConfiguration(CustomConfigurationClass::class.java))
+
         context = Context(
-            configurationFactory.getCustomConfiguration(CustomConfigurationClass::class.java),
+            configuration,
+
+            serverType = ServerType.valueOf(configuration.serverType.value),
 
             cradleManager = configurationFactory.cradleManager.also {
                 resources += AutoCloseable { it.dispose() }
@@ -103,7 +104,7 @@ class Main {
 
         System.setProperty(IO_PARALLELISM_PROPERTY_NAME, context.configuration.ioDispatcherThreadPoolSize.value)
 
-        when (ServerType.valueOf(context.configuration.serverType.value)) {
+        when (context.serverType) {
             HTTP -> {
                 HttpServer(context).run()
             }

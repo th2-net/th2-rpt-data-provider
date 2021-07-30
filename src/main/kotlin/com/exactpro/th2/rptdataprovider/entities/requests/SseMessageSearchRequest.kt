@@ -15,15 +15,13 @@
  ******************************************************************************/
 package com.exactpro.th2.rptdataprovider.entities.requests
 
-import com.exactpro.cradle.Direction.*
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.common.grpc.Direction
 import com.exactpro.th2.dataprovider.grpc.MessageSearchRequest
+import com.exactpro.th2.dataprovider.grpc.TimeRelation.PREVIOUS
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
-import com.exactpro.th2.dataprovider.grpc.TimeRelation.*
 import com.exactpro.th2.rptdataprovider.grpcDirectionToCradle
 import java.time.Instant
 
