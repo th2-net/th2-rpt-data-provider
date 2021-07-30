@@ -69,6 +69,7 @@ class RabbitMqService(
 
     private val decodeRequests = ConcurrentHashMap<MessageID, ConcurrentSkipListSet<MessageRequest>>()
 
+
     private val receiveChannel = messageRouterParsedBatch.subscribeAll(
         MessageListener { _, decodedBatch ->
             decodedBatch.messagesList.forEach { message ->

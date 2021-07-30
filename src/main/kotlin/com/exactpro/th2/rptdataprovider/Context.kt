@@ -27,7 +27,6 @@ import com.exactpro.th2.rptdataprovider.cache.CodecCacheBatches
 import com.exactpro.th2.rptdataprovider.cache.EventCache
 import com.exactpro.th2.rptdataprovider.cache.MessageCache
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
-import com.exactpro.th2.rptdataprovider.entities.configuration.CustomConfigurationClass
 import com.exactpro.th2.rptdataprovider.entities.filters.PredicateFactory
 import com.exactpro.th2.rptdataprovider.entities.filters.events.*
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.AttachedEventFilters
@@ -46,12 +45,11 @@ import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import io.ktor.http.*
+import io.ktor.http.CacheControl
 
 @Suppress("MemberVisibilityCanBePrivate")
 class Context(
     val configuration: Configuration,
-
     val serverType: ServerType,
 
     val timeout: Long = configuration.responseTimeout.value.toLong(),
@@ -66,6 +64,7 @@ class Context(
     val cradleManager: CradleManager,
     val messageRouterRawBatch: MessageRouter<RawMessageBatch>,
     val messageRouterParsedBatch: MessageRouter<MessageBatch>,
+
     val grpcConfig: GrpcRouterConfiguration,
 
     val cradleService: CradleService = CradleService(
@@ -101,15 +100,7 @@ class Context(
     ),
 
     val messageCache: MessageCache = MessageCache(configuration, messageProducer),
-    val searchMessagesHandler: SearchMessagesHandler = SearchMessagesHandler(
-        cradleService,
-        messageProducer,
-        messageCache,
-        configuration.maxMessagesLimit.value.toInt(),
-        configuration.messageSearchPipelineBuffer.value.toInt(),
-        configuration.dbRetryDelay.value.toLong(),
-        configuration.sseSearchDelay.value.toLong()
-    ),
+
 
     val eventFiltersPredicateFactory: PredicateFactory<BaseEventEntity> = PredicateFactory(
         mapOf(
@@ -141,6 +132,9 @@ class Context(
         cacheControlConfig(it, enableCaching)
     }
 ) {
+
+    val searchMessagesHandler: SearchMessagesHandler = SearchMessagesHandler(this)
+
     companion object {
         private fun cacheControlConfig(timeout: Int, enableCaching: Boolean): CacheControl {
             return if (enableCaching) {

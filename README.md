@@ -162,6 +162,7 @@ Event metadata object example (in sse):
 - `keepOpen` - boolean - If the search has reached the current moment, is it necessary to wait further for the appearance of new data. Default `false`.
 - `messageId` - text, accepts multiple values - List of message IDs to restore search. If given, it has the highest priority and ignores `stream` (uses streams from ids), `startTimestamp` and `resumeFromId`. Defaults to `null`
 - `attachedEvents`- boolean - If `true`, additionally load `attachedEventIds`. Default `false`.
+- `lookupLimitDays` - number - The number of days that will be viewed on the first request to get the one closest to the specified timestamp. Default `null` - not limited to the past and up to the present moment to the future.
 
 
 - `FILTERS`:
