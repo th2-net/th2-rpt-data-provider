@@ -93,7 +93,7 @@ class StreamGenerator(
                     }
                 }
             }.build(),
-            if (searchAfter) Order.DIRECT else Order.INVERSE
+            if (searchAfter) Order.DIRECT else Order.REVERSE
         )
     }
 
