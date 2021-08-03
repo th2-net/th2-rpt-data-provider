@@ -125,7 +125,7 @@ class SearchMessagesHandler(
         stream: String,
         direction: Direction,
         timelineDirection: TimeRelation,
-        daysInterval: Int = 2
+        daysInterval: Int = 1000
     ): StoredMessageId? {
         var daysChecking = daysInterval
         var isCurrentDay = true
