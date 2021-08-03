@@ -67,6 +67,43 @@ class MessageProducer(
         return parseRawMessageBatch(messageBatch, request.attachedEvents)
     }
 
+    private suspend fun createMessageBatch(
+        messageBatch: StoredMessageBatch,
+        processed: List<MessageRequest>?,
+        parsedRawMessage: List<RawMessage?>,
+        attachedEvents: List<Set<String>>?,
+        needAttachEvents: Boolean
+    ): ParsedMessageBatch {
+        var allMessageParsed = true
+
+        return ParsedMessageBatch(messageBatch.id,
+            messageBatch.messages.mapIndexed { i, rawMessage ->
+                val parsedMessage = processed?.get(i)?.get()
+                Message(
+                    rawMessage,
+                    if (serverType == HTTP) parsedMessage?.let { JsonFormat.printer().print(it) } else null,
+                    if (serverType == GRPC) parsedMessage else null,
+                    parsedRawMessage[i]?.let {
+                        Base64.getEncoder().encodeToString(it.body.toByteArray())
+                    },
+                    parsedMessage?.metadata?.messageType ?: "",
+                    attachedEvents?.get(i) ?: emptySet()
+                ).also {
+                    if (it.body != null || it.message != null) {
+                        codecCache.put(it.messageId, it)
+                    } else {
+                        allMessageParsed = false
+                    }
+                }
+            }.associateBy { it.id },
+            needAttachEvents
+        ).also {
+            if (allMessageParsed) {
+                codecCacheBatches.put(it.id.toString(), it)
+            }
+        }
+    }
+
     private suspend fun parseRawMessageBatch(
         messageBatch: StoredMessageBatch,
         needAttachEvents: Boolean = true
@@ -84,24 +121,13 @@ class MessageProducer(
             val attachedEvents: List<Set<String>>? =
                 if (needAttachEvents) getAttachedEvents(messageBatch.messages) else null
 
-            return@coroutineScope ParsedMessageBatch(messageBatch.id,
-                messageBatch.messages.mapIndexed { i, rawMessage ->
-                    val parsedMessage = processed?.get(i)?.get()
-                    Message(
-                        rawMessage,
-                        if (serverType == HTTP) parsedMessage?.let { JsonFormat.printer().print(it) } else null,
-                        if (serverType == GRPC) parsedMessage else null,
-                        parsedRawMessage[i]?.let {
-                            Base64.getEncoder().encodeToString(it.body.toByteArray())
-                        },
-                        parsedMessage?.metadata?.messageType ?: "",
-                        attachedEvents?.get(i) ?: emptySet()
-                    ).also { codecCache.put(it.messageId, it) }
-                }.associateBy { it.id },
+            return@coroutineScope createMessageBatch(
+                messageBatch,
+                processed,
+                parsedRawMessage,
+                attachedEvents,
                 needAttachEvents
-            ).also {
-                codecCacheBatches.put(it.id.toString(), it)
-            }
+            )
         }
     }
 
