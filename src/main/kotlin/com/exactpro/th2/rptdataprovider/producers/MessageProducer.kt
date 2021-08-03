@@ -141,8 +141,7 @@ class MessageProducer(
 
             val attachedEvents: List<Set<String>>? =
                 if (needAttachEvents) getAttachedEvents(messageBatch.messages) else null
-
-            var allMessageParsed = true
+            
             return@coroutineScope createMessageBatch(
                 messageBatch,
                 processed,
