@@ -78,7 +78,7 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
         }
     }
 
-    suspend fun getMessagesBatchesSuspend(filter: StoredMessageFilter): MutableIterable<StoredMessageBatch> {
+    suspend fun getMessagesBatchesSuspend(filter: StoredMessageFilter): Iterable<StoredMessageBatch> {
         return withContext(cradleDispatcher) {
             logMetrics(getMessagesBatches) {
                 logTime("getMessagesBatches (filter=${filter.convertToString()})") {
@@ -142,7 +142,7 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
         }
     }
 
-    suspend fun getCompletedEventSuspend(ids: Set<StoredTestEventId>): MutableIterable<StoredTestEventWrapper> {
+    suspend fun getCompletedEventSuspend(ids: Set<StoredTestEventId>): Iterable<StoredTestEventWrapper> {
         return withContext(cradleDispatcher) {
             logMetrics(getTestCompletedEventAsyncMetric) {
                 logTime("getCompleteTestEvents (id=$ids)") {
