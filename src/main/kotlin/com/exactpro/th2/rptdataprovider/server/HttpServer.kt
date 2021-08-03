@@ -35,6 +35,7 @@ import io.ktor.util.*
 import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
+import java.nio.channels.ClosedChannelException
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
@@ -109,7 +110,7 @@ class HttpServer(private val context: Context) {
 
             while (coroutineContext.isActive) {
                 if (nettyApplicationRequest.context.isRemoved)
-                    throw ChannelClosedException("Channel is closed")
+                    throw ClosedChannelException()
 
                 delay(checkRequestAliveDelay)
             }
@@ -189,8 +190,8 @@ class HttpServer(private val context: Context) {
                         logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - invalid request" }
                     } catch (e: CradleObjectNotFoundException) {
                         logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - missing cradle data" }
-                    } catch (e: ChannelClosedException) {
-                        logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - channel closed" }
+                    } catch (e: ClosedChannelException) {
+                        logger.warn(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - channel closed" }
                     } catch (e: Exception) {
                         logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - unexpected exception" }
                     }
