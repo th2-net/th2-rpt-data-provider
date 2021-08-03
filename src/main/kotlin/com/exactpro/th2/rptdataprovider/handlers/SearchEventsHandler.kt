@@ -26,20 +26,17 @@ import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
-import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
 import com.fasterxml.jackson.databind.ObjectMapper
-import io.ktor.utils.io.errors.*
 import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel.Factory.BUFFERED
 import kotlinx.coroutines.flow.*
 import mu.KotlinLogging
-import java.io.Writer
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneOffset
@@ -237,11 +234,6 @@ class SearchEventsHandler(
         }
     }
 
-    private suspend fun getStartTimestamp(request: SseEventSearchRequest): Instant {
-        return request.resumeFromId?.let {
-            eventProducer.fromId(ProviderEventId(request.resumeFromId)).startTimestamp
-        } ?: request.startTimestamp!!
-    }
 
     private suspend fun getNextTimestampGenerator(
         request: SseEventSearchRequest,
@@ -274,6 +266,20 @@ class SearchEventsHandler(
         }
     }
 
+    private suspend fun needDropByTimestamp(
+        request: SseEventSearchRequest,
+        resumeFromEvent: BaseEventEntity
+    ): (BaseEventEntity) -> Boolean {
+        return { event: BaseEventEntity ->
+            if (request.searchDirection == AFTER) {
+                event.startTimestamp.isBeforeOrEqual(resumeFromEvent.startTimestamp)
+            } else {
+                event.startTimestamp.isAfterOrEqual(resumeFromEvent.startTimestamp)
+            }
+        }
+    }
+
+
     @ExperimentalCoroutinesApi
     @FlowPreview
     suspend fun searchEventsSse(
@@ -288,7 +294,10 @@ class SearchEventsHandler(
             val lastEventId = AtomicLong(0)
             val scanCnt = AtomicLong(0)
 
-            val startTimestamp = getStartTimestamp(request)
+            val resumeFromEvent = request.resumeFromId?.let {
+                eventProducer.fromId(ProviderEventId(request.resumeFromId))
+            }
+            val startTimestamp = resumeFromEvent?.startTimestamp ?: request.startTimestamp!!
             val timeIntervals = getNextTimestampGenerator(request, sseEventSearchStep, startTimestamp)
             val parentEventCounter = ParentEventCounter(request.limitForParent)
 
@@ -310,7 +319,20 @@ class SearchEventsHandler(
             }
                 .map { it.await() }
                 .flatMapConcat { it.asFlow() }
-                .filter { it.id.toString() != request.resumeFromId }
+                .let { eventFlow: Flow<BaseEventEntity> ->
+                    when {
+                        resumeFromEvent != null -> {
+                            val dropByTimestamp = needDropByTimestamp(request, resumeFromEvent)
+                            eventFlow
+                                .dropWhile { dropByTimestamp(it) && it.id != resumeFromEvent.id }
+                                .dropWhile{ it.id == resumeFromEvent.id }
+                        }
+                        request.resumeFromId != null -> eventFlow.filter {
+                            it.id.toString() != request.resumeFromId
+                        }
+                        else -> eventFlow
+                    }
+                }
                 .takeWhile { event ->
                     request.endTimestamp?.let {
                         if (request.searchDirection == AFTER) {
@@ -324,7 +346,7 @@ class SearchEventsHandler(
                     lastScannedObject.update(event, scanCnt)
                     processedEventCount.inc()
                 }
-                .filter { request.filterPredicate.apply(it) }
+                .filter { request.filterPredicate.apply(it) && it.isBatched }
                 .let {
                     if (parentEventCounter.limitForParent != null) {
                         it.filter { event -> parentEventCounter.checkCountAndGet(event) != null }
