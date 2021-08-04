@@ -35,6 +35,7 @@ import io.ktor.util.*
 import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
+import java.nio.channels.ClosedChannelException
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
@@ -109,7 +110,7 @@ class HttpServer(private val context: Context) {
 
             while (coroutineContext.isActive) {
                 if (nettyApplicationRequest.context.isRemoved)
-                    throw ChannelClosedException("Channel is closed")
+                    throw ClosedChannelException()
 
                 delay(checkRequestAliveDelay)
             }
@@ -189,8 +190,8 @@ class HttpServer(private val context: Context) {
                         logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - invalid request" }
                     } catch (e: CradleObjectNotFoundException) {
                         logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - missing cradle data" }
-                    } catch (e: ChannelClosedException) {
-                        logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - channel closed" }
+                    } catch (e: ClosedChannelException) {
+                        logger.info { "request '$requestName' with parameters '${stringParameters.value}' has been cancelled by a client" }
                     } catch (e: Exception) {
                         logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - unexpected exception" }
                     }
@@ -350,7 +351,10 @@ class HttpServer(private val context: Context) {
                 get("search/sse/messages") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "search messages sse", null, false, true, queryParametersMap) {
-                        suspend fun(w: StreamWriter, keepAlive: suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit) {
+                        suspend fun(
+                            w: StreamWriter,
+                            keepAlive: suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit
+                        ) {
                             val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
                             val request = SseMessageSearchRequest(queryParametersMap, filterPredicate)
                             request.checkRequest()
@@ -362,7 +366,10 @@ class HttpServer(private val context: Context) {
                 get("search/sse/events") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "search events sse", null, false, true, queryParametersMap) {
-                        suspend fun(w: StreamWriter, keepAlive: suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit) {
+                        suspend fun(
+                            w: StreamWriter,
+                            keepAlive: suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit
+                        ) {
                             val filterPredicate =
                                 eventFiltersPredicateFactory.build(queryParametersMap)
                             val request = SseEventSearchRequest(queryParametersMap, filterPredicate)
