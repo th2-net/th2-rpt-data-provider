@@ -266,7 +266,7 @@ class SearchEventsHandler(
         }
     }
 
-    private suspend fun needDropByTimestamp(
+    private suspend fun dropByTimestampFilter(
         request: SseEventSearchRequest,
         resumeFromEvent: BaseEventEntity
     ): (BaseEventEntity) -> Boolean {
