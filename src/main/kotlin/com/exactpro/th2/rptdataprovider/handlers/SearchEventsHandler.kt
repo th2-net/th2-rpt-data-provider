@@ -294,7 +294,7 @@ class SearchEventsHandler(
             val scanCnt = AtomicLong(0)
 
             val resumeFromEvent = request.resumeFromId?.let {
-                eventProducer.fromId(ProviderEventId(request.resumeFromId))
+                eventProducer.fromId(ProviderEventId(it))
             }
             val startTimestamp = resumeFromEvent?.startTimestamp ?: request.startTimestamp!!
             val timeIntervals = getNextTimestampGenerator(request, sseEventSearchStep, startTimestamp)
