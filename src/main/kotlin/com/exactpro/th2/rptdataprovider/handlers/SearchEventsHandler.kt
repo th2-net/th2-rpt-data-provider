@@ -32,7 +32,9 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundExcep
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
 import com.fasterxml.jackson.databind.ObjectMapper
+import io.prometheus.client.Collector
 import io.prometheus.client.Counter
+import jnr.ffi.annotations.In
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel.Factory.BUFFERED
 import kotlinx.coroutines.flow.*
@@ -279,6 +281,34 @@ class SearchEventsHandler(
         }
     }
 
+    @ExperimentalCoroutinesApi
+    private suspend fun dropBeforeResumeId(
+        eventFlow: Flow<BaseEventEntity>,
+        request: SseEventSearchRequest,
+        resumeFromEvent: BaseEventEntity
+    ): Flow<BaseEventEntity> {
+        return flow {
+            val dropByTimestamp = dropByTimestampFilter(request, resumeFromEvent)
+            val head = mutableListOf<BaseEventEntity>()
+            var headIsDropped = false
+            eventFlow.collect {
+                if (!headIsDropped) {
+                    when {
+                        dropByTimestamp(it) && it.id != resumeFromEvent.id -> head.add(it)
+                        it.id == resumeFromEvent.id -> headIsDropped = true
+                        else -> {
+                            emitAll(head.asFlow())
+                            emit(it)
+                            headIsDropped = true
+                        }
+                    }
+                } else {
+                    emit(it)
+                }
+            }
+        }
+    }
+
 
     @ExperimentalCoroutinesApi
     @FlowPreview
@@ -320,17 +350,10 @@ class SearchEventsHandler(
                 .map { it.await() }
                 .flatMapConcat { it.asFlow() }
                 .let { eventFlow: Flow<BaseEventEntity> ->
-                    when {
-                        resumeFromEvent != null -> {
-                            val dropByTimestamp = needDropByTimestamp(request, resumeFromEvent)
-                            eventFlow
-                                .dropWhile { dropByTimestamp(it) && it.id != resumeFromEvent.id }
-                                .dropWhile{ it.id == resumeFromEvent.id }
-                        }
-                        request.resumeFromId != null -> eventFlow.filter {
-                            it.id.toString() != request.resumeFromId
-                        }
-                        else -> eventFlow
+                    if (resumeFromEvent != null) {
+                        dropBeforeResumeId(eventFlow, request, resumeFromEvent)
+                    } else {
+                        eventFlow
                     }
                 }
                 .takeWhile { event ->
