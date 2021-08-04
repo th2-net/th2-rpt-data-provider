@@ -21,6 +21,7 @@ import com.exactpro.cradle.CradleManager
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.*
+import com.exactpro.cradle.testevents.ExtendedTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventWrapper
@@ -177,11 +178,11 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
         }
     }
 
-    suspend fun getEventIdsSuspend(id: StoredMessageId): Collection<StoredTestEventId> {
+    suspend fun getEventIdsSuspend(id: StoredMessageId): Collection<ExtendedTestEventId> {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventIdsByMessageIdAsyncMetric) {
                 logTime("getTestEventIdsByMessageId (id=$id)") {
-                    linker.getTestEventIdsByMessageIdAsync(id).await()
+                    linker.getTestEventIdsAsync(id).await()
                 }
             } ?: emptyList()
         }
