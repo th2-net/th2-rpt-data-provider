@@ -85,14 +85,11 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
         }
     }
 
-    suspend fun getMessagesBatchesSuspend(
-        filter: StoredMessageFilter,
-        order: Order = Order.DIRECT
-    ): Iterable<StoredMessageBatch> {
+    suspend fun getMessagesBatchesSuspend(filter: StoredMessageFilter): Iterable<StoredMessageBatch> {
         return withContext(cradleDispatcher) {
             logMetrics(getMessagesBatches) {
                 logTime("getMessagesBatches (filter=${filter.convertToString()})") {
-                    storage.getMessagesBatchesAsync(filter, order).await()
+                    storage.getMessagesBatchesAsync(filter).await()
                 }
             } ?: listOf()
         }
@@ -118,11 +115,15 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
         }
     }
 
-    suspend fun getEventsSuspend(from: Instant, to: Instant): Iterable<StoredTestEventMetadata> {
+    suspend fun getEventsSuspend(
+        from: Instant,
+        to: Instant,
+        order: Order = Order.DIRECT
+    ): Iterable<StoredTestEventMetadata> {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
                 logTime("Get events from: $from to: $to") {
-                    storage.getTestEventsAsync(from, to).await()
+                    storage.getTestEventsAsync(from, to, order).await()
                 }
             } ?: listOf()
         }
@@ -131,12 +132,13 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
     suspend fun getEventsSuspend(
         parentId: StoredTestEventId,
         from: Instant,
-        to: Instant
+        to: Instant,
+        order: Order = Order.DIRECT
     ): Iterable<StoredTestEventMetadata> {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
                 logTime("Get events parent: $parentId from: $from to: $to") {
-                    storage.getTestEventsAsync(parentId, from, to).await()
+                    storage.getTestEventsAsync(parentId, from, to, order).await()
                 }
             } ?: listOf()
         }
