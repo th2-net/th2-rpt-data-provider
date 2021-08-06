@@ -22,6 +22,7 @@ import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedExcepti
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.requests.*
 import com.exactpro.th2.rptdataprovider.entities.sse.*
+import com.exactpro.th2.rptdataprovider.messageProfile.ProfilesStatistics
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import io.ktor.application.*
 import io.ktor.features.*
@@ -301,6 +302,10 @@ class HttpServer(private val context: Context) {
 
             routing {
 
+                get("/performanceMetrics") {
+                    call.respondText(ProfilesStatistics.getStatisticsJson())
+                }
+
                 get("/event/{id}") {
                     val probe = call.parameters["probe"]?.toBoolean() ?: false
                     handleRequest(
@@ -350,7 +355,10 @@ class HttpServer(private val context: Context) {
                 get("search/sse/messages") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "search messages sse", null, false, true, queryParametersMap) {
-                        suspend fun(w: StreamWriter, keepAlive: suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit) {
+                        suspend fun(
+                            w: StreamWriter,
+                            keepAlive: suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit
+                        ) {
                             val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
                             val request = SseMessageSearchRequest(queryParametersMap, filterPredicate)
                             request.checkRequest()
@@ -362,7 +370,10 @@ class HttpServer(private val context: Context) {
                 get("search/sse/events") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "search events sse", null, false, true, queryParametersMap) {
-                        suspend fun(w: StreamWriter, keepAlive: suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit) {
+                        suspend fun(
+                            w: StreamWriter,
+                            keepAlive: suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit
+                        ) {
                             val filterPredicate =
                                 eventFiltersPredicateFactory.build(queryParametersMap)
                             val request = SseEventSearchRequest(queryParametersMap, filterPredicate)

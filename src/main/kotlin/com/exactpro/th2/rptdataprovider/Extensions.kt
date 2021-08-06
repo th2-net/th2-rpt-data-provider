@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.selects.whileSelect
 import mu.KotlinLogging
+import org.apache.log4j.Logger
 import java.io.IOException
 import java.io.Writer
 import java.time.Duration
@@ -53,6 +54,10 @@ suspend fun ObjectMapper.asStringSuspend(data: Any?): String {
     return withContext(Dispatchers.IO) {
         mapper.writeValueAsString(data)
     }
+}
+
+fun Logger.debugArray(array: ArrayList<String>) {
+    this.debug(array.joinToString("\n") + "\n")
 }
 
 fun StoredMessageFilter.convertToString(): String {

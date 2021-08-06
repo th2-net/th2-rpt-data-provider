@@ -35,6 +35,8 @@ import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
+import com.exactpro.th2.rptdataprovider.messageProfile.MessageProfile
+import com.exactpro.th2.rptdataprovider.messageProfile.ProfilesStatistics
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
@@ -66,6 +68,8 @@ class SearchMessagesHandler(
             "processed_message_count", "Count of processed Message"
         ).register()
     }
+
+    var messagesProfilesMap: MutableMap<StoredMessageId, MessageProfile> = mutableMapOf()
 
     private fun nextDay(timestamp: Instant, timelineDirection: TimeRelation): Instant {
         val utcTimestamp = timestamp.atOffset(ZoneOffset.UTC)
@@ -277,6 +281,8 @@ class SearchMessagesHandler(
             var streamsInfo: MutableList<StreamInfo> = mutableListOf()
             var lastIdInStream: MutableMap<Pair<String, Direction>, StoredMessageId?> = mutableMapOf()
 
+            var profilesStatistics: ProfilesStatistics? = ProfilesStatistics()
+
             flow {
 
                 streamsInfo = initStreamsInfo(request)
@@ -285,10 +291,14 @@ class SearchMessagesHandler(
                 getMessageStream(
                     request, streamsInfo, request.resultCountLimit ?: startMessageCountLimit,
                     messageIdStored, this@withContext
-                ).collect { emit(it) }
+                ).collect {
+                    messagesProfilesMap[it.id]!!.gotMessage()
+                    emit(it)
+                }
             }.map {
                 async {
                     val parsedMessage = it.getParsedMessage()
+                    messagesProfilesMap[it.id]!!.parsed(parsedMessage)
                     messageCache.put(parsedMessage.messageId, parsedMessage)
                     Pair(parsedMessage, request.filterPredicate.apply(parsedMessage))
                 }.also { coroutineContext.ensureActive() }
@@ -301,6 +311,7 @@ class SearchMessagesHandler(
                         lastIdInStream[Pair(it.streamName, it.direction)] = it
                     }
                     processedMessageCount.inc()
+                    messagesProfilesMap[message.id]!!.filtered(message)
                 }
                 .filter { it.second }
                 .map { it.first }
@@ -318,7 +329,13 @@ class SearchMessagesHandler(
                 .collect {
                     coroutineContext.ensureActive()
                     writer.write(it, lastEventId)
+                    if (!profilesStatistics!!.isStarted) {
+                        profilesStatistics.start()
+                    }
+                    var messageProfile = messagesProfilesMap[it.id]!!.endOfProcessing()
+                    profilesStatistics!!.processedMessage(messageProfile)
                 }
+            profilesStatistics!!.enough()
         }
     }
 
@@ -367,6 +384,7 @@ class SearchMessagesHandler(
         isFirstPull: Boolean,
         searchContext: CoroutineScope
     ): List<MessageWrapper> {
+        var messageWrapper: MessageWrapper
         return coroutineScope {
             databaseRequestRetry(dbRetryDelay) {
                 pullMore(startId, limit, request.searchDirection, isFirstPull)
@@ -376,7 +394,10 @@ class SearchMessagesHandler(
                         messageProducer.fromRawMessage(batch, request)
                     }
                     batch.messages.map { message ->
-                        MessageWrapper.build(message, parsedFuture)
+                        messageWrapper = MessageWrapper.build(message, parsedFuture)
+                        var messageProfile = MessageProfile(message.id, messageWrapper)
+                        messagesProfilesMap[message.id] = messageProfile
+                        messageWrapper
                     }
                 }
             }.awaitAll().flatten()
