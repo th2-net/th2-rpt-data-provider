@@ -38,8 +38,7 @@ class ProfilesStatistics {
         private var worstProfileInfo: String = ""
         private var middleProfileInfo: String = ""
 
-        suspend fun getStatisticsJson(): String {
-            val jacksonMapper = ObjectMapper()
+        suspend fun getStatisticsJson(jacksonMapper: ObjectMapper): String {
             val profilesRangeStatistics = ProfilesRangeStatistics(bestProfileInfo, middleProfileInfo, worstProfileInfo)
             val profileStatisticsData = ProfileStatisticsData(
                 MessageProfile.getMessageCount.toString(),
@@ -65,10 +64,8 @@ class ProfilesStatistics {
         val middleTime = oneSecondWorstList.keys.sum() / oneSecondWorstList.size
         var middle: Long = 0
         oneSecondWorstList.keys.sorted().forEach { key ->
-            run {
-                if (key <= middleTime) {
-                    middle = key
-                }
+            if (key <= middleTime) {
+                middle = key
             }
         }
         middleProfileInfo = "${oneSecondWorstList[middle]!!.messageId} processed for $middle ms"

@@ -43,7 +43,7 @@ import kotlin.system.measureTimeMillis
 private typealias Streaming =
         suspend (StreamWriter, suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit) -> Unit
 
-class HttpServer(private val context: Context) {
+class HttpServer(private val applicationContext: Context) {
 
     private val sseRequestsProcessedInParallelQuantity: Metrics =
         Metrics("th2_sse_requests_processed_in_parallel_quantity", "SSE requests processed in parallel")
@@ -73,10 +73,10 @@ class HttpServer(private val context: Context) {
         private val logger = KotlinLogging.logger {}
     }
 
-    private val jacksonMapper = context.jacksonMapper
-    private val checkRequestAliveDelay = context.configuration.checkRequestsAliveDelay.value.toLong()
-    private val keepAliveTimeout = context.configuration.keepAliveTimeout.value.toLong()
-    private val configuration = context.configuration
+    private val jacksonMapper = applicationContext.jacksonMapper
+    private val checkRequestAliveDelay = applicationContext.configuration.checkRequestsAliveDelay.value.toLong()
+    private val keepAliveTimeout = applicationContext.configuration.keepAliveTimeout.value.toLong()
+    private val configuration = applicationContext.configuration
 
     private class Timeouts {
         class Config(var requestTimeout: Long = 5000L, var excludes: List<String> = listOf("sse"))
@@ -275,35 +275,34 @@ class HttpServer(private val context: Context) {
     @InternalAPI
     fun run() {
 
-        val notModifiedCacheControl = this.context.cacheControlNotModified
-        val rarelyModifiedCacheControl = this.context.cacheControlRarelyModified
+        val notModifiedCacheControl = this.applicationContext.cacheControlNotModified
+        val rarelyModifiedCacheControl = this.applicationContext.cacheControlRarelyModified
 
-        val cradleService = this.context.cradleService
+        val cradleService = this.applicationContext.cradleService
 
-        val eventCache = this.context.eventCache
-        val messageCache = this.context.messageCache
+        val eventCache = this.applicationContext.eventCache
+        val messageCache = this.applicationContext.messageCache
 
-        val searchEventsHandler = this.context.searchEventsHandler
-        val searchMessagesHandler = this.context.searchMessagesHandler
+        val searchEventsHandler = this.applicationContext.searchEventsHandler
+        val searchMessagesHandler = this.applicationContext.searchMessagesHandler
 
-        val eventFiltersPredicateFactory = this.context.eventFiltersPredicateFactory
-        val messageFiltersPredicateFactory = this.context.messageFiltersPredicateFactory
+        val eventFiltersPredicateFactory = this.applicationContext.eventFiltersPredicateFactory
+        val messageFiltersPredicateFactory = this.applicationContext.messageFiltersPredicateFactory
 
-        val sseEventSearchStep = this.context.sseEventSearchStep
+        val sseEventSearchStep = this.applicationContext.sseEventSearchStep
 
-        val getEventsLimit = this.context.configuration.eventSearchChunkSize.value.toInt()
+        val getEventsLimit = this.applicationContext.configuration.eventSearchChunkSize.value.toInt()
 
         embeddedServer(Netty, configuration.port.value.toInt()) {
 
             install(Compression)
             install(Timeouts) {
-                requestTimeout = context.timeout
+                requestTimeout = applicationContext.timeout
             }
 
             routing {
-
                 get("/performanceMetrics") {
-                    call.respondText(ProfilesStatistics.getStatisticsJson())
+                    call.respondText(ProfilesStatistics.getStatisticsJson(applicationContext.jacksonMapper))
                 }
 
                 get("/event/{id}") {

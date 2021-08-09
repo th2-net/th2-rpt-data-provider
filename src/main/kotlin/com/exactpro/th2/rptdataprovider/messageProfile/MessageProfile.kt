@@ -77,8 +77,7 @@ class MessageProfile(var messageId: StoredMessageId, var messageWrapper: Message
     }
 
     private fun writeResult(time: Long) {
-        val result = "Обработка сообщения $messageId заняла $time ms"
-        println("Обработка сообщения $messageId заняла $time ms")
+        val result = "Processing for message $messageId took $time ms"
         stepsInfo.add(result)
         logger.debugArray(stepsInfo)
     }

@@ -97,13 +97,6 @@ data class SseEvent(val data: String = "empty data", val event: EventType? = nul
             )
         }
 
-        suspend fun build(jacksonMapper: ObjectMapper, message: JsonObject): SseEvent {
-            return SseEvent(
-                jacksonMapper.asStringSuspend(message),
-                EventType.MESSAGE
-            )
-        }
-
         suspend fun build(
             jacksonMapper: ObjectMapper,
             lastScannedObjectInfo: LastScannedObjectInfo,
