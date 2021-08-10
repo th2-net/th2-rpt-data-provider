@@ -26,6 +26,7 @@ import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
+import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedEventInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
@@ -317,7 +318,7 @@ class SearchEventsHandler(
         writer: StreamWriter
     ) {
         coroutineScope {
-            val lastScannedObject = LastScannedObjectInfo()
+            val lastScannedObject = LastScannedEventInfo()
             val lastEventId = AtomicLong(0)
             val scanCnt = AtomicLong(0)
 

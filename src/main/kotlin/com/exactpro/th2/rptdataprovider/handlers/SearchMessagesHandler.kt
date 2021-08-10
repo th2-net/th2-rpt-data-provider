@@ -18,6 +18,7 @@ package com.exactpro.th2.rptdataprovider.handlers
 
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedMessageInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.messages.MessageStreamProducer
@@ -50,7 +51,7 @@ class SearchMessagesHandler(private val context: Context) {
         writer: StreamWriter
     ) {
         withContext(coroutineContext) {
-            val lastScannedObject = LastScannedObjectInfo()
+            val lastScannedObject = LastScannedMessageInfo()
             val lastEventId = AtomicLong(0)
             val scanCnt = AtomicLong(0)
 
