@@ -18,10 +18,15 @@ package com.exactpro.th2.rptdataprovider.entities.sse
 
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.th2.common.grpc.EventID
+import com.exactpro.th2.common.grpc.MessageID
+import com.exactpro.th2.common.message.toTimestamp
 import com.exactpro.th2.rptdataprovider.asStringSuspend
+import com.exactpro.th2.rptdataprovider.convertToProto
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.responses.*
 import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
+import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.google.protobuf.Timestamp
 import io.ktor.util.*
@@ -37,32 +42,75 @@ enum class EventType {
     }
 }
 
-data class LastScannedObjectInfo(var id: String = "", var timestamp: Long = 0, var scanCounter: Long = 0) {
+abstract class LastScannedObjectInfo(
+    @JsonIgnore var instantTimestamp: Instant? = null,
+    var scanCounter: Long = 0
+) {
+
+    val timestamp: Long
+        get() = instantTimestamp?.toEpochMilli() ?: 0
 
     fun update(lastTimestamp: Instant) {
-        timestamp = lastTimestamp.toEpochMilli()
+        instantTimestamp = lastTimestamp
     }
 
-    fun update(event: BaseEventEntity, scanCnt: AtomicLong) {
-        id = event.id.toString()
-        timestamp = event.startTimestamp.toEpochMilli()
-        scanCounter = scanCnt.incrementAndGet()
-    }
+    abstract fun convertToGrpc(): com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo
+
+}
+
+class LastScannedMessageInfo(
+    @JsonIgnore var messageId: StoredMessageId? = null,
+    timestamp: Instant? = null,
+    scanCounter: Long = 0
+) : LastScannedObjectInfo(timestamp, scanCounter) {
+
+    val id: String?
+        get() = messageId?.toString() ?: ""
 
     fun update(message: Message, scanCnt: AtomicLong) {
-        id = message.id.toString()
-        timestamp = message.timestamp.toEpochMilli()
+        messageId = message.id
+        instantTimestamp = message.timestamp
         scanCounter = scanCnt.incrementAndGet()
     }
 
-    fun convertToGrpc(): com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo {
+    override fun convertToGrpc(): com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo {
         return com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo.newBuilder()
-            .setId(id)
-            .setTimestampMillis(timestamp)
             .setScanCounter(scanCounter)
+            .also { builder ->
+                instantTimestamp?.let { builder.setTimestamp(it.toTimestamp()) }
+                messageId?.let { builder.setMessageId(it.convertToProto()) }
+            }.build()
+    }
+}
+
+
+class LastScannedEventInfo(
+    @JsonIgnore var eventId: ProviderEventId? = null,
+    timestamp: Instant? = null,
+    scanCounter: Long = 0
+) : LastScannedObjectInfo(timestamp, scanCounter) {
+
+    val id: String?
+        get() = eventId?.toString() ?: ""
+
+    fun update(event: BaseEventEntity, scanCnt: AtomicLong) {
+        eventId = event.id
+        instantTimestamp = event.startTimestamp
+        scanCounter = scanCnt.incrementAndGet()
+    }
+
+
+    override fun convertToGrpc(): com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo {
+        return com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo.newBuilder()
+            .setScanCounter(scanCounter)
+            .also { builder ->
+                instantTimestamp?.let { builder.setTimestamp(it.toTimestamp()) }
+                id?.let { builder.setEventId(EventID.newBuilder().setId(it)) }
+            }
             .build()
     }
 }
+
 
 data class ExceptionInfo(val exceptionName: String, val exceptionCause: String)
 

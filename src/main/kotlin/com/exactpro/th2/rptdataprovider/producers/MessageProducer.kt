@@ -84,6 +84,48 @@ class MessageProducer(
         return parseRawMessageBatch(messageBatch, request.attachedEvents)
     }
 
+
+    private suspend fun parseMessageHttp(
+        rawMessage: StoredMessage,
+        parsedMessage: com.exactpro.th2.common.grpc.Message?,
+        parsedRawMessage: RawMessage?,
+        parsedRawMessageProtocol: String?,
+        attachedEvents: Set<String>?
+    ): Message {
+        return Message(
+            rawMessage,
+            parsedMessage?.let { JsonFormat.printer().print(it) },
+            null,
+            parsedRawMessage?.let {
+                Base64.getEncoder().encodeToString(it.body.toByteArray())
+            },
+            null,
+            parsedMessage?.metadata?.messageType ?: parsedRawMessageProtocol ?: "",
+            attachedEvents ?: emptySet()
+        )
+    }
+
+    private suspend fun parseMessageGrpc(
+        rawMessage: StoredMessage,
+        parsedMessage: com.exactpro.th2.common.grpc.Message?,
+        parsedRawMessage: RawMessage?,
+        parsedRawMessageProtocol: String?,
+        attachedEvents: Set<String>?
+    ): Message {
+        return Message(
+            rawMessage,
+            null,
+            parsedMessage,
+            parsedRawMessage?.let {
+                Base64.getEncoder().encodeToString(it.body.toByteArray())
+            },
+            parsedRawMessage?.body,
+            parsedMessage?.metadata?.messageType ?: parsedRawMessageProtocol ?: "",
+            attachedEvents ?: emptySet()
+        )
+    }
+
+
     private suspend fun createMessageBatch(
         messageBatch: StoredMessageBatch,
         processed: List<MessageRequest>?,
@@ -94,18 +136,17 @@ class MessageProducer(
     ): ParsedMessageBatch {
         var allMessageParsed = true
 
+        val parseMessage = if (serverType == HTTP) ::parseMessageHttp else ::parseMessageGrpc
+
         return ParsedMessageBatch(messageBatch.id,
             messageBatch.messages.mapIndexed { i, rawMessage ->
                 val parsedMessage = processed?.get(i)?.get()
-                Message(
+                parseMessage(
                     rawMessage,
-                    if (serverType == HTTP) parsedMessage?.let { JsonFormat.printer().print(it) } else null,
-                    if (serverType == GRPC) parsedMessage else null,
-                    parsedRawMessage[i]?.let {
-                        Base64.getEncoder().encodeToString(it.body.toByteArray())
-                    },
-                    parsedMessage?.metadata?.messageType ?: parsedRawMessageProtocol ?: "",
-                    attachedEvents?.get(i) ?: emptySet()
+                    parsedMessage,
+                    parsedRawMessage[i],
+                    parsedRawMessageProtocol,
+                    attachedEvents?.get(i)
                 ).also {
                     if (it.body != null || it.message != null) {
                         codecCache.put(it.messageId, it)
@@ -141,7 +182,7 @@ class MessageProducer(
 
             val attachedEvents: List<Set<String>>? =
                 if (needAttachEvents) getAttachedEvents(messageBatch.messages) else null
-            
+
             return@coroutineScope createMessageBatch(
                 messageBatch,
                 processed,

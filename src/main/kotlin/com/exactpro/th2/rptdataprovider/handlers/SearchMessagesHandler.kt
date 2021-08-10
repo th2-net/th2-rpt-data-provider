@@ -33,6 +33,7 @@ import com.exactpro.th2.rptdataprovider.cache.MessageCache
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
+import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedMessageInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
@@ -270,7 +271,7 @@ class SearchMessagesHandler(
     ) {
         withContext(coroutineContext) {
             val startMessageCountLimit = 25
-            val lastScannedObject = LastScannedObjectInfo()
+            val lastScannedObject = LastScannedMessageInfo()
             val lastEventId = AtomicLong(0)
             val scanCnt = AtomicLong(0)
             val messageIdStored = request.resumeFromId?.let { StoredMessageId.fromString(it) }

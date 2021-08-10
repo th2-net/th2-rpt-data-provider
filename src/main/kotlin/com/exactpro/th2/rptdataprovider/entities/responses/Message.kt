@@ -28,6 +28,7 @@ import com.exactpro.th2.rptdataprovider.cradleDirectionToGrpc
 import com.exactpro.th2.rptdataprovider.entities.internal.Direction
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.annotation.JsonRawValue
+import com.google.protobuf.ByteString
 import java.time.Instant
 
 data class Message(
@@ -45,6 +46,9 @@ data class Message(
     val bodyBase64: String?,
 
     @JsonIgnore
+    val rawBody: com.google.protobuf.ByteString?,
+
+    @JsonIgnore
     val id: StoredMessageId,
 
     @JsonIgnore
@@ -60,6 +64,7 @@ data class Message(
         jsonBody: String?,
         message: Message?,
         base64Body: String?,
+        rawBody: ByteString?,
         messageType: String,
         events: Set<String>
     ) : this(
@@ -71,20 +76,18 @@ data class Message(
         timestamp = rawStoredMessage.timestamp ?: Instant.ofEpochMilli(0),
         sessionId = rawStoredMessage.streamName ?: "",
         attachedEventIds = events,
-        message = message
+        message = message,
+        rawBody = rawBody
     )
 
     fun convertToGrpcMessageData(): MessageData {
         return MessageData.newBuilder()
             .setMessageId(id.convertToProto())
             .setTimestamp(timestamp.toTimestamp())
-            .setDirection(cradleDirectionToGrpc(id.direction))
-            .setSessionId(ConnectionID.newBuilder().setSessionAlias(id.streamName))
             .setMessageType(messageType)
             .addAllAttachedEventIds(attachedEventIds.map { EventID.newBuilder().setId(it).build() })
             .also { builder ->
-                body?.let { builder.setBody(body) }
-                bodyBase64?.let { builder.setBodyBase64(bodyBase64) }
+                bodyBase64?.let { builder.setBodyRaw(rawBody) }
                 message?.let { builder.setMessage(it) }
             }.build()
     }
