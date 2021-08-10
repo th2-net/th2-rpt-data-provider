@@ -87,16 +87,6 @@ data class SseMessageSearchRequest(
                 Instant.ofEpochSecond(it.seconds, it.nanos.toLong())
             } else null,
 
-        resumeFromId = if (request.hasResumeFromId()) {
-            request.resumeFromId.let {
-                StoredMessageId(
-                    it.connectionId.sessionAlias,
-                    grpcDirectionToCradle(it.direction),
-                    it.sequence
-                ).toString()
-            }
-        } else null,
-
         resultCountLimit = if (request.hasResultCountLimit()) {
             request.resultCountLimit.value
         } else null,
@@ -105,8 +95,8 @@ data class SseMessageSearchRequest(
             request.keepOpen.value
         } else false,
 
-        resumeFromIdsList = if (request.messageIdList.isNotEmpty()) {
-            request.messageIdList.map {
+        resumeFromIdsList = if (request.resumeFromIdsList.isNotEmpty()) {
+            request.resumeFromIdsList.map {
                 StoredMessageId(
                     it.connectionId.sessionAlias,
                     grpcDirectionToCradle(it.direction),
@@ -116,7 +106,9 @@ data class SseMessageSearchRequest(
         } else null,
         attachedEvents = if (request.hasAttachedEvents()) {
             request.attachedEvents.value
-        } else false
+        } else false,
+
+        resumeFromId = null
     )
 
     private fun checkEndTimestamp() {
