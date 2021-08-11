@@ -69,7 +69,7 @@ class MessageTypeFilter(
                 }
             }
             element.filteredBody
-        }?.any() ?: false
+        }?.any { it } ?: false
     }
 
     override fun getInfo(): FilterInfo {

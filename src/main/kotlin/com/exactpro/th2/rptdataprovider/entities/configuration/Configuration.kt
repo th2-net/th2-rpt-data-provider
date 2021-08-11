@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider.entities.configuration
 
+<<<<<<< HEAD
 import com.exactpro.cradle.CradleManager
 import com.exactpro.th2.common.grpc.MessageBatch
 import com.exactpro.th2.common.grpc.RawMessageBatch
@@ -24,6 +25,8 @@ import com.exactpro.th2.common.schema.grpc.configuration.GrpcEndpointConfigurati
 import com.exactpro.th2.common.schema.grpc.router.GrpcRouter
 import com.exactpro.th2.common.schema.message.MessageRouter
 import com.exactpro.th2.rptdataprovider.grpc.RptDataProviderGrpcHandler
+=======
+>>>>>>> 934ac64 (add subsequence processing)
 import com.exactpro.th2.rptdataprovider.server.ServerType
 import mu.KotlinLogging
 

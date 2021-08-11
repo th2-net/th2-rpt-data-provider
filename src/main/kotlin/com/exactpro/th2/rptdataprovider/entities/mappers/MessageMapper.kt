@@ -28,31 +28,31 @@ import java.util.*
 
 object MessageMapper {
 
-    private fun bodyWrapperToProto(bodyWrapper: BodyWrapper, isFiltered: Boolean = true): MessageBodyWrapper {
-        return MessageBodyWrapper.newBuilder()
-            .setMessage(bodyWrapper.message)
-            .setFiltered(isFiltered)
-            .build()
-    }
-
-    fun convertToGrpcMessageData(messageWithMetadata: MessageWithMetadata): MessageData {
-        return with(messageWithMetadata) {
-            MessageData.newBuilder()
-                .setMessageId(message.id.convertToProto())
-                .setTimestamp(message.timestamp.toTimestamp())
-                .addAllAttachedEventIds(message.attachedEventIds.map { EventID.newBuilder().setId(it).build() })
-                .setBodyRaw(message.rawMessageBody)
-                .also { builder ->
-                    message.messageBody?.let {
-                        builder.addAllMessages(
-                            it.zip(filteredBody).map { (msg, filtered) ->
-                                bodyWrapperToProto(msg, filtered)
-                            }
-                        )
-                    }
-                }.build()
+        private fun bodyWrapperToProto(bodyWrapper: BodyWrapper, isFiltered: Boolean = true): MessageBodyWrapper {
+            return MessageBodyWrapper.newBuilder()
+                .setMessage(bodyWrapper.message)
+                .setFiltered(isFiltered)
+                .build()
         }
-    }
+
+        fun convertToGrpcMessageData(messageWithMetadata: MessageWithMetadata): MessageData {
+            return with(messageWithMetadata) {
+                MessageData.newBuilder()
+                    .setMessageId(message.id.convertToProto())
+                    .setTimestamp(message.timestamp.toTimestamp())
+                    .addAllAttachedEventIds(message.attachedEventIds.map { EventID.newBuilder().setId(it).build() })
+                    .setBodyRaw(message.rawMessageBody)
+                    .also { builder ->
+                        message.messageBody?.let {
+                            builder.addAllMessages(
+                                it.zip(filteredBody).map { (msg, filtered) ->
+                                    bodyWrapperToProto(msg, filtered)
+                                }
+                            )
+                        }
+                    }.build()
+            }
+        }
 
     suspend fun convertToHttpMessage(messageWithMetadata: MessageWithMetadata): HttpMessage {
         return with(messageWithMetadata) {

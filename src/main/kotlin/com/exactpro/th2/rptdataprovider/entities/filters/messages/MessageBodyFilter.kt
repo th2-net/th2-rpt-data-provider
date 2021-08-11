@@ -88,7 +88,7 @@ class MessageBodyFilter private constructor(
                 }
             }
             element.filteredBody
-        }?.any() ?: false
+        }?.any { it } ?: false
     }
 
     override fun getInfo(): FilterInfo {

@@ -39,8 +39,8 @@ import com.google.protobuf.MessageOrBuilder
 import com.google.protobuf.TextFormat
 import io.grpc.Status
 import io.grpc.stub.StreamObserver
-import io.ktor.server.engine.*
-import io.ktor.util.*
+import io.ktor.server.engine.EngineAPI
+import io.ktor.util.InternalAPI
 import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging

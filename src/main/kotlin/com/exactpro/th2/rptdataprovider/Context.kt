@@ -33,9 +33,8 @@ import com.exactpro.th2.rptdataprovider.entities.filters.messages.AttachedEventF
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyBinaryFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageTypeFilter
-import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
-import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
+import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.handlers.SearchEventsHandler
 import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
@@ -46,7 +45,7 @@ import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import io.ktor.http.*
+import io.ktor.http.CacheControl
 
 @Suppress("MemberVisibilityCanBePrivate")
 class Context(
@@ -118,7 +117,7 @@ class Context(
             AttachedEventFilters.filterInfo to AttachedEventFilters.Companion::build,
             MessageTypeFilter.filterInfo to MessageTypeFilter.Companion::build,
             MessageBodyFilter.filterInfo to MessageBodyFilter.Companion::build,
-            MessageBodyBinaryFilter.filterInfo to MessageBodyFilter.Companion::build
+            MessageBodyBinaryFilter.filterInfo to MessageBodyBinaryFilter.Companion::build
         ), cradleService
     ),
 
