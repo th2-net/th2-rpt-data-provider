@@ -18,7 +18,6 @@ package com.exactpro.th2.rptdataprovider.entities.sse
 
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.dataprovider.grpc.Stream
 import com.exactpro.th2.dataprovider.grpc.StreamResponse
 import com.exactpro.th2.dataprovider.grpc.StreamsInfo
@@ -26,10 +25,11 @@ import com.exactpro.th2.rptdataprovider.convertToProto
 import com.exactpro.th2.rptdataprovider.cradleDirectionToGrpc
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
-import com.exactpro.th2.rptdataprovider.entities.responses.Message
+import com.exactpro.th2.rptdataprovider.entities.internal.Message
+import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
+import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
 import com.exactpro.th2.rptdataprovider.eventWrite
-import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.grpc.stub.StreamObserver
 import java.io.Writer
@@ -40,7 +40,7 @@ interface StreamWriter {
 
     suspend fun write(event: EventTreeNode, counter: AtomicLong)
 
-    suspend fun write(message: Message, counter: AtomicLong)
+    suspend fun write(message: MessageWithMetadata, counter: AtomicLong)
 
     suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong)
 
@@ -59,8 +59,8 @@ class SseWriter(private val writer: Writer, private val jacksonMapper: ObjectMap
         writer.eventWrite(SseEvent.build(jacksonMapper, event, counter))
     }
 
-    override suspend fun write(message: Message, counter: AtomicLong) {
-        writer.eventWrite(SseEvent.build(jacksonMapper, message, counter))
+    override suspend fun write(message: MessageWithMetadata, counter: AtomicLong) {
+        writer.eventWrite(SseEvent.build(jacksonMapper, MessageMapper.convertToHttpMessage(message), counter))
     }
 
     override suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong) {
@@ -92,9 +92,9 @@ class GrpcWriter(private val writer: StreamObserver<StreamResponse>) : StreamWri
         counter.incrementAndGet()
     }
 
-    override suspend fun write(message: Message, counter: AtomicLong) {
+    override suspend fun write(message: MessageWithMetadata, counter: AtomicLong) {
         writer.onNext(StreamResponse.newBuilder()
-            .setMessage(message.convertToGrpcMessageData())
+            .setMessage(MessageMapper.convertToGrpcMessageData(message))
             .build())
         counter.incrementAndGet()
     }

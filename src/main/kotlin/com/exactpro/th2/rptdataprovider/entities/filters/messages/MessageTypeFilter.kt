@@ -16,23 +16,26 @@
 
 package com.exactpro.th2.rptdataprovider.entities.filters.messages
 
+import com.exactpro.th2.common.message.messageType
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.Filter
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterRequest
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
-import com.exactpro.th2.rptdataprovider.entities.responses.Message
+import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
+import com.exactpro.th2.rptdataprovider.entities.internal.Message
+import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
 class MessageTypeFilter(
     private var type: List<String>,
     override var negative: Boolean = false,
     override var conjunct: Boolean = false
-) : Filter<Message> {
+) : Filter<MessageWithMetadata> {
 
     companion object {
-        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<Message> {
+        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<MessageWithMetadata> {
             return MessageTypeFilter(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
@@ -52,11 +55,23 @@ class MessageTypeFilter(
         )
     }
 
-    override fun match(element: Message): Boolean {
+
+    private fun predicate(element: BodyWrapper): Boolean {
         val predicate: (String) -> Boolean = { item ->
-            element.messageType.toLowerCase().contains(item.toLowerCase())
+            element.message.messageType.toLowerCase().contains(item.toLowerCase())
         }
         return negative.xor(if (conjunct) type.all(predicate) else type.any(predicate))
+    }
+
+    override fun match(element: MessageWithMetadata): Boolean {
+        return element.message.messageBody?.let { messageBody ->
+            messageBody.forEachIndexed { index, bodyWrapper ->
+                predicate(bodyWrapper).also {
+                    element.filteredBody[index] = element.filteredBody[index] && it
+                }
+            }
+            element.filteredBody
+        }?.any() ?: false
     }
 
     override fun getInfo(): FilterInfo {

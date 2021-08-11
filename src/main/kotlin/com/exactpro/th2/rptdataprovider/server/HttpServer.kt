@@ -20,6 +20,8 @@ import com.exactpro.cradle.utils.CradleIdException
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
+import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
+import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.requests.*
 import com.exactpro.th2.rptdataprovider.entities.sse.*
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
@@ -344,7 +346,9 @@ class HttpServer(private val context: Context) {
                         call, context, "get single message",
                         notModifiedCacheControl, probe, false, call.parameters.toMap()
                     ) {
-                        messageCache.getOrPut(call.parameters["id"]!!)
+                        MessageWithMetadata(messageCache.getOrPut(call.parameters["id"]!!)).let {
+                            MessageMapper.convertToHttpMessage(it)
+                        }
                     }
                 }
 
@@ -426,8 +430,8 @@ class HttpServer(private val context: Context) {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "match message", null, false, false, queryParametersMap) {
                         val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
-                        val event = messageCache.getOrPut(call.parameters["id"]!!)
-                        filterPredicate.apply(event)
+                        val message = messageCache.getOrPut(call.parameters["id"]!!)
+                        filterPredicate.apply(MessageWithMetadata(message))
                     }
                 }
             }

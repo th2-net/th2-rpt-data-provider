@@ -24,12 +24,9 @@ import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.common.grpc.Direction.FIRST
-import com.exactpro.th2.common.grpc.Direction.SECOND
-import com.exactpro.th2.dataprovider.grpc.Stream
-import com.exactpro.th2.dataprovider.grpc.StreamsInfo
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.cache.MessageCache
+import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
@@ -291,20 +288,21 @@ class SearchMessagesHandler(
                 async {
                     val parsedMessage = it.getParsedMessage()
                     messageCache.put(parsedMessage.messageId, parsedMessage)
-                    Pair(parsedMessage, request.filterPredicate.apply(parsedMessage))
+                   MessageWithMetadata(parsedMessage).apply {
+                       finalFiltered = request.filterPredicate.apply(this)
+                   }
                 }.also { coroutineContext.ensureActive() }
             }
                 .buffer(messageSearchPipelineBuffer)
                 .map { it.await() }
-                .onEach { (message, _) ->
-                    lastScannedObject.update(message, scanCnt)
-                    message.id.let {
+                .onEach { wrapper ->
+                    lastScannedObject.update(wrapper.message, scanCnt)
+                    wrapper.message.id.let {
                         lastIdInStream[Pair(it.streamName, it.direction)] = it
                     }
                     processedMessageCount.inc()
                 }
-                .filter { it.second }
-                .map { it.first }
+                .filter { it.finalFiltered }
                 .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
                 .onStart {
                     launch {
@@ -318,7 +316,7 @@ class SearchMessagesHandler(
                 }
                 .collect {
                     coroutineContext.ensureActive()
-                    writer.write(it, lastEventId)
+                    writer.write(it as MessageWithMetadata, lastEventId)
                 }
         }
     }

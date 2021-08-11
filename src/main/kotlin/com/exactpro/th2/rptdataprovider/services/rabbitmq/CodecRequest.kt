@@ -20,6 +20,7 @@ import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.grpc.RawMessage
+import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import java.util.*
@@ -27,8 +28,8 @@ import java.util.*
 data class MessageRequest(
     val id: MessageID,
     val rawMessage: RawMessage,
-    private val channel: Channel<Message?>,
-    private val result: Deferred<Message?>,
+    private val channel: Channel<List<BodyWrapper>?>,
+    private val result: Deferred<List<BodyWrapper>?>,
     private val requestId: UUID = UUID.randomUUID(),
     var exception: Throwable? = null
 ) : Comparable<MessageRequest> {
@@ -38,7 +39,7 @@ data class MessageRequest(
 
     companion object {
         suspend fun build(rawMessage: RawMessage): MessageRequest {
-            val messageChannel = Channel<Message?>(0)
+            val messageChannel = Channel<List<BodyWrapper>?>(0)
             return MessageRequest(
                 id = rawMessage.metadata.id,
                 rawMessage = rawMessage,
@@ -49,7 +50,7 @@ data class MessageRequest(
         }
     }
 
-    suspend fun sendMessage(message: Message?) {
+    suspend fun sendMessage(message: List<BodyWrapper>?) {
         if (result.isActive && !messageIsSend) {
             CoroutineScope(Dispatchers.Default).launch {
                 channel.send(message)
@@ -58,7 +59,7 @@ data class MessageRequest(
         messageIsSend = true
     }
 
-    suspend fun get(): Message? {
+    suspend fun get(): List<BodyWrapper>? {
         return result.await()
     }
 

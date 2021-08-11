@@ -19,16 +19,14 @@ package com.exactpro.th2.rptdataprovider.entities.sse
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.EventID
-import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.message.toTimestamp
 import com.exactpro.th2.rptdataprovider.asStringSuspend
 import com.exactpro.th2.rptdataprovider.convertToProto
+import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.responses.*
-import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.google.protobuf.Timestamp
 import io.ktor.util.*
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicLong
@@ -136,7 +134,7 @@ data class SseEvent(val data: String = "empty data", val event: EventType? = nul
             )
         }
 
-        suspend fun build(jacksonMapper: ObjectMapper, message: Message, counter: AtomicLong): SseEvent {
+        suspend fun build(jacksonMapper: ObjectMapper, message: HttpMessage, counter: AtomicLong): SseEvent {
             return SseEvent(
                 jacksonMapper.asStringSuspend(message),
                 EventType.MESSAGE,
