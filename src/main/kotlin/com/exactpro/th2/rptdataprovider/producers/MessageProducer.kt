@@ -23,17 +23,15 @@ import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.rptdataprovider.cache.CodecCache
 import com.exactpro.th2.rptdataprovider.cache.CodecCacheBatches
+import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.entities.responses.ParsedMessageBatch
 import com.exactpro.th2.rptdataprovider.server.ServerType
-import com.exactpro.th2.rptdataprovider.server.ServerType.*
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.MessageRequest
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import com.google.protobuf.InvalidProtocolBufferException
-import com.google.protobuf.util.JsonFormat
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -63,50 +61,6 @@ class MessageProducer(
         }
     }
 
-    suspend fun fromRawMessage(messageBatch: StoredMessageBatch, request: SseMessageSearchRequest): ParsedMessageBatch {
-        return parseRawMessageBatch(messageBatch, request.attachedEvents)
-    }
-
-
-    private suspend fun parseMessageHttp(
-        rawMessage: StoredMessage,
-        parsedMessage: com.exactpro.th2.common.grpc.Message?,
-        parsedRawMessage: RawMessage?,
-        attachedEvents: Set<String>?
-    ): Message {
-        return Message(
-            rawMessage,
-            parsedMessage?.let { JsonFormat.printer().print(it) },
-            null,
-            parsedRawMessage?.let {
-                Base64.getEncoder().encodeToString(it.body.toByteArray())
-            },
-            null,
-            parsedMessage?.metadata?.messageType ?: "",
-            attachedEvents ?: emptySet()
-        )
-    }
-
-    private suspend fun parseMessageGrpc(
-        rawMessage: StoredMessage,
-        parsedMessage: com.exactpro.th2.common.grpc.Message?,
-        parsedRawMessage: RawMessage?,
-        attachedEvents: Set<String>?
-    ): Message {
-        return Message(
-            rawMessage,
-            null,
-            parsedMessage,
-            parsedRawMessage?.let {
-                Base64.getEncoder().encodeToString(it.body.toByteArray())
-            },
-            parsedRawMessage?.body,
-            parsedMessage?.metadata?.messageType ?: "",
-            attachedEvents ?: emptySet()
-        )
-    }
-
-
     private suspend fun createMessageBatch(
         messageBatch: StoredMessageBatch,
         processed: List<MessageRequest>?,
@@ -114,20 +68,14 @@ class MessageProducer(
         attachedEvents: List<Set<String>>?,
         needAttachEvents: Boolean
     ): ParsedMessageBatch {
-        var allMessageParsed = true
 
-        val parseMessage = if (serverType == HTTP) ::parseMessageHttp else ::parseMessageGrpc
+        var allMessageParsed = true
 
         return ParsedMessageBatch(messageBatch.id,
             messageBatch.messages.mapIndexed { i, rawMessage ->
                 val parsedMessage = processed?.get(i)?.get()
-                parseMessage(
-                    rawMessage,
-                    parsedMessage,
-                    parsedRawMessage[i],
-                    attachedEvents?.get(i)
-                ).also {
-                    if (it.body != null || it.message != null) {
+                Message(rawMessage, parsedMessage, parsedRawMessage[i]?.body, attachedEvents?.get(i)).also {
+                    if (it.messageBody != null && it.rawMessageBody != null) {
                         codecCache.put(it.messageId, it)
                     } else {
                         allMessageParsed = false
@@ -142,11 +90,19 @@ class MessageProducer(
         }
     }
 
+    suspend fun fromRawMessage(
+        messageBatch: StoredMessageBatch,
+        searchRequest: SseMessageSearchRequest
+    ): ParsedMessageBatch {
+        return parseRawMessageBatch(messageBatch, searchRequest.attachedEvents)
+    }
+
     private suspend fun parseRawMessageBatch(
         messageBatch: StoredMessageBatch,
         needAttachEvents: Boolean = true
     ): ParsedMessageBatch {
         return coroutineScope {
+
             codecCacheBatches.get(messageBatch.id.toString())?.let {
                 if (!needAttachEvents || it.attachedEvents)
                     return@coroutineScope it
@@ -181,7 +137,7 @@ class MessageProducer(
                         } catch (e: Exception) {
                             logger.error(e) { "unable to get events attached to message (id=${message.id})" }
 
-                            Collections.emptySet<String>()
+                            emptySet<String>()
                         }
                     }
                 }

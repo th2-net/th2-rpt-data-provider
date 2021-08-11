@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+﻿/*******************************************************************************
+ * Copyright 2021-2021 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,14 +14,22 @@
  * limitations under the License.
  ******************************************************************************/
 
-package com.exactpro.th2.rptdataprovider.entities.filters
+package com.exactpro.th2.rptdataprovider.entities.internal
 
-import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
+import com.exactpro.th2.common.grpc.Message
+import com.exactpro.th2.common.grpc.MessageID
 
 
-interface Filter<T> {
-    val negative: Boolean
-    val conjunct: Boolean
-    fun match(element: T): Boolean
-    fun getInfo(): FilterInfo
+data class BodyWrapper(
+    val id: MessageID,
+    val protocol: String?,
+    val messageType: String,
+    val message: Message
+) {
+    constructor(message: Message) : this(
+        message.metadata.id,
+        null,
+        message.metadata.messageType,
+        message
+    )
 }

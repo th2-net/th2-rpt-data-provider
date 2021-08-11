@@ -17,6 +17,7 @@
 package com.exactpro.th2.rptdataprovider.handlers
 
 import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedMessageInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
@@ -67,7 +68,9 @@ class SearchMessagesHandler(private val context: Context) {
                 async {
                     val parsedMessage = it.getParsedMessage()
                     context.messageCache.put(parsedMessage.messageId, parsedMessage)
-                    Pair(parsedMessage, request.filterPredicate.apply(parsedMessage))
+                    MessageWithMetadata(parsedMessage).apply {
+                        finalFiltered = request.filterPredicate.apply(this)
+                    }
                 }.also { coroutineContext.ensureActive() }
             }
                 .buffer(messageSearchPipelineBuffer)
@@ -76,8 +79,7 @@ class SearchMessagesHandler(private val context: Context) {
                     lastScannedObject.update(message, scanCnt)
                     processedMessageCount.inc()
                 }
-                .filter { it.second }
-                .map { it.first }
+                .filter { it.finalFiltered }
                 .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
                 .onStart {
                     launch {
@@ -91,7 +93,7 @@ class SearchMessagesHandler(private val context: Context) {
                 }
                 .collect {
                     coroutineContext.ensureActive()
-                    writer.write(it, lastEventId)
+                    writer.write(it as MessageWithMetadata, lastEventId)
                 }
         }
     }

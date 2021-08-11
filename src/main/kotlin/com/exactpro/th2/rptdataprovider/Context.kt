@@ -27,7 +27,6 @@ import com.exactpro.th2.rptdataprovider.cache.CodecCacheBatches
 import com.exactpro.th2.rptdataprovider.cache.EventCache
 import com.exactpro.th2.rptdataprovider.cache.MessageCache
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
-import com.exactpro.th2.rptdataprovider.entities.configuration.CustomConfigurationClass
 import com.exactpro.th2.rptdataprovider.entities.filters.PredicateFactory
 import com.exactpro.th2.rptdataprovider.entities.filters.events.*
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.AttachedEventFilters
@@ -35,7 +34,8 @@ import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyBin
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageTypeFilter
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
-import com.exactpro.th2.rptdataprovider.entities.responses.Message
+import com.exactpro.th2.rptdataprovider.entities.internal.Message
+import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.handlers.SearchEventsHandler
 import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
@@ -113,7 +113,7 @@ class Context(
         ), cradleService
     ),
 
-    val messageFiltersPredicateFactory: PredicateFactory<Message> = PredicateFactory(
+    val messageFiltersPredicateFactory: PredicateFactory<MessageWithMetadata> = PredicateFactory(
         mapOf(
             AttachedEventFilters.filterInfo to AttachedEventFilters.Companion::build,
             MessageTypeFilter.filterInfo to MessageTypeFilter.Companion::build,
