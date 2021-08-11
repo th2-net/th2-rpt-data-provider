@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider.entities.filters.messages
 
-import com.exactpro.th2.common.message.messageType
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.Filter
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterRequest
@@ -25,7 +24,6 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterTyp
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
-import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.google.protobuf.util.JsonFormat
@@ -90,7 +88,7 @@ class MessageBodyFilter private constructor(
                 }
             }
             element.filteredBody
-        }?.any() ?: false
+        }?.any { it } ?: false
     }
 
     override fun getInfo(): FilterInfo {

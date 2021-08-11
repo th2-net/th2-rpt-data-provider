@@ -36,7 +36,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import mu.KotlinLogging
-import java.util.*
 
 class MessageProducer(
     private val serverType: ServerType,

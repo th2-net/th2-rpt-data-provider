@@ -27,7 +27,8 @@ import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.responses.*
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.databind.ObjectMapper
-import io.ktor.util.*
+import io.ktor.util.InternalAPI
+import io.ktor.util.rootCause
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicLong
 

@@ -23,11 +23,9 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
-import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import mu.KotlinLogging
-import java.util.*
 
 class MessageBodyBinaryFilter private constructor(
     private var bodyBinary: List<String>,
@@ -62,7 +60,7 @@ class MessageBodyBinaryFilter private constructor(
     override fun match(element: MessageWithMetadata): Boolean {
         val predicate: (String) -> Boolean = { item ->
             element.message.rawMessageBody?.let {
-                String(it.toByteArray ()).toLowerCase().contains(item.toLowerCase())
+                String(it.toByteArray()).toLowerCase().contains(item.toLowerCase())
             } ?: false
         }
         return try {
