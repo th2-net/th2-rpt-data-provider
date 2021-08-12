@@ -276,7 +276,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     }
 
 
-    override fun getMessageStreams(request: com.google.protobuf.Empty, responseObserver: StreamObserver<StringList>) {
+    override fun getMessageStreams(request: MessageStreamNamesRequest, responseObserver: StreamObserver<StringList>) {
         handleRequest(
             responseObserver,
             "get message streams",
