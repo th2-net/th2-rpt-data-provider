@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider.entities.filters.messages
 
-import com.exactpro.th2.common.message.messageType
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.Filter
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterRequest
@@ -57,7 +56,7 @@ class MessageTypeFilter(
 
     private fun predicate(element: BodyWrapper): Boolean {
         val predicate: (String) -> Boolean = { item ->
-            element.message.messageType.toLowerCase().contains(item.toLowerCase())
+            element.messageType.toLowerCase().contains(item.toLowerCase())
         }
         return negative.xor(if (conjunct) type.all(predicate) else type.any(predicate))
     }

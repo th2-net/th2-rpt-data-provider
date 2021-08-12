@@ -339,7 +339,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     }
 
     override fun getMessagesFilters(
-        request: com.google.protobuf.Empty,
+        request: MessageFiltersRequest,
         responseObserver: StreamObserver<ListFilterName>
     ) {
         handleRequest(
@@ -359,7 +359,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
 
 
     override fun getEventsFilters(
-        request: com.google.protobuf.Empty,
+        request: EventFiltersRequest,
         responseObserver: StreamObserver<ListFilterName>
     ) {
         handleRequest(

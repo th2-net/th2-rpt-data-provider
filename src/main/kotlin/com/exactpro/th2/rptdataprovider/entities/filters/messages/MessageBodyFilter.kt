@@ -34,8 +34,6 @@ class MessageBodyFilter private constructor(
     override var conjunct: Boolean = false
 ) : Filter<MessageWithMetadata> {
 
-    private val logicalOperator = if (conjunct) Boolean::and else Boolean::or
-
     companion object {
         suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<MessageWithMetadata> {
             return MessageBodyFilter(
@@ -56,21 +54,6 @@ class MessageBodyFilter private constructor(
             },
             FilterSpecialType.NEED_JSON_BODY
         )
-    }
-
-    private fun getPredicate(element: MessageWithMetadata): (String) -> Boolean {
-        return { item ->
-            element.message.messageBody?.let { messageBody ->
-                var result = true
-                messageBody.forEachIndexed { index, bodyWrapper ->
-                    JsonFormat.printer().print(bodyWrapper.message).toLowerCase().contains(item.toLowerCase()).also {
-                        element.filteredBody[index] = logicalOperator(element.filteredBody[index], it)
-                        result = logicalOperator(result, it)
-                    }
-                }
-                result
-            } ?: false
-        }
     }
 
     private fun predicate(element: BodyWrapper): Boolean {
