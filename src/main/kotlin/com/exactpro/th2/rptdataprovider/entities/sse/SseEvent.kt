@@ -22,6 +22,7 @@ import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.message.toTimestamp
 import com.exactpro.th2.rptdataprovider.asStringSuspend
 import com.exactpro.th2.rptdataprovider.convertToProto
+import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.responses.*
 import com.fasterxml.jackson.annotation.JsonIgnore
@@ -134,7 +135,7 @@ data class SseEvent(val data: String = "empty data", val event: EventType? = nul
             )
         }
 
-        suspend fun build(jacksonMapper: ObjectMapper, message: Message, counter: AtomicLong): SseEvent {
+        suspend fun build(jacksonMapper: ObjectMapper, message: HttpMessage, counter: AtomicLong): SseEvent {
             return SseEvent(
                 jacksonMapper.asStringSuspend(message),
                 EventType.MESSAGE,

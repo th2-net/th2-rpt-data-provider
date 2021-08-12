@@ -16,14 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider.entities.configuration
 
-import com.exactpro.cradle.CradleManager
-import com.exactpro.th2.common.grpc.MessageBatch
-import com.exactpro.th2.common.grpc.RawMessageBatch
-import com.exactpro.th2.common.schema.factory.CommonFactory
-import com.exactpro.th2.common.schema.grpc.configuration.GrpcEndpointConfiguration
-import com.exactpro.th2.common.schema.grpc.router.GrpcRouter
-import com.exactpro.th2.common.schema.message.MessageRouter
-import com.exactpro.th2.rptdataprovider.grpc.RptDataProviderGrpcHandler
 import com.exactpro.th2.rptdataprovider.server.ServerType
 import mu.KotlinLogging
 

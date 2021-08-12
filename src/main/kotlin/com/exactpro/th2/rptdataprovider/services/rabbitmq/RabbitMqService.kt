@@ -17,16 +17,16 @@
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
 import com.exactpro.cradle.messages.StoredMessageBatch
+import com.exactpro.th2.common.grpc.MessageBatch
 import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.common.grpc.RawMessageBatch
-import com.exactpro.th2.common.grpc.*
-import com.exactpro.th2.common.message.addFields
 import com.exactpro.th2.common.schema.message.MessageListener
 import com.exactpro.th2.common.schema.message.MessageRouter
 import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.chunked
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
+import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import com.exactpro.th2.rptdataprovider.logMetrics
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -77,7 +77,7 @@ class RabbitMqService(
 
                 decodeRequests.remove(messageId)?.let { match ->
                     match.forEach {
-                        GlobalScope.launch { it.sendMessage(message) }
+                        GlobalScope.launch { it.sendMessage(listOf(BodyWrapper(message))) }
                     }
                 }
             }

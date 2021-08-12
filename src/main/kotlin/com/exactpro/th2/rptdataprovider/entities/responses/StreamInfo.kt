@@ -20,8 +20,8 @@ import com.exactpro.cradle.Direction
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.dataprovider.grpc.Stream
-import com.exactpro.th2.rptdataprovider.cradleDirectionToGrpc
 import com.exactpro.th2.rptdataprovider.convertToProto
+import com.exactpro.th2.rptdataprovider.cradleDirectionToGrpc
 import java.time.Instant
 
 data class StreamInfo(val stream: Pair<String, Direction>, val keepOpen: Boolean, val startTimestamp: Instant) {

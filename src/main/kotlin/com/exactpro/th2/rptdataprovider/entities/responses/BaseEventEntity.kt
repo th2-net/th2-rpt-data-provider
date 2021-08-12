@@ -18,7 +18,6 @@ package com.exactpro.th2.rptdataprovider.entities.responses
 
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
-import com.exactpro.cradle.testevents.StoredTestEventWithContent
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.fasterxml.jackson.annotation.JsonRawValue
 import java.time.Instant

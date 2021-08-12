@@ -17,7 +17,7 @@
 package com.exactpro.th2.rptdataprovider.cache
 
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
-import com.exactpro.th2.rptdataprovider.entities.responses.Message
+import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.entities.responses.ParsedMessageBatch
 import mu.KotlinLogging
 import org.ehcache.Cache
