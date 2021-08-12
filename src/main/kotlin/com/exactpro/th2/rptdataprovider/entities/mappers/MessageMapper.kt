@@ -18,6 +18,7 @@ package com.exactpro.th2.rptdataprovider.entities.mappers
 
 import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.message.toTimestamp
+import com.exactpro.th2.dataprovider.grpc.MessageBodyWrapper
 import com.exactpro.th2.dataprovider.grpc.MessageData
 import com.exactpro.th2.rptdataprovider.convertToProto
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
