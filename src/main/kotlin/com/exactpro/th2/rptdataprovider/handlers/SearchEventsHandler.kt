@@ -17,6 +17,7 @@
 package com.exactpro.th2.rptdataprovider.handlers
 
 
+import com.exactpro.cradle.Order
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.TimeRelation.AFTER
 import com.exactpro.cradle.testevents.StoredTestEventId
@@ -92,18 +93,17 @@ class SearchEventsHandler(
         searchDirection: TimeRelation
     ): Iterable<StoredTestEventMetadata> {
         return coroutineScope {
+            val order = if (searchDirection == AFTER) Order.DIRECT else Order.REVERSE
             if (parentEvent != null) {
                 if (parentEvent.batchId != null) {
                     cradle.getEventSuspend(parentEvent.batchId)?.let {
                         listOf(StoredTestEventMetadata(it.asBatch()))
                     } ?: emptyList()
                 } else {
-                    cradle.getEventsSuspend(parentEvent.eventId, timestampFrom, timestampTo)
+                    cradle.getEventsSuspend(parentEvent.eventId, timestampFrom, timestampTo, order)
                 }
             } else {
-                cradle.getEventsSuspend(timestampFrom, timestampTo)
-            }.let {
-                if (searchDirection == AFTER) it else it.reversed()
+                cradle.getEventsSuspend(timestampFrom, timestampTo, order)
             }
         }
     }

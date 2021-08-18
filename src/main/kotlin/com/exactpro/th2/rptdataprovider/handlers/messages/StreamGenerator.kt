@@ -69,21 +69,20 @@ class StreamGenerator(
 
         if (startId == null) return emptyList()
 
-        val searchAfter = request.searchDirection == AFTER
-
         return context.cradleService.getMessagesBatchesSuspend(
             StoredMessageFilterBuilder().apply {
                 streamName().isEqualTo(startId.streamName)
                 direction().isEqualTo(startId.direction)
                 limit(limit)
 
-                if (searchAfter) {
+                if (request.searchDirection == AFTER) {
                     index().let {
                         if (isFirstPull)
                             it.isGreaterThanOrEqualTo(startId.index)
                         else
                             it.isGreaterThan(startId.index)
                     }
+                    order(Order.DIRECT)
                 } else {
                     index().let {
                         if (isFirstPull)
@@ -91,12 +90,11 @@ class StreamGenerator(
                         else
                             it.isLessThan(startId.index)
                     }
+                    order(Order.REVERSE)
                 }
-            }.build(),
-            if (searchAfter) Order.DIRECT else Order.REVERSE
+            }.build()
         )
     }
-
 
     private suspend fun pullMoreWrapped(startId: StoredMessageId?, limit: Int): List<MessageWrapper> {
         return coroutineScope {

@@ -19,6 +19,7 @@ package com.exactpro.th2.rptdataprovider.services.cradle
 
 import com.exactpro.cradle.CradleManager
 import com.exactpro.cradle.Direction
+import com.exactpro.cradle.Order
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageBatch
@@ -114,11 +115,15 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
         }
     }
 
-    suspend fun getEventsSuspend(from: Instant, to: Instant): Iterable<StoredTestEventMetadata> {
+    suspend fun getEventsSuspend(
+        from: Instant,
+        to: Instant,
+        order: Order = Order.DIRECT
+    ): Iterable<StoredTestEventMetadata> {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
                 logTime("Get events from: $from to: $to") {
-                    storage.getTestEventsAsync(from, to).await()
+                    storage.getTestEventsAsync(from, to, order).await()
                 }
             } ?: listOf()
         }
@@ -127,12 +132,13 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
     suspend fun getEventsSuspend(
         parentId: StoredTestEventId,
         from: Instant,
-        to: Instant
+        to: Instant,
+        order: Order = Order.DIRECT
     ): Iterable<StoredTestEventMetadata> {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
                 logTime("Get events parent: $parentId from: $from to: $to") {
-                    storage.getTestEventsAsync(parentId, from, to).await()
+                    storage.getTestEventsAsync(parentId, from, to, order).await()
                 }
             } ?: listOf()
         }

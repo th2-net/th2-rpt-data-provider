@@ -96,12 +96,7 @@ class BasketCreator(
         startTimestamp: Instant,
         stream: String,
         direction: Direction,
-<<<<<<< HEAD
-        timelineDirection: TimeRelation,
-        daysInterval: Int = 1000
-=======
         request: SseMessageSearchRequest
->>>>>>> b761bf1 (last fixes)
     ): StoredMessageId? {
         var daysChecking = request.lookupLimitDays
         var isCurrentDay = true
