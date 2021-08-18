@@ -104,7 +104,6 @@ class MessageProducer(
         }
     }
 
-
     private suspend fun parseRawMessageBatch(
         messageBatch: StoredMessageBatch,
         needAttachEvents: Boolean = true
@@ -121,7 +120,7 @@ class MessageProducer(
 
             val attachedEvents: List<Set<String>>? =
                 if (needAttachEvents) getAttachedEvents(messageBatch.messages) else null
-            
+
             return@coroutineScope createMessageBatch(
                 messageBatch,
                 processed,
