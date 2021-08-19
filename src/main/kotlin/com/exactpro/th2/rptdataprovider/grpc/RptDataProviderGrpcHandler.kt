@@ -262,7 +262,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
 
     override fun getMessage(request: MessageID, responseObserver: StreamObserver<MessageData>) {
         handleRequest(responseObserver, "get message", useStream = false, request = request) {
-            val messageIdWithoutSubsequence = request.toBuilder().clearSubsequence().build()
+            val messageIdWithoutSubsequence = request.toBuilder().build()
             messageCache.getOrPut(
                 StoredMessageId(
                     messageIdWithoutSubsequence.connectionId.sessionAlias,
