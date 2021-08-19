@@ -30,6 +30,7 @@ version release_version
 
 repositories {
     mavenCentral()
+    mavenLocal()
     maven {
         name 'Sonatype_snapshots'
         url 'https://s01.oss.sonatype.org/content/repositories/snapshots/'
@@ -52,7 +53,7 @@ dependencies {
 
     implementation 'com.exactpro.th2:cradle-core:2.16.1'
     implementation 'com.exactpro.th2:cradle-cassandra:2.16.1'
-    implementation "com.exactpro.th2:grpc-data-provider:0.1.4rc2"
+    implementation "com.exactpro.th2:grpc-data-provider:0.1.5rc2"
 
     implementation 'io.github.microutils:kotlin-logging:1.7.10'
 
