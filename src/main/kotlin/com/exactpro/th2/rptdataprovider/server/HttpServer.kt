@@ -20,18 +20,32 @@ import com.exactpro.cradle.utils.CradleIdException
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
-import com.exactpro.th2.rptdataprovider.entities.requests.*
+import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
+import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
+import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.sse.*
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import io.ktor.application.*
-import io.ktor.features.*
-import io.ktor.http.*
-import io.ktor.request.*
-import io.ktor.response.*
-import io.ktor.routing.*
-import io.ktor.server.engine.*
-import io.ktor.server.netty.*
-import io.ktor.util.*
+import io.ktor.features.Compression
+import io.ktor.http.CacheControl
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.request.uri
+import io.ktor.response.cacheControl
+import io.ktor.response.respondText
+import io.ktor.response.respondTextWriter
+import io.ktor.routing.get
+import io.ktor.routing.routing
+import io.ktor.server.engine.EngineAPI
+import io.ktor.server.engine.embeddedServer
+import io.ktor.server.netty.Netty
+import io.ktor.server.netty.NettyApplicationCall
+import io.ktor.util.AttributeKey
+import io.ktor.util.InternalAPI
+import io.ktor.util.rootCause
+import io.ktor.util.toMap
 import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
@@ -344,7 +358,9 @@ class HttpServer(private val context: Context) {
                         call, context, "get single message",
                         notModifiedCacheControl, probe, false, call.parameters.toMap()
                     ) {
-                        messageCache.getOrPut(call.parameters["id"]!!)
+                        MessageWithMetadata(messageCache.getOrPut(call.parameters["id"]!!)).let {
+                            MessageMapper.convertToHttpMessage(it)
+                        }
                     }
                 }
 
@@ -426,8 +442,8 @@ class HttpServer(private val context: Context) {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "match message", null, false, false, queryParametersMap) {
                         val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
-                        val event = messageCache.getOrPut(call.parameters["id"]!!)
-                        filterPredicate.apply(event)
+                        val message = messageCache.getOrPut(call.parameters["id"]!!)
+                        filterPredicate.apply(MessageWithMetadata(message))
                     }
                 }
             }

@@ -25,6 +25,8 @@ import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
+import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
+import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.sse.GrpcWriter
@@ -37,8 +39,8 @@ import com.google.protobuf.MessageOrBuilder
 import com.google.protobuf.TextFormat
 import io.grpc.Status
 import io.grpc.stub.StreamObserver
-import io.ktor.server.engine.*
-import io.ktor.util.*
+import io.ktor.server.engine.EngineAPI
+import io.ktor.util.InternalAPI
 import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
@@ -260,22 +262,27 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
 
     override fun getMessage(request: MessageID, responseObserver: StreamObserver<MessageData>) {
         handleRequest(responseObserver, "get message", useStream = false, request = request) {
+            val messageIdWithoutSubsequence = request.toBuilder().clearSubsequence().build()
             messageCache.getOrPut(
                 StoredMessageId(
-                    request.connectionId.sessionAlias,
-                    grpcDirectionToCradle(request.direction),
-                    request.sequence
+                    messageIdWithoutSubsequence.connectionId.sessionAlias,
+                    grpcDirectionToCradle(messageIdWithoutSubsequence.direction),
+                    messageIdWithoutSubsequence.sequence
                 ).toString()
-            ).convertToGrpcMessageData()
+            ).let {
+                MessageMapper.convertToGrpcMessageData(MessageWithMetadata(it, request))
+            }
         }
     }
 
 
-    override fun getMessageStreams(request: com.google.protobuf.Empty, responseObserver: StreamObserver<StringList>) {
-        handleRequest(responseObserver,
+    override fun getMessageStreams(request: MessageStreamNamesRequest, responseObserver: StreamObserver<StringList>) {
+        handleRequest(
+            responseObserver,
             "get message streams",
             useStream = false,
-            request = request) {
+            request = request
+        ) {
             StringList.newBuilder()
                 .addAllListString(cradleService.getMessageStreams())
                 .build()
@@ -287,10 +294,12 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
         grpcRequest: MessageSearchRequest,
         responseObserver: StreamObserver<StreamResponse>
     ) {
-        handleRequest(responseObserver,
+        handleRequest(
+            responseObserver,
             "grpc search message",
             useStream = true,
-            request = grpcRequest) {
+            request = grpcRequest
+        ) {
             suspend fun(
                 w: StreamWriter,
                 keepAlive: suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit
@@ -310,10 +319,12 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
         grpcRequest: EventSearchRequest,
         responseObserver: StreamObserver<StreamResponse>
     ) {
-        handleRequest(responseObserver,
+        handleRequest(
+            responseObserver,
             "grpc search events",
             useStream = true,
-            request = grpcRequest) {
+            request = grpcRequest
+        ) {
             suspend fun(
                 w: StreamWriter,
                 keepAlive: suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit
@@ -328,13 +339,15 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     }
 
     override fun getMessagesFilters(
-        request: com.google.protobuf.Empty,
+        request: MessageFiltersRequest,
         responseObserver: StreamObserver<ListFilterName>
     ) {
-        handleRequest(responseObserver,
+        handleRequest(
+            responseObserver,
             "get message filters names",
             useStream = false,
-            request = request) {
+            request = request
+        ) {
             ListFilterName.newBuilder()
                 .addAllFilterNames(
                     messageFiltersPredicateFactory.getFiltersNames().map {
@@ -346,13 +359,15 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
 
 
     override fun getEventsFilters(
-        request: com.google.protobuf.Empty,
+        request: EventFiltersRequest,
         responseObserver: StreamObserver<ListFilterName>
     ) {
-        handleRequest(responseObserver,
+        handleRequest(
+            responseObserver,
             "get event filters names",
             useStream = false,
-            request = request) {
+            request = request
+        ) {
             ListFilterName.newBuilder()
                 .addAllFilterNames(
                     eventFiltersPredicateFactory.getFiltersNames().map {
@@ -369,10 +384,12 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     }
 
     override fun getMessageFilterInfo(request: FilterName, responseObserver: StreamObserver<FilterInfo>) {
-        handleRequest(responseObserver,
+        handleRequest(
+            responseObserver,
             "get message filter info",
             useStream = false,
-            request = request) {
+            request = request
+        ) {
             messageFiltersPredicateFactory.getFilterInfo(request.filterName).convertToProto()
         }
     }
@@ -390,13 +407,17 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
         handleRequest(responseObserver, "match message", useStream = false, request = request) {
             val filterPredicate = messageFiltersPredicateFactory.build(request.filtersList)
             IsMatched.newBuilder().setIsMatched(
-                filterPredicate.apply(messageCache.getOrPut(
-                    StoredMessageId(
-                        request.messageId.connectionId.sessionAlias,
-                        grpcDirectionToCradle(request.messageId.direction),
-                        request.messageId.sequence
-                    ).toString()
-                ))
+                filterPredicate.apply(
+                    MessageWithMetadata(
+                        messageCache.getOrPut(
+                            StoredMessageId(
+                                request.messageId.connectionId.sessionAlias,
+                                grpcDirectionToCradle(request.messageId.direction),
+                                request.messageId.sequence
+                            ).toString()
+                        )
+                    )
+                )
             ).build()
         }
     }

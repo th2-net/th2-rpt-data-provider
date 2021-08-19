@@ -66,7 +66,7 @@ data class Event(
             .setIsBatched(isBatched)
             .setEventName(eventName)
             .setStartTimestamp(startTimestamp.toTimestamp())
-            .setSuccessful(if (successful) SUCCESS else FAILED)
+            .setStatus(if (successful) SUCCESS else FAILED)
             .addAllAttachedMessageIds(convertMessageIdToProto(attachedMessageIds))
             .also { builder ->
                 batchId?.let { builder.setBatchId(EventID.newBuilder().setId(it)) }

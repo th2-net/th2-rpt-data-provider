@@ -17,11 +17,6 @@
 package com.exactpro.th2.rptdataprovider
 
 import com.exactpro.cradle.Direction
-import com.exactpro.th2.common.grpc.EventID
-import com.exactpro.th2.common.grpc.EventStatus
-import com.exactpro.th2.common.message.toTimestamp
-import com.exactpro.th2.dataprovider.grpc.EventMetadata
-import java.time.Instant
 
 fun cradleDirectionToGrpc(direction: Direction): com.exactpro.th2.common.grpc.Direction {
     return if (direction == Direction.FIRST)

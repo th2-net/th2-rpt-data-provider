@@ -17,14 +17,16 @@
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
 import com.exactpro.cradle.messages.StoredMessageBatch
-import com.exactpro.th2.common.grpc.*
-import com.exactpro.th2.common.message.addFields
-import com.exactpro.th2.common.message.messageType
+import com.exactpro.th2.common.grpc.MessageBatch
+import com.exactpro.th2.common.grpc.MessageID
+import com.exactpro.th2.common.grpc.RawMessage
+import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.schema.message.MessageListener
 import com.exactpro.th2.common.schema.message.MessageRouter
 import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.chunked
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
+import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import com.exactpro.th2.rptdataprovider.logMetrics
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -67,24 +69,6 @@ class RabbitMqService(
 
     private val decodeRequests = ConcurrentHashMap<MessageID, ConcurrentSkipListSet<MessageRequest>>()
 
-    private fun isMessageTypeUnique(messages: List<Message>): Boolean {
-        val messageTypes = messages.map { it.messageType }.toSet()
-        return messageTypes.size == messages.size
-    }
-
-    private fun mergeMessagesBody(messages: List<Message>): Map<String, Message.Builder> {
-        return if (isMessageTypeUnique(messages)) {
-            messages.associate {
-                it.messageType to Message.newBuilder().addFields(it.fieldsMap)
-            }
-        } else {
-            messages.associate {
-                val id = "${it.messageType}-${it.metadata.id.subsequenceList.joinToString("-")}"
-                id to Message.newBuilder().addFields(it.fieldsMap)
-            }
-        }
-    }
-
     private val receiveChannel = messageRouterParsedBatch.subscribeAll(
         MessageListener { _, decodedBatch ->
             decodedBatch.messagesList.groupBy { it.metadata.id.sequence }.forEach { (_, messages) ->
@@ -99,17 +83,7 @@ class RabbitMqService(
                 decodeRequests.remove(messageId)?.let { match ->
                     match.forEach {
                         GlobalScope.launch {
-                            val message = when (messages.size) {
-                                1 -> messages[0]
-                                else -> messages[0].toBuilder().run {
-                                    messages.drop(1).forEach { mergeFrom(it) }
-                                    metadataBuilder.messageType = messages.joinToString("/") { it.metadata.messageType }
-                                    clearFields()
-                                    addFields(mergeMessagesBody(messages))
-                                    build()
-                                }
-                            }
-                            it.sendMessage(message)
+                            it.sendMessage(messages.map { BodyWrapper(it) })
                         }
                     }
                 }
