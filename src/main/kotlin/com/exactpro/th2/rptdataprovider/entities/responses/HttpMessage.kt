@@ -25,7 +25,7 @@ import java.time.Instant
 
 
 class HttpBodyWrapper(
-    val subsequenceIds: List<Int>,
+    val subsequenceId: List<Int>,
     val protocol: String,
     val messageType: String,
     @JsonRawValue
