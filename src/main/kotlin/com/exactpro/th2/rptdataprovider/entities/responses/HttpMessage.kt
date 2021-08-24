@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider.entities.responses
 
+import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.Direction
 import com.fasterxml.jackson.annotation.JsonRawValue
@@ -24,6 +25,7 @@ import java.time.Instant
 
 
 class HttpBodyWrapper(
+    val subsequenceIds: List<Int>,
     val protocol: String,
     val messageType: String,
     @JsonRawValue
@@ -34,6 +36,7 @@ class HttpBodyWrapper(
     companion object {
         suspend fun from(bodyWrapper: BodyWrapper, filtered: Boolean): HttpBodyWrapper {
             return HttpBodyWrapper(
+                bodyWrapper.id.subsequenceList,
                 bodyWrapper.protocol,
                 bodyWrapper.messageType,
                 JsonFormat.printer().print(bodyWrapper.message),
