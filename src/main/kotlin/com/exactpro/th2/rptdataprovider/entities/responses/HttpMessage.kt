@@ -20,10 +20,12 @@ import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.Direction
 import com.fasterxml.jackson.annotation.JsonRawValue
 import com.google.protobuf.util.JsonFormat
+import jnr.ffi.annotations.In
 import java.time.Instant
 
 
 class HttpBodyWrapper(
+    val subsequenceId: List<Int>?,
     val protocol: String?,
     val messageType: String,
     @JsonRawValue
@@ -34,6 +36,7 @@ class HttpBodyWrapper(
     companion object {
         suspend fun from(bodyWrapper: BodyWrapper, filtered: Boolean): HttpBodyWrapper {
             return HttpBodyWrapper(
+                null,
                 bodyWrapper.protocol,
                 bodyWrapper.messageType,
                 JsonFormat.printer().print(bodyWrapper.message),
