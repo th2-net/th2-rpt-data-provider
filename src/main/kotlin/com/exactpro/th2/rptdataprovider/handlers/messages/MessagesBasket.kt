@@ -49,8 +49,10 @@ data class MessagesBasket private constructor(
             firstPull: Boolean = true
         ): MessagesBasket {
             val streamGenerator =
-                StreamGenerator.create(context, coroutineScope,
-                    request, startTimestamp, firstPull)
+                StreamGenerator.create(
+                    context, coroutineScope,
+                    request, startTimestamp, firstPull
+                )
 
             return MessagesBasket(
                 context, stream, startMessageId,
@@ -95,8 +97,9 @@ data class MessagesBasket private constructor(
 
     suspend fun pop(): MessageWrapper? {
         return coroutineScope {
-            autoUpdateBasket()
-            messageStream.pollFirst()
+            messageStream.pollFirst().apply {
+                autoUpdateBasket()
+            }
         }
     }
 
