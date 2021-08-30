@@ -118,7 +118,7 @@ class Context(
             AttachedEventFilters.filterInfo to AttachedEventFilters.Companion::build,
             MessageTypeFilter.filterInfo to MessageTypeFilter.Companion::build,
             MessageBodyFilter.filterInfo to MessageBodyFilter.Companion::build,
-            MessageBodyBinaryFilter.filterInfo to MessageBodyFilter.Companion::build
+            MessageBodyBinaryFilter.filterInfo to MessageBodyBinaryFilter.Companion::build
         ), cradleService
     ),
 
