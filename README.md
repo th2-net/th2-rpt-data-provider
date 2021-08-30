@@ -158,7 +158,7 @@ Event metadata object example (in sse):
 }
 ```
 
-[FILTERS](#Filters API):
+[FILTERS](#filters-api):
 - `attachedMessageId` - Filters the events that are linked to the specified message id. Parameters: `values` - text, `negative` - boolean, `conjunct` - boolean.  
 - `name` - Will match the events which name contains one of the given substrings. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.  
 - `type` - Will match the events which type contains one of the given substrings. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.  
@@ -179,7 +179,7 @@ Event metadata object example (in sse):
 - `attachedEvents`- boolean - If `true`, additionally load `attachedEventIds`. Default `false`.
 - `lookupLimitDays` - number - The number of days that will be viewed on the first request to get the one closest to the specified timestamp. Default `null` - not limited to the past and up to the present moment to the future.
 
-[FILTERS](#Filters API):
+[FILTERS](#filters-api):
 
 - `attachedEventIds` - Filters the messages that are linked to the specified event id. Parameters: `values` - text, accepts multiple values, `negative` - boolean, `conjunct` - boolean. 
 - `type` - Will match the messages by their full type name. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.
