@@ -76,7 +76,7 @@ Message object example:
 
 ### SSE
 
-##### Filters API
+#### Filters API
 
 Filters are formed as follows:
 - `filters={filter name}` - you must register the filter by specifying its name.  
