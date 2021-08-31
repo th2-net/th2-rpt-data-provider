@@ -16,8 +16,13 @@
 
 package com.exactpro.th2.rptdataprovider.entities.sse
 
+import com.exactpro.cradle.Direction
+import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.th2.dataprovider.grpc.Stream
 import com.exactpro.th2.dataprovider.grpc.StreamResponse
 import com.exactpro.th2.dataprovider.grpc.StreamsInfo
+import com.exactpro.th2.rptdataprovider.convertToProto
+import com.exactpro.th2.rptdataprovider.cradleDirectionToGrpc
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
@@ -40,6 +45,8 @@ interface StreamWriter {
     suspend fun write(streamInfo: List<StreamInfo>)
 
     suspend fun write(event: Event, lastEventId: AtomicLong)
+
+    suspend fun write(lastIdInStream: Map<Pair<String, Direction>, StoredMessageId?>)
 
     suspend fun closeWriter()
 }
@@ -66,6 +73,10 @@ class SseWriter(private val writer: Writer, private val jacksonMapper: ObjectMap
         writer.eventWrite(SseEvent.build(jacksonMapper, event, lastEventId))
     }
 
+    override suspend fun write(lastIdInStream: Map<Pair<String, Direction>, StoredMessageId?>) {
+        writer.eventWrite(SseEvent.build(jacksonMapper, lastIdInStream))
+    }
+
     override suspend fun closeWriter() {
         writer.close()
     }
@@ -73,23 +84,29 @@ class SseWriter(private val writer: Writer, private val jacksonMapper: ObjectMap
 
 class GrpcWriter(private val writer: StreamObserver<StreamResponse>) : StreamWriter {
     override suspend fun write(event: EventTreeNode, counter: AtomicLong) {
-        writer.onNext(StreamResponse.newBuilder()
-            .setEventMetadata(event.convertToGrpcEventMetadata())
-            .build())
+        writer.onNext(
+            StreamResponse.newBuilder()
+                .setEventMetadata(event.convertToGrpcEventMetadata())
+                .build()
+        )
         counter.incrementAndGet()
     }
 
     override suspend fun write(message: Message, counter: AtomicLong) {
-        writer.onNext(StreamResponse.newBuilder()
-            .setMessage(message.convertToGrpcMessageData())
-            .build())
+        writer.onNext(
+            StreamResponse.newBuilder()
+                .setMessage(message.convertToGrpcMessageData())
+                .build()
+        )
         counter.incrementAndGet()
     }
 
     override suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong) {
-        writer.onNext(StreamResponse.newBuilder()
-            .setLastScannedObject(lastScannedObjectInfo.convertToGrpc())
-            .build())
+        writer.onNext(
+            StreamResponse.newBuilder()
+                .setLastScannedObject(lastScannedObjectInfo.convertToGrpc())
+                .build()
+        )
         counter.incrementAndGet()
     }
 
@@ -107,6 +124,22 @@ class GrpcWriter(private val writer: StreamObserver<StreamResponse>) : StreamWri
             StreamResponse.newBuilder().setStreamInfo(
                 StreamsInfo.newBuilder().addAllStreams(
                     streamInfo.map { it.convertToProto() }
+                ).build()
+            ).build()
+        )
+    }
+
+    override suspend fun write(lastIdInStream: Map<Pair<String, Direction>, StoredMessageId?>) {
+        writer.onNext(
+            StreamResponse.newBuilder().setStreamInfo(
+                StreamsInfo.newBuilder().addAllStreams(
+                    lastIdInStream.entries.map { (stream, lastElement) ->
+                        Stream.newBuilder()
+                            .setDirection(cradleDirectionToGrpc(stream.second))
+                            .setSession(stream.first).also { builder ->
+                                lastElement?.let { builder.setLastId(it.convertToProto()) }
+                            }.build()
+                    }
                 ).build()
             ).build()
         )
