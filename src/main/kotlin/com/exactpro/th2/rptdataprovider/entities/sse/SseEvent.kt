@@ -127,6 +127,20 @@ data class SseEvent(val data: String = "empty data", val event: EventType? = nul
                 event = EventType.MESSAGE_IDS
             )
         }
+
+        suspend fun build(
+            jacksonMapper: ObjectMapper,
+            lastIdInStream: Map<Pair<String, Direction>, StoredMessageId?>
+        ): SseEvent {
+            return SseEvent(
+                jacksonMapper.asStringSuspend(
+                    mapOf(
+                        "messageIds" to lastIdInStream.entries.associate { it.key to it.value?.toString() }
+                    )
+                ),
+                event = EventType.MESSAGE_IDS
+            )
+        }
     }
 }
 
