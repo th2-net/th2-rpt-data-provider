@@ -25,6 +25,7 @@ import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.coroutineScope
+import java.lang.Integer.*
 import java.time.Instant
 import java.util.*
 
@@ -49,8 +50,10 @@ data class MessagesBasket private constructor(
             firstPull: Boolean = true
         ): MessagesBasket {
             val streamGenerator =
-                StreamGenerator.create(context, coroutineScope,
-                    request, startTimestamp, firstPull)
+                StreamGenerator.create(
+                    context, coroutineScope,
+                    request, startTimestamp, firstPull
+                )
 
             return MessagesBasket(
                 context, stream, startMessageId,
@@ -67,7 +70,7 @@ data class MessagesBasket private constructor(
         private set
 
     private val maxMessagesLimit = context.configuration.maxMessagesLimit.value.toInt()
-    private var perStreamLimit = Integer.min(maxMessagesLimit, request.resultCountLimit ?: 25)
+    private var perStreamLimit = min(maxMessagesLimit, request.resultCountLimit ?: 25)
 
     private val messageStream: LinkedList<MessageWrapper> = LinkedList()
 
@@ -83,6 +86,7 @@ data class MessagesBasket private constructor(
                     lastElement = it.first
                     lastTimestamp = it.second
                 }
+                perStreamLimit = min(perStreamLimit * 2, maxMessagesLimit)
             }
         }
     }
@@ -95,8 +99,9 @@ data class MessagesBasket private constructor(
 
     suspend fun pop(): MessageWrapper? {
         return coroutineScope {
-            autoUpdateBasket()
-            messageStream.pollFirst()
+            messageStream.pollFirst().apply {
+                autoUpdateBasket()
+            }
         }
     }
 
