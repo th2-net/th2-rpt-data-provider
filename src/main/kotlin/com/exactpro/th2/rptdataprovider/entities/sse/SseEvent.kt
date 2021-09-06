@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider.entities.sse
 
+import com.exactpro.cradle.Direction
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.message.toTimestamp
@@ -167,6 +168,20 @@ data class SseEvent(val data: String = "empty data", val event: EventType? = nul
                 jacksonMapper.asStringSuspend(
                     mapOf(
                         "messageIds" to streamsInfo.associate { it.stream to it.lastElement?.toString() }
+                    )
+                ),
+                event = EventType.MESSAGE_IDS
+            )
+        }
+
+        suspend fun build(
+            jacksonMapper: ObjectMapper,
+            lastIdInStream: Map<Pair<String, Direction>, StoredMessageId?>
+        ): SseEvent {
+            return SseEvent(
+                jacksonMapper.asStringSuspend(
+                    mapOf(
+                        "messageIds" to lastIdInStream.entries.associate { it.key to it.value?.toString() }
                     )
                 ),
                 event = EventType.MESSAGE_IDS

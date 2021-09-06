@@ -16,6 +16,8 @@
 
 package com.exactpro.th2.rptdataprovider.handlers
 
+import com.exactpro.cradle.Direction
+import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
@@ -55,6 +57,7 @@ class SearchMessagesHandler(private val context: Context) {
             val lastScannedObject = LastScannedMessageInfo()
             val lastEventId = AtomicLong(0)
             val scanCnt = AtomicLong(0)
+            var lastIdInStream: MutableMap<Pair<String, Direction>, StoredMessageId?> = mutableMapOf()
 
             var streamProducer: MessageStreamProducer? = null
 
@@ -77,6 +80,9 @@ class SearchMessagesHandler(private val context: Context) {
                 .map { it.await() }
                 .onEach { (message, _) ->
                     lastScannedObject.update(message, scanCnt)
+                    message.id.let {
+                        lastIdInStream[Pair(it.streamName, it.direction)] = it
+                    }
                     processedMessageCount.inc()
                 }
                 .filter { it.finalFiltered }
@@ -87,7 +93,7 @@ class SearchMessagesHandler(private val context: Context) {
                     }
                 }
                 .onCompletion {
-                    streamProducer?.let { pr -> writer.write(pr.getStreamsInfo()) }
+                    writer.write(lastIdInStream)
                     coroutineContext.cancelChildren()
                     it?.let { throwable -> throw throwable }
                 }
