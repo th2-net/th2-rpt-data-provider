@@ -113,7 +113,6 @@ class StreamGenerator(
                     }
                 }
             }.awaitAll().also {
-                isFirstPull = false
                 isStreamEmpty = it.size < limit
             }.flatten()
         }
@@ -124,6 +123,8 @@ class StreamGenerator(
         return coroutineScope {
             pullMoreWrapped(startId, limit).let {
                 dropUntilInRangeInOppositeDirection(startId, it)
+            }.also {
+                isFirstPull = false
             }
         }
     }
