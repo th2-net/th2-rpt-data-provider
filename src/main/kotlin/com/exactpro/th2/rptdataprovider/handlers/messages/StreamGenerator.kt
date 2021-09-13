@@ -63,11 +63,9 @@ class StreamGenerator(
         private set
 
 
-    private suspend fun pullMore(startId: StoredMessageId?, limit: Int): Iterable<StoredMessageBatch> {
+    private suspend fun pullMore(startId: StoredMessageId, limit: Int): Iterable<StoredMessageBatch> {
 
         logger.debug { "pulling more messages (id=$startId limit=$limit direction=${request.searchDirection})" }
-
-        if (startId == null) return emptyList()
 
         return context.cradleService.getMessagesBatchesSuspend(
             StoredMessageFilterBuilder().apply {
@@ -97,7 +95,7 @@ class StreamGenerator(
     }
 
 
-    private suspend fun pullMoreWrapped(startId: StoredMessageId?, limit: Int): List<MessageWrapper> {
+    private suspend fun pullMoreWrapped(startId: StoredMessageId, limit: Int): List<MessageWrapper> {
         return coroutineScope {
             databaseRequestRetry(dbRetryDelay) {
                 pullMore(startId, limit)
@@ -120,7 +118,7 @@ class StreamGenerator(
     }
 
 
-    suspend fun pullMoreMessage(startId: StoredMessageId?, limit: Int): List<MessageWrapper> {
+    suspend fun pullMoreMessage(startId: StoredMessageId, limit: Int): List<MessageWrapper> {
         return coroutineScope {
             pullMoreWrapped(startId, limit).let {
                 dropUntilInRangeInOppositeDirection(startId, it)

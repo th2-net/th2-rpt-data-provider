@@ -20,16 +20,13 @@ import com.exactpro.cradle.Direction
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.isAfterOrEqual
-import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.coroutineScope
 import mu.KotlinLogging
 import java.time.Instant
-import java.time.LocalTime
-import java.time.ZoneOffset
 
 class BasketCreator(
     private val context: Context,
@@ -40,16 +37,12 @@ class BasketCreator(
         private val logger = KotlinLogging.logger { }
     }
 
-    private fun nextDay(timestamp: Instant, timelineDirection: TimeRelation): Instant {
-        val utcTimestamp = timestamp.atOffset(ZoneOffset.UTC)
-        return if (timelineDirection == TimeRelation.AFTER) {
-            utcTimestamp.plusDays(1)
-                .with(LocalTime.of(0, 0, 0, 0))
-        } else {
-            utcTimestamp.with(LocalTime.of(0, 0, 0, 0))
-                .minusNanos(1)
-        }.toInstant()
-    }
+
+    data class InitializedBasketsInfo(
+        val baskets: List<MessagesBasket>,
+        val searchLimit: (Instant) -> Boolean
+    )
+
 
     private suspend fun chooseStartTimestamp(messageId: StoredMessageId?, startTimestamp: Instant?): Instant {
         return messageId?.let { context.cradleService.getMessageSuspend(it)?.timestamp }
@@ -70,6 +63,7 @@ class BasketCreator(
             messageBatch.findLast { it.timestamp.isBeforeOrEqual(timestamp) } ?: messageBatch.firstOrNull()
     }
 
+
     private suspend fun getFirstMessageCurrentDay(
         timestamp: Instant,
         stream: String,
@@ -83,43 +77,59 @@ class BasketCreator(
         return null
     }
 
+
     private fun getTimeSearchLimit(request: SseMessageSearchRequest): ((Instant) -> Boolean) {
         if (request.searchDirection == TimeRelation.AFTER) {
-            val futureSearchLimit = nextDay(Instant.now(), TimeRelation.AFTER)
+            val futureSearchLimit = Instant.now().nextDay(TimeRelation.AFTER)
             return { timestamp: Instant -> timestamp.isBefore(futureSearchLimit) }
         } else {
-            return { timestamp -> true }
+            if (request.endTimestamp != null) {
+                val pastSearchLimit = request.endTimestamp.nextDay(TimeRelation.BEFORE)
+                return { timestamp: Instant -> timestamp.isAfter(pastSearchLimit) }
+            } else {
+                return { timestamp -> true }
+            }
         }
     }
+
 
     private suspend fun getFirstMessageIdDifferentDays(
         startTimestamp: Instant,
-        stream: String,
-        direction: Direction,
-        request: SseMessageSearchRequest
-    ): StoredMessageId? {
+        streamInfos: List<Pair<String, Direction>>,
+        request: SseMessageSearchRequest,
+        timeLimit: (Instant) -> Boolean
+    ): Map<Pair<String, Direction>, StoredMessageId?> {
         var daysChecking = request.lookupLimitDays
         var isCurrentDay = true
         var timestamp = startTimestamp
-        var messageId: StoredMessageId? = null
-        val timeLimit = getTimeSearchLimit(request)
+        val messageIds: MutableMap<Pair<String, Direction>, StoredMessageId?> = mutableMapOf()
+        var firstMessageFound = false
 
-        while (messageId == null && timeLimit(timestamp) && daysChecking?.let { it >= 0 } != false) {
-            messageId =
-                if (isCurrentDay) {
+        while (!firstMessageFound && timeLimit(timestamp) && daysChecking?.let { it >= 0 } != false) {
+            streamInfos.forEach { (stream, direction) ->
+                val messageId = if (isCurrentDay) {
                     getFirstMessageCurrentDay(timestamp, stream, direction)
                 } else {
-                    context.cradleService.getFirstMessageIdSuspend(timestamp,
+                    context.cradleService.getFirstMessageIdSuspend(
+                        timestamp,
                         stream,
                         direction,
-                        request.searchDirection)
+                        request.searchDirection
+                    )
                 }
+                messageIds[Pair(stream, direction)] = messageId
+
+                if (messageId != null) {
+                    firstMessageFound = true
+                }
+            }
             daysChecking = daysChecking?.dec()
             isCurrentDay = false
-            timestamp = nextDay(timestamp, request.searchDirection)
+            timestamp = timestamp.nextDay(request.searchDirection)
         }
-        return messageId
+        return messageIds
     }
+
 
     private suspend fun initStreamsInfoFromIds(request: SseMessageSearchRequest): List<MessagesBasket> {
         return coroutineScope {
@@ -137,36 +147,46 @@ class BasketCreator(
         }
     }
 
+
     private suspend fun initStreamsInfoFromTime(
         request: SseMessageSearchRequest,
         resumeIdStream: Pair<String, Direction>?,
-        timestamp: Instant
+        timestamp: Instant,
+        timeLimit: (Instant) -> Boolean
     ): List<MessagesBasket> {
-        return mutableListOf<MessagesBasket>().apply {
-            for (stream in request.stream ?: emptyList()) {
-                for (direction in Direction.values()) {
-                    val storedMessageId =
-                        getFirstMessageIdDifferentDays(timestamp, stream, direction, request)
 
-                    val streamInfo = Pair(stream, direction)
-                    val isFirstPull = streamInfo != resumeIdStream
+        val streamInfos = request.stream
+            ?.flatMap { stream -> Direction.values().map { Pair(stream, it) } }
+            ?: return emptyList()
 
-                    if (storedMessageId != null) {
-                        val messageBatch = context.cradleService.getMessageBatchSuspend(storedMessageId)
-                        val nearestMessage = getNearestMessage(messageBatch, request.searchDirection, timestamp)
+        val streamToMessageId =
+            getFirstMessageIdDifferentDays(timestamp, streamInfos, request, timeLimit)
 
-                        add(MessagesBasket.create(context, streamInfo, nearestMessage?.id,
-                            timestamp, request, coroutineScope, isFirstPull))
-                    } else {
-                        add(MessagesBasket.create(context, streamInfo, null, timestamp, request,
-                            coroutineScope, isFirstPull))
-                    }
-                }
+        return streamToMessageId.map { (streamInfo, storedMessageId) ->
+            val isFirstPull = streamInfo != resumeIdStream
+
+            if (storedMessageId != null) {
+                val messageBatch = context.cradleService.getMessageBatchSuspend(storedMessageId)
+                val nearestMessage = getNearestMessage(messageBatch, request.searchDirection, timestamp)
+
+                MessagesBasket.create(
+                    context, streamInfo, nearestMessage?.id,
+                    timestamp, request, coroutineScope, isFirstPull
+                )
+            } else {
+                MessagesBasket.create(
+                    context, streamInfo, null, timestamp, request,
+                    coroutineScope, isFirstPull
+                )
             }
         }
     }
 
-    suspend fun initStreamsInfo(request: SseMessageSearchRequest): List<MessagesBasket> {
+
+    suspend fun initStreamsInfo(request: SseMessageSearchRequest): InitializedBasketsInfo {
+
+        val timeLimit = getTimeSearchLimit(request)
+
         return if (request.resumeFromIdsList.isNullOrEmpty()) {
             val startTimestamp = chooseStartTimestamp(
                 request.resumeFromId?.let { StoredMessageId.fromString(it) },
@@ -176,9 +196,141 @@ class BasketCreator(
                 ?.let { StoredMessageId.fromString(it) }
                 ?.let { Pair(it.streamName, it.direction) }
 
-            initStreamsInfoFromTime(request, resumeIdStream, startTimestamp)
+            InitializedBasketsInfo(
+                initStreamsInfoFromTime(request, resumeIdStream, startTimestamp, timeLimit),
+                timeLimit
+            )
         } else {
-            initStreamsInfoFromIds(request)
+            InitializedBasketsInfo(initStreamsInfoFromIds(request), timeLimit)
+        }
+    }
+}
+
+
+private data class DayLimits(
+    val requestDay: Instant? = null,
+    val dayLimit: Instant? = null,
+    val searchDirection: TimeRelation
+) {
+    val notInit: Boolean
+        get() = requestDay == null && dayLimit == null
+
+    companion object {
+        private fun getDayLimit(timestamp: Instant, searchDirection: TimeRelation): Instant {
+            return if (searchDirection == TimeRelation.AFTER) {
+                timestamp.dayEnd()
+            } else {
+                timestamp.dayStart()
+            }
+        }
+
+        fun initCurrentDay(timestamp: Instant, searchDirection: TimeRelation): DayLimits {
+            return DayLimits(
+                requestDay = timestamp,
+                dayLimit = getDayLimit(timestamp, searchDirection),
+                searchDirection = searchDirection
+            )
+        }
+
+        fun initNextDay(dayLimits: DayLimits): DayLimits {
+            val nextDay = dayLimits.requestDay!!.nextDay(dayLimits.searchDirection)
+            return DayLimits(
+                requestDay = nextDay,
+                dayLimit = getDayLimit(nextDay, dayLimits.searchDirection),
+                searchDirection = dayLimits.searchDirection
+            )
+        }
+    }
+}
+
+
+data class BasketInitializer(
+    private val context: Context,
+    private val coroutineScope: CoroutineScope,
+    private val request: SseMessageSearchRequest,
+    private val timeLimit: (Instant) -> Boolean
+) {
+
+    private var dayLimits = DayLimits(searchDirection = request.searchDirection)
+    var allBasketsInit = false
+        private set
+
+    private fun getFirstMessageInDay(
+        messageBatch: Collection<StoredMessage>,
+        timelineDirection: TimeRelation
+    ): StoredMessage? {
+        if (messageBatch.isEmpty()) return null
+        return if (timelineDirection == TimeRelation.AFTER)
+            messageBatch.first()
+        else
+            messageBatch.last()
+    }
+
+
+    private suspend fun tryToInitBaskets(
+        messageBaskets: List<MessagesBasket>,
+        timestamp: Instant
+    ) {
+        messageBaskets.map { basket ->
+            val storedMessageId = context.cradleService.getFirstMessageIdSuspend(
+                timestamp,
+                basket.stream.first,
+                basket.stream.second,
+                request.searchDirection
+            )
+
+            if (storedMessageId != null) {
+                val messageBatch = context.cradleService.getMessageBatchSuspend(storedMessageId)
+                val nearestMessage = getFirstMessageInDay(messageBatch, request.searchDirection)
+
+                nearestMessage?.let { basket.tryToInitBasket(it.id) }
+            }
+        }
+    }
+
+    private fun changeCurrentDay(timestamp: Instant?) {
+        dayLimits = if (dayLimits.notInit && timestamp != null) {
+            DayLimits.initCurrentDay(timestamp, request.searchDirection)
+        } else {
+            DayLimits.initNextDay(dayLimits)
+        }
+    }
+
+    private fun changeCurrentDay(wrapper: MessageWrapper?) {
+        changeCurrentDay(wrapper?.message?.timestamp)
+    }
+
+    private suspend fun tryToInitBaskets(messageBaskets: List<MessagesBasket>) {
+        if (!allBasketsInit) {
+            tryToInitBaskets(messageBaskets, dayLimits.requestDay!!)
+        }
+        allBasketsInit = messageBaskets.all { it.canInit() }
+    }
+
+    private fun isDayChanged(timestamp: Instant): Boolean {
+        return if (request.searchDirection == TimeRelation.AFTER)
+            timestamp.isAfterOrEqual(dayLimits.dayLimit!!)
+        else
+            timestamp.isBeforeOrEqual(dayLimits.dayLimit!!)
+    }
+
+    fun isDayChanged(wrapper: MessageWrapper?): Boolean {
+        if (wrapper == null) return false
+        return isDayChanged(wrapper.message.timestamp)
+    }
+
+    suspend fun dayChangedInitBaskets(wrapper: MessageWrapper?, messageBaskets: List<MessagesBasket>) {
+        if (isDayChanged(wrapper) && !allBasketsInit && wrapper?.message?.let { timeLimit(it.timestamp) } != false) {
+            changeCurrentDay(wrapper)
+            tryToInitBaskets(messageBaskets)
+        }
+    }
+
+    suspend fun tryToInitBasketsInFuture(messageBaskets: List<MessagesBasket>) {
+        val nowDay = Instant.now()
+        if (isDayChanged(nowDay)) {
+            changeCurrentDay(nowDay)
+            tryToInitBaskets(messageBaskets)
         }
     }
 }

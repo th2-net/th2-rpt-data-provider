@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider
 
+import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageFilter
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
@@ -41,6 +42,8 @@ import java.io.IOException
 import java.io.Writer
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalTime
+import java.time.ZoneOffset
 import java.util.concurrent.Executors
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
@@ -268,4 +271,29 @@ fun StoredMessageId.convertToProto(): MessageID {
         .setDirection(cradleDirectionToGrpc(direction))
         .setConnectionId(ConnectionID.newBuilder().setSessionAlias(streamName))
         .build()
+}
+
+fun Instant.dayEnd(): Instant {
+    val utcTimestamp = this.atOffset(ZoneOffset.UTC)
+    return utcTimestamp
+        .with(LocalTime.of(0, 0, 0, 0))
+        .minusNanos(1)
+        .toInstant()
+}
+
+fun Instant.dayStart(): Instant {
+    val utcTimestamp = this.atOffset(ZoneOffset.UTC)
+    return utcTimestamp.with(LocalTime.of(0, 0, 0, 0)).toInstant()
+}
+
+
+fun Instant.nextDay(timelineDirection: TimeRelation): Instant {
+    val utcTimestamp = this.atOffset(ZoneOffset.UTC)
+    return if (timelineDirection == TimeRelation.AFTER) {
+        utcTimestamp.plusDays(1)
+            .with(LocalTime.of(0, 0, 0, 0))
+    } else {
+        utcTimestamp.with(LocalTime.of(0, 0, 0, 0))
+            .minusNanos(1)
+    }.toInstant()
 }

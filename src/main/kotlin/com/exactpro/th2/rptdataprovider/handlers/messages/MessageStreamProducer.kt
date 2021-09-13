@@ -17,12 +17,10 @@
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.cradle.TimeRelation
-import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
-import com.exactpro.th2.rptdataprovider.isAfterOrEqual
-import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -31,7 +29,8 @@ import kotlinx.coroutines.flow.takeWhile
 class MessageStreamProducer private constructor(
     private val request: SseMessageSearchRequest,
     context: Context,
-    private val messageBaskets: List<MessagesBasket>
+    private val messageBaskets: List<MessagesBasket>,
+    private val basketInitializer: BasketInitializer
 ) {
 
     private val sseSearchDelay = context.configuration.sseSearchDelay.value.toLong()
@@ -42,12 +41,14 @@ class MessageStreamProducer private constructor(
             context: Context,
             coroutineScope: CoroutineScope
         ): MessageStreamProducer {
-            val streamBasketProducer = BasketCreator(context, coroutineScope)
-            return MessageStreamProducer(
-                request,
-                context,
-                streamBasketProducer.initStreamsInfo(request)
-            )
+
+            val streamInfo = BasketCreator(context, coroutineScope)
+                .initStreamsInfo(request)
+
+            val basketInitializer =
+                BasketInitializer(context, coroutineScope, request, streamInfo.searchLimit)
+
+            return MessageStreamProducer(request, context, streamInfo.baskets, basketInitializer)
         }
     }
 
@@ -91,6 +92,7 @@ class MessageStreamProducer private constructor(
 
                     if (data == null && searchInFuture) {
                         delay(sseSearchDelay * 1000)
+                        basketInitializer.tryToInitBasketsInFuture(messageBaskets)
                         loadBaskets(messageBaskets)
                     }
                 } while (data != null || searchInFuture)
@@ -101,7 +103,7 @@ class MessageStreamProducer private constructor(
     }
 
 
-    private suspend fun selectMessage(comparator: (MessageWrapper, MessageWrapper) -> Boolean): MessageWrapper? {
+    private suspend fun selectMessage(comparator: (MessageWrapper, MessageWrapper) -> Boolean): MessagesBasket? {
         return coroutineScope {
             var resultElement: MessagesBasket? = null
             for (basket in messageBaskets) {
@@ -113,7 +115,7 @@ class MessageStreamProducer private constructor(
                     }
                 }
             }
-            resultElement?.pop()
+            resultElement
         }
     }
 
@@ -125,7 +127,22 @@ class MessageStreamProducer private constructor(
         return first.message.timestamp.isAfter(second.message.timestamp)
     }
 
+
     private suspend fun getNextMessage(): MessageWrapper? {
+        var resultElement: MessageWrapper? = null
+        do {
+            resultElement = selectBasketWithNextMessage()?.top()
+
+            val isDayChange = basketInitializer.isDayChanged(resultElement)
+
+            basketInitializer.dayChangedInitBaskets(resultElement, messageBaskets)
+
+        } while (isDayChange)
+
+        return resultElement
+    }
+
+    private suspend fun selectBasketWithNextMessage(): MessagesBasket? {
         return coroutineScope {
             if (request.searchDirection == TimeRelation.AFTER) {
                 selectMessage { new, old ->
