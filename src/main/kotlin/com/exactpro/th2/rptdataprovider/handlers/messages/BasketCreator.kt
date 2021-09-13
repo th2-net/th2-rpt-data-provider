@@ -88,7 +88,12 @@ class BasketCreator(
             val futureSearchLimit = nextDay(Instant.now(), TimeRelation.AFTER)
             return { timestamp: Instant -> timestamp.isBefore(futureSearchLimit) }
         } else {
-            return { timestamp -> true }
+            if (request.endTimestamp != null) {
+                val pastSearchLimit =  nextDay(request.endTimestamp, TimeRelation.BEFORE)
+                return { timestamp: Instant -> timestamp.isAfter(pastSearchLimit) }
+            } else {
+                return { timestamp -> true }
+            }
         }
     }
 
