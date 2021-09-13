@@ -41,6 +41,8 @@ import java.io.IOException
 import java.io.Writer
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalTime
+import java.time.ZoneOffset
 import java.util.concurrent.Executors
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
@@ -268,4 +270,18 @@ fun StoredMessageId.convertToProto(): MessageID {
         .setDirection(cradleDirectionToGrpc(direction))
         .setConnectionId(ConnectionID.newBuilder().setSessionAlias(streamName))
         .build()
+}
+
+
+fun Instant.dayEnd(): Instant {
+    val utcTimestamp = this.atOffset(ZoneOffset.UTC)
+    return utcTimestamp
+        .with(LocalTime.of(0, 0, 0, 0))
+        .minusNanos(1)
+        .toInstant()
+}
+
+fun Instant.dayStart(): Instant {
+    val utcTimestamp = this.atOffset(ZoneOffset.UTC)
+    return utcTimestamp.with(LocalTime.of(0, 0, 0, 0)).toInstant()
 }

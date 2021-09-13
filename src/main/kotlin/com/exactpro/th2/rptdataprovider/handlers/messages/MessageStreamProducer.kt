@@ -17,16 +17,15 @@
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.cradle.TimeRelation
-import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
-import com.exactpro.th2.rptdataprovider.isAfterOrEqual
-import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.takeWhile
+import java.time.Instant
 
 class MessageStreamProducer private constructor(
     private val request: SseMessageSearchRequest,
@@ -65,6 +64,16 @@ class MessageStreamProducer private constructor(
         }
     }
 
+    private suspend fun tryToInitBaskets(messageBaskets: List<MessagesBasket>) {
+        coroutineScope {
+            val timestampNow = if (request.searchDirection == TimeRelation.AFTER) {
+                Instant.now().dayStart()
+            } else {
+                Instant.now().dayEnd()
+            }
+            messageBaskets.onEach { it.tryToInitBasket  (timestampNow) }
+        }
+    }
 
     private fun timestampInRange(wrapper: MessageWrapper): Boolean {
         return wrapper.message.timestamp.let { timestamp ->
@@ -91,6 +100,7 @@ class MessageStreamProducer private constructor(
 
                     if (data == null && searchInFuture) {
                         delay(sseSearchDelay * 1000)
+                        tryToInitBaskets(messageBaskets)
                         loadBaskets(messageBaskets)
                     }
                 } while (data != null || searchInFuture)

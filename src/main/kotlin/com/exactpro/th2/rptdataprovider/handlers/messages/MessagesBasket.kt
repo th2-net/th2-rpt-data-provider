@@ -17,7 +17,6 @@
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.cradle.Direction
-import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
@@ -25,7 +24,7 @@ import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.coroutineScope
-import java.lang.Integer.*
+import java.lang.Integer.min
 import java.time.Instant
 import java.util.*
 
@@ -33,8 +32,8 @@ import java.util.*
 data class MessagesBasket private constructor(
     private val context: Context,
     val stream: Pair<String, Direction>,
-    val startMessageId: StoredMessageId?,
     val startTimestamp: Instant,
+    private var startMessageId: StoredMessageId?,
     private val request: SseMessageSearchRequest,
     private val streamProducer: StreamGenerator
 ) {
@@ -56,8 +55,8 @@ data class MessagesBasket private constructor(
                 )
 
             return MessagesBasket(
-                context, stream, startMessageId,
-                startTimestamp, request, streamGenerator
+                context, stream, startTimestamp,
+                startMessageId, request, streamGenerator
             ).apply {
                 loadBasket()
             }
@@ -116,6 +115,19 @@ data class MessagesBasket private constructor(
     }
 
     fun getStreamInfo(): StreamInfo {
-        return StreamInfo(stream, top()?.id)
+        return StreamInfo(stream, top()?.id, streamProducer.isStreamEmpty, startMessageId)
+    }
+
+    suspend fun tryToInitBasket(timestamp: Instant) {
+        if (this.startMessageId == null) {
+            val messageId = context.cradleService.getFirstMessageIdSuspend(
+                timestamp,
+                stream.first,
+                stream.second,
+                request.searchDirection
+            )
+            this.startMessageId = messageId
+            this.lastElement = messageId
+        }
     }
 }

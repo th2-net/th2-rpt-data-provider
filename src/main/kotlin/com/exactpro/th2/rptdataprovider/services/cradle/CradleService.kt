@@ -21,10 +21,7 @@ import com.exactpro.cradle.CradleManager
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.Order
 import com.exactpro.cradle.TimeRelation
-import com.exactpro.cradle.messages.StoredMessage
-import com.exactpro.cradle.messages.StoredMessageBatch
-import com.exactpro.cradle.messages.StoredMessageFilter
-import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.cradle.messages.*
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventWrapper
@@ -217,5 +214,29 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
                 }
             } ?: emptyList()
         }
+    }
+
+    suspend fun getFirstMessageIndex(stream: String, direction: Direction): Long {
+        return withContext(cradleDispatcher) {
+            logTime("getFirstIdInStream") {
+                storage.getFirstMessageIndex(stream, direction)
+            }
+        } ?: -1
+    }
+
+    suspend fun getNextMessage(messageId: StoredMessageId, timeRelation: TimeRelation): StoredMessage? {
+        return getMessagesSuspend(
+            StoredMessageFilterBuilder()
+                .streamName().isEqualTo(messageId.streamName)
+                .direction().isEqualTo(messageId.direction)
+                .limit(1)
+                .also {
+                    if (timeRelation == TimeRelation.AFTER) {
+                        it.index().isGreaterThan(messageId.index)
+                    } else {
+                        it.index().isLessThan(messageId.index)
+                    }
+                }.build()
+        ).firstOrNull()
     }
 }

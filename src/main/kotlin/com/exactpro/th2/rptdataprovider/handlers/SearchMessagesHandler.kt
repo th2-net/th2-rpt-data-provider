@@ -55,12 +55,15 @@ class SearchMessagesHandler(private val context: Context) {
             val lastScannedObject = LastScannedObjectInfo()
             val lastEventId = AtomicLong(0)
             val scanCnt = AtomicLong(0)
-            var lastIdInStream: MutableMap<Pair<String, Direction>, StoredMessageId?> = mutableMapOf()
+            var lastIdInStream: MutableMap<Pair<String, Direction>, StoredMessageId?>? = null
 
             var streamProducer: MessageStreamProducer? = null
 
             flow {
                 streamProducer = MessageStreamProducer.create(request, context, this@withContext)
+                lastIdInStream = streamProducer
+                    ?.getStreamsInfo()
+                    ?.associate { it.stream to null as? StoredMessageId } as MutableMap
 
                 streamProducer
                     ?.getMessageStream()
@@ -77,7 +80,7 @@ class SearchMessagesHandler(private val context: Context) {
                 .onEach { (message, _) ->
                     lastScannedObject.update(message, scanCnt)
                     message.id.let {
-                        lastIdInStream[Pair(it.streamName, it.direction)] = it
+                        lastIdInStream?.set(Pair(it.streamName, it.direction), it)
                     }
                     processedMessageCount.inc()
                 }
@@ -89,10 +92,21 @@ class SearchMessagesHandler(private val context: Context) {
                         keepAlive.invoke(writer, lastScannedObject, lastEventId)
                     }
                 }
-                .onCompletion {
-                    writer.write(lastIdInStream)
+                .onCompletion { throwable ->
+                    streamProducer?.getStreamsInfo()?.forEach {
+                        val id = lastIdInStream?.get(it.stream)
+                        if (id == null) {
+                            lastIdInStream?.set(it.stream, it.startMessageId)
+                        } else {
+                            lastIdInStream?.set(
+                                it.stream,
+                                context.cradleService.getNextMessage(id, request.searchDirection)?.id
+                            )
+                        }
+                    }
+                    lastIdInStream?.let { writer.write(it) }
                     coroutineContext.cancelChildren()
-                    it?.let { throwable -> throw throwable }
+                    throwable?.let { throw it }
                 }
                 .collect {
                     coroutineContext.ensureActive()
