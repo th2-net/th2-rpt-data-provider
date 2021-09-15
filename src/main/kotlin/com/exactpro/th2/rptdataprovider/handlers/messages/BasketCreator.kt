@@ -57,14 +57,6 @@ class BasketCreator(
             ?: Instant.now()
     }
 
-    private fun getNearestTimestamp(request: SseMessageSearchRequest, messages: List<MessagesBasket>): Instant {
-        return if (request.searchDirection == TimeRelation.AFTER) {
-            messages.minBy { it.startTimestamp }!!.startTimestamp
-        } else {
-            messages.maxBy { it.startTimestamp }!!.startTimestamp
-        }
-    }
-
     private fun getNearestMessage(
         messageBatch: Collection<StoredMessage>,
         timelineDirection: TimeRelation,
@@ -147,16 +139,27 @@ class BasketCreator(
         return messageId
     }
 
-    private suspend fun initStreamsInfoFromIds(request: SseMessageSearchRequest): List<MessagesBasket> {
+    private suspend fun initStreamsInfoFromIds(
+        request: SseMessageSearchRequest,
+        streamInfos: List<Pair<String, Direction>>
+    ): List<MessagesBasket> {
         return coroutineScope {
-            mutableListOf<MessagesBasket>().apply {
-                request.resumeFromIdsList!!.forEach {
-                    val timestamp = chooseStartTimestamp(it, request.startTimestamp)
-                    add(
-                        MessagesBasket.create(
-                            context, Pair(it.streamName, it.direction), it,
-                            timestamp, request, coroutineScope, true
-                        )
+            val resumeFromIdMap = request.resumeFromIdsList
+                ?.associateBy { Pair(it.streamName, it.direction) } ?: emptyMap()
+
+            streamInfos.map { stream ->
+                val messageId = resumeFromIdMap[stream]
+                if (messageId == null) {
+                    MessagesBasket.create(
+                        context, stream, messageId,
+                        request.startTimestamp ?: Instant.now(),
+                        request, coroutineScope, true
+                    )
+                } else {
+                    val timestamp = chooseStartTimestamp(messageId, request.startTimestamp)
+                    MessagesBasket.create(
+                        context, stream, messageId,
+                        timestamp, request, coroutineScope, true
                     )
                 }
             }
@@ -169,33 +172,26 @@ class BasketCreator(
         resumeIdStream: Pair<String, Direction>?,
         timestamp: Instant
     ): List<MessagesBasket> {
-        return mutableListOf<MessagesBasket>().apply {
-            streams.forEach { (stream, direction) ->
+        return streams.map { (stream, direction) ->
+            val storedMessageId =
+                getFirstMessageIdDifferentDays(timestamp, stream, direction, request)
 
-                val storedMessageId =
-                    getFirstMessageIdDifferentDays(timestamp, stream, direction, request)
+            val streamInfo = Pair(stream, direction)
+            val isFirstPull = streamInfo != resumeIdStream
 
-                val streamInfo = Pair(stream, direction)
-                val isFirstPull = streamInfo != resumeIdStream
+            if (storedMessageId != null) {
+                val messageBatch = context.cradleService.getMessageBatchSuspend(storedMessageId)
+                val nearestMessage = getNearestMessage(messageBatch, request.searchDirection, timestamp)
 
-                if (storedMessageId != null) {
-                    val messageBatch = context.cradleService.getMessageBatchSuspend(storedMessageId)
-                    val nearestMessage = getNearestMessage(messageBatch, request.searchDirection, timestamp)
-
-                    add(
-                        MessagesBasket.create(
-                            context, streamInfo, nearestMessage?.id,
-                            timestamp, request, coroutineScope, isFirstPull
-                        )
-                    )
-                } else {
-                    add(
-                        MessagesBasket.create(
-                            context, streamInfo, null, timestamp, request,
-                            coroutineScope, isFirstPull
-                        )
-                    )
-                }
+                MessagesBasket.create(
+                    context, streamInfo, nearestMessage?.id,
+                    timestamp, request, coroutineScope, isFirstPull
+                )
+            } else {
+                MessagesBasket.create(
+                    context, streamInfo, null, timestamp, request,
+                    coroutineScope, isFirstPull
+                )
             }
         }
     }
@@ -217,14 +213,7 @@ class BasketCreator(
 
             initStreamsInfoFromTime(request, streamInfos, resumeIdStream, startTimestamp)
         } else {
-            val idsStreamInfo = initStreamsInfoFromIds(request)
-
-            val notInitialized = streamInfos
-                .filter { stream -> !idsStreamInfo.any { it.stream == stream } }
-
-            val startTimestamp = getNearestTimestamp(request, idsStreamInfo)
-
-            idsStreamInfo + initStreamsInfoFromTime(request, notInitialized, null, startTimestamp)
+            initStreamsInfoFromIds(request, streamInfos)
         }
     }
 }
