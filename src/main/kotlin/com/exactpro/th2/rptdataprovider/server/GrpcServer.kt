@@ -39,7 +39,7 @@ class GrpcServer(private val context: Context, grpcRouter: GrpcRouter) {
 
     fun start() {
         this.server.start()
-        LOGGER.info("${GrpcServer::class.java.simpleName} started. " +
+        LOGGER.info("${GrpcServer::class.simpleName} started. " +
                 "Host: '${context.grpcConfig.serverConfiguration.host}' " +
                 "port: '${context.grpcConfig.serverConfiguration.port}'")
     }
@@ -54,7 +54,6 @@ class GrpcServer(private val context: Context, grpcRouter: GrpcRouter) {
     /**
      * Await termination on the main thread since the grpc library uses daemon threads.
      */
-    @Throws(InterruptedException::class)
     fun blockUntilShutdown() {
         server?.awaitTermination()
     }

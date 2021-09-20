@@ -95,7 +95,7 @@ class SearchMessagesHandler(private val context: Context) {
                 }
                 .onCompletion {
                     writer.write(lastIdInStream)
-                    coroutineContext.cancelChildren()
+                    currentCoroutineContext().cancelChildren()
                     it?.let { throwable -> throw throwable }
                 }
                 .collect {

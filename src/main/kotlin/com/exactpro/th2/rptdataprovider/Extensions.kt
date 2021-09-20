@@ -29,6 +29,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import io.prometheus.client.Gauge
 import io.prometheus.client.Histogram
 import kotlinx.coroutines.*
+import kotlinx.coroutines.GlobalScope.coroutineContext
 import kotlinx.coroutines.channels.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
@@ -39,8 +40,10 @@ import java.io.IOException
 import java.io.Writer
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalTime
+import java.time.ZoneOffset
+import java.util.*
 import java.util.concurrent.Executors
-import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
 private val logger = KotlinLogging.logger { }
@@ -198,7 +201,7 @@ fun StoredTestEventMetadata.tryToGetTestEvents(parentEventId: StoredTestEventId?
 @ExperimentalCoroutinesApi
 @InternalCoroutinesApi
 fun ReceiveChannel<BatchRequest>.chunked(size: Int, time: Long, capacity: Int = 1000) =
-    GlobalScope.produce<List<BatchRequest>>(capacity = capacity, onCompletion = consumes()) {
+    CoroutineScope(Dispatchers.Default).produce<List<BatchRequest>>(capacity = capacity, onCompletion = consumes()) {
         while (true) {
             val chunk = ArrayList<BatchRequest>()
             val ticker = ticker(time)
@@ -266,4 +269,18 @@ fun StoredMessageId.convertToProto(): MessageID {
         .setDirection(cradleDirectionToGrpc(direction))
         .setConnectionId(ConnectionID.newBuilder().setSessionAlias(streamName))
         .build()
+}
+
+
+fun Instant.dayEnd(): Instant {
+    val utcTimestamp = this.atOffset(ZoneOffset.UTC)
+    return utcTimestamp
+        .with(LocalTime.of(0, 0, 0, 0))
+        .minusNanos(1)
+        .toInstant()
+}
+
+fun Instant.dayStart(): Instant {
+    val utcTimestamp = this.atOffset(ZoneOffset.UTC)
+    return utcTimestamp.with(LocalTime.of(0, 0, 0, 0)).toInstant()
 }

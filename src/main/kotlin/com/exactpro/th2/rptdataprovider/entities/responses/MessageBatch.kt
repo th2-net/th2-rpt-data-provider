@@ -17,52 +17,15 @@
 package com.exactpro.th2.rptdataprovider.entities.responses
 
 import com.exactpro.cradle.messages.StoredMessage
+import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.cradle.messages.StoredMessageBatchId
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.entities.internal.Message
-import kotlinx.coroutines.Deferred
-import java.time.Instant
 
-data class MessageWrapper(
-    val id: StoredMessageId,
-    val message: StoredMessage,
-    private val result: Deferred<ParsedMessageBatch>
-) {
-    companion object {
-        suspend fun build(message: StoredMessage, parseMessageBatch: Deferred<ParsedMessageBatch>): MessageWrapper {
-            return MessageWrapper(
-                id = message.id,
-                message = message,
-                result = parseMessageBatch
-            )
-        }
-    }
-
-    suspend fun getParsedMessage(): Message {
-        val parsedBatch = result.await()
-        return  parsedBatch.batch.getValue(id)
-    }
-}
-
-
-data class MessageBatch(
-    val startTimestamp: Instant,
-    val endTimestamp: Instant,
-    val id: StoredMessageId,
-    val batch: Collection<StoredMessage>
-) {
-    companion object {
-        fun build(batch: Collection<StoredMessage>): MessageBatch {
-            return MessageBatch(
-                startTimestamp = batch.first().timestamp,
-                endTimestamp = batch.last().timestamp,
-                id = batch.first().id,
-                batch = batch
-            )
-        }
-    }
-}
-
+data class MessageBatchWrapper(
+    val messages: List<StoredMessage>,
+    val messageBatch: StoredMessageBatch
+)
 
 data class ParsedMessageBatch(
     val id: StoredMessageBatchId,

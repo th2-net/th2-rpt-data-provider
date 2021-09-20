@@ -83,12 +83,29 @@ class BasketCreator(
         return null
     }
 
-    private fun getTimeSearchLimit(request: SseMessageSearchRequest): ((Instant) -> Boolean) {
+    private suspend fun getFirstMessageInStream(stream: String, direction: Direction): StoredMessage? {
+        val index = context.cradleService.getFirstMessageIndex(stream, direction)
+        if (index == -1L) return null
+        val messageId = StoredMessageId(stream, direction, index)
+        return context.cradleService.getMessageSuspend(messageId)
+    }
+
+
+    private fun getTimeSearchLimit(request: SseMessageSearchRequest, lastTimestamp: Instant?): ((Instant) -> Boolean) {
         if (request.searchDirection == TimeRelation.AFTER) {
             val futureSearchLimit = nextDay(Instant.now(), TimeRelation.AFTER)
             return { timestamp: Instant -> timestamp.isBefore(futureSearchLimit) }
         } else {
-            return { timestamp -> true }
+            if (request.endTimestamp != null) {
+                val pastSearchLimit = nextDay(request.endTimestamp, TimeRelation.BEFORE)
+
+                return { timestamp: Instant ->
+                    timestamp.isAfter(pastSearchLimit)
+                            || lastTimestamp?.let { timestamp.isAfterOrEqual(it) } ?: true
+                }
+            } else {
+                return { timestamp: Instant -> lastTimestamp?.let { timestamp.isAfterOrEqual(it) } ?: true }
+            }
         }
     }
 
@@ -102,17 +119,20 @@ class BasketCreator(
         var isCurrentDay = true
         var timestamp = startTimestamp
         var messageId: StoredMessageId? = null
-        val timeLimit = getTimeSearchLimit(request)
+        val firstMessageInStream = getFirstMessageInStream(stream, direction)
+        val timeLimit = getTimeSearchLimit(request, firstMessageInStream?.timestamp)
 
         while (messageId == null && timeLimit(timestamp) && daysChecking?.let { it >= 0 } != false) {
             messageId =
                 if (isCurrentDay) {
                     getFirstMessageCurrentDay(timestamp, stream, direction)
                 } else {
-                    context.cradleService.getFirstMessageIdSuspend(timestamp,
+                    context.cradleService.getFirstMessageIdSuspend(
+                        timestamp,
                         stream,
                         direction,
-                        request.searchDirection)
+                        request.searchDirection
+                    )
                 }
             daysChecking = daysChecking?.dec()
             isCurrentDay = false
@@ -121,13 +141,13 @@ class BasketCreator(
         return messageId
     }
 
-    private suspend fun initStreamsInfoFromIds(request: SseMessageSearchRequest): List<MessagesBasket> {
+    private suspend fun initStreamsInfoFromIds(request: SseMessageSearchRequest): List<ContinuousStream> {
         return coroutineScope {
-            mutableListOf<MessagesBasket>().apply {
+            mutableListOf<ContinuousStream>().apply {
                 request.resumeFromIdsList!!.forEach {
                     val timestamp = chooseStartTimestamp(it, request.startTimestamp)
                     add(
-                        MessagesBasket.create(
+                        ContinuousStream(
                             context, Pair(it.streamName, it.direction), it,
                             timestamp, request, coroutineScope, false
                         )
@@ -139,34 +159,40 @@ class BasketCreator(
 
     private suspend fun initStreamsInfoFromTime(
         request: SseMessageSearchRequest,
+        streams: List<Pair<String, Direction>>,
         resumeIdStream: Pair<String, Direction>?,
         timestamp: Instant
-    ): List<MessagesBasket> {
-        return mutableListOf<MessagesBasket>().apply {
-            for (stream in request.stream ?: emptyList()) {
-                for (direction in Direction.values()) {
-                    val storedMessageId =
-                        getFirstMessageIdDifferentDays(timestamp, stream, direction, request)
+    ): List<ContinuousStream> {
+        return streams.map { (stream, direction) ->
+            val storedMessageId =
+                getFirstMessageIdDifferentDays(timestamp, stream, direction, request)
 
-                    val streamInfo = Pair(stream, direction)
-                    val isFirstPull = streamInfo != resumeIdStream
+            val streamInfo = Pair(stream, direction)
+            val isFirstPull = streamInfo != resumeIdStream
 
-                    if (storedMessageId != null) {
-                        val messageBatch = context.cradleService.getMessageBatchSuspend(storedMessageId)
-                        val nearestMessage = getNearestMessage(messageBatch, request.searchDirection, timestamp)
+            if (storedMessageId != null) {
+                val messageBatch = context.cradleService.getMessageBatchSuspend(storedMessageId)
+                val nearestMessage = getNearestMessage(messageBatch, request.searchDirection, timestamp)
 
-                        add(MessagesBasket.create(context, streamInfo, nearestMessage?.id,
-                            timestamp, request, coroutineScope, isFirstPull))
-                    } else {
-                        add(MessagesBasket.create(context, streamInfo, null, timestamp, request,
-                            coroutineScope, isFirstPull))
-                    }
-                }
+                ContinuousStream(
+                    context, streamInfo, nearestMessage?.id,
+                    timestamp, request, coroutineScope, isFirstPull
+                )
+            } else {
+                ContinuousStream(
+                    context, streamInfo, null, timestamp, request,
+                    coroutineScope, isFirstPull
+                )
             }
         }
     }
 
-    suspend fun initStreamsInfo(request: SseMessageSearchRequest): List<MessagesBasket> {
+
+    suspend fun initStreamsInfo(request: SseMessageSearchRequest): List<ContinuousStream> {
+        val streamInfos = request.stream
+            ?.flatMap { stream -> Direction.values().map { Pair(stream, it) } }
+            ?: return emptyList()
+
         return if (request.resumeFromIdsList.isNullOrEmpty()) {
             val startTimestamp = chooseStartTimestamp(
                 request.resumeFromId?.let { StoredMessageId.fromString(it) },
@@ -176,7 +202,7 @@ class BasketCreator(
                 ?.let { StoredMessageId.fromString(it) }
                 ?.let { Pair(it.streamName, it.direction) }
 
-            initStreamsInfoFromTime(request, resumeIdStream, startTimestamp)
+            initStreamsInfoFromTime(request, streamInfos, resumeIdStream, startTimestamp)
         } else {
             initStreamsInfoFromIds(request)
         }

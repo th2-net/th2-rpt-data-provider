@@ -26,7 +26,6 @@ import com.exactpro.th2.rptdataprovider.cache.CodecCacheBatches
 import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.ParsedMessageBatch
-import com.exactpro.th2.rptdataprovider.server.ServerType
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.MessageRequest
@@ -38,7 +37,6 @@ import kotlinx.coroutines.coroutineScope
 import mu.KotlinLogging
 
 class MessageProducer(
-    private val serverType: ServerType,
     private val cradle: CradleService,
     private val rabbitMqService: RabbitMqService,
     private val codecCache: CodecCache,
@@ -78,7 +76,7 @@ class MessageProducer(
 
     private suspend fun createMessageBatch(
         messageBatch: StoredMessageBatch,
-        processed: List<MessageRequest>?,
+        processed: List<MessageRequest?>?,
         parsedRawMessage: List<RawMessage?>,
         attachedEvents: List<Set<String>>?,
         needAttachEvents: Boolean
@@ -126,8 +124,8 @@ class MessageProducer(
             val parsedRawMessage = messageBatch.messages.map { parseRawMessage(it) }
             val parsedRawMessageProtocol = parsedRawMessage.firstOrNull()?.let { getFieldName(it) }
 
-            val processed: List<MessageRequest>? =
-                if (!isImage(parsedRawMessageProtocol)) parseMessage(messageBatch) else null
+            val processed: List<MessageRequest?>? =
+                if (!isImage(parsedRawMessageProtocol)) parseMessage(messageBatch, parsedRawMessage) else null
 
             val attachedEvents: List<Set<String>>? =
                 if (needAttachEvents) getAttachedEvents(messageBatch.messages) else null
@@ -163,14 +161,14 @@ class MessageProducer(
     }
 
 
-    private suspend fun parseMessage(batch: StoredMessageBatch): List<MessageRequest>? {
+    private suspend fun parseMessage(batch: StoredMessageBatch, parsedRawMessage: List<RawMessage?>): List<MessageRequest?>? {
 
         if (batch.isEmpty) {
             logger.error { "unable to parse message '${batch.id}' - message batch does not exist or is empty" }
             return null
         }
         return coroutineScope {
-            rabbitMqService.decodeBatch(batch).toList().let {
+            rabbitMqService.decodeBatch(batch, parsedRawMessage).toList().let {
                 if (it.isEmpty()) {
                     logger.error { "Decoded batch can not be empty. Batch: ${batch.id}" }
                     null

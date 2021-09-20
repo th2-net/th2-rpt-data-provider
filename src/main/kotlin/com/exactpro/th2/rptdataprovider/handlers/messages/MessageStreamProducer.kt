@@ -19,19 +19,16 @@ package com.exactpro.th2.rptdataprovider.handlers.messages
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
-import com.exactpro.th2.rptdataprovider.isAfterOrEqual
-import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.takeWhile
 
 class MessageStreamProducer private constructor(
     private val request: SseMessageSearchRequest,
-    context: Context,
-    private val messageBaskets: List<MessagesBasket>
+    private val context: Context,
+    private val messageBaskets: List<ContinuousStream>
 ) {
 
     private val sseSearchDelay = context.configuration.sseSearchDelay.value.toLong()
@@ -52,7 +49,7 @@ class MessageStreamProducer private constructor(
     }
 
 
-    private fun isSearchInFuture(data: MessageWrapper?): Boolean {
+    private fun isSearchInFuture(data: MessageBatchWrapper?): Boolean {
         return data == null && request.keepOpen && request.searchDirection == TimeRelation.AFTER
     }
 
@@ -66,7 +63,7 @@ class MessageStreamProducer private constructor(
     }
 
 
-    private fun timestampInRange(wrapper: MessageWrapper): Boolean {
+    private fun timestampInRange(wrapper: MessageBatchWrapper): Boolean {
         return wrapper.message.timestamp.let { timestamp ->
             if (request.searchDirection == TimeRelation.AFTER) {
                 request.endTimestamp == null || timestamp.isBeforeOrEqual(request.endTimestamp)
@@ -79,7 +76,7 @@ class MessageStreamProducer private constructor(
 
     @FlowPreview
     @ExperimentalCoroutinesApi
-    suspend fun getMessageStream(): Flow<MessageWrapper> {
+    suspend fun getMessageStream(): Flow<MessageBatchWrapper> {
         return coroutineScope {
             flow {
                 var searchInFuture = false
@@ -101,7 +98,7 @@ class MessageStreamProducer private constructor(
     }
 
 
-    private suspend fun selectMessage(comparator: (MessageWrapper, MessageWrapper) -> Boolean): MessageWrapper? {
+    private suspend fun selectMessage(comparator: (MessageBatchWrapper, MessageBatchWrapper) -> Boolean): MessageBatchWrapper? {
         return coroutineScope {
             var resultElement: MessagesBasket? = null
             for (basket in messageBaskets) {
@@ -117,15 +114,15 @@ class MessageStreamProducer private constructor(
         }
     }
 
-    private fun isLess(first: MessageWrapper, second: MessageWrapper): Boolean {
+    private fun isLess(first: MessageBatchWrapper, second: MessageBatchWrapper): Boolean {
         return first.message.timestamp.isBefore(second.message.timestamp)
     }
 
-    private fun isGreater(first: MessageWrapper, second: MessageWrapper): Boolean {
+    private fun isGreater(first: MessageBatchWrapper, second: MessageBatchWrapper): Boolean {
         return first.message.timestamp.isAfter(second.message.timestamp)
     }
 
-    private suspend fun getNextMessage(): MessageWrapper? {
+    private suspend fun getNextMessage(): MessageBatchWrapper? {
         return coroutineScope {
             if (request.searchDirection == TimeRelation.AFTER) {
                 selectMessage { new, old ->

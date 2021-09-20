@@ -85,6 +85,6 @@ data class MessageRequest(
 
 data class BatchRequest(
     val batch: StoredMessageBatch,
-    val requests: List<MessageRequest>,
+    val requests: List<MessageRequest?>,
     val context: CoroutineScope
 )

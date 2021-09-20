@@ -17,57 +17,38 @@
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.cradle.Order
+import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.TimeRelation.AFTER
+import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
-import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import mu.KotlinLogging
+import java.sql.Timestamp
 import java.time.Instant
 
 class StreamGenerator(
     private val context: Context,
-    private val startTimestamp: Instant,
-    private val request: SseMessageSearchRequest,
-    private val coroutineScope: CoroutineScope
+    val startTimestamp: Instant,
+    val searchDirection: TimeRelation
 ) {
 
     companion object {
-        private val logger = KotlinLogging.logger {}
-        fun create(
-            context: Context,
-            coroutineScope: CoroutineScope,
-            request: SseMessageSearchRequest,
-            startTimestamp: Instant,
-            firstPull: Boolean = true
-        ): StreamGenerator {
-            return StreamGenerator(context, startTimestamp, request, coroutineScope).apply {
-                isFirstPull = firstPull
-            }
-        }
+        private val logger = KotlinLogging.logger { }
     }
 
     private val dbRetryDelay = context.configuration.dbRetryDelay.value.toLong()
 
-    var isStreamEmpty: Boolean = false
-        private set
+    private suspend fun pullMore(
+        startId: StoredMessageId,
+        include: Boolean,
+        limit: Int
+    ): Iterable<StoredMessageBatch> {
 
-    var isFirstPull: Boolean = true
-        private set
-
-
-    private suspend fun pullMore(startId: StoredMessageId?, limit: Int): Iterable<StoredMessageBatch> {
-
-        logger.debug { "pulling more messages (id=$startId limit=$limit direction=${request.searchDirection})" }
-
-        if (startId == null) return emptyList()
+        logger.debug { "pulling more messages (id=$startId limit=$limit direction=${searchDirection})" }
 
         return context.cradleService.getMessagesBatchesSuspend(
             StoredMessageFilterBuilder().apply {
@@ -75,9 +56,9 @@ class StreamGenerator(
                 direction().isEqualTo(startId.direction)
                 limit(limit)
 
-                if (request.searchDirection == AFTER) {
+                if (searchDirection == AFTER) {
                     index().let {
-                        if (isFirstPull)
+                        if (include)
                             it.isGreaterThanOrEqualTo(startId.index)
                         else
                             it.isGreaterThan(startId.index)
@@ -85,7 +66,7 @@ class StreamGenerator(
                     order(Order.DIRECT)
                 } else {
                     index().let {
-                        if (isFirstPull)
+                        if (include)
                             it.isLessThanOrEqualTo(startId.index)
                         else
                             it.isLessThan(startId.index)
@@ -97,69 +78,56 @@ class StreamGenerator(
     }
 
 
-    private suspend fun pullMoreWrapped(startId: StoredMessageId?, limit: Int): List<MessageWrapper> {
-        return coroutineScope {
-            databaseRequestRetry(dbRetryDelay) {
-                pullMore(startId, limit)
-            }.map { batch ->
-                async {
-                    val parsedFuture = coroutineScope.async {
-                        context.messageProducer.fromRawMessage(batch, request)
-                    }
-                    batch.messages.let {
-                        if (request.searchDirection == AFTER) it else it.reversed()
-                    }.map { message ->
-                        MessageWrapper.build(message, parsedFuture)
+    private fun isLessThenStart(message: StoredMessage, include: Boolean, startId: StoredMessageId): Boolean {
+        return message.timestamp.isBefore(startTimestamp) ||
+                startId.let {
+                    if (include) {
+                        message.index < it.index
+                    } else {
+                        message.index <= it.index
                     }
                 }
-            }.awaitAll().also {
-                isFirstPull = false
-                isStreamEmpty = it.size < limit
-            }.flatten()
-        }
     }
 
 
-    suspend fun pullMoreMessage(startId: StoredMessageId?, limit: Int): List<MessageWrapper> {
-        return coroutineScope {
-            pullMoreWrapped(startId, limit).let {
-                dropUntilInRangeInOppositeDirection(startId, it)
-            }
-        }
-    }
-
-
-    private fun isLessThenStart(wrapper: MessageWrapper, startId: StoredMessageId?): Boolean {
-        return wrapper.message.timestamp.isBefore(startTimestamp) ||
-                startId?.let {
-                    if (isFirstPull) {
-                        wrapper.message.index < it.index
+    private fun isGreaterThenStart(message: StoredMessage, include: Boolean, startId: StoredMessageId): Boolean {
+        return message.timestamp.isAfter(startTimestamp) ||
+                startId.let {
+                    if (include) {
+                        message.index > it.index
                     } else {
-                        wrapper.message.index <= it.index
+                        message.index >= it.index
                     }
-                } ?: false
-    }
-
-    private fun isGreaterThenStart(wrapper: MessageWrapper, startId: StoredMessageId?): Boolean {
-        return wrapper.message.timestamp.isAfter(startTimestamp) ||
-                startId?.let {
-                    if (isFirstPull) {
-                        wrapper.message.index > it.index
-                    } else {
-                        wrapper.message.index >= it.index
-                    }
-                } ?: false
+                }
     }
 
 
     private fun dropUntilInRangeInOppositeDirection(
-        startId: StoredMessageId?,
-        storedMessages: List<MessageWrapper>
-    ): List<MessageWrapper> {
-        return if (request.searchDirection == AFTER) {
-            storedMessages.dropWhile { isLessThenStart(it, startId) }
+        startId: StoredMessageId,
+        include: Boolean,
+        storedMessages: Collection<StoredMessage>
+    ): List<StoredMessage> {
+        return if (searchDirection == AFTER) {
+            storedMessages.dropWhile { isLessThenStart(it, include, startId) }
         } else {
-            storedMessages.dropWhile { isGreaterThenStart(it, startId) }
+            storedMessages.dropWhile { isGreaterThenStart(it, include, startId) }
+        }
+    }
+
+
+    suspend fun pullMoreMessage(startId: StoredMessageId, include: Boolean, limit: Int): List<MessageBatchWrapper> {
+        return databaseRequestRetry(dbRetryDelay) {
+            pullMore(startId, include, limit)
+        }.toList().map { batch ->
+            val messages = if (searchDirection == AFTER) {
+                batch.messages
+            } else {
+                batch.messagesReverse
+            }
+            MessageBatchWrapper(
+                dropUntilInRangeInOppositeDirection(startId, include, messages),
+                batch
+            )
         }
     }
 }

@@ -37,6 +37,7 @@ import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.handlers.SearchEventsHandler
 import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
+import com.exactpro.th2.rptdataprovider.handlers.messages.StreamGenerator
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
 import com.exactpro.th2.rptdataprovider.server.ServerType
@@ -92,7 +93,6 @@ class Context(
     val codecBatchesCache: CodecCacheBatches = CodecCacheBatches(configuration),
 
     val messageProducer: MessageProducer = MessageProducer(
-        serverType,
         cradleService,
         rabbitMqService,
         codecCache,

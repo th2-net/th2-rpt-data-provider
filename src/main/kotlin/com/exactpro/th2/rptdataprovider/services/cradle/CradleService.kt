@@ -33,9 +33,9 @@ import com.exactpro.th2.rptdataprovider.convertToString
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.logTime
-import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.future.await
-import kotlinx.coroutines.withContext
 import mu.KotlinLogging
 import java.time.Instant
 import java.util.concurrent.Executors
@@ -217,5 +217,13 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
                 }
             } ?: emptyList()
         }
+    }
+
+    suspend fun getFirstMessageIndex(stream: String, direction: Direction): Long {
+        return withContext(cradleDispatcher) {
+            logTime("getFirstIdInStream") {
+                storage.getFirstMessageIndex(stream, direction)
+            }
+        } ?: -1
     }
 }
