@@ -339,7 +339,7 @@ class SearchEventsHandler(
                         delay(sseSearchDelay * 1000)
 
                     getEventFlow(
-                        request, timestamp.first, timestamp.second, currentCoroutineContext()
+                        request, timestamp.first, timestamp.second, coroutineContext
                     ).collect { emit(it) }
 
                     if (request.parentEvent?.batchId != null)
@@ -382,7 +382,7 @@ class SearchEventsHandler(
                         keepAlive.invoke(writer, lastScannedObject, lastEventId)
                     }
                 }.onCompletion {
-                    currentCoroutineContext().cancelChildren()
+                    coroutineContext.cancelChildren()
                     it?.let { throwable -> throw throwable }
                 }.let { eventFlow ->
                     if (request.metadataOnly) {
