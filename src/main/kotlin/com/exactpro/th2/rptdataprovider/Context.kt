@@ -27,13 +27,18 @@ import com.exactpro.th2.rptdataprovider.cache.CodecCacheBatches
 import com.exactpro.th2.rptdataprovider.cache.EventCache
 import com.exactpro.th2.rptdataprovider.cache.MessageCache
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
-import com.exactpro.th2.rptdataprovider.entities.configuration.CustomConfigurationClass
 import com.exactpro.th2.rptdataprovider.entities.filters.PredicateFactory
-import com.exactpro.th2.rptdataprovider.entities.filters.events.*
+import com.exactpro.th2.rptdataprovider.entities.filters.events.AttachedMessageFilter
+import com.exactpro.th2.rptdataprovider.entities.filters.events.EventBodyFilter
+import com.exactpro.th2.rptdataprovider.entities.filters.events.EventNameFilter
+import com.exactpro.th2.rptdataprovider.entities.filters.events.EventStatusFilter
+import com.exactpro.th2.rptdataprovider.entities.filters.events.EventTextFilter
+import com.exactpro.th2.rptdataprovider.entities.filters.events.EventTypeFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.AttachedEventFilters
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyBinaryFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageTypeFilter
+import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageTextFilter
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.entities.responses.Message
 import com.exactpro.th2.rptdataprovider.handlers.SearchEventsHandler
@@ -50,88 +55,90 @@ import io.ktor.http.*
 
 @Suppress("MemberVisibilityCanBePrivate")
 class Context(
-    val configuration: Configuration,
+        val configuration: Configuration,
 
-    val serverType: ServerType,
+        val serverType: ServerType,
 
-    val timeout: Long = configuration.responseTimeout.value.toLong(),
-    val cacheTimeout: Long = configuration.serverCacheTimeout.value.toLong(),
+        val timeout: Long = configuration.responseTimeout.value.toLong(),
+        val cacheTimeout: Long = configuration.serverCacheTimeout.value.toLong(),
 
-    val sseEventSearchStep: Long = configuration.sseEventSearchStep.value.toLong(),
+        val sseEventSearchStep: Long = configuration.sseEventSearchStep.value.toLong(),
 
-    val jacksonMapper: ObjectMapper = jacksonObjectMapper()
-        .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
-        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES),
+        val jacksonMapper: ObjectMapper = jacksonObjectMapper()
+                .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
+                .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES),
 
-    val cradleManager: CradleManager,
-    val messageRouterRawBatch: MessageRouter<RawMessageBatch>,
-    val messageRouterParsedBatch: MessageRouter<MessageBatch>,
-    val grpcConfig: GrpcConfiguration,
+        val cradleManager: CradleManager,
+        val messageRouterRawBatch: MessageRouter<RawMessageBatch>,
+        val messageRouterParsedBatch: MessageRouter<MessageBatch>,
+        val grpcConfig: GrpcConfiguration,
 
-    val cradleService: CradleService = CradleService(
-        configuration,
-        cradleManager
-    ),
+        val cradleService: CradleService = CradleService(
+                configuration,
+                cradleManager
+        ),
 
-    val rabbitMqService: RabbitMqService = RabbitMqService(
-        configuration,
-        messageRouterParsedBatch,
-        messageRouterRawBatch
-    ),
+        val rabbitMqService: RabbitMqService = RabbitMqService(
+                configuration,
+                messageRouterParsedBatch,
+                messageRouterRawBatch
+        ),
 
-    val eventProducer: EventProducer = EventProducer(cradleService, jacksonMapper),
-    val eventCache: EventCache = EventCache(cacheTimeout, configuration.eventCacheSize.value.toLong(), eventProducer),
-    val searchEventsHandler: SearchEventsHandler = SearchEventsHandler(
-        cradleService,
-        eventProducer,
-        configuration.dbRetryDelay.value.toLong(),
-        configuration.sseSearchDelay.value.toLong(),
-        configuration.eventSearchChunkSize.value.toInt()
-    ),
+        val eventProducer: EventProducer = EventProducer(cradleService, jacksonMapper),
+        val eventCache: EventCache = EventCache(cacheTimeout, configuration.eventCacheSize.value.toLong(), eventProducer),
+        val searchEventsHandler: SearchEventsHandler = SearchEventsHandler(
+                cradleService,
+                eventProducer,
+                configuration.dbRetryDelay.value.toLong(),
+                configuration.sseSearchDelay.value.toLong(),
+                configuration.eventSearchChunkSize.value.toInt()
+        ),
 
-    val codecCache: CodecCache = CodecCache(configuration),
-    val codecBatchesCache: CodecCacheBatches = CodecCacheBatches(configuration),
+        val codecCache: CodecCache = CodecCache(configuration),
+        val codecBatchesCache: CodecCacheBatches = CodecCacheBatches(configuration),
 
-    val messageProducer: MessageProducer = MessageProducer(
-        serverType,
-        cradleService,
-        rabbitMqService,
-        codecCache,
-        codecBatchesCache
-    ),
+        val messageProducer: MessageProducer = MessageProducer(
+                serverType,
+                cradleService,
+                rabbitMqService,
+                codecCache,
+                codecBatchesCache
+        ),
 
-    val messageCache: MessageCache = MessageCache(configuration, messageProducer),
-
-
-    val eventFiltersPredicateFactory: PredicateFactory<BaseEventEntity> = PredicateFactory(
-        mapOf(
-            AttachedMessageFilter.filterInfo to AttachedMessageFilter.Companion::build,
-            EventTypeFilter.filterInfo to EventTypeFilter.Companion::build,
-            EventNameFilter.filterInfo to EventNameFilter.Companion::build,
-            EventBodyFilter.filterInfo to EventBodyFilter.Companion::build,
-            EventStatusFilter.filterInfo to EventStatusFilter.Companion::build
-        ), cradleService
-    ),
-
-    val messageFiltersPredicateFactory: PredicateFactory<Message> = PredicateFactory(
-        mapOf(
-            AttachedEventFilters.filterInfo to AttachedEventFilters.Companion::build,
-            MessageTypeFilter.filterInfo to MessageTypeFilter.Companion::build,
-            MessageBodyFilter.filterInfo to MessageBodyFilter.Companion::build,
-            MessageBodyBinaryFilter.filterInfo to MessageBodyFilter.Companion::build
-        ), cradleService
-    ),
+        val messageCache: MessageCache = MessageCache(configuration, messageProducer),
 
 
-    private val enableCaching: Boolean = configuration.enableCaching.value.toBoolean(),
+        val eventFiltersPredicateFactory: PredicateFactory<BaseEventEntity> = PredicateFactory(
+                mapOf(
+                        AttachedMessageFilter.filterInfo to AttachedMessageFilter.Companion::build,
+                        EventTextFilter.filterInfo to EventTextFilter.Companion::build,
+                        EventTypeFilter.filterInfo to EventTypeFilter.Companion::build,
+                        EventNameFilter.filterInfo to EventNameFilter.Companion::build,
+                        EventBodyFilter.filterInfo to EventBodyFilter.Companion::build,
+                        EventStatusFilter.filterInfo to EventStatusFilter.Companion::build
+                ), cradleService
+        ),
 
-    val cacheControlNotModified: CacheControl = configuration.notModifiedObjectsLifetime.value.toInt().let {
-        cacheControlConfig(it, enableCaching)
-    },
+        val messageFiltersPredicateFactory: PredicateFactory<Message> = PredicateFactory(
+                mapOf(
+                        AttachedEventFilters.filterInfo to AttachedEventFilters.Companion::build,
+                        MessageTypeFilter.filterInfo to MessageTypeFilter.Companion::build,
+                        MessageBodyFilter.filterInfo to MessageBodyFilter.Companion::build,
+                        MessageBodyBinaryFilter.filterInfo to MessageBodyFilter.Companion::build,
+                        MessageTextFilter.filterInfo to MessageTextFilter.Companion::build
+                ), cradleService
+        ),
 
-    val cacheControlRarelyModified: CacheControl = configuration.rarelyModifiedObjects.value.toInt().let {
-        cacheControlConfig(it, enableCaching)
-    }
+
+        private val enableCaching: Boolean = configuration.enableCaching.value.toBoolean(),
+
+        val cacheControlNotModified: CacheControl = configuration.notModifiedObjectsLifetime.value.toInt().let {
+            cacheControlConfig(it, enableCaching)
+        },
+
+        val cacheControlRarelyModified: CacheControl = configuration.rarelyModifiedObjects.value.toInt().let {
+            cacheControlConfig(it, enableCaching)
+        }
 ) {
 
     val searchMessagesHandler: SearchMessagesHandler = SearchMessagesHandler(this)
@@ -140,15 +147,15 @@ class Context(
         private fun cacheControlConfig(timeout: Int, enableCaching: Boolean): CacheControl {
             return if (enableCaching) {
                 CacheControl.MaxAge(
-                    visibility = CacheControl.Visibility.Public,
-                    maxAgeSeconds = timeout,
-                    mustRevalidate = false,
-                    proxyRevalidate = false,
-                    proxyMaxAgeSeconds = timeout
+                        visibility = CacheControl.Visibility.Public,
+                        maxAgeSeconds = timeout,
+                        mustRevalidate = false,
+                        proxyRevalidate = false,
+                        proxyMaxAgeSeconds = timeout
                 )
             } else {
                 CacheControl.NoCache(
-                    visibility = CacheControl.Visibility.Public
+                        visibility = CacheControl.Visibility.Public
                 )
             }
         }
