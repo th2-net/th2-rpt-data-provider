@@ -16,48 +16,57 @@
 
 package com.exactpro.th2.rptdataprovider.entities.internal
 
-import com.exactpro.cradle.TimeRelation
-import com.exactpro.cradle.messages.StoredMessageBatch
+import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
-import com.exactpro.th2.rptdataprovider.entities.responses.ParsedMessageBatch
+import java.sql.Timestamp
 import java.time.Instant
 
-interface MessagePipelineStepObject {
+interface PipelineStepObject {
     val streamEmpty: Boolean
-    val payload: Any?
     val lastProcessedId: StoredMessageId?
     val lastScannedTime: Instant
 }
 
-data class RawBatch(
+
+data class EmptyPipelineObject(
     override val streamEmpty: Boolean,
-    override val payload: MessageBatchWrapper?,
     override val lastProcessedId: StoredMessageId?,
-    override val lastScannedTime: Instant,
-    val needReverseBatch: Boolean
-) : MessagePipelineStepObject {
-    constructor(
-        streamEmpty: Boolean,
-        payload: MessageBatchWrapper?,
-        lastProcessedId: StoredMessageId?,
-        lastScannedTime: Instant,
-        direction: TimeRelation
-    ) : this(streamEmpty, payload, lastProcessedId, lastScannedTime, direction == TimeRelation.BEFORE)
+    override val lastScannedTime: Instant
+) : PipelineStepObject {
+    constructor(pipelineStepObject: PipelineStepObject) : this(
+        pipelineStepObject.streamEmpty, pipelineStepObject.lastProcessedId, pipelineStepObject.lastScannedTime
+    )
 }
 
 
-data class ParsedMessage(
+data class PipelineRawBatchData(
     override val streamEmpty: Boolean,
-    override val payload: Message?,
     override val lastProcessedId: StoredMessageId?,
-    override val lastScannedTime: Instant
-) : MessagePipelineStepObject
+    override val lastScannedTime: Instant,
+    val payload: MessageBatchWrapper
+) : PipelineStepObject
 
 
-data class FilterWrappedParsedMessage(
+data class PipelineParsedMessage(
     override val streamEmpty: Boolean,
-    override val payload: MessageWithMetadata?,
     override val lastProcessedId: StoredMessageId?,
-    override val lastScannedTime: Instant
-) : MessagePipelineStepObject
+    override val lastScannedTime: Instant,
+    val payload: Message
+) : PipelineStepObject {
+    constructor(pipelineStepObject: PipelineStepObject, payload: Message) : this(
+        pipelineStepObject.streamEmpty, pipelineStepObject.lastProcessedId, pipelineStepObject.lastScannedTime, payload
+    )
+}
+
+
+data class PipelineFilteredMessage(
+    override val streamEmpty: Boolean,
+    override val lastProcessedId: StoredMessageId?,
+    override val lastScannedTime: Instant,
+    val payload: MessageWithMetadata
+) : PipelineStepObject {
+    constructor(pipelineStepObject: PipelineStepObject, payload: MessageWithMetadata) : this(
+        pipelineStepObject.streamEmpty, pipelineStepObject.lastProcessedId, pipelineStepObject.lastScannedTime, payload
+    )
+}

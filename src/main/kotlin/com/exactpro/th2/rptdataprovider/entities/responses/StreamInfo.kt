@@ -17,18 +17,17 @@
 package com.exactpro.th2.rptdataprovider.entities.responses
 
 import com.exactpro.cradle.Direction
-import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.dataprovider.grpc.Stream
 import com.exactpro.th2.rptdataprovider.convertToProto
 import com.exactpro.th2.rptdataprovider.cradleDirectionToGrpc
-import java.time.Instant
+import com.exactpro.th2.rptdataprovider.handlers.StreamName
 
-data class StreamInfo(val stream: Pair<String, Direction>, val lastElement: StoredMessageId? = null) {
+data class StreamInfo(val stream: StreamName, val lastElement: StoredMessageId? = null) {
     fun convertToProto(): Stream {
         return Stream.newBuilder()
-            .setDirection(cradleDirectionToGrpc(stream.second))
-            .setSession(stream.first).also { builder ->
+            .setDirection(cradleDirectionToGrpc(stream.direction))
+            .setSession(stream.name).also { builder ->
                 lastElement?.let { builder.setLastId(it.convertToProto()) }
             }.build()
     }

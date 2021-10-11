@@ -17,15 +17,12 @@
 package com.exactpro.th2.rptdataprovider.producers
 
 import com.exactpro.cradle.messages.StoredMessage
-import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.rptdataprovider.cache.CodecCache
-import com.exactpro.th2.rptdataprovider.cache.CodecCacheBatches
 import com.exactpro.th2.rptdataprovider.entities.internal.Message
-import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.responses.ParsedMessageBatch
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.MessageRequest
@@ -39,9 +36,14 @@ import mu.KotlinLogging
 class MessageProducer(
     private val cradle: CradleService,
     private val rabbitMqService: RabbitMqService,
-    private val codecCache: CodecCache,
-    private val codecCacheBatches: CodecCacheBatches
+    private val codecCache: CodecCache
 ) {
+
+    data class BuildersBatch(
+        val builders: List<Message.Builder>,
+        val rawMessages: List<RawMessage?>,
+        val isImages: Boolean
+    )
 
     companion object {
         private val logger = KotlinLogging.logger { }
@@ -74,108 +76,86 @@ class MessageProducer(
         return protocolName?.contains(TYPE_IMAGE) ?: false
     }
 
-    private suspend fun createMessageBatch(
-        messageBatch: StoredMessageBatch,
-        processed: List<MessageRequest?>?,
-        parsedRawMessage: List<RawMessage?>,
-        attachedEvents: List<Set<String>>?,
-        needAttachEvents: Boolean
-    ): ParsedMessageBatch {
+    private fun createMessageBatch(
+        messageBatch: MessageBatchWrapper,
+        parsedRawMessage: List<RawMessage?>
+    ): List<Message.Builder> {
+        return messageBatch.messages.mapIndexed { i, rawMessage ->
+            Message.Builder(rawMessage, parsedRawMessage[i])
+        }
+    }
 
-        var allMessageParsed = true
+    private suspend fun fullMessageParsing(messageBatch: MessageBatchWrapper): List<Message> {
+        return messageBatchToBuilders(messageBatch).let { messages ->
 
-        return ParsedMessageBatch(messageBatch.id,
-            messageBatch.messages.mapIndexed { i, rawMessage ->
-                val parsedMessage = processed?.get(i)?.get()
-                Message(rawMessage, parsedMessage, parsedRawMessage[i]?.body, attachedEvents?.get(i)).also {
+            val parsedMessages = if (!messages.isImages)
+                parseMessages(messageBatch, messages.rawMessages)
+            else
+                null
+
+            attachEvents(messages.builders)
+
+            messages.builders.mapIndexed { index, builder ->
+                builder.parsedMessage(parsedMessages?.get(index)?.get())
+                builder.build().also {
                     if (it.messageBody != null && it.rawMessageBody != null) {
                         codecCache.put(it.messageId, it)
-                    } else {
-                        allMessageParsed = false
                     }
                 }
-            }.associateBy { it.id },
-            needAttachEvents
-        ).also {
-            if (allMessageParsed) {
-                codecCacheBatches.put(it.id.toString(), it)
             }
         }
     }
 
-    suspend fun fromRawMessage(
-        messageBatch: StoredMessageBatch,
-        searchRequest: SseMessageSearchRequest
-    ): ParsedMessageBatch {
-        return parseRawMessageBatch(messageBatch, searchRequest.attachedEvents)
-    }
-
-    private suspend fun parseRawMessageBatch(
-        messageBatch: StoredMessageBatch,
-        needAttachEvents: Boolean = true
-    ): ParsedMessageBatch {
-        return coroutineScope {
-
-            codecCacheBatches.get(messageBatch.id.toString())?.let {
-                if (!needAttachEvents || it.attachedEvents)
-                    return@coroutineScope it
-            }
-
-            val parsedRawMessage = messageBatch.messages.map { parseRawMessage(it) }
-            val parsedRawMessageProtocol = parsedRawMessage.firstOrNull()?.let { getFieldName(it) }
-
-            val processed: List<MessageRequest?>? =
-                if (!isImage(parsedRawMessageProtocol)) parseMessage(messageBatch, parsedRawMessage) else null
-
-            val attachedEvents: List<Set<String>>? =
-                if (needAttachEvents) getAttachedEvents(messageBatch.messages) else null
-
-            return@coroutineScope createMessageBatch(
-                messageBatch,
-                processed,
-                parsedRawMessage,
-                attachedEvents,
-                needAttachEvents
-            )
-        }
-    }
-
-    private suspend fun getAttachedEvents(
-        messages: MutableCollection<StoredMessage>
-    ): List<Set<String>> {
-        return coroutineScope {
-            messages.map { message ->
+    suspend fun attachEvents(builders: List<Message.Builder>) {
+        coroutineScope {
+            builders.map { builder ->
                 async {
-                    message.id.let {
+                    val eventsId = builder.rawStoredMessage.id.let {
                         try {
                             cradle.getEventIdsSuspend(it).map(Any::toString).toSet()
                         } catch (e: Exception) {
-                            logger.error(e) { "unable to get events attached to message (id=${message.id})" }
+                            logger.error(e) { "unable to get events attached to message (id=$it)" }
 
                             emptySet<String>()
                         }
                     }
+                    builder.attachedEvents(eventsId)
                 }
             }.awaitAll()
         }
     }
 
+    suspend fun parseMessages(
+        batchWrapper: MessageBatchWrapper,
+        parsedRawMessage: List<RawMessage?>
+    ): List<MessageRequest?> {
 
-    private suspend fun parseMessage(batch: StoredMessageBatch, parsedRawMessage: List<RawMessage?>): List<MessageRequest?>? {
-
-        if (batch.isEmpty) {
-            logger.error { "unable to parse message '${batch.id}' - message batch does not exist or is empty" }
-            return null
+        if (batchWrapper.messageBatch.isEmpty) {
+            logger.error { "unable to parse message '${batchWrapper.messageBatch.id}' - message batch does not exist or is empty" }
+            return emptyList()
         }
         return coroutineScope {
-            rabbitMqService.decodeBatch(batch, parsedRawMessage).toList().let {
+            rabbitMqService.decodeBatch(batchWrapper, parsedRawMessage).let {
                 if (it.isEmpty()) {
-                    logger.error { "Decoded batch can not be empty. Batch: ${batch.id}" }
-                    null
+                    logger.error { "Decoded batch can not be empty. Batch: ${batchWrapper.messageBatch.id}" }
+                    emptyList()
                 } else {
                     it
                 }
             }
+        }
+    }
+
+    suspend fun messageBatchToBuilders(messageBatch: MessageBatchWrapper): BuildersBatch {
+        return coroutineScope {
+
+            val parsedRawMessage = messageBatch.messages.map { parseRawMessage(it) }
+
+            val parsedRawMessageProtocol = parsedRawMessage.firstOrNull()?.let { getFieldName(it) }
+
+            val messageBuilders = createMessageBatch(messageBatch, parsedRawMessage)
+
+            return@coroutineScope BuildersBatch(messageBuilders, parsedRawMessage, isImage(parsedRawMessageProtocol))
         }
     }
 
@@ -193,7 +173,8 @@ class MessageProducer(
         ).firstOrNull()?.let { if (it.isEmpty) null else it }
 
         return rawBatchNullable?.let { rawBatch ->
-            (codecCacheBatches.get(rawBatch.id.toString()) ?: parseRawMessageBatch(rawBatch)).batch[id]
+            val wrappedBatch = MessageBatchWrapper(rawBatch)
+            fullMessageParsing(wrappedBatch).first { it.id == id }
         } ?: throw CradleMessageNotFoundException("message '${id}' does not exist in cradle")
     }
 }

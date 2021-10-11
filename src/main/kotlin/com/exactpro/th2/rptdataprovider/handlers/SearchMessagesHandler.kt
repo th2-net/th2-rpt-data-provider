@@ -16,15 +16,17 @@
 
 package com.exactpro.th2.rptdataprovider.handlers
 
-import com.exactpro.cradle.Direction
-import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineFilteredMessage
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepObject
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedMessageInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
-import com.exactpro.th2.rptdataprovider.handlers.messages.MessageStreamProducer
+import com.exactpro.th2.rptdataprovider.handlers.messages.ChainBuilder
+import com.exactpro.th2.rptdataprovider.handlers.messages.StreamMerger
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.prometheus.client.Counter
 import kotlinx.coroutines.*
@@ -54,53 +56,36 @@ class SearchMessagesHandler(private val context: Context) {
         writer: StreamWriter
     ) {
         withContext(coroutineContext) {
-            val startMessageCountLimit = 25
-            val lastScannedObject = LastScannedMessageInfo()
-            val lastEventId = AtomicLong(0)
-            val scanCnt = AtomicLong(0)
-            var lastIdInStream: MutableMap<Pair<String, Direction>, StoredMessageId?> = mutableMapOf()
 
-            var streamProducer: MessageStreamProducer? = null
+            val lastMessageIdCounter = AtomicLong(0)
+            var streamMerger: StreamMerger? = null
+            var lastScannedObject: LastScannedObjectInfo? = null
 
             flow {
-                streamProducer = MessageStreamProducer.create(request, context, this@withContext)
+                streamMerger = ChainBuilder(context, request, this@withContext).buildChain()
+                lastScannedObject = streamMerger?.let { LastScannedMessageInfo(it) }
 
-                streamProducer
+                streamMerger
                     ?.getMessageStream()
                     ?.collect { emit(it) }
-            }.map {
-                async {
-                    val parsedMessage = it.getParsedMessage()
-                    context.messageCache.put(parsedMessage.messageId, parsedMessage)
-                    MessageWithMetadata(parsedMessage).apply {
-                        finalFiltered = request.filterPredicate.apply(this)
-                    }
-                }.also { coroutineContext.ensureActive() }
             }
-                .buffer(messageSearchPipelineBuffer)
-                .map { it.await() }
-                .onEach { (message, _) ->
-                    lastScannedObject.update(message, scanCnt)
-                    message.id.let {
-                        lastIdInStream[Pair(it.streamName, it.direction)] = it
-                    }
-                    processedMessageCount.inc()
+                .onEach { processedMessageCount.inc() }
+                .let { messageFlow ->
+                    request.resultCountLimit?.let { messageFlow.take(it) } ?: messageFlow
                 }
-                .filter { it.finalFiltered }
-                .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
                 .onStart {
                     launch {
-                        keepAlive.invoke(writer, lastScannedObject, lastEventId)
+                        lastScannedObject?.let { keepAlive.invoke(writer, it, lastMessageIdCounter) }
                     }
                 }
                 .onCompletion {
-                    writer.write(lastIdInStream)
-                    currentCoroutineContext().cancelChildren()
+                    streamMerger?.let { merger -> writer.write(merger.getStreamsInfo()) }
+                    coroutineContext.cancelChildren()
                     it?.let { throwable -> throw throwable }
                 }
                 .collect {
                     coroutineContext.ensureActive()
-                    writer.write(it as MessageWithMetadata, lastEventId)
+                    writer.write((it as PipelineFilteredMessage).payload, lastMessageIdCounter)
                 }
         }
     }

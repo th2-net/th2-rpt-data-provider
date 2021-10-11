@@ -27,6 +27,7 @@ import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.chunked
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.logMetrics
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -110,7 +111,7 @@ class RabbitMqService(
 
     private fun mergeBatches(messages: Map.Entry<String, MutableList<MessageRequest>>): RawMessageBatch {
         return RawMessageBatch.newBuilder().addAllMessages(
-            messages.value.sortedBy { it.rawMessage.metadata.id.sequence }.map { it.rawMessage }
+            messages.value.map { it.rawMessage }
         ).build()
     }
 
@@ -126,7 +127,6 @@ class RabbitMqService(
         }
     }
 
-
     @ExperimentalCoroutinesApi
     @ObsoleteCoroutinesApi
     @InternalCoroutinesApi
@@ -139,9 +139,8 @@ class RabbitMqService(
 
                 val batchesMap = mutableMapOf<String, MutableList<MessageRequest>>().apply {
                     batches.forEach {
-                        getOrPut(
-                            it.batch.id.streamName,
-                            { mutableListOf() }).addAll(it.requests.filterNotNull())
+                        getOrPut(it.batchId.streamName, { mutableListOf() })
+                            .addAll(it.requests.filterNotNull())
                     }
                 }
 
@@ -192,20 +191,22 @@ class RabbitMqService(
     }
 
     suspend fun decodeBatch(
-        messageBatch: StoredMessageBatch,
+        messageBatch: MessageBatchWrapper,
         parsedRawMessage: List<RawMessage?>
     ): List<MessageRequest?> {
         return coroutineScope {
             val rawBatch = parsedRawMessage
                 .map { message -> message?.let { MessageRequest.build(it) } }
 
-            messageBuffer.send(BatchRequest(messageBatch, rawBatch, this))
+            messageBuffer.send(BatchRequest(messageBatch.messageBatch, rawBatch, this))
 
-            logMetrics(rabbitMqMessageParseMetrics) {
-                rawBatch.map { async { it?.get(); it } }.awaitAll()
-                    .onEach { message -> message?.exception?.let { throw it } }
-            }
-        } ?: emptyList()
+            rawBatch
+//            logMetrics(rabbitMqMessageParseMetrics) {
+            //.map { async { it?.get(); it } }.awaitAll()
+//                    .onEach { message -> message?.exception?.let { throw it } }
+//            }
+//        } ?: emptyList()
+        }
     }
 
     private suspend fun sendMessageBatchToRabbit(

@@ -17,66 +17,112 @@
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.th2.rptdataprovider.Context
-import com.exactpro.th2.rptdataprovider.entities.internal.MessagePipelineStepObject
-import com.exactpro.th2.rptdataprovider.entities.internal.ParsedMessage
-import com.exactpro.th2.rptdataprovider.entities.internal.RawBatch
+import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.responses.ParsedMessageBatch
-import com.exactpro.th2.rptdataprovider.handlers.BatchPair
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
-import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
+import com.exactpro.th2.rptdataprovider.handlers.StreamName
+import com.exactpro.th2.rptdataprovider.producers.MessageProducer
+import com.exactpro.th2.rptdataprovider.services.rabbitmq.MessageRequest
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.isActive
 
 class MessageDecoder(
-    private val context: Context,
-    private val searchRequest: SseMessageSearchRequest,
+    context: Context,
+    searchRequest: SseMessageSearchRequest,
+    streamName: StreamName,
     externalScope: CoroutineScope,
-    previousComponent: PipelineComponent<MessagePipelineStepObject, RawBatch>
-) : PipelineComponent<RawBatch, ParsedMessage>(externalScope, previousComponent) {
+    previousComponent: PipelineComponent?
+) : PipelineComponent(context, searchRequest, streamName, externalScope, previousComponent) {
 
+    constructor(pipelineComponent: MessageContinuousStream) : this(
+        pipelineComponent.context,
+        pipelineComponent.searchRequest,
+        pipelineComponent.streamName,
+        pipelineComponent.externalScope,
+        pipelineComponent.previousComponent
+    )
 
-    private val maxBufferSize = 2
-    private val elementBuffer = Channel<Deferred<BatchPair<RawBatch, ParsedMessageBatch?>>>(maxBufferSize)
+    private suspend fun createMessageBuilders(rawBatch: MessageBatchWrapper): MessageProducer.BuildersBatch {
+        return context.messageProducer.messageBatchToBuilders(rawBatch)
+    }
 
-
-    private suspend fun parse(rawBatch: RawBatch): BatchPair<RawBatch, ParsedMessageBatch?> {
-        val parsedBatch = rawBatch.payload?.let {
-            context.messageProducer.fromRawMessage(it.messageBatch, searchRequest)
+    private suspend fun setAttachedEvents(builders: List<Message.Builder>) {
+        if (searchRequest.attachedEvents) {
+            context.messageProducer.attachEvents(builders)
         }
-        return BatchPair(rawBatch, parsedBatch)
     }
 
 
-    private suspend fun tryToLoadBuffer(coroutineScope: CoroutineScope) {
-        while (coroutineScope.isActive) {
-            val rawBatch = previousComponent!!.pollMessage()
-            elementBuffer.send(coroutineScope.async { parse(rawBatch) })
+    private suspend fun getParsedMessages(
+        rawBatchPayload: MessageBatchWrapper,
+        parsedMessages: MessageProducer.BuildersBatch
+    ): List<MessageRequest?> {
+        return context.messageProducer.parseMessages(rawBatchPayload, parsedMessages.rawMessages)
+    }
+
+
+    private fun <T> sublistOrEmpty(elements: List<T>, index: Int?): List<T> {
+        return if (index == null) {
+            emptyList()
+        } else {
+            elements.subList(index, elements.size)
+        }
+    }
+
+
+    private suspend fun sendImages(builders: List<Message.Builder>, rawBatch: PipelineRawBatchData) {
+        val inRangeBuilders = sublistOrEmpty(builders, rawBatch.payload.firstIndexInRange)
+
+        setAttachedEvents(inRangeBuilders)
+
+        inRangeBuilders.forEach { builder ->
+            val message = builder.build()
+            sendToChannel(PipelineParsedMessage(rawBatch, message))
+        }
+    }
+
+
+    private suspend fun sendParsedMessages(
+        builders: List<Message.Builder>,
+        messageRequests: List<MessageRequest?>,
+        rawBatch: PipelineRawBatchData
+    ) {
+        val inRangeBuilders = sublistOrEmpty(builders, rawBatch.payload.firstIndexInRange)
+        val inRangeMessageRequests = sublistOrEmpty(messageRequests, rawBatch.payload.firstIndexInRange)
+
+        setAttachedEvents(inRangeBuilders)
+
+        inRangeBuilders.forEachIndexed { i, builder ->
+            val messageRequest = inRangeMessageRequests[i]
+            builder.parsedMessage(messageRequest?.get())
+            val message = builder.build()
+            sendToChannel(PipelineParsedMessage(rawBatch, message))
         }
     }
 
 
     override suspend fun processMessage() {
         coroutineScope {
-            launch { tryToLoadBuffer(this) }
             while (isActive) {
-                val (rawBatch, parsedBatch) = elementBuffer.receive().await()
-                if (parsedBatch != null && rawBatch.payload?.messages != null) {
-                    rawBatch.payload.messages.forEach {
-                        val parsedMessage = ParsedMessage(
-                            rawBatch.streamEmpty,
-                            parsedBatch.batch[it.id],
-                            rawBatch.lastProcessedId,
-                            rawBatch.lastScannedTime
+                val rawBatch = previousComponent!!.pollMessage()
+
+                if (rawBatch is PipelineRawBatchData) {
+
+                    val buildersBatch = createMessageBuilders(rawBatch.payload)
+
+                    if (buildersBatch.isImages) {
+                        sendImages(buildersBatch.builders, rawBatch)
+                    } else {
+                        sendParsedMessages(
+                            buildersBatch.builders,
+                            getParsedMessages(rawBatch.payload, buildersBatch),
+                            rawBatch
                         )
-                        sendToChannel(parsedMessage)
                     }
                 } else {
-                    sendToChannel(ParsedMessage(
-                        rawBatch.streamEmpty,
-                        null,
-                        rawBatch.lastProcessedId,
-                        rawBatch.lastScannedTime
-                    ))
+                    sendToChannel(rawBatch)
                 }
             }
         }

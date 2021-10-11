@@ -16,24 +16,25 @@
 
 package com.exactpro.th2.rptdataprovider.handlers
 
-import com.exactpro.th2.rptdataprovider.entities.internal.MessagePipelineStepObject
-import com.exactpro.th2.rptdataprovider.entities.internal.RawBatch
-import com.exactpro.th2.rptdataprovider.entities.responses.ParsedMessageBatch
+import com.exactpro.cradle.Direction
+import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepObject
+import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.consumeAsFlow
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+data class StreamName(val name: String, val direction: Direction)
 
-data class BatchPair<T, Y>(val previous: T, val new: Y)
-
-
-abstract class PipelineComponent<T : MessagePipelineStepObject, Y : MessagePipelineStepObject>(
-    private val externalScope: CoroutineScope,
-    val previousComponent: PipelineComponent<*, T>? = null
+abstract class PipelineComponent(
+    val context: Context,
+    val searchRequest: SseMessageSearchRequest,
+    val streamName: StreamName,
+    val externalScope: CoroutineScope,
+    val previousComponent: PipelineComponent? = null
 ) {
-    private val messageFlow = Channel<Y>(Channel.BUFFERED)
+    private val messageFlow = Channel<PipelineStepObject>(Channel.BUFFERED)
+    open var processedMessages: Long = 0
 
     init {
         externalScope.launch {
@@ -43,11 +44,13 @@ abstract class PipelineComponent<T : MessagePipelineStepObject, Y : MessagePipel
 
     protected abstract suspend fun processMessage()
 
-    protected suspend fun sendToChannel(message: Y) {
+
+    protected suspend fun sendToChannel(message: PipelineStepObject) {
         messageFlow.send(message)
     }
+    
 
-    suspend fun pollMessage(): Y {
+    suspend fun pollMessage(): PipelineStepObject {
         return messageFlow.receive()
     }
 }

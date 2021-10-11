@@ -23,7 +23,6 @@ import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.schema.grpc.configuration.GrpcConfiguration
 import com.exactpro.th2.common.schema.message.MessageRouter
 import com.exactpro.th2.rptdataprovider.cache.CodecCache
-import com.exactpro.th2.rptdataprovider.cache.CodecCacheBatches
 import com.exactpro.th2.rptdataprovider.cache.EventCache
 import com.exactpro.th2.rptdataprovider.cache.MessageCache
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
@@ -37,7 +36,6 @@ import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.handlers.SearchEventsHandler
 import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
-import com.exactpro.th2.rptdataprovider.handlers.messages.StreamGenerator
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
 import com.exactpro.th2.rptdataprovider.server.ServerType
@@ -90,13 +88,13 @@ class Context(
     ),
 
     val codecCache: CodecCache = CodecCache(configuration),
-    val codecBatchesCache: CodecCacheBatches = CodecCacheBatches(configuration),
+//    val codecBatchesCache: CodecCacheBatches = CodecCacheBatches(configuration),
 
     val messageProducer: MessageProducer = MessageProducer(
         cradleService,
         rabbitMqService,
-        codecCache,
-        codecBatchesCache
+        codecCache
+//        codecBatchesCache
     ),
 
     val messageCache: MessageCache = MessageCache(configuration, messageProducer),

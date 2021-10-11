@@ -169,18 +169,6 @@ fun Instant.isAfterOrEqual(other: Instant): Boolean {
 }
 
 
-suspend fun <E> ReceiveChannel<E>.receiveAvailable(): List<E> {
-    val allMessages = mutableListOf<E>()
-    allMessages.add(receive())
-    var next = poll()
-    while (next != null) {
-        allMessages.add(next)
-        next = poll()
-    }
-    return allMessages
-}
-
-
 fun StoredTestEventMetadata.tryToGetTestEvents(parentEventId: StoredTestEventId? = null): Collection<BatchedStoredTestEventMetadata>? {
     return try {
         this.batchMetadata?.testEvents?.let { events ->
@@ -213,7 +201,7 @@ fun ReceiveChannel<BatchRequest>.chunked(size: Int, time: Long, capacity: Int = 
                     }
                     this@chunked.onReceive {
                         chunk += it
-                        messageCount += it.batch.messageCount
+                        messageCount += it.messagesCount
                         messageCount < size
                     }
                 }
@@ -279,6 +267,7 @@ fun Instant.dayEnd(): Instant {
         .minusNanos(1)
         .toInstant()
 }
+
 
 fun Instant.dayStart(): Instant {
     val utcTimestamp = this.atOffset(ZoneOffset.UTC)

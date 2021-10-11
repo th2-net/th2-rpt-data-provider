@@ -17,6 +17,7 @@
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
 import com.exactpro.cradle.messages.StoredMessageBatch
+import com.exactpro.cradle.messages.StoredMessageBatchId
 import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
@@ -58,8 +59,13 @@ data class MessageRequest(
         messageIsSend = true
     }
 
-    suspend fun get(): List<BodyWrapper>? {
-        return result.await()
+    suspend fun get(timeout: Long = 5000): List<BodyWrapper>? {
+        //    return withTimeoutOrNull(timeout) {
+        val message = result.await()
+        exception?.let { throw it }
+        return message
+
+        //  }
     }
 
     override fun equals(other: Any?): Boolean {
@@ -84,7 +90,15 @@ data class MessageRequest(
 
 
 data class BatchRequest(
-    val batch: StoredMessageBatch,
+    val batchId: StoredMessageBatchId,
+    val messagesCount: Int,
     val requests: List<MessageRequest?>,
     val context: CoroutineScope
-)
+) {
+    constructor(batch: StoredMessageBatch, requests: List<MessageRequest?>, context: CoroutineScope) : this(
+        batchId = batch.id,
+        messagesCount = batch.messageCount,
+        requests = requests,
+        context = context
+    )
+}

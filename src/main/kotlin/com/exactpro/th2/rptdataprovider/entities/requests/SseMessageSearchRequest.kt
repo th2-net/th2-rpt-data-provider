@@ -28,7 +28,7 @@ import java.time.Instant
 data class SseMessageSearchRequest(
     val filterPredicate: FilterPredicate<MessageWithMetadata>,
     val startTimestamp: Instant?,
-    val stream: List<String>?,
+    val stream: List<String>,
     val searchDirection: TimeRelation,
     val endTimestamp: Instant?,
     val resumeFromId: String?,
@@ -36,7 +36,7 @@ data class SseMessageSearchRequest(
     val keepOpen: Boolean,
     val attachedEvents: Boolean,
     val lookupLimitDays: Int?,
-    val resumeFromIdsList: List<StoredMessageId>?
+    val resumeFromIdsList: List<StoredMessageId>
 ) {
 
     companion object {
@@ -51,7 +51,7 @@ data class SseMessageSearchRequest(
     constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<MessageWithMetadata>) : this(
         filterPredicate = filterPredicate,
         startTimestamp = parameters["startTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
-        stream = parameters["stream"],
+        stream = parameters["stream"] ?: emptyList(),
         searchDirection = parameters["searchDirection"]?.firstOrNull()?.let {
             asCradleTimeRelation(
                 it
@@ -59,7 +59,7 @@ data class SseMessageSearchRequest(
         } ?: TimeRelation.AFTER,
         endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
         resumeFromId = parameters["resumeFromId"]?.firstOrNull(),
-        resumeFromIdsList = parameters["messageId"]?.map { StoredMessageId.fromString(it) },
+        resumeFromIdsList = parameters["messageId"]?.map { StoredMessageId.fromString(it) } ?: emptyList(),
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt(),
         keepOpen = parameters["keepOpen"]?.firstOrNull()?.toBoolean() ?: false,
         attachedEvents = parameters["attachedEvents"]?.firstOrNull()?.toBoolean() ?: false,
@@ -105,7 +105,7 @@ data class SseMessageSearchRequest(
                     it.sequence
                 )
             }
-        } else null,
+        } else emptyList(),
 
         attachedEvents = if (request.hasAttachedEvents()) {
             request.attachedEvents.value
@@ -131,7 +131,7 @@ data class SseMessageSearchRequest(
     }
 
     private fun checkStartPoint() {
-        if (startTimestamp == null && resumeFromId == null && resumeFromIdsList == null)
+        if (startTimestamp == null && resumeFromId == null && resumeFromIdsList.isEmpty())
             throw InvalidRequestException("One of the 'startTimestamp' or 'resumeFromId' or 'messageId' must not be null")
     }
 

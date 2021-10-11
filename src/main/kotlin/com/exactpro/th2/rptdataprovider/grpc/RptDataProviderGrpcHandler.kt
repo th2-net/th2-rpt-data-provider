@@ -125,6 +125,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
         counter: AtomicLong
     ) {
         while (coroutineContext.isActive) {
+            lastScannedObjectInfo.updateSelf()
             writer.write(lastScannedObjectInfo, counter)
             delay(keepAliveTimeout)
         }

@@ -31,6 +31,7 @@ import com.exactpro.cradle.testevents.StoredTestEventWrapper
 import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.convertToString
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
+import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.logTime
 import kotlinx.coroutines.*
@@ -177,6 +178,14 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
                 }
             }
         }
+    }
+
+    suspend fun getFirstMessageIdSuspend(
+        timestamp: Instant,
+        stream: StreamName,
+        timelineDirection: TimeRelation
+    ): StoredMessageId? {
+        return getFirstMessageIdSuspend(timestamp, stream.name, stream.direction, timelineDirection)
     }
 
     suspend fun getMessageBatchSuspend(id: StoredMessageId): Collection<StoredMessage> {

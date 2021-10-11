@@ -18,6 +18,7 @@ package com.exactpro.th2.rptdataprovider.entities.internal
 
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.th2.common.grpc.RawMessage
 import com.google.protobuf.ByteString
 import java.time.Instant
 
@@ -51,5 +52,27 @@ data class Message(
         rawMessageBody = rawBody,
         messageBody = messageBody
     )
+
+    private constructor(builder: Builder) : this(
+        builder.rawStoredMessage,
+        builder.messageBody,
+        builder.rawMessage?.body,
+        builder.events
+    )
+
+    class Builder(val rawStoredMessage: StoredMessage, val rawMessage: RawMessage?) {
+        var messageBody: List<BodyWrapper>? = null
+            private set
+
+        var events: Set<String>? = null
+            private set
+
+        fun parsedMessage(messageBody: List<BodyWrapper>?) = apply { this.messageBody = messageBody }
+
+        fun attachedEvents(events: Set<String>?) = apply { this.events = events }
+
+        fun build() = Message(this)
+    }
+
 }
 

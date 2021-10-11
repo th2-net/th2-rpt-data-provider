@@ -25,6 +25,7 @@ import com.exactpro.th2.rptdataprovider.convertToProto
 import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.responses.*
+import com.exactpro.th2.rptdataprovider.handlers.messages.StreamMerger
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.ktor.util.InternalAPI
@@ -42,35 +43,46 @@ enum class EventType {
 }
 
 abstract class LastScannedObjectInfo(
-    @JsonIgnore var instantTimestamp: Instant? = null,
-    var scanCounter: Long = 0
+    @JsonIgnore protected open var instantTimestamp: Instant? = null,
+    protected open var scanCounter: Long = 0
 ) {
 
-    val timestamp: Long
+    protected val timestamp: Long
         get() = instantTimestamp?.toEpochMilli() ?: 0
 
     fun update(lastTimestamp: Instant) {
         instantTimestamp = lastTimestamp
     }
 
+    open fun updateSelf() {}
+
     abstract fun convertToGrpc(): com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo
 
 }
 
 class LastScannedMessageInfo(
-    @JsonIgnore var messageId: StoredMessageId? = null,
-    timestamp: Instant? = null,
-    scanCounter: Long = 0
-) : LastScannedObjectInfo(timestamp, scanCounter) {
+    private val streamMerger: StreamMerger
+) : LastScannedObjectInfo(null, 0) {
+
+    @JsonIgnore
+    var messageId: StoredMessageId? = null
+        private set
+
+    override var instantTimestamp: Instant? = null
+
+    override var scanCounter: Long = 0
 
     val id: String?
-        get() = messageId?.toString() ?: ""
+        get() = messageId?.toString()
 
-    fun update(message: Message, scanCnt: AtomicLong) {
-        messageId = message.id
-        instantTimestamp = message.timestamp
-        scanCounter = scanCnt.incrementAndGet()
+
+    override fun updateSelf() {
+        val lastObject = streamMerger.getLastScannedObject()
+        messageId = lastObject?.lastProcessedId
+        instantTimestamp = lastObject?.lastScannedTime
+        scanCounter = streamMerger.getScannedObjectCount()
     }
+
 
     override fun convertToGrpc(): com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo {
         return com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo.newBuilder()
@@ -90,7 +102,8 @@ class LastScannedEventInfo(
 ) : LastScannedObjectInfo(timestamp, scanCounter) {
 
     val id: String?
-        get() = eventId?.toString() ?: ""
+        get() = eventId?.toString()
+
 
     fun update(event: BaseEventEntity, scanCnt: AtomicLong) {
         eventId = event.id

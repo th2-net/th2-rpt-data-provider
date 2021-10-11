@@ -19,6 +19,7 @@ package com.exactpro.th2.rptdataprovider.handlers.messages
 import com.exactpro.cradle.Order
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.TimeRelation.AFTER
+import com.exactpro.cradle.TimeRelation.BEFORE
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.cradle.messages.StoredMessageFilterBuilder
@@ -30,10 +31,10 @@ import mu.KotlinLogging
 import java.sql.Timestamp
 import java.time.Instant
 
-class StreamGenerator(
+class MessageLoader(
     private val context: Context,
-    val startTimestamp: Instant,
-    val searchDirection: TimeRelation
+    private val startTimestamp: Instant,
+    private val searchDirection: TimeRelation
 ) {
 
     companion object {
@@ -102,32 +103,23 @@ class StreamGenerator(
     }
 
 
-    private fun dropUntilInRangeInOppositeDirection(
-        startId: StoredMessageId,
-        include: Boolean,
-        storedMessages: Collection<StoredMessage>
-    ): List<StoredMessage> {
-        return if (searchDirection == AFTER) {
-            storedMessages.dropWhile { isLessThenStart(it, include, startId) }
-        } else {
-            storedMessages.dropWhile { isGreaterThenStart(it, include, startId) }
-        }
+    private fun getFirstIdInRange(startId: StoredMessageId, include: Boolean, batch: StoredMessageBatch): Int? {
+        val firstMessageInRange =
+            if (searchDirection == AFTER) {
+                batch.messages.indexOfFirst { !isLessThenStart(it, include, startId) }
+            } else {
+                batch.messagesReverse.indexOfFirst { !isGreaterThenStart(it, include, startId) }
+            }
+
+        return firstMessageInRange.takeIf { it != -1 }
     }
 
 
     suspend fun pullMoreMessage(startId: StoredMessageId, include: Boolean, limit: Int): List<MessageBatchWrapper> {
         return databaseRequestRetry(dbRetryDelay) {
             pullMore(startId, include, limit)
-        }.toList().map { batch ->
-            val messages = if (searchDirection == AFTER) {
-                batch.messages
-            } else {
-                batch.messagesReverse
-            }
-            MessageBatchWrapper(
-                dropUntilInRangeInOppositeDirection(startId, include, messages),
-                batch
-            )
+        }.map { batch ->
+            MessageBatchWrapper(batch, getFirstIdInRange(startId, include, batch), searchDirection)
         }
     }
 }

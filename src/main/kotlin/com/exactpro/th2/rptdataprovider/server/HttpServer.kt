@@ -137,6 +137,7 @@ class HttpServer(private val context: Context) {
         counter: AtomicLong
     ) {
         while (coroutineContext.isActive) {
+            lastScannedObjectInfo.updateSelf()
             writer.write(lastScannedObjectInfo, counter)
             delay(keepAliveTimeout)
         }
