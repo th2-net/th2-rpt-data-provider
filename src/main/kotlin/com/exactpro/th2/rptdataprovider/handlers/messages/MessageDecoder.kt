@@ -41,7 +41,7 @@ class MessageDecoder(
         pipelineComponent.searchRequest,
         pipelineComponent.streamName,
         pipelineComponent.externalScope,
-        pipelineComponent.previousComponent
+        pipelineComponent
     )
 
     private suspend fun createMessageBuilders(rawBatch: MessageBatchWrapper): MessageProducer.BuildersBatch {
@@ -112,15 +112,15 @@ class MessageDecoder(
 
                     val buildersBatch = createMessageBuilders(rawBatch.payload)
 
-                    if (buildersBatch.isImages) {
+//                    if (buildersBatch.isImages) {
                         sendImages(buildersBatch.builders, rawBatch)
-                    } else {
-                        sendParsedMessages(
-                            buildersBatch.builders,
-                            getParsedMessages(rawBatch.payload, buildersBatch),
-                            rawBatch
-                        )
-                    }
+//                    } else {
+//                        sendParsedMessages(
+//                            buildersBatch.builders,
+//                            getParsedMessages(rawBatch.payload, buildersBatch),
+//                            rawBatch
+//                        )
+//                    }
                 } else {
                     sendToChannel(rawBatch)
                 }

@@ -44,10 +44,10 @@ enum class EventType {
 
 abstract class LastScannedObjectInfo(
     @JsonIgnore protected open var instantTimestamp: Instant? = null,
-    protected open var scanCounter: Long = 0
+    open var scanCounter: Long = 0
 ) {
 
-    protected val timestamp: Long
+    val timestamp: Long
         get() = instantTimestamp?.toEpochMilli() ?: 0
 
     fun update(lastTimestamp: Instant) {
@@ -61,13 +61,15 @@ abstract class LastScannedObjectInfo(
 }
 
 class LastScannedMessageInfo(
-    private val streamMerger: StreamMerger
+    @JsonIgnore
+    private var streamMerger: StreamMerger? = null
 ) : LastScannedObjectInfo(null, 0) {
 
     @JsonIgnore
     var messageId: StoredMessageId? = null
         private set
 
+    @JsonIgnore
     override var instantTimestamp: Instant? = null
 
     override var scanCounter: Long = 0
@@ -77,12 +79,17 @@ class LastScannedMessageInfo(
 
 
     override fun updateSelf() {
-        val lastObject = streamMerger.getLastScannedObject()
-        messageId = lastObject?.lastProcessedId
-        instantTimestamp = lastObject?.lastScannedTime
-        scanCounter = streamMerger.getScannedObjectCount()
+        streamMerger?.let {
+            val lastObject = it.getLastScannedObject()
+            messageId = lastObject?.lastProcessedId
+            instantTimestamp = lastObject?.lastScannedTime
+            scanCounter = it.getScannedObjectCount()
+        }
     }
 
+    fun setProducer(streamMerger: StreamMerger?) {
+        this.streamMerger = streamMerger
+    }
 
     override fun convertToGrpc(): com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo {
         return com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo.newBuilder()

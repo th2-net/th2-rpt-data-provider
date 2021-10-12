@@ -18,27 +18,21 @@ package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.rptdataprovider.dayStart
 import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
-import com.exactpro.th2.rptdataprovider.entities.internal.PipelineFilteredMessage
-import com.exactpro.th2.rptdataprovider.entities.internal.PipelineParsedMessage
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatchData
-import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
-import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import kotlinx.coroutines.*
 import java.lang.Integer.*
-import java.sql.Timestamp
 import java.time.Instant
-import java.util.*
 
 
 class MessageContinuousStream(
     private val messageLoader: MessageLoader,
-    startMessageId: StoredMessageId?,
-    initializer: StreamInitializer,
-    startTimestamp: Instant,
+    private val startMessageId: StoredMessageId?,
+    private val initializer: StreamInitializer,
+    private val startTimestamp: Instant,
     externalScope: CoroutineScope
 ) : PipelineComponent(initializer.context, initializer.request, initializer.stream, externalScope) {
 
@@ -47,11 +41,52 @@ class MessageContinuousStream(
     private val maxMessagesLimit = context.configuration.maxMessagesLimit.value.toInt()
     private var perStreamLimit = min(maxMessagesLimit, searchRequest.resultCountLimit ?: 25)
 
-    private var firstPull: Boolean = startMessageId == null
+    private var firstPull: Boolean = true
     private var isStreamEmpty: Boolean = false
+    private var needLoadMessage: Boolean = true
 
-    private var lastElement: StoredMessageId? = startMessageId
+    private var lastElement: StoredMessageId? = null
     private var lastTimestamp: Instant = startTimestamp
+
+
+    private suspend fun initialize() {
+        if (startMessageId == null) {
+            initializer.initStream(startTimestamp)?.let {
+                lastElement = it.id
+                lastTimestamp = it.timestamp
+            }
+        } else {
+            lastElement = startMessageId
+            firstPull = false
+        }
+    }
+
+
+    private suspend fun tryToLoadStreamAfter() {
+        if (lastElement == null) {
+            val currentTimestamp = Instant.now()
+            initializer.tryToGetStartId(currentTimestamp.dayStart())?.let {
+                lastElement = it
+            }
+            lastTimestamp = currentTimestamp
+        }
+    }
+
+    private fun tryToLoadStreamBefore() {
+        if (lastElement == null || isStreamEmpty) {
+            lastTimestamp = Instant.MIN
+            needLoadMessage = false
+        }
+    }
+
+
+    private suspend fun tryToReloadStream() {
+        if (searchRequest.searchDirection == TimeRelation.AFTER) {
+            tryToLoadStreamAfter()
+        } else {
+            tryToLoadStreamBefore()
+        }
+    }
 
 
     private fun changeStreamMessageIndex(filteredIdsList: List<MessageBatchWrapper>): Pair<StoredMessageId?, Instant> {
@@ -71,8 +106,9 @@ class MessageContinuousStream(
 
 
     private suspend fun loadMoreMessage(): List<MessageBatchWrapper> {
-        if (lastElement == null) return emptyList()
-
+        if (lastElement == null || !needLoadMessage) {
+            return emptyList()
+        }
         return messageLoader.pullMoreMessage(lastElement!!, firstPull, perStreamLimit).also { messages ->
             changeStreamMessageIndex(messages).let {
                 lastElement = it.first
@@ -96,11 +132,22 @@ class MessageContinuousStream(
 
     override suspend fun processMessage() {
         coroutineScope {
+
+            initialize()
             launch { emptySender(this) }
-            while (isActive) {
+
+            while (isActive && needLoadMessage) {
+
+                tryToReloadStream()
+
                 val messageBatches = loadMoreMessage()
+
                 for (parsedMessage in messageBatches) {
                     sendToChannel(PipelineRawBatchData(isStreamEmpty, lastElement, lastTimestamp, parsedMessage))
+                }
+
+                if (isStreamEmpty) {
+                    delay(sseSearchDelay)
                 }
             }
         }

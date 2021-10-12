@@ -31,24 +31,20 @@ class MessageFilter(
     previousComponent: PipelineComponent?
 ) : PipelineComponent(context, searchRequest, streamName, externalScope, previousComponent) {
 
-    override var processedMessages: Long = 0
-        private set
+    private val emptySendDelay: Long = 1000
+    private var lastScannedObject: PipelineStepObject? = null
 
     constructor(pipelineComponent: MessageDecoder) : this(
         pipelineComponent.context,
         pipelineComponent.searchRequest,
         pipelineComponent.streamName,
         pipelineComponent.externalScope,
-        pipelineComponent.previousComponent
+        pipelineComponent
     )
-
-    private val emptySendDelay: Long = 1000
-    private var lastScannedObject: PipelineStepObject? = null
-
 
     private fun updateState(parsedMessage: PipelineParsedMessage) {
         lastScannedObject = parsedMessage
-        processedMessages++
+        processedMessagesCounter++
     }
 
 

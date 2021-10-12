@@ -16,10 +16,8 @@
 
 package com.exactpro.th2.rptdataprovider.entities.internal
 
-import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
-import java.sql.Timestamp
 import java.time.Instant
 
 interface PipelineStepObject {

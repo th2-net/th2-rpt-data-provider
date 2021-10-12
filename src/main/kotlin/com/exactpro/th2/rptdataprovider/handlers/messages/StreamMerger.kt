@@ -63,7 +63,6 @@ class StreamMerger(
     private val messageStreams = pipelineStreams.map { StreamHolder(it) }
     private var allStreamIsEmpty: Boolean = false
 
-
     private suspend fun messageStreamsInit() {
         messageStreams.forEach { it.pop() }
     }
@@ -88,21 +87,19 @@ class StreamMerger(
     @FlowPreview
     @ExperimentalCoroutinesApi
     suspend fun getMessageStream(): Flow<PipelineStepObject> {
-        return withContext(externalScope.coroutineContext) {
-            flow {
-                messageStreamsInit()
-                do {
+        return flow {
+            messageStreamsInit()
+            do {
 
-                    val nextMessage = getNextMessage()
+                val nextMessage = getNextMessage()
 
-                    if (nextMessage !is EmptyPipelineObject) {
-                        emit(nextMessage)
-                    }
+                if (nextMessage !is EmptyPipelineObject) {
+                    emit(nextMessage)
+                }
 
-                } while (keepSearch())
-            }.takeWhile {
-                timestampInRange(it)
-            }
+            } while (keepSearch())
+        }.takeWhile {
+            timestampInRange(it)
         }
     }
 
@@ -166,7 +163,7 @@ class StreamMerger(
 
     fun getScannedObjectCount(): Long {
         return messageStreams
-            .map { it.messageStream.processedMessages }
+            .map { it.messageStream.processedMessageCount }
             .reduceRight { acc, value -> acc + value }
     }
 }

@@ -59,13 +59,10 @@ data class MessageRequest(
         messageIsSend = true
     }
 
-    suspend fun get(timeout: Long = 5000): List<BodyWrapper>? {
-        //    return withTimeoutOrNull(timeout) {
+    suspend fun get(): List<BodyWrapper>? {
         val message = result.await()
         exception?.let { throw it }
         return message
-
-        //  }
     }
 
     override fun equals(other: Any?): Boolean {

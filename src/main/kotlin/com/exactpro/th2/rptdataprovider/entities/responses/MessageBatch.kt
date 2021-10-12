@@ -28,15 +28,16 @@ data class MessageBatchWrapper(
     val firstIndexInRange: Int? = null,
     val timeRelation: TimeRelation = TimeRelation.AFTER
 ) {
-    private val _messages: MutableCollection<StoredMessage>? = null
+    private var _messages: MutableCollection<StoredMessage>? = null
 
     val messages: MutableCollection<StoredMessage>
         get() {
             if (_messages == null) {
-                if (timeRelation == TimeRelation.AFTER)
-                    messageBatch.messages
-                else
-                    messageBatch.messagesReverse
+                _messages =
+                    if (timeRelation == TimeRelation.AFTER)
+                        messageBatch.messages
+                    else
+                        messageBatch.messagesReverse
             }
             return _messages!!
         }

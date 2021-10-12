@@ -46,7 +46,11 @@ class ChainBuilder(
 
 
     private fun getRequestResumeId(request: SseMessageSearchRequest): Map<StreamName, StoredMessageId?> {
-        val idsList = request.resumeFromIdsList + listOf(StoredMessageId.fromString(request.resumeFromId))
+        val resumeFromId = request.resumeFromId?.let {
+            listOf(StoredMessageId.fromString(it))
+        } ?: emptyList()
+
+        val idsList = request.resumeFromIdsList + resumeFromId
 
         return idsList.associateBy { StreamName(it.streamName, it.direction) }
     }

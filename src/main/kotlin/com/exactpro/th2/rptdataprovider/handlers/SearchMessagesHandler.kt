@@ -58,16 +58,16 @@ class SearchMessagesHandler(private val context: Context) {
         withContext(coroutineContext) {
 
             val lastMessageIdCounter = AtomicLong(0)
+            val lastScannedObject = LastScannedMessageInfo()
+
             var streamMerger: StreamMerger? = null
-            var lastScannedObject: LastScannedObjectInfo? = null
 
             flow {
                 streamMerger = ChainBuilder(context, request, this@withContext).buildChain()
-                lastScannedObject = streamMerger?.let { LastScannedMessageInfo(it) }
+                lastScannedObject.setProducer(streamMerger)
 
-                streamMerger
-                    ?.getMessageStream()
-                    ?.collect { emit(it) }
+                val messageStream = streamMerger?.getMessageStream()
+                messageStream?.collect { emit(it) }
             }
                 .onEach { processedMessageCount.inc() }
                 .let { messageFlow ->
@@ -75,7 +75,7 @@ class SearchMessagesHandler(private val context: Context) {
                 }
                 .onStart {
                     launch {
-                        lastScannedObject?.let { keepAlive.invoke(writer, it, lastMessageIdCounter) }
+                        keepAlive.invoke(writer, lastScannedObject, lastMessageIdCounter)
                     }
                 }
                 .onCompletion {

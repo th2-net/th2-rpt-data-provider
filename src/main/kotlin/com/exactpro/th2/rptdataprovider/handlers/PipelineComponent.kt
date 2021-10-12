@@ -34,7 +34,10 @@ abstract class PipelineComponent(
     val previousComponent: PipelineComponent? = null
 ) {
     private val messageFlow = Channel<PipelineStepObject>(Channel.BUFFERED)
-    open var processedMessages: Long = 0
+    protected var processedMessagesCounter: Long = 0
+
+    val processedMessageCount
+        get() = processedMessagesCounter
 
     init {
         externalScope.launch {
