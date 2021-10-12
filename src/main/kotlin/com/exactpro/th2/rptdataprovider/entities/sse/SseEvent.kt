@@ -23,6 +23,8 @@ import com.exactpro.th2.common.message.toTimestamp
 import com.exactpro.th2.rptdataprovider.asStringSuspend
 import com.exactpro.th2.rptdataprovider.convertToProto
 import com.exactpro.th2.rptdataprovider.entities.internal.Message
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineKeepAlive
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepObject
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.responses.*
 import com.exactpro.th2.rptdataprovider.handlers.messages.StreamMerger
@@ -32,6 +34,7 @@ import io.ktor.util.InternalAPI
 import io.ktor.util.rootCause
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.concurrent.timer
 
 
 enum class EventType {
@@ -54,42 +57,24 @@ abstract class LastScannedObjectInfo(
         instantTimestamp = lastTimestamp
     }
 
-    open fun updateSelf() {}
-
     abstract fun convertToGrpc(): com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo
 
 }
 
 class LastScannedMessageInfo(
-    @JsonIgnore
-    private var streamMerger: StreamMerger? = null
-) : LastScannedObjectInfo(null, 0) {
+    @JsonIgnore var messageId: StoredMessageId? = null,
+    timestamp: Instant? = null,
+    scanCounter: Long = 0
+) : LastScannedObjectInfo(timestamp, scanCounter) {
 
-    @JsonIgnore
-    var messageId: StoredMessageId? = null
-        private set
+    val id: String
+        get() = messageId?.toString() ?: ""
 
-    @JsonIgnore
-    override var instantTimestamp: Instant? = null
-
-    override var scanCounter: Long = 0
-
-    val id: String?
-        get() = messageId?.toString()
-
-
-    override fun updateSelf() {
-        streamMerger?.let {
-            val lastObject = it.getLastScannedObject()
-            messageId = lastObject?.lastProcessedId
-            instantTimestamp = lastObject?.lastScannedTime
-            scanCounter = it.getScannedObjectCount()
-        }
-    }
-
-    fun setProducer(streamMerger: StreamMerger?) {
-        this.streamMerger = streamMerger
-    }
+    constructor(pipelineStepObject: PipelineKeepAlive) : this(
+        messageId = pipelineStepObject.lastProcessedId,
+        timestamp = pipelineStepObject.lastScannedTime,
+        scanCounter = pipelineStepObject.scannedObjectsCount
+    )
 
     override fun convertToGrpc(): com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo {
         return com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo.newBuilder()
@@ -108,8 +93,8 @@ class LastScannedEventInfo(
     scanCounter: Long = 0
 ) : LastScannedObjectInfo(timestamp, scanCounter) {
 
-    val id: String?
-        get() = eventId?.toString()
+    val id: String
+        get() = eventId?.toString() ?: ""
 
 
     fun update(event: BaseEventEntity, scanCnt: AtomicLong) {
@@ -124,7 +109,7 @@ class LastScannedEventInfo(
             .setScanCounter(scanCounter)
             .also { builder ->
                 instantTimestamp?.let { builder.setTimestamp(it.toTimestamp()) }
-                id?.let { builder.setEventId(EventID.newBuilder().setId(it)) }
+                eventId?.let { builder.setEventId(EventID.newBuilder().setId(it.toString())) }
             }
             .build()
     }
@@ -183,28 +168,11 @@ data class SseEvent(val data: String = "empty data", val event: EventType? = nul
             )
         }
 
-        suspend fun build(
-            jacksonMapper: ObjectMapper,
-            streamsInfo: List<StreamInfo>
-        ): SseEvent {
+        suspend fun build(jacksonMapper: ObjectMapper, streamsInfo: List<StreamInfo>): SseEvent {
             return SseEvent(
                 jacksonMapper.asStringSuspend(
                     mapOf(
                         "messageIds" to streamsInfo.associate { it.stream to it.lastElement?.toString() }
-                    )
-                ),
-                event = EventType.MESSAGE_IDS
-            )
-        }
-
-        suspend fun build(
-            jacksonMapper: ObjectMapper,
-            lastIdInStream: Map<Pair<String, Direction>, StoredMessageId?>
-        ): SseEvent {
-            return SseEvent(
-                jacksonMapper.asStringSuspend(
-                    mapOf(
-                        "messageIds" to lastIdInStream.entries.associate { it.key to it.value?.toString() }
                     )
                 ),
                 event = EventType.MESSAGE_IDS

@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
-import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.th2.common.grpc.MessageBatch
 import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.grpc.RawMessage
@@ -48,7 +47,6 @@ class RabbitMqService(
         val logger = KotlinLogging.logger { }
 
         private val rabbitMqBatchParseMetrics: Metrics = Metrics("rabbit_mq_batch_parse", "rabbitMqBatchParse")
-        private val rabbitMqMessageParseMetrics: Metrics = Metrics("rabbit_mq_message_parse", "rabbitMqMessageParse")
 
     }
 
@@ -133,7 +131,7 @@ class RabbitMqService(
     private suspend fun decodeMessage() {
         coroutineScope {
             while (true) {
-                val batches = messageBufferReceiver.receive().filter { it.context.isActive }
+                val batches = messageBufferReceiver.receive()//.filter { it.context.isActive }
 
                 if (batches.isEmpty()) continue
 
@@ -190,24 +188,11 @@ class RabbitMqService(
         }
     }
 
-    suspend fun decodeBatch(
-        messageBatch: MessageBatchWrapper,
-        parsedRawMessage: List<RawMessage?>
-    ): List<MessageRequest?> {
-        return coroutineScope {
-            val rawBatch = parsedRawMessage
-                .map { message -> message?.let { MessageRequest.build(it) } }
 
-            messageBuffer.send(BatchRequest(messageBatch.messageBatch, rawBatch, this))
-
-            rawBatch
-//            logMetrics(rabbitMqMessageParseMetrics) {
-            //.map { async { it?.get(); it } }.awaitAll()
-//                    .onEach { message -> message?.exception?.let { throw it } }
-//            }
-//        } ?: emptyList()
-        }
+    suspend fun decodeBatch(batchRequest: BatchRequest) {
+        return messageBuffer.send(batchRequest)
     }
+
 
     private suspend fun sendMessageBatchToRabbit(
         batch: RawMessageBatch,

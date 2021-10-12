@@ -29,11 +29,11 @@ data class StreamName(val name: String, val direction: Direction)
 abstract class PipelineComponent(
     val context: Context,
     val searchRequest: SseMessageSearchRequest,
-    val streamName: StreamName,
     val externalScope: CoroutineScope,
+    val streamName: StreamName? = null,
     val previousComponent: PipelineComponent? = null
 ) {
-    private val messageFlow = Channel<PipelineStepObject>(Channel.BUFFERED)
+    private val messageFlow = Channel<PipelineStepObject>(500)
     protected var processedMessagesCounter: Long = 0
 
     val processedMessageCount

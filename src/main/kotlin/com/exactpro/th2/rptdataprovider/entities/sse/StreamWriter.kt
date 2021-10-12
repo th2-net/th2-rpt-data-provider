@@ -16,13 +16,8 @@
 
 package com.exactpro.th2.rptdataprovider.entities.sse
 
-import com.exactpro.cradle.Direction
-import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.dataprovider.grpc.Stream
 import com.exactpro.th2.dataprovider.grpc.StreamResponse
 import com.exactpro.th2.dataprovider.grpc.StreamsInfo
-import com.exactpro.th2.rptdataprovider.convertToProto
-import com.exactpro.th2.rptdataprovider.cradleDirectionToGrpc
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
@@ -41,13 +36,11 @@ interface StreamWriter {
 
     suspend fun write(message: MessageWithMetadata, counter: AtomicLong)
 
-    suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong)
+    suspend fun write(event: Event, lastEventId: AtomicLong)
 
     suspend fun write(streamInfo: List<StreamInfo>)
 
-    suspend fun write(event: Event, lastEventId: AtomicLong)
-
-    suspend fun write(lastIdInStream: Map<Pair<String, Direction>, StoredMessageId?>)
+    suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong)
 
     suspend fun closeWriter()
 }
@@ -72,10 +65,6 @@ class SseWriter(private val writer: Writer, private val jacksonMapper: ObjectMap
 
     override suspend fun write(event: Event, lastEventId: AtomicLong) {
         writer.eventWrite(SseEvent.build(jacksonMapper, event, lastEventId))
-    }
-
-    override suspend fun write(lastIdInStream: Map<Pair<String, Direction>, StoredMessageId?>) {
-        writer.eventWrite(SseEvent.build(jacksonMapper, lastIdInStream))
     }
 
     override suspend fun closeWriter() {
@@ -126,22 +115,6 @@ class GrpcWriter(private val writer: StreamObserver<StreamResponse>) : StreamWri
             StreamResponse.newBuilder().setStreamInfo(
                 StreamsInfo.newBuilder().addAllStreams(
                     streamInfo.map { it.convertToProto() }
-                ).build()
-            ).build()
-        )
-    }
-
-    override suspend fun write(lastIdInStream: Map<Pair<String, Direction>, StoredMessageId?>) {
-        writer.onNext(
-            StreamResponse.newBuilder().setStreamInfo(
-                StreamsInfo.newBuilder().addAllStreams(
-                    lastIdInStream.entries.map { (stream, lastElement) ->
-                        Stream.newBuilder()
-                            .setDirection(cradleDirectionToGrpc(stream.second))
-                            .setSession(stream.first).also { builder ->
-                                lastElement?.let { builder.setLastId(it.convertToProto()) }
-                            }.build()
-                    }
                 ).build()
             ).build()
         )

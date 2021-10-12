@@ -27,6 +27,17 @@ interface PipelineStepObject {
 }
 
 
+data class StreamEndObject(
+    override val streamEmpty: Boolean,
+    override val lastProcessedId: StoredMessageId?,
+    override val lastScannedTime: Instant
+) : PipelineStepObject {
+    constructor(pipelineStepObject: PipelineStepObject) : this(
+        pipelineStepObject.streamEmpty, pipelineStepObject.lastProcessedId, pipelineStepObject.lastScannedTime
+    )
+}
+
+
 data class EmptyPipelineObject(
     override val streamEmpty: Boolean,
     override val lastProcessedId: StoredMessageId?,
@@ -34,6 +45,22 @@ data class EmptyPipelineObject(
 ) : PipelineStepObject {
     constructor(pipelineStepObject: PipelineStepObject) : this(
         pipelineStepObject.streamEmpty, pipelineStepObject.lastProcessedId, pipelineStepObject.lastScannedTime
+    )
+}
+
+
+data class PipelineKeepAlive(
+    override val streamEmpty: Boolean,
+    override val lastProcessedId: StoredMessageId?,
+    override val lastScannedTime: Instant,
+    val scannedObjectsCount: Long
+) : PipelineStepObject {
+
+    constructor(pipelineStepObject: PipelineStepObject, scannedObjectsCount: Long) : this(
+        pipelineStepObject.streamEmpty,
+        pipelineStepObject.lastProcessedId,
+        pipelineStepObject.lastScannedTime,
+        scannedObjectsCount
     )
 }
 

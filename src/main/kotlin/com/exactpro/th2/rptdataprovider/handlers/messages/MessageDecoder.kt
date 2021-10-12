@@ -22,19 +22,24 @@ import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchReques
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
+import com.exactpro.th2.rptdataprovider.producers.BuildersBatch
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.MessageRequest
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlin.system.measureTimeMillis
+import kotlin.time.measureTime
 
 class MessageDecoder(
     context: Context,
     searchRequest: SseMessageSearchRequest,
-    streamName: StreamName,
+    streamName: StreamName?,
     externalScope: CoroutineScope,
     previousComponent: PipelineComponent?
-) : PipelineComponent(context, searchRequest, streamName, externalScope, previousComponent) {
+) : PipelineComponent(context, searchRequest, externalScope, streamName, previousComponent) {
 
     constructor(pipelineComponent: MessageContinuousStream) : this(
         pipelineComponent.context,
@@ -44,22 +49,16 @@ class MessageDecoder(
         pipelineComponent
     )
 
-    private suspend fun createMessageBuilders(rawBatch: MessageBatchWrapper): MessageProducer.BuildersBatch {
+
+    private suspend fun createMessageBuilders(rawBatch: MessageBatchWrapper): BuildersBatch {
         return context.messageProducer.messageBatchToBuilders(rawBatch)
     }
+
 
     private suspend fun setAttachedEvents(builders: List<Message.Builder>) {
         if (searchRequest.attachedEvents) {
             context.messageProducer.attachEvents(builders)
         }
-    }
-
-
-    private suspend fun getParsedMessages(
-        rawBatchPayload: MessageBatchWrapper,
-        parsedMessages: MessageProducer.BuildersBatch
-    ): List<MessageRequest?> {
-        return context.messageProducer.parseMessages(rawBatchPayload, parsedMessages.rawMessages)
     }
 
 
@@ -103,6 +102,19 @@ class MessageDecoder(
     }
 
 
+    private suspend fun getMessageRequests(
+        rawBatch: PipelineRawBatchData,
+        buildersBatch: BuildersBatch,
+        coroutineScope: CoroutineScope
+    ): List<MessageRequest?> {
+        return context.messageProducer.parseMessages(
+            rawBatch.payload,
+            buildersBatch.rawMessages,
+            coroutineScope
+        )
+    }
+
+
     override suspend fun processMessage() {
         coroutineScope {
             while (isActive) {
@@ -112,15 +124,12 @@ class MessageDecoder(
 
                     val buildersBatch = createMessageBuilders(rawBatch.payload)
 
-//                    if (buildersBatch.isImages) {
+                    if (buildersBatch.isImages) {
                         sendImages(buildersBatch.builders, rawBatch)
-//                    } else {
-//                        sendParsedMessages(
-//                            buildersBatch.builders,
-//                            getParsedMessages(rawBatch.payload, buildersBatch),
-//                            rawBatch
-//                        )
-//                    }
+                    } else {
+                        val messageRequests = getMessageRequests(rawBatch, buildersBatch, this)
+                        sendParsedMessages(buildersBatch.builders, messageRequests, rawBatch)
+                    }
                 } else {
                     sendToChannel(rawBatch)
                 }

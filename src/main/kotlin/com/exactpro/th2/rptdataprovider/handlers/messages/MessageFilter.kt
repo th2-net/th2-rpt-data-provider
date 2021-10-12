@@ -26,10 +26,10 @@ import kotlinx.coroutines.*
 class MessageFilter(
     context: Context,
     searchRequest: SseMessageSearchRequest,
-    streamName: StreamName,
+    streamName: StreamName?,
     externalScope: CoroutineScope,
     previousComponent: PipelineComponent?
-) : PipelineComponent(context, searchRequest, streamName, externalScope, previousComponent) {
+) : PipelineComponent(context, searchRequest, externalScope, streamName, previousComponent) {
 
     private val emptySendDelay: Long = 1000
     private var lastScannedObject: PipelineStepObject? = null

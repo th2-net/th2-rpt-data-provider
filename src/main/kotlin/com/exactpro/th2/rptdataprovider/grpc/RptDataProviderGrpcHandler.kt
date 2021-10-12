@@ -49,9 +49,7 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
-
-private typealias Streaming =
-        suspend (StreamWriter, suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit) -> Unit
+private typealias Streaming = suspend (StreamWriter) -> Unit
 
 @EngineAPI
 @InternalAPI
@@ -95,9 +93,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     val cradleService = this.context.cradleService
     private val eventCache = this.context.eventCache
     private val messageCache = this.context.messageCache
-    private val jacksonMapper = context.jacksonMapper
     private val checkRequestAliveDelay = context.configuration.checkRequestsAliveDelay.value.toLong()
-    private val keepAliveTimeout = context.configuration.keepAliveTimeout.value.toLong()
     private val getEventsLimit = this.context.configuration.eventSearchChunkSize.value.toInt()
 
     private val searchEventsHandler = this.context.searchEventsHandler
@@ -106,8 +102,6 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     private val eventFiltersPredicateFactory = this.context.eventFiltersPredicateFactory
     private val messageFiltersPredicateFactory = this.context.messageFiltersPredicateFactory
 
-    private val sseEventSearchStep = this.context.sseEventSearchStep
-
 
     private suspend fun checkContext(context: io.grpc.Context) {
         while (coroutineContext.isActive) {
@@ -115,19 +109,6 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
                 throw ChannelClosedException("Channel is closed")
 
             delay(checkRequestAliveDelay)
-        }
-    }
-
-
-    private suspend fun keepAlive(
-        writer: StreamWriter,
-        lastScannedObjectInfo: LastScannedObjectInfo,
-        counter: AtomicLong
-    ) {
-        while (coroutineContext.isActive) {
-            lastScannedObjectInfo.updateSelf()
-            writer.write(lastScannedObjectInfo, counter)
-            delay(keepAliveTimeout)
         }
     }
 
@@ -229,7 +210,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
                 launch {
                     checkContext(context)
                 }
-                calledFun.invoke(GrpcWriter(responseObserver), ::keepAlive)
+                calledFun.invoke(GrpcWriter(responseObserver))
             } finally {
                 coroutineContext.cancelChildren()
             }
@@ -290,65 +271,39 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
         }
     }
 
-    @FlowPreview
-    override fun searchMessages(
-        grpcRequest: MessageSearchRequest,
-        responseObserver: StreamObserver<StreamResponse>
-    ) {
-        handleRequest(
-            responseObserver,
-            "grpc search message",
-            useStream = true,
-            request = grpcRequest
-        ) {
-            suspend fun(
-                w: StreamWriter,
-                keepAlive: suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit
-            ) {
 
+    @FlowPreview
+    override fun searchMessages(grpcRequest: MessageSearchRequest, responseObserver: StreamObserver<StreamResponse>) {
+        handleRequest(responseObserver, "grpc search message", useStream = true, request = grpcRequest) {
+
+            suspend fun(streamWriter: StreamWriter) {
                 val filterPredicate = messageFiltersPredicateFactory.build(grpcRequest.filtersList)
                 val request = SseMessageSearchRequest(grpcRequest, filterPredicate)
                 request.checkRequest()
 
-                searchMessagesHandler.searchMessagesSse(request, jacksonMapper, keepAlive, w)
+                searchMessagesHandler.searchMessagesSse(request, streamWriter)
             }
         }
     }
 
+
     @FlowPreview
-    override fun searchEvents(
-        grpcRequest: EventSearchRequest,
-        responseObserver: StreamObserver<StreamResponse>
-    ) {
-        handleRequest(
-            responseObserver,
-            "grpc search events",
-            useStream = true,
-            request = grpcRequest
-        ) {
-            suspend fun(
-                w: StreamWriter,
-                keepAlive: suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit
-            ) {
+    override fun searchEvents(grpcRequest: EventSearchRequest, responseObserver: StreamObserver<StreamResponse>) {
+        handleRequest(responseObserver, "grpc search events", useStream = true, request = grpcRequest) {
+
+            suspend fun(streamWriter: StreamWriter) {
                 val filterPredicate = eventFiltersPredicateFactory.build(grpcRequest.filtersList)
                 val request = SseEventSearchRequest(grpcRequest, filterPredicate)
                 request.checkRequest()
 
-                searchEventsHandler.searchEventsSse(request, jacksonMapper, sseEventSearchStep, keepAlive, w)
+                searchEventsHandler.searchEventsSse(request, streamWriter)
             }
         }
     }
 
-    override fun getMessagesFilters(
-        request: MessageFiltersRequest,
-        responseObserver: StreamObserver<ListFilterName>
-    ) {
-        handleRequest(
-            responseObserver,
-            "get message filters names",
-            useStream = false,
-            request = request
-        ) {
+
+    override fun getMessagesFilters(request: MessageFiltersRequest, responseObserver: StreamObserver<ListFilterName>) {
+        handleRequest(responseObserver, "get message filters names", useStream = false, request = request) {
             ListFilterName.newBuilder()
                 .addAllFilterNames(
                     messageFiltersPredicateFactory.getFiltersNames().map {
@@ -359,16 +314,8 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     }
 
 
-    override fun getEventsFilters(
-        request: EventFiltersRequest,
-        responseObserver: StreamObserver<ListFilterName>
-    ) {
-        handleRequest(
-            responseObserver,
-            "get event filters names",
-            useStream = false,
-            request = request
-        ) {
+    override fun getEventsFilters(request: EventFiltersRequest, responseObserver: StreamObserver<ListFilterName>) {
+        handleRequest(responseObserver, "get event filters names", useStream = false, request = request) {
             ListFilterName.newBuilder()
                 .addAllFilterNames(
                     eventFiltersPredicateFactory.getFiltersNames().map {
@@ -378,22 +325,20 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
         }
     }
 
+
     override fun getEventFilterInfo(request: FilterName, responseObserver: StreamObserver<FilterInfo>) {
         handleRequest(responseObserver, "get event filter info", useStream = false, request = request) {
             eventFiltersPredicateFactory.getFilterInfo(request.filterName).convertToProto()
         }
     }
 
+
     override fun getMessageFilterInfo(request: FilterName, responseObserver: StreamObserver<FilterInfo>) {
-        handleRequest(
-            responseObserver,
-            "get message filter info",
-            useStream = false,
-            request = request
-        ) {
+        handleRequest(responseObserver, "get message filter info", useStream = false, request = request) {
             messageFiltersPredicateFactory.getFilterInfo(request.filterName).convertToProto()
         }
     }
+
 
     override fun matchEvent(request: MatchRequest, responseObserver: StreamObserver<IsMatched>) {
         handleRequest(responseObserver, "match event", useStream = false, request = request) {

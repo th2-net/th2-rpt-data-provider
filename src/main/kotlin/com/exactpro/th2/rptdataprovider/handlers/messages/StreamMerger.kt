@@ -19,7 +19,9 @@ package com.exactpro.th2.rptdataprovider.handlers.messages
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineKeepAlive
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepObject
+import com.exactpro.th2.rptdataprovider.entities.internal.StreamEndObject
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
@@ -27,17 +29,19 @@ import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.takeWhile
 import java.time.Instant
+import kotlin.coroutines.coroutineContext
 
 
 class StreamMerger(
-    private val context: Context,
-    private val searchRequest: SseMessageSearchRequest,
-    private val externalScope: CoroutineScope,
+    context: Context,
+    searchRequest: SseMessageSearchRequest,
+    externalScope: CoroutineScope,
     pipelineStreams: List<PipelineComponent>
-) {
+) : PipelineComponent(context, searchRequest, externalScope) {
 
     private class StreamHolder(
         val messageStream: PipelineComponent
@@ -68,11 +72,6 @@ class StreamMerger(
     }
 
 
-    private fun keepSearch(): Boolean {
-        return !allStreamIsEmpty || searchRequest.keepOpen && searchRequest.searchDirection == TimeRelation.AFTER
-    }
-
-
     private fun timestampInRange(pipelineStepObject: PipelineStepObject): Boolean {
         return pipelineStepObject.lastScannedTime.let { timestamp ->
             if (searchRequest.searchDirection == TimeRelation.AFTER) {
@@ -84,22 +83,62 @@ class StreamMerger(
     }
 
 
-    @FlowPreview
-    @ExperimentalCoroutinesApi
-    suspend fun getMessageStream(): Flow<PipelineStepObject> {
-        return flow {
+    private fun keepSearch(pipelineStepObject: PipelineStepObject): Boolean {
+        val isKeepOpen = searchRequest.keepOpen && searchRequest.searchDirection == TimeRelation.AFTER
+        return (!allStreamIsEmpty || isKeepOpen) && timestampInRange(pipelineStepObject)
+    }
+
+
+    private fun getLastScannedObject(): PipelineStepObject? {
+        return if (searchRequest.searchDirection == TimeRelation.AFTER) {
+            messageStreams
+                .maxBy { it.previousElement?.lastScannedTime ?: Instant.MIN }
+                ?.previousElement
+        } else {
+            messageStreams
+                .minBy { it.previousElement?.lastScannedTime ?: Instant.MAX }
+                ?.previousElement
+        }
+    }
+
+
+    private fun getScannedObjectCount(): Long {
+        return messageStreams
+            .map { it.messageStream.processedMessageCount }
+            .reduceRight { acc, value -> acc + value }
+    }
+
+
+    private suspend fun keepAliveGenerator() {
+        while (coroutineContext.isActive) {
+            val scannedObjectCount = getScannedObjectCount()
+            val lastScannedObject = getLastScannedObject()
+
+            if (lastScannedObject != null) {
+                sendToChannel(PipelineKeepAlive(lastScannedObject, scannedObjectCount))
+            } else {
+                sendToChannel(PipelineKeepAlive(false, null, Instant.ofEpochMilli(0), scannedObjectCount))
+            }
+            delay(context.keepAliveTimeout)
+        }
+    }
+
+
+    override suspend fun processMessage() {
+        coroutineScope {
             messageStreamsInit()
+            externalScope.launch { keepAliveGenerator() }
             do {
 
                 val nextMessage = getNextMessage()
 
                 if (nextMessage !is EmptyPipelineObject) {
-                    emit(nextMessage)
+                    sendToChannel(nextMessage)
                 }
 
-            } while (keepSearch())
-        }.takeWhile {
-            timestampInRange(it)
+            } while (keepSearch(nextMessage))
+
+            sendToChannel(StreamEndObject(false, null, Instant.ofEpochMilli(0)))
         }
     }
 
@@ -143,27 +182,13 @@ class StreamMerger(
     }
 
 
-    fun getLastScannedObject(): PipelineStepObject? {
-        return if (searchRequest.searchDirection == TimeRelation.AFTER) {
-            messageStreams
-                .maxBy { it.previousElement?.lastScannedTime ?: Instant.MIN }
-                ?.previousElement
-        } else {
-            messageStreams
-                .minBy { it.previousElement?.lastScannedTime ?: Instant.MAX }
-                ?.previousElement
+    fun getStreamsInfo(): List<StreamInfo> {
+        return messageStreams.map {
+            StreamInfo(
+                it.messageStream.streamName!!,
+                it.previousElement?.lastProcessedId
+            )
         }
     }
 
-
-    fun getStreamsInfo(): List<StreamInfo> {
-        return messageStreams.map { StreamInfo(it.messageStream.streamName, it.previousElement?.lastProcessedId) }
-    }
-
-
-    fun getScannedObjectCount(): Long {
-        return messageStreams
-            .map { it.messageStream.processedMessageCount }
-            .reduceRight { acc, value -> acc + value }
-    }
 }

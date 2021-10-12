@@ -33,6 +33,7 @@ import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyBin
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageTypeFilter
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineKeepAlive
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.handlers.SearchEventsHandler
 import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
@@ -55,8 +56,6 @@ class Context(
     val timeout: Long = configuration.responseTimeout.value.toLong(),
     val cacheTimeout: Long = configuration.serverCacheTimeout.value.toLong(),
 
-    val sseEventSearchStep: Long = configuration.sseEventSearchStep.value.toLong(),
-
     val jacksonMapper: ObjectMapper = jacksonObjectMapper()
         .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
         .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES),
@@ -78,27 +77,18 @@ class Context(
     ),
 
     val eventProducer: EventProducer = EventProducer(cradleService, jacksonMapper),
+
     val eventCache: EventCache = EventCache(cacheTimeout, configuration.eventCacheSize.value.toLong(), eventProducer),
-    val searchEventsHandler: SearchEventsHandler = SearchEventsHandler(
-        cradleService,
-        eventProducer,
-        configuration.dbRetryDelay.value.toLong(),
-        configuration.sseSearchDelay.value.toLong(),
-        configuration.eventSearchChunkSize.value.toInt()
-    ),
 
     val codecCache: CodecCache = CodecCache(configuration),
-//    val codecBatchesCache: CodecCacheBatches = CodecCacheBatches(configuration),
 
     val messageProducer: MessageProducer = MessageProducer(
         cradleService,
         rabbitMqService,
         codecCache
-//        codecBatchesCache
     ),
 
     val messageCache: MessageCache = MessageCache(configuration, messageProducer),
-
 
     val eventFiltersPredicateFactory: PredicateFactory<BaseEventEntity> = PredicateFactory(
         mapOf(
@@ -122,6 +112,8 @@ class Context(
 
     private val enableCaching: Boolean = configuration.enableCaching.value.toBoolean(),
 
+    val keepAliveTimeout: Long = configuration.keepAliveTimeout.value.toLong(),
+
     val cacheControlNotModified: CacheControl = configuration.notModifiedObjectsLifetime.value.toInt().let {
         cacheControlConfig(it, enableCaching)
     },
@@ -132,6 +124,7 @@ class Context(
 ) {
 
     val searchMessagesHandler: SearchMessagesHandler = SearchMessagesHandler(this)
+    val searchEventsHandler: SearchEventsHandler = SearchEventsHandler(this)
 
     companion object {
         private fun cacheControlConfig(timeout: Int, enableCaching: Boolean): CacheControl {

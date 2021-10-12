@@ -34,7 +34,7 @@ class MessageContinuousStream(
     private val initializer: StreamInitializer,
     private val startTimestamp: Instant,
     externalScope: CoroutineScope
-) : PipelineComponent(initializer.context, initializer.request, initializer.stream, externalScope) {
+) : PipelineComponent(initializer.context, initializer.request, externalScope, initializer.stream) {
 
 
     private val sseSearchDelay = context.configuration.sseSearchDelay.value.toLong()
@@ -114,8 +114,10 @@ class MessageContinuousStream(
                 lastElement = it.first
                 lastTimestamp = it.second
             }
-            isStreamEmpty = messages.size < perStreamLimit
+
             firstPull = false
+            isStreamEmpty = messages.size < perStreamLimit
+            perStreamLimit = min(perStreamLimit * 2, maxMessagesLimit)
         }
     }
 

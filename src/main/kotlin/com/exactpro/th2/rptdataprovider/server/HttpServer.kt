@@ -54,8 +54,8 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
-private typealias Streaming =
-        suspend (StreamWriter, suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit) -> Unit
+private typealias Streaming = suspend (StreamWriter) -> Unit
+
 
 class HttpServer(private val context: Context) {
 
@@ -131,17 +131,6 @@ class HttpServer(private val context: Context) {
         }
     }
 
-    private suspend fun keepAlive(
-        writer: StreamWriter,
-        lastScannedObjectInfo: LastScannedObjectInfo,
-        counter: AtomicLong
-    ) {
-        while (coroutineContext.isActive) {
-            lastScannedObjectInfo.updateSelf()
-            writer.write(lastScannedObjectInfo, counter)
-            delay(keepAliveTimeout)
-        }
-    }
 
     @InternalAPI
     private suspend fun sendErrorCode(call: ApplicationCall, e: Exception, code: HttpStatusCode) {
@@ -232,7 +221,7 @@ class HttpServer(private val context: Context) {
                 call.response.headers.append(HttpHeaders.CacheControl, "no-cache, no-store")
                 call.respondTextWriter(contentType = ContentType.Text.EventStream) {
                     try {
-                        calledFun.invoke(SseWriter(this, jacksonMapper), ::keepAlive)
+                        calledFun.invoke(SseWriter(this, jacksonMapper))
                     } catch (e: Exception) {
                         eventWrite(SseEvent.build(jacksonMapper, e))
                         throw e
@@ -304,8 +293,6 @@ class HttpServer(private val context: Context) {
         val eventFiltersPredicateFactory = this.context.eventFiltersPredicateFactory
         val messageFiltersPredicateFactory = this.context.messageFiltersPredicateFactory
 
-        val sseEventSearchStep = this.context.sseEventSearchStep
-
         val getEventsLimit = this.context.configuration.eventSearchChunkSize.value.toInt()
 
         embeddedServer(Netty, configuration.port.value.toInt()) {
@@ -368,14 +355,11 @@ class HttpServer(private val context: Context) {
                 get("search/sse/messages") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "search messages sse", null, false, true, queryParametersMap) {
-                        suspend fun(
-                            w: StreamWriter,
-                            keepAlive: suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit
-                        ) {
+                        suspend fun(streamWriter: StreamWriter) {
                             val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
                             val request = SseMessageSearchRequest(queryParametersMap, filterPredicate)
                             request.checkRequest()
-                            searchMessagesHandler.searchMessagesSse(request, jacksonMapper, keepAlive, w)
+                            searchMessagesHandler.searchMessagesSse(request, streamWriter)
                         }
                     }
                 }
@@ -383,21 +367,12 @@ class HttpServer(private val context: Context) {
                 get("search/sse/events") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "search events sse", null, false, true, queryParametersMap) {
-                        suspend fun(
-                            w: StreamWriter,
-                            keepAlive: suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit
-                        ) {
-                            val filterPredicate =
-                                eventFiltersPredicateFactory.build(queryParametersMap)
+                        suspend fun(streamWriter: StreamWriter) {
+                            val filterPredicate = eventFiltersPredicateFactory.build(queryParametersMap)
                             val request = SseEventSearchRequest(queryParametersMap, filterPredicate)
                             request.checkRequest()
-                            searchEventsHandler.searchEventsSse(
-                                request,
-                                jacksonMapper,
-                                sseEventSearchStep,
-                                keepAlive,
-                                w
-                            )
+
+                            searchEventsHandler.searchEventsSse(request, streamWriter)
                         }
                     }
                 }

@@ -17,18 +17,12 @@
 package com.exactpro.th2.rptdataprovider.handlers
 
 import com.exactpro.th2.rptdataprovider.Context
-import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
-import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
-import com.exactpro.th2.rptdataprovider.entities.internal.PipelineFilteredMessage
-import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepObject
+import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedMessageInfo
-import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.messages.ChainBuilder
 import com.exactpro.th2.rptdataprovider.handlers.messages.StreamMerger
-import com.fasterxml.jackson.databind.ObjectMapper
-import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import mu.KotlinLogging
@@ -37,46 +31,29 @@ import kotlin.coroutines.coroutineContext
 
 class SearchMessagesHandler(private val context: Context) {
 
-    private val messageSearchPipelineBuffer = context.configuration.messageSearchPipelineBuffer.value.toInt()
-
     companion object {
         private val logger = KotlinLogging.logger { }
-
-        private val processedMessageCount = Counter.build(
-            "processed_message_count", "Count of processed Message"
-        ).register()
     }
 
     @FlowPreview
     @ExperimentalCoroutinesApi
-    suspend fun searchMessagesSse(
-        request: SseMessageSearchRequest,
-        jacksonMapper: ObjectMapper,
-        keepAlive: suspend (StreamWriter, lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong) -> Unit,
-        writer: StreamWriter
-    ) {
+    suspend fun searchMessagesSse(request: SseMessageSearchRequest, writer: StreamWriter) {
         withContext(coroutineContext) {
 
             val lastMessageIdCounter = AtomicLong(0)
-            val lastScannedObject = LastScannedMessageInfo()
-
             var streamMerger: StreamMerger? = null
 
             flow {
                 streamMerger = ChainBuilder(context, request, this@withContext).buildChain()
-                lastScannedObject.setProducer(streamMerger)
 
-                val messageStream = streamMerger?.getMessageStream()
-                messageStream?.collect { emit(it) }
+                do {
+                    val message = streamMerger?.pollMessage()
+                    message?.let { emit(it) }
+                } while (true)
             }
-                .onEach { processedMessageCount.inc() }
+
                 .let { messageFlow ->
                     request.resultCountLimit?.let { messageFlow.take(it) } ?: messageFlow
-                }
-                .onStart {
-                    launch {
-                        keepAlive.invoke(writer, lastScannedObject, lastMessageIdCounter)
-                    }
                 }
                 .onCompletion {
                     streamMerger?.let { merger -> writer.write(merger.getStreamsInfo()) }
@@ -85,7 +62,12 @@ class SearchMessagesHandler(private val context: Context) {
                 }
                 .collect {
                     coroutineContext.ensureActive()
-                    writer.write((it as PipelineFilteredMessage).payload, lastMessageIdCounter)
+
+                    if (it is PipelineFilteredMessage) {
+                        writer.write(it.payload, lastMessageIdCounter)
+                    } else if (it is PipelineKeepAlive) {
+                        writer.write(LastScannedMessageInfo(it), lastMessageIdCounter)
+                    }
                 }
         }
     }
