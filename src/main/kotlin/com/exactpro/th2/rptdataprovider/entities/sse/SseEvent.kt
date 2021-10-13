@@ -16,25 +16,19 @@
 
 package com.exactpro.th2.rptdataprovider.entities.sse
 
-import com.exactpro.cradle.Direction
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.message.toTimestamp
 import com.exactpro.th2.rptdataprovider.asStringSuspend
 import com.exactpro.th2.rptdataprovider.convertToProto
-import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineKeepAlive
-import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepObject
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.responses.*
-import com.exactpro.th2.rptdataprovider.handlers.messages.StreamMerger
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.databind.ObjectMapper
-import io.ktor.util.InternalAPI
-import io.ktor.util.rootCause
+import io.ktor.util.*
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicLong
-import kotlin.concurrent.timer
 
 
 enum class EventType {

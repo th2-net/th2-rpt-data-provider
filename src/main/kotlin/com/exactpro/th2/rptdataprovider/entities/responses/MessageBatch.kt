@@ -19,9 +19,6 @@ package com.exactpro.th2.rptdataprovider.entities.responses
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageBatch
-import com.exactpro.cradle.messages.StoredMessageBatchId
-import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.rptdataprovider.entities.internal.Message
 
 data class MessageBatchWrapper(
     val messageBatch: StoredMessageBatch,

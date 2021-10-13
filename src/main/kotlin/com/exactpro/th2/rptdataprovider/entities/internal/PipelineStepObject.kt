@@ -80,7 +80,7 @@ data class PipelineParsedMessage(
     val payload: Message
 ) : PipelineStepObject {
     constructor(pipelineStepObject: PipelineStepObject, payload: Message) : this(
-        pipelineStepObject.streamEmpty, pipelineStepObject.lastProcessedId, pipelineStepObject.lastScannedTime, payload
+        pipelineStepObject.streamEmpty, payload.id, payload.timestamp, payload
     )
 }
 

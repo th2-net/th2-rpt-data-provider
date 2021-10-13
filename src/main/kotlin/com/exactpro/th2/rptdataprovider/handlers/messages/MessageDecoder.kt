@@ -17,21 +17,19 @@
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.th2.rptdataprovider.Context
-import com.exactpro.th2.rptdataprovider.entities.internal.*
+import com.exactpro.th2.rptdataprovider.entities.internal.Message
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineParsedMessage
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatchData
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.producers.BuildersBatch
-import com.exactpro.th2.rptdataprovider.producers.MessageProducer
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.MessageRequest
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.InternalCoroutinesApi
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlin.system.measureTimeMillis
-import kotlin.time.measureTime
 
 class MessageDecoder(
     context: Context,
@@ -40,6 +38,8 @@ class MessageDecoder(
     externalScope: CoroutineScope,
     previousComponent: PipelineComponent?
 ) : PipelineComponent(context, searchRequest, externalScope, streamName, previousComponent) {
+
+    private val batchMergeSize = context.configuration.rabbitMergedBatchSize.value.toLong()
 
     constructor(pipelineComponent: MessageContinuousStream) : this(
         pipelineComponent.context,
@@ -82,41 +82,75 @@ class MessageDecoder(
         }
     }
 
+//
+//    private suspend fun sendParsedMessages(
+//        builders: List<Message.Builder>,
+//        messageRequests: List<MessageRequest?>,
+//        rawBatch: PipelineRawBatchData
+//    ) {
+//        val inRangeBuilders = sublistOrEmpty(builders, rawBatch.payload.firstIndexInRange)
+//        val inRangeMessageRequests = sublistOrEmpty(messageRequests, rawBatch.payload.firstIndexInRange)
+//
+//        setAttachedEvents(inRangeBuilders)
+//
+//        inRangeBuilders.forEachIndexed { i, builder ->
+//            val messageRequest = inRangeMessageRequests[i]
+//            builder.parsedMessage(messageRequest?.get())
+//            val message = builder.build()
+//            sendToChannel(PipelineParsedMessage(rawBatch, message))
+//        }
+//    }
 
     private suspend fun sendParsedMessages(
-        builders: List<Message.Builder>,
-        messageRequests: List<MessageRequest?>,
-        rawBatch: PipelineRawBatchData
+        buffer: MutableList<Pair<BuildersBatch, PipelineRawBatchData>>,
+        messageRequests: List<List<MessageRequest?>>
     ) {
-        val inRangeBuilders = sublistOrEmpty(builders, rawBatch.payload.firstIndexInRange)
-        val inRangeMessageRequests = sublistOrEmpty(messageRequests, rawBatch.payload.firstIndexInRange)
+        buffer.mapIndexed { index, (buildersBatch, rawBatch) ->
 
-        setAttachedEvents(inRangeBuilders)
+            val inRangeBuilders = sublistOrEmpty(buildersBatch.builders, rawBatch.payload.firstIndexInRange)
+            val inRangeMessageRequests = sublistOrEmpty(messageRequests[index], rawBatch.payload.firstIndexInRange)
 
-        inRangeBuilders.forEachIndexed { i, builder ->
-            val messageRequest = inRangeMessageRequests[i]
-            builder.parsedMessage(messageRequest?.get())
-            val message = builder.build()
-            sendToChannel(PipelineParsedMessage(rawBatch, message))
+            setAttachedEvents(inRangeBuilders)
+
+            inRangeBuilders.forEachIndexed { i, builder ->
+                val messageRequest = inRangeMessageRequests[i]
+                builder.parsedMessage(messageRequest?.get())
+                val message = builder.build()
+                sendToChannel(PipelineParsedMessage(rawBatch, message))
+            }
         }
     }
 
 
+//
+//    private suspend fun getMessageRequests(
+//        rawBatch: PipelineRawBatchData,
+//        buildersBatch: BuildersBatch,
+//        coroutineScope: CoroutineScope
+//    ): List<MessageRequest?> {
+//        return context.messageProducer.parseMessages(
+//            rawBatch.payload,
+//            buildersBatch.rawMessages,
+//            coroutineScope
+//        )
+//    }
+
+
+    @InternalCoroutinesApi
     private suspend fun getMessageRequests(
-        rawBatch: PipelineRawBatchData,
-        buildersBatch: BuildersBatch,
+        rawBatch: List<BuildersBatch>,
         coroutineScope: CoroutineScope
-    ): List<MessageRequest?> {
-        return context.messageProducer.parseMessages(
-            rawBatch.payload,
-            buildersBatch.rawMessages,
-            coroutineScope
-        )
+    ): List<List<MessageRequest?>> {
+        return context.messageProducer.parseMessages(rawBatch, coroutineScope)
     }
 
 
+    @InternalCoroutinesApi
     override suspend fun processMessage() {
         coroutineScope {
+            val buffer = mutableListOf<Pair<BuildersBatch, PipelineRawBatchData>>()
+            var messagesInBuffer = 0L
+
             while (isActive) {
                 val rawBatch = previousComponent!!.pollMessage()
 
@@ -127,8 +161,15 @@ class MessageDecoder(
                     if (buildersBatch.isImages) {
                         sendImages(buildersBatch.builders, rawBatch)
                     } else {
-                        val messageRequests = getMessageRequests(rawBatch, buildersBatch, this)
-                        sendParsedMessages(buildersBatch.builders, messageRequests, rawBatch)
+                        if (messagesInBuffer < batchMergeSize) {
+                            buffer.add(buildersBatch to rawBatch)
+                            messagesInBuffer += rawBatch.payload.messageBatch.messageCount
+                        } else {
+                            val messagesRequest = getMessageRequests(buffer.map { it.first }, this)
+                            sendParsedMessages(buffer, messagesRequest)
+                            messagesInBuffer = 0L
+                            buffer.clear()
+                        }
                     }
                 } else {
                     sendToChannel(rawBatch)

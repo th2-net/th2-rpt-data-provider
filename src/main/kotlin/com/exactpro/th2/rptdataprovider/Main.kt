@@ -25,8 +25,8 @@ import com.exactpro.th2.rptdataprovider.server.HttpServer
 import com.exactpro.th2.rptdataprovider.server.ServerType
 import com.exactpro.th2.rptdataprovider.server.ServerType.GRPC
 import com.exactpro.th2.rptdataprovider.server.ServerType.HTTP
-import io.ktor.server.engine.EngineAPI
-import io.ktor.util.InternalAPI
+import io.ktor.server.engine.*
+import io.ktor.util.*
 import kotlinx.atomicfu.locks.ReentrantLock
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview

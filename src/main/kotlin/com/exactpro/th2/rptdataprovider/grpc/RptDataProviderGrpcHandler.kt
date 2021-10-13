@@ -30,7 +30,6 @@ import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.sse.GrpcWriter
-import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.grpcDirectionToCradle
 import com.exactpro.th2.rptdataprovider.logMetrics
@@ -39,13 +38,12 @@ import com.google.protobuf.MessageOrBuilder
 import com.google.protobuf.TextFormat
 import io.grpc.Status
 import io.grpc.stub.StreamObserver
-import io.ktor.server.engine.EngineAPI
-import io.ktor.util.InternalAPI
+import io.ktor.server.engine.*
+import io.ktor.util.*
 import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import org.apache.commons.lang3.exception.ExceptionUtils
-import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -242,6 +240,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
         }
     }
 
+    @InternalCoroutinesApi
     override fun getMessage(request: MessageID, responseObserver: StreamObserver<MessageData>) {
         handleRequest(responseObserver, "get message", useStream = false, request = request) {
             val messageIdWithoutSubsequence = request.toBuilder().clearSubsequence().build()
@@ -349,6 +348,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
         }
     }
 
+    @InternalCoroutinesApi
     override fun matchMessage(request: MatchRequest, responseObserver: StreamObserver<IsMatched>) {
         handleRequest(responseObserver, "match message", useStream = false, request = request) {
             val filterPredicate = messageFiltersPredicateFactory.build(request.filtersList)

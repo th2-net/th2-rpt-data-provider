@@ -27,30 +27,18 @@ import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchReques
 import com.exactpro.th2.rptdataprovider.entities.sse.*
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import io.ktor.application.*
-import io.ktor.features.Compression
-import io.ktor.http.CacheControl
-import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpStatusCode
-import io.ktor.request.uri
-import io.ktor.response.cacheControl
-import io.ktor.response.respondText
-import io.ktor.response.respondTextWriter
-import io.ktor.routing.get
-import io.ktor.routing.routing
-import io.ktor.server.engine.EngineAPI
-import io.ktor.server.engine.embeddedServer
-import io.ktor.server.netty.Netty
-import io.ktor.server.netty.NettyApplicationCall
-import io.ktor.util.AttributeKey
-import io.ktor.util.InternalAPI
-import io.ktor.util.rootCause
-import io.ktor.util.toMap
+import io.ktor.features.*
+import io.ktor.http.*
+import io.ktor.request.*
+import io.ktor.response.*
+import io.ktor.routing.*
+import io.ktor.server.engine.*
+import io.ktor.server.netty.*
+import io.ktor.util.*
 import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.nio.channels.ClosedChannelException
-import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -273,6 +261,7 @@ class HttpServer(private val context: Context) {
         }
     }
 
+    @InternalCoroutinesApi
     @FlowPreview
     @ExperimentalCoroutinesApi
     @EngineAPI

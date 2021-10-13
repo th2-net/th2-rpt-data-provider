@@ -47,7 +47,7 @@ class CustomConfigurationClass {
     val sseSearchDelay: Long = 5
     val rabbitBatchMergeFrequency: Long = 200
     val rabbitBatchMergeBuffer: Long = 500
-    val rabbitMergedBatchSize: Long = 16
+    val rabbitMergedBatchSize: Long = 50
     val decodeMessageConsumerCount: Int = 64
 
     val eventSearchChunkSize: Int = 64

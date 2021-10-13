@@ -16,11 +16,11 @@
 
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
-import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.cradle.messages.StoredMessageBatchId
 import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
+import com.exactpro.th2.rptdataprovider.producers.BuildersBatch
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import java.util.*
@@ -92,8 +92,8 @@ data class BatchRequest(
     val requests: List<MessageRequest?>,
     val context: CoroutineScope
 ) {
-    constructor(batch: StoredMessageBatch, requests: List<MessageRequest?>, context: CoroutineScope) : this(
-        batchId = batch.id,
+    constructor(batch: BuildersBatch, requests: List<MessageRequest?>, context: CoroutineScope) : this(
+        batchId = batch.batchId,
         messagesCount = batch.messageCount,
         requests = requests,
         context = context

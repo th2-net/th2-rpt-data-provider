@@ -34,9 +34,9 @@ import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.logTime
-import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.future.await
+import kotlinx.coroutines.withContext
 import mu.KotlinLogging
 import java.time.Instant
 import java.util.concurrent.Executors

@@ -33,7 +33,6 @@ import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyBin
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageTypeFilter
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
-import com.exactpro.th2.rptdataprovider.entities.internal.PipelineKeepAlive
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.handlers.SearchEventsHandler
 import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
@@ -45,7 +44,7 @@ import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import io.ktor.http.CacheControl
+import io.ktor.http.*
 
 @Suppress("MemberVisibilityCanBePrivate")
 class Context(

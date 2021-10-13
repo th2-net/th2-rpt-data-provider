@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider.entities.responses
 
-import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.Direction
 import com.fasterxml.jackson.annotation.JsonRawValue

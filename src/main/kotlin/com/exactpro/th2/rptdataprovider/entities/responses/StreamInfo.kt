@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider.entities.responses
 
-import com.exactpro.cradle.Direction
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.dataprovider.grpc.Stream
 import com.exactpro.th2.rptdataprovider.convertToProto

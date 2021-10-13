@@ -19,7 +19,6 @@ package com.exactpro.th2.rptdataprovider.handlers.messages
 import com.exactpro.cradle.Order
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.TimeRelation.AFTER
-import com.exactpro.cradle.TimeRelation.BEFORE
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.cradle.messages.StoredMessageFilterBuilder
@@ -28,7 +27,6 @@ import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
 import mu.KotlinLogging
-import java.sql.Timestamp
 import java.time.Instant
 
 class MessageLoader(
