@@ -123,8 +123,10 @@ class StreamMerger(
 
     override suspend fun processMessage() {
         coroutineScope {
-            messageStreamsInit()
+
             externalScope.launch { keepAliveGenerator() }
+
+            messageStreamsInit()
             do {
 
                 val nextMessage = getNextMessage()

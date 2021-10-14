@@ -435,9 +435,9 @@ class HttpServer(private val applicationContext: Context) {
                                     order(Order.DIRECT)
                                 }.build()
                             )
-                            for (m in iterator) {
 
-                                val message = MessageBatchWrapper(m).let {
+                            for (batch in iterator) {
+                                val message = MessageBatchWrapper(batch).let {
                                     applicationContext.messageProducer.messageBatchToBuilders(it)
                                 }
                                 for (res in message.builders) {
@@ -454,13 +454,13 @@ class HttpServer(private val applicationContext: Context) {
                     handleRequest(call, context, "search events sse", null, false, true) {
                         suspend fun(streamWriter: StreamWriter) {
                             val startId = StoredMessageId.fromString(call.parameters.getOrFail("start"))
-                            for (limit in 250..100000 step 250) {
+                            for (limit in 1..100) {
                                 val iterator = applicationContext.cradleService.getMessagesBatchesSuspend(
                                     StoredMessageFilterBuilder().apply {
                                         streamName().isEqualTo(startId.streamName)
                                         direction().isEqualTo(startId.direction)
                                         index().isGreaterThanOrEqualTo(startId.index)
-                                        limit(limit)
+                                        limit(5000)
                                     }.build()
                                 )
                                 for (m in iterator) {
