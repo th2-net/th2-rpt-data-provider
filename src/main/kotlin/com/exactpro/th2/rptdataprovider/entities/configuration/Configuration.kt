@@ -44,7 +44,7 @@ class CustomConfigurationClass {
 
     val cradleDispatcherPoolSize: Long = 1
 
-    val sseSearchDelay: Long = 5
+    val sseSearchDelay: Long = 6000
     val rabbitBatchMergeFrequency: Long = 200
     val rabbitBatchMergeBuffer: Long = 500
     val rabbitMergedBatchSize: Long = 50
@@ -138,7 +138,7 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
         Variable("cradleDispatcherPoolSize", customConfiguration.cradleDispatcherPoolSize.toString(), "2")
 
 
-    val sseSearchDelay: Variable = Variable("sseSearchDelay", customConfiguration.sseSearchDelay.toString(), "5")
+    val sseSearchDelay: Variable = Variable("sseSearchDelay", customConfiguration.sseSearchDelay.toString(), "6000")
 
     val rabbitBatchMergeFrequency: Variable =
         Variable("rabbitBatchMergeFrequency", customConfiguration.rabbitBatchMergeFrequency.toString(), "200")

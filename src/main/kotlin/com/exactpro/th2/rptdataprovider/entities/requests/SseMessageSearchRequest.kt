@@ -135,9 +135,16 @@ data class SseMessageSearchRequest(
             throw InvalidRequestException("One of the 'startTimestamp' or 'resumeFromId' or 'messageId' must not be null")
     }
 
+    private fun checkStreamList() {
+        if (stream.isEmpty()) {
+            throw InvalidRequestException("Streams list can not be empty")
+        }
+    }
+
     fun checkRequest() {
         checkStartPoint()
         checkEndTimestamp()
+        checkStreamList()
     }
 }
 
