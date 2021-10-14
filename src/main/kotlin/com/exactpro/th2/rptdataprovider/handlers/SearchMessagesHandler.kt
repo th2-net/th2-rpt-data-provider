@@ -35,6 +35,7 @@ class SearchMessagesHandler(private val context: Context) {
         private val logger = KotlinLogging.logger { }
     }
 
+    @InternalCoroutinesApi
     @FlowPreview
     @ExperimentalCoroutinesApi
     suspend fun searchMessagesSse(request: SseMessageSearchRequest, writer: StreamWriter) {
@@ -51,7 +52,7 @@ class SearchMessagesHandler(private val context: Context) {
                     message?.let { emit(it) }
                 } while (true)
             }
-
+                .takeWhile { it !is StreamEndObject }
                 .let { messageFlow ->
                     request.resultCountLimit?.let { messageFlow.take(it) } ?: messageFlow
                 }

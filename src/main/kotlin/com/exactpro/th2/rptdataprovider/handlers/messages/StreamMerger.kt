@@ -54,15 +54,28 @@ class StreamMerger(
         }
 
         suspend fun pop(): PipelineStepObject {
-            return messageStream.pollMessage().also {
-                previousElement = currentElement
-                currentElement = it
+            return messageStream.pollMessage().let {
+                if (previousElement == null && currentElement == null) {
+                    previousElement = it
+                    currentElement = it
+                } else {
+                    previousElement = currentElement
+                    currentElement = it
+                }
+                previousElement!!
             }
         }
     }
 
     private val messageStreams = pipelineStreams.map { StreamHolder(it) }
     private var allStreamIsEmpty: Boolean = false
+
+
+    init {
+        externalScope.launch {
+            processMessage()
+        }
+    }
 
     private suspend fun messageStreamsInit() {
         messageStreams.forEach { it.pop() }
@@ -106,8 +119,8 @@ class StreamMerger(
     }
 
 
-    private suspend fun keepAliveGenerator() {
-        while (coroutineContext.isActive) {
+    private suspend fun keepAliveGenerator(coroutineScope: CoroutineScope) {
+        while (coroutineScope.isActive) {
             val scannedObjectCount = getScannedObjectCount()
             val lastScannedObject = getLastScannedObject()
 
@@ -124,7 +137,7 @@ class StreamMerger(
     override suspend fun processMessage() {
         coroutineScope {
 
-            externalScope.launch { keepAliveGenerator() }
+            launch { keepAliveGenerator(this@coroutineScope) }
 
             messageStreamsInit()
             do {
@@ -146,7 +159,7 @@ class StreamMerger(
         return coroutineScope {
             var resultElement: StreamHolder = messageStreams.first()
             for (messageStream in messageStreams) {
-                allStreamIsEmpty = messageStream.top().streamEmpty
+                allStreamIsEmpty = allStreamIsEmpty && messageStream.top().streamEmpty
                 if (comparator(messageStream.top(), resultElement.top())) {
                     resultElement = messageStream
                 }
@@ -189,5 +202,4 @@ class StreamMerger(
             )
         }
     }
-
 }

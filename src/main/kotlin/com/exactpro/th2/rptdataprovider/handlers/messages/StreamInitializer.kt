@@ -114,11 +114,12 @@ class StreamInitializer(
     }
 
 
-    private fun getTimeSearchLimit(lastTimestamp: Instant?): ((Instant) -> Boolean) {
+    private suspend fun getTimeSearchLimit(): ((Instant) -> Boolean) {
         return if (request.searchDirection == TimeRelation.AFTER) {
             searchInFutureLimit(request.endTimestamp)
         } else {
-            searchInPastLimit(request.endTimestamp, lastTimestamp)
+            val firstMessageInStream = getFirstMessageInStream(stream)
+            searchInPastLimit(request.endTimestamp, firstMessageInStream?.timestamp)
         }
     }
 
@@ -129,8 +130,7 @@ class StreamInitializer(
         var messageId: StoredMessageId? = null
         var daysChecking = request.lookupLimitDays
 
-        val firstMessageInStream = getFirstMessageInStream(stream)
-        val timeLimit = getTimeSearchLimit(firstMessageInStream?.timestamp)
+        val timeLimit = getTimeSearchLimit()
 
         while (messageId == null && timeLimit(timestamp) && daysChecking?.let { it >= 0 } != false) {
             messageId =

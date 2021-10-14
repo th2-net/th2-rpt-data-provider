@@ -47,7 +47,7 @@ class MessageContinuousStream(
     private val sseSearchDelay = context.configuration.sseSearchDelay.value.toLong()
     private val sendEmptyDelay = context.configuration.sendEmptyDelay.value.toLong()
     private val maxMessagesLimit = context.configuration.maxMessagesLimit.value.toInt()
-    private var perStreamLimit = min(maxMessagesLimit, searchRequest.resultCountLimit ?: 25)
+    private var perStreamLimit = maxMessagesLimit// min(maxMessagesLimit, searchRequest.resultCountLimit ?: 25)
 
     private var firstPull: Boolean = true
     private var isStreamEmpty: Boolean = false
@@ -57,8 +57,16 @@ class MessageContinuousStream(
     private var lastTimestamp: Instant = startTimestamp
 
 
+    init {
+        externalScope.launch {
+            processMessage()
+        }
+    }
+
+
     private suspend fun initialize() {
         if (startMessageId == null) {
+            println(startTimestamp)
             initializer.initStream(startTimestamp)?.let {
                 lastElement = it.id
                 lastTimestamp = it.timestamp
@@ -75,10 +83,12 @@ class MessageContinuousStream(
 
 
     private suspend fun tryToLoadStreamAfter() {
-        if (lastElement == null) {
+        if (lastElement == null || isStreamEmpty) {
             val currentTimestamp = Instant.now()
-            initializer.tryToGetStartId(currentTimestamp.dayStart())?.let {
-                lastElement = it
+            if (lastElement == null) {
+                initializer.tryToGetStartId(currentTimestamp.dayStart())?.let {
+                    lastElement = it
+                }
             }
             lastTimestamp = currentTimestamp
         }
@@ -118,7 +128,8 @@ class MessageContinuousStream(
 
 
     private suspend fun loadMoreMessage(): List<MessageBatchWrapper> {
-        if (lastElement == null || !needLoadMessage || messageLoader == null) {
+        if (lastElement == null || messageLoader == null) {
+            isStreamEmpty = true
             return emptyList()
         }
         return messageLoader!!.pullMoreMessage(lastElement!!, firstPull, perStreamLimit).also { messages ->
@@ -137,7 +148,7 @@ class MessageContinuousStream(
     private suspend fun emptySender(parentScope: CoroutineScope) {
         while (parentScope.isActive) {
             lastElement?.let {
-                sendToChannel(EmptyPipelineObject(isStreamEmpty, lastElement, lastTimestamp))
+                sendToChannel(EmptyPipelineObject(isStreamEmpty, it, lastTimestamp))
                 delay(sendEmptyDelay)
             }
         }
@@ -146,7 +157,6 @@ class MessageContinuousStream(
 
     override suspend fun processMessage() {
         coroutineScope {
-
             launch { emptySender(this) }
 
             initialize()

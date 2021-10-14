@@ -27,11 +27,9 @@ import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.producers.BuildersBatch
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.MessageRequest
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.InternalCoroutinesApi
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.*
 
+@InternalCoroutinesApi
 class MessageDecoder(
     context: Context,
     searchRequest: SseMessageSearchRequest,
@@ -43,6 +41,12 @@ class MessageDecoder(
 
     private val batchMergeSize = context.configuration.rabbitMergedBatchSize.value.toLong()
 
+    init {
+        externalScope.launch {
+            processMessage()
+        }
+    }
+
     constructor(pipelineComponent: MessageContinuousStream, messageFlowCapacity: Int) : this(
         pipelineComponent.context,
         pipelineComponent.searchRequest,
@@ -51,7 +55,6 @@ class MessageDecoder(
         pipelineComponent,
         messageFlowCapacity
     )
-
 
     private suspend fun createMessageBuilders(rawBatch: MessageBatchWrapper): BuildersBatch {
         return context.messageProducer.messageBatchToBuilders(rawBatch)
@@ -125,24 +128,24 @@ class MessageDecoder(
             while (isActive) {
                 val rawBatch = previousComponent!!.pollMessage()
 
-//                if (messagesInBuffer >= batchMergeSize || rawBatch is EmptyPipelineObject) {
-//                    getMessageRequests(buffer.map { it.first }, this).let {
-//                        sendParsedMessages(buffer, it)
-//                        messagesInBuffer = 0L
-//                        buffer.clear()
-//                    }
-//                }
+                if (messagesInBuffer >= batchMergeSize || rawBatch is EmptyPipelineObject) {
+                    getMessageRequests(buffer.map { it.first }, this).let {
+                        sendParsedMessages(buffer, it)
+                        messagesInBuffer = 0L
+                        buffer.clear()
+                    }
+                }
 
                 if (rawBatch is PipelineRawBatchData) {
 
                     val buildersBatch = createMessageBuilders(rawBatch.payload)
 
-//                    if (buildersBatch.isImages) {
+                    if (buildersBatch.isImages) {
                         sendImages(buildersBatch.builders, rawBatch)
-//                    } else {
-//                        buffer.add(buildersBatch to rawBatch)
-//                        messagesInBuffer += rawBatch.payload.messageBatch.messageCount
-//                    }
+                    } else {
+                        buffer.add(buildersBatch to rawBatch)
+                        messagesInBuffer += rawBatch.payload.messageBatch.messageCount
+                    }
                 } else {
                     sendToChannel(rawBatch)
                 }

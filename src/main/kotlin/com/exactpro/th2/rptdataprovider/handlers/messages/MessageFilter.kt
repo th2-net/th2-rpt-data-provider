@@ -23,6 +23,7 @@ import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import kotlinx.coroutines.*
 
+@InternalCoroutinesApi
 class MessageFilter(
     context: Context,
     searchRequest: SseMessageSearchRequest,
@@ -34,6 +35,14 @@ class MessageFilter(
 
     private val sendEmptyDelay: Long = context.configuration.sendEmptyDelay.value.toLong()
     private var lastScannedObject: PipelineStepObject? = null
+
+
+    init {
+        externalScope.launch {
+            processMessage()
+        }
+    }
+
 
     constructor(pipelineComponent: MessageDecoder, messageFlowCapacity: Int) : this(
         pipelineComponent.context,

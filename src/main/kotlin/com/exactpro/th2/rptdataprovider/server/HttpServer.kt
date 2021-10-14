@@ -420,64 +420,6 @@ class HttpServer(private val applicationContext: Context) {
                         filterPredicate.apply(MessageWithMetadata(message))
                     }
                 }
-
-
-                get("sse/messages/{start}") {
-                    handleRequest(call, context, "search events sse", null, false, true) {
-                        suspend fun(streamWriter: StreamWriter) {
-                            val startId = StoredMessageId.fromString(call.parameters.getOrFail("start"))
-
-                            val iterator = applicationContext.cradleService.getMessagesBatchesSuspend(
-                                StoredMessageFilterBuilder().apply {
-                                    streamName().isEqualTo(startId.streamName)
-                                    direction().isEqualTo(startId.direction)
-                                    index().isGreaterThanOrEqualTo(startId.index)
-                                    order(Order.DIRECT)
-                                }.build()
-                            )
-
-                            for (batch in iterator) {
-                                val message = MessageBatchWrapper(batch).let {
-                                    applicationContext.messageProducer.messageBatchToBuilders(it)
-                                }
-                                for (res in message.builders) {
-                                    streamWriter.write(MessageWithMetadata(res.build()), AtomicLong(0))
-                                }
-                            }
-                        }
-                    }
-                }
-
-
-
-                get("sse/messages/batches/{start}") {
-                    handleRequest(call, context, "search events sse", null, false, true) {
-                        suspend fun(streamWriter: StreamWriter) {
-                            val startId = StoredMessageId.fromString(call.parameters.getOrFail("start"))
-                            for (limit in 1..100) {
-                                val iterator = applicationContext.cradleService.getMessagesBatchesSuspend(
-                                    StoredMessageFilterBuilder().apply {
-                                        streamName().isEqualTo(startId.streamName)
-                                        direction().isEqualTo(startId.direction)
-                                        index().isGreaterThanOrEqualTo(startId.index)
-                                        limit(5000)
-                                    }.build()
-                                )
-                                for (m in iterator) {
-
-                                    val message = MessageBatchWrapper(m).let {
-                                        applicationContext.messageProducer.messageBatchToBuilders(it)
-                                    }
-                                    for (res in message.builders) {
-                                        streamWriter.write(MessageWithMetadata(res.build()), AtomicLong(0))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-
             }
         }.start(false)
 

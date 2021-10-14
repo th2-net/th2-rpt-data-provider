@@ -50,7 +50,7 @@ class CustomConfigurationClass {
     val rabbitMergedBatchSize: Long = 50
     val decodeMessageConsumerCount: Int = 64
 
-    val messageContinuousStreamBuffer = 50
+    val messageContinuousStreamBuffer = 5000
     val messageDecoderBuffer = 500
     val messageFilterBuffer = 500
     val messageStreamMergerBuffer = 500

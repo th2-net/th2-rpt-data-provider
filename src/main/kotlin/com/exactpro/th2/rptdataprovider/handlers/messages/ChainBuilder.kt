@@ -22,6 +22,7 @@ import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.InternalCoroutinesApi
 import java.time.Instant
 
 class ChainBuilder(
@@ -47,7 +48,7 @@ class ChainBuilder(
 
     private fun getRequestStreamNames(request: SseMessageSearchRequest): List<StreamName> {
         return request.stream
-            .map { stream ->  StreamName(stream, Direction.FIRST) }
+            .flatMap { stream -> Direction.values().map { StreamName(stream, it) } }
     }
 
 
@@ -62,6 +63,7 @@ class ChainBuilder(
     }
 
 
+    @InternalCoroutinesApi
     suspend fun buildChain(): StreamMerger {
 
         val streamNames = getRequestStreamNames(request)

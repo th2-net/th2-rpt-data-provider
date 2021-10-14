@@ -24,7 +24,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 
-data class StreamName(val name: String, val direction: Direction)
+data class StreamName(val name: String, val direction: Direction) {
+    override fun toString(): String {
+        return "$name:$direction"
+    }
+}
 
 abstract class PipelineComponent(
     val context: Context,
@@ -40,11 +44,6 @@ abstract class PipelineComponent(
     val processedMessageCount
         get() = processedMessagesCounter
 
-    init {
-        externalScope.launch {
-            processMessage()
-        }
-    }
 
     protected abstract suspend fun processMessage()
 
