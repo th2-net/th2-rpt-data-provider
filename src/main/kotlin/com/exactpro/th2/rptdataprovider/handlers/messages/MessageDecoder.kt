@@ -85,24 +85,6 @@ class MessageDecoder(
         }
     }
 
-//
-//    private suspend fun sendParsedMessages(
-//        builders: List<Message.Builder>,
-//        messageRequests: List<MessageRequest?>,
-//        rawBatch: PipelineRawBatchData
-//    ) {
-//        val inRangeBuilders = sublistOrEmpty(builders, rawBatch.payload.firstIndexInRange)
-//        val inRangeMessageRequests = sublistOrEmpty(messageRequests, rawBatch.payload.firstIndexInRange)
-//
-//        setAttachedEvents(inRangeBuilders)
-//
-//        inRangeBuilders.forEachIndexed { i, builder ->
-//            val messageRequest = inRangeMessageRequests[i]
-//            builder.parsedMessage(messageRequest?.get())
-//            val message = builder.build()
-//            sendToChannel(PipelineParsedMessage(rawBatch, message))
-//        }
-//    }
 
     private suspend fun sendParsedMessages(
         buffer: MutableList<Pair<BuildersBatch, PipelineRawBatchData>>,
@@ -123,20 +105,6 @@ class MessageDecoder(
             }
         }
     }
-
-
-//
-//    private suspend fun getMessageRequests(
-//        rawBatch: PipelineRawBatchData,
-//        buildersBatch: BuildersBatch,
-//        coroutineScope: CoroutineScope
-//    ): List<MessageRequest?> {
-//        return context.messageProducer.parseMessages(
-//            rawBatch.payload,
-//            buildersBatch.rawMessages,
-//            coroutineScope
-//        )
-//    }
 
 
     @InternalCoroutinesApi

@@ -50,21 +50,11 @@ class RabbitMqService(
     private val mqDispatcherPoolSize = configuration.cradleDispatcherPoolSize.value.toInt()
     private val mqDispatcher = Executors.newFixedThreadPool(mqDispatcherPoolSize).asCoroutineDispatcher()
 
-    //    private val rabbitBatchMergeFrequency = configuration.rabbitBatchMergeFrequency.value.toLong()
     private val rabbitBatchMergeBuffer = configuration.rabbitBatchMergeBuffer.value.toInt()
     private val rabbitMergedBatchSize = configuration.rabbitMergedBatchSize.value.toInt()
     private val decodeMessageConsumerCount = configuration.decodeMessageConsumerCount.value.toInt()
 
     private val messageBatchBuffer = Channel<List<BatchRequest>>(rabbitBatchMergeBuffer * rabbitMergedBatchSize)
-
-//    private val messageBuffer = Channel<BatchRequest>(rabbitBatchMergeBuffer * rabbitMergedBatchSize)
-//
-//    @ExperimentalCoroutinesApi
-//    @ObsoleteCoroutinesApi
-//    @InternalCoroutinesApi
-//    private val messageBufferReceiver =
-//        messageBuffer.chunked(rabbitMergedBatchSize, rabbitBatchMergeFrequency, rabbitBatchMergeBuffer)
-
 
     private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
 
@@ -105,30 +95,11 @@ class RabbitMqService(
         }
     }
 
-    private fun mergeBatches(messages: Map.Entry<String, MutableList<MessageRequest>>): RawMessageBatch {
-        return RawMessageBatch.newBuilder().addAllMessages(
-            messages.value.map { it.rawMessage }
-        ).build()
-    }
-
     private fun mergeBatches(messages: List<MessageRequest>): RawMessageBatch {
         return RawMessageBatch.newBuilder().addAllMessages(
             messages.map { it.rawMessage }
         ).build()
     }
-
-    private fun getRequestDebugInfo(batches: MutableMap<String, MutableList<MessageRequest>>): List<String> {
-        return batches.map { (session, messageBatch) ->
-            let {
-                val firstSeqNum = messageBatch.first().id.sequence
-                val lastSeqNum = messageBatch.last().id.sequence
-                val count = messageBatch.size
-
-                "(session=$session firstSeqNum=$firstSeqNum lastSeqNum=$lastSeqNum count=$count)"
-            }
-        }
-    }
-
 
     private fun getRequestDebugInfo(batches: List<MessageRequest>): String {
 
@@ -141,68 +112,6 @@ class RabbitMqService(
     }
 
 
-    //    @ExperimentalCoroutinesApi
-//    @ObsoleteCoroutinesApi
-//    @InternalCoroutinesApi
-//    private suspend fun decodeMessage() {
-//        coroutineScope {
-//            while (true) {
-//                val batches = messageBufferReceiver.receive().filter { it.context.isActive }
-//
-//                if (batches.isEmpty()) continue
-//
-//                val batchesMap = mutableMapOf<String, MutableList<MessageRequest>>().apply {
-//                    batches.forEach {
-//                        getOrPut(it.batchId.streamName, { mutableListOf() })
-//                            .addAll(it.requests.filterNotNull())
-//                    }
-//                }
-//
-//                val requestDebugInfo = getRequestDebugInfo(batchesMap)
-//
-//                val requestsMaps =
-//                    batchesMap.map { group -> group.key to group.value.groupBy { it.id } }.associate { it }
-//
-//                val requests = batches.flatMap { it.requests }
-//
-//                try {
-//                    logMetrics(rabbitMqBatchParseMetrics) {
-//                        batchesMap.map { messages ->
-//                            val batch = mergeBatches(messages)
-//                            sendMessageBatchToRabbit(batch, requestsMaps.getValue(messages.key))
-//                        }
-//
-//                        withTimeout(responseTimeout) {
-//                            requests.map { async { it?.get() } }.awaitAll()
-//                                .also { logger.debug { "codec response received $requestDebugInfo" } }
-//                        }
-//                    }
-//                } catch (e: Exception) {
-//                    withContext(NonCancellable) {
-//                        when (e) {
-//                            is TimeoutCancellationException ->
-//                                logger.error { "unable to parse messages $requestDebugInfo - timed out after $responseTimeout milliseconds" }
-//                            else -> {
-//                                logger.error(e) { "exception when send message $requestDebugInfo" }
-//                                val rootCause = ExceptionUtils.getRootCause(e)
-//                                requests.forEach { request -> request?.let { it.exception = rootCause } }
-//                            }
-//                        }
-//
-//                        requests.onEach { request ->
-//                            request?.let { decodeRequests.remove(it.id) }
-//                        }.forEach {
-//                            try {
-//                                it?.sendMessage(null)
-//                            } catch (e: CancellationException) {
-//                                logger.error { "cancelled channel from message: '${it?.rawMessage?.metadata?.id}'" }
-//                            }
-//                        }
-//                    }
-//                }
-//            }
-//        }
-//    }
     @ExperimentalCoroutinesApi
     @ObsoleteCoroutinesApi
     @InternalCoroutinesApi
@@ -254,11 +163,6 @@ class RabbitMqService(
             }
         }
     }
-
-
-//    suspend fun decodeBatch(batchRequest: BatchRequest) {
-//        // messageBuffer.send(batchRequest)
-//    }
 
     suspend fun decodeBatch(batchRequest: List<BatchRequest>) {
         messageBatchBuffer.send(batchRequest)

@@ -148,27 +148,6 @@ class MessageProducer(
     }
 
 
-//    suspend fun parseMessages(
-//        batchWrapper: MessageBatchWrapper,
-//        parsedRawMessage: List<RawMessage?>,
-//        coroutineScope: CoroutineScope
-//    ): List<MessageRequest?> {
-//
-//        if (batchWrapper.messageBatch.isEmpty) {
-//            logger.error { "unable to parse message '${batchWrapper.messageBatch.id}' - message batch does not exist or is empty" }
-//            return emptyList()
-//        }
-//
-//        val messageRequests = parsedRawMessage.map { message -> message?.let { MessageRequest.build(it) } }
-//
-//        val batchRequest = BatchRequest(batchWrapper.messageBatch, messageRequests, coroutineScope)
-//
-//        rabbitMqService.decodeBatch(batchRequest)
-//
-//        return messageRequests
-//    }
-
-
     @InternalCoroutinesApi
     suspend fun parseMessages(
         batchBuilders: List<BuildersBatch>,
