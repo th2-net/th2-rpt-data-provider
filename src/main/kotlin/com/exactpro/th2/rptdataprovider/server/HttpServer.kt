@@ -16,15 +16,22 @@
 
 package com.exactpro.th2.rptdataprovider.server
 
+import com.exactpro.cradle.Order
+import com.exactpro.cradle.TimeRelation
+import com.exactpro.cradle.messages.StoredMessageFilterBuilder
+import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.utils.CradleIdException
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
+import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.entities.sse.*
+import com.exactpro.th2.rptdataprovider.handlers.messages.MessageLoader
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import io.ktor.application.*
 import io.ktor.features.*
@@ -39,13 +46,15 @@ import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.nio.channels.ClosedChannelException
+import java.time.Instant
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
 private typealias Streaming = suspend (StreamWriter) -> Unit
 
 
-class HttpServer(private val context: Context) {
+class HttpServer(private val applicationContext: Context) {
 
     private val sseRequestsProcessedInParallelQuantity: Metrics =
         Metrics("th2_sse_requests_processed_in_parallel_quantity", "SSE requests processed in parallel")
@@ -75,10 +84,10 @@ class HttpServer(private val context: Context) {
         private val logger = KotlinLogging.logger {}
     }
 
-    private val jacksonMapper = context.jacksonMapper
-    private val checkRequestAliveDelay = context.configuration.checkRequestsAliveDelay.value.toLong()
-    private val keepAliveTimeout = context.configuration.keepAliveTimeout.value.toLong()
-    private val configuration = context.configuration
+    private val jacksonMapper = applicationContext.jacksonMapper
+    private val checkRequestAliveDelay = applicationContext.configuration.checkRequestsAliveDelay.value.toLong()
+    private val keepAliveTimeout = applicationContext.configuration.keepAliveTimeout.value.toLong()
+    private val configuration = applicationContext.configuration
 
     private class Timeouts {
         class Config(var requestTimeout: Long = 5000L, var excludes: List<String> = listOf("sse"))
@@ -268,27 +277,27 @@ class HttpServer(private val context: Context) {
     @InternalAPI
     fun run() {
 
-        val notModifiedCacheControl = this.context.cacheControlNotModified
-        val rarelyModifiedCacheControl = this.context.cacheControlRarelyModified
+        val notModifiedCacheControl = this.applicationContext.cacheControlNotModified
+        val rarelyModifiedCacheControl = this.applicationContext.cacheControlRarelyModified
 
-        val cradleService = this.context.cradleService
+        val cradleService = this.applicationContext.cradleService
 
-        val eventCache = this.context.eventCache
-        val messageCache = this.context.messageCache
+        val eventCache = this.applicationContext.eventCache
+        val messageCache = this.applicationContext.messageCache
 
-        val searchEventsHandler = this.context.searchEventsHandler
-        val searchMessagesHandler = this.context.searchMessagesHandler
+        val searchEventsHandler = this.applicationContext.searchEventsHandler
+        val searchMessagesHandler = this.applicationContext.searchMessagesHandler
 
-        val eventFiltersPredicateFactory = this.context.eventFiltersPredicateFactory
-        val messageFiltersPredicateFactory = this.context.messageFiltersPredicateFactory
+        val eventFiltersPredicateFactory = this.applicationContext.eventFiltersPredicateFactory
+        val messageFiltersPredicateFactory = this.applicationContext.messageFiltersPredicateFactory
 
-        val getEventsLimit = this.context.configuration.eventSearchChunkSize.value.toInt()
+        val getEventsLimit = this.applicationContext.configuration.eventSearchChunkSize.value.toInt()
 
         embeddedServer(Netty, configuration.port.value.toInt()) {
 
             install(Compression)
             install(Timeouts) {
-                requestTimeout = context.timeout
+                requestTimeout = applicationContext.timeout
             }
 
             routing {
@@ -411,6 +420,64 @@ class HttpServer(private val context: Context) {
                         filterPredicate.apply(MessageWithMetadata(message))
                     }
                 }
+
+
+                get("sse/messages/{start}") {
+                    handleRequest(call, context, "search events sse", null, false, true) {
+                        suspend fun(streamWriter: StreamWriter) {
+                            val startId = StoredMessageId.fromString(call.parameters.getOrFail("start"))
+
+                            val iterator = applicationContext.cradleService.getMessagesBatchesSuspend(
+                                StoredMessageFilterBuilder().apply {
+                                    streamName().isEqualTo(startId.streamName)
+                                    direction().isEqualTo(startId.direction)
+                                    index().isGreaterThanOrEqualTo(startId.index)
+                                    order(Order.DIRECT)
+                                }.build()
+                            )
+                            for (m in iterator) {
+
+                                val message = MessageBatchWrapper(m).let {
+                                    applicationContext.messageProducer.messageBatchToBuilders(it)
+                                }
+                                for (res in message.builders) {
+                                    streamWriter.write(MessageWithMetadata(res.build()), AtomicLong(0))
+                                }
+                            }
+                        }
+                    }
+                }
+
+
+
+                get("sse/messages/batches/{start}") {
+                    handleRequest(call, context, "search events sse", null, false, true) {
+                        suspend fun(streamWriter: StreamWriter) {
+                            val startId = StoredMessageId.fromString(call.parameters.getOrFail("start"))
+                            for (limit in 250..100000 step 250) {
+                                val iterator = applicationContext.cradleService.getMessagesBatchesSuspend(
+                                    StoredMessageFilterBuilder().apply {
+                                        streamName().isEqualTo(startId.streamName)
+                                        direction().isEqualTo(startId.direction)
+                                        index().isGreaterThanOrEqualTo(startId.index)
+                                        limit(limit)
+                                    }.build()
+                                )
+                                for (m in iterator) {
+
+                                    val message = MessageBatchWrapper(m).let {
+                                        applicationContext.messageProducer.messageBatchToBuilders(it)
+                                    }
+                                    for (res in message.builders) {
+                                        streamWriter.write(MessageWithMetadata(res.build()), AtomicLong(0))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+
             }
         }.start(false)
 
