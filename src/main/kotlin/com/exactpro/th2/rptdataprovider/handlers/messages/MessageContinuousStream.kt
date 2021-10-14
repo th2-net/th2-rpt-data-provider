@@ -66,7 +66,6 @@ class MessageContinuousStream(
 
     private suspend fun initialize() {
         if (startMessageId == null) {
-            println(startTimestamp)
             initializer.initStream(startTimestamp)?.let {
                 lastElement = it.id
                 lastTimestamp = it.timestamp
