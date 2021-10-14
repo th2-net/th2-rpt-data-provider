@@ -47,7 +47,7 @@ class ChainBuilder(
 
     private fun getRequestStreamNames(request: SseMessageSearchRequest): List<StreamName> {
         return request.stream
-            .flatMap { stream -> Direction.values().map { StreamName(stream, it) } }
+            .map { stream ->  StreamName(stream, Direction.FIRST) }
     }
 
 
@@ -67,13 +67,12 @@ class ChainBuilder(
         val streamNames = getRequestStreamNames(request)
         val resumeFromIds = getRequestResumeId(request)
         val startTimestamp = chooseStartTimestamp(request)
-        val messageLoader = MessageLoader(context, startTimestamp, request.searchDirection)
+
 
         val dataStreams = streamNames.map { streamName ->
             val streamInitializer = StreamInitializer(context, request, streamName)
 
             val messageStream = MessageContinuousStream(
-                messageLoader,
                 resumeFromIds[streamName],
                 streamInitializer,
                 startTimestamp,

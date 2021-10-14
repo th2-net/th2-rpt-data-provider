@@ -125,24 +125,24 @@ class MessageDecoder(
             while (isActive) {
                 val rawBatch = previousComponent!!.pollMessage()
 
-                if (messagesInBuffer >= batchMergeSize || rawBatch is EmptyPipelineObject) {
-                    getMessageRequests(buffer.map { it.first }, this).let {
-                        sendParsedMessages(buffer, it)
-                        messagesInBuffer = 0L
-                        buffer.clear()
-                    }
-                }
+//                if (messagesInBuffer >= batchMergeSize || rawBatch is EmptyPipelineObject) {
+//                    getMessageRequests(buffer.map { it.first }, this).let {
+//                        sendParsedMessages(buffer, it)
+//                        messagesInBuffer = 0L
+//                        buffer.clear()
+//                    }
+//                }
 
                 if (rawBatch is PipelineRawBatchData) {
 
                     val buildersBatch = createMessageBuilders(rawBatch.payload)
 
-                    if (buildersBatch.isImages) {
+//                    if (buildersBatch.isImages) {
                         sendImages(buildersBatch.builders, rawBatch)
-                    } else {
-                        buffer.add(buildersBatch to rawBatch)
-                        messagesInBuffer += rawBatch.payload.messageBatch.messageCount
-                    }
+//                    } else {
+//                        buffer.add(buildersBatch to rawBatch)
+//                        messagesInBuffer += rawBatch.payload.messageBatch.messageCount
+//                    }
                 } else {
                     sendToChannel(rawBatch)
                 }

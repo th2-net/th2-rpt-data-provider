@@ -29,7 +29,6 @@ import java.time.Instant
 
 
 class MessageContinuousStream(
-    private val messageLoader: MessageLoader,
     private val startMessageId: StoredMessageId?,
     private val initializer: StreamInitializer,
     private val startTimestamp: Instant,
@@ -43,6 +42,7 @@ class MessageContinuousStream(
     messageFlowCapacity = messageFlowCapacity
 ) {
 
+    private var messageLoader: MessageLoader? = null
 
     private val sseSearchDelay = context.configuration.sseSearchDelay.value.toLong()
     private val sendEmptyDelay = context.configuration.sendEmptyDelay.value.toLong()
@@ -64,9 +64,13 @@ class MessageContinuousStream(
                 lastTimestamp = it.timestamp
             }
         } else {
-            lastElement = startMessageId
-            firstPull = false
+            context.cradleService.getMessageSuspend(startMessageId)?.let {
+                lastElement = it.id
+                lastTimestamp = it.timestamp
+                firstPull = false
+            }
         }
+        messageLoader = MessageLoader(context, startTimestamp, searchRequest.searchDirection)
     }
 
 
@@ -114,10 +118,10 @@ class MessageContinuousStream(
 
 
     private suspend fun loadMoreMessage(): List<MessageBatchWrapper> {
-        if (lastElement == null || !needLoadMessage) {
+        if (lastElement == null || !needLoadMessage || messageLoader == null) {
             return emptyList()
         }
-        return messageLoader.pullMoreMessage(lastElement!!, firstPull, perStreamLimit).also { messages ->
+        return messageLoader!!.pullMoreMessage(lastElement!!, firstPull, perStreamLimit).also { messages ->
             changeStreamMessageIndex(messages).let {
                 lastElement = it.first
                 lastTimestamp = it.second
@@ -143,8 +147,9 @@ class MessageContinuousStream(
     override suspend fun processMessage() {
         coroutineScope {
 
-            initialize()
             launch { emptySender(this) }
+
+            initialize()
 
             while (isActive && needLoadMessage) {
 
