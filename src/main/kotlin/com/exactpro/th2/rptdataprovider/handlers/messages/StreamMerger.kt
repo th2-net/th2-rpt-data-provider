@@ -36,8 +36,9 @@ class StreamMerger(
     context: Context,
     searchRequest: SseMessageSearchRequest,
     externalScope: CoroutineScope,
-    pipelineStreams: List<PipelineComponent>
-) : PipelineComponent(context, searchRequest, externalScope) {
+    pipelineStreams: List<PipelineComponent>,
+    messageFlowCapacity: Int
+) : PipelineComponent(context, searchRequest, externalScope, messageFlowCapacity = messageFlowCapacity) {
 
     private class StreamHolder(
         val messageStream: PipelineComponent

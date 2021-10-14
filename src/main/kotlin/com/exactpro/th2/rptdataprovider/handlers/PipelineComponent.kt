@@ -31,9 +31,10 @@ abstract class PipelineComponent(
     val searchRequest: SseMessageSearchRequest,
     val externalScope: CoroutineScope,
     val streamName: StreamName? = null,
-    val previousComponent: PipelineComponent? = null
+    val previousComponent: PipelineComponent? = null,
+    messageFlowCapacity: Int
 ) {
-    private val messageFlow = Channel<PipelineStepObject>(500)
+    private val messageFlow = Channel<PipelineStepObject>(messageFlowCapacity)
     protected var processedMessagesCounter: Long = 0
 
     val processedMessageCount

@@ -17,6 +17,7 @@
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
 import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineParsedMessage
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatchData
@@ -36,17 +37,19 @@ class MessageDecoder(
     searchRequest: SseMessageSearchRequest,
     streamName: StreamName?,
     externalScope: CoroutineScope,
-    previousComponent: PipelineComponent?
-) : PipelineComponent(context, searchRequest, externalScope, streamName, previousComponent) {
+    previousComponent: PipelineComponent?,
+    messageFlowCapacity: Int
+) : PipelineComponent(context, searchRequest, externalScope, streamName, previousComponent, messageFlowCapacity) {
 
     private val batchMergeSize = context.configuration.rabbitMergedBatchSize.value.toLong()
 
-    constructor(pipelineComponent: MessageContinuousStream) : this(
+    constructor(pipelineComponent: MessageContinuousStream, messageFlowCapacity: Int) : this(
         pipelineComponent.context,
         pipelineComponent.searchRequest,
         pipelineComponent.streamName,
         pipelineComponent.externalScope,
-        pipelineComponent
+        pipelineComponent,
+        messageFlowCapacity
     )
 
 
@@ -154,6 +157,14 @@ class MessageDecoder(
             while (isActive) {
                 val rawBatch = previousComponent!!.pollMessage()
 
+                if (messagesInBuffer >= batchMergeSize || rawBatch is EmptyPipelineObject) {
+                    getMessageRequests(buffer.map { it.first }, this).let {
+                        sendParsedMessages(buffer, it)
+                        messagesInBuffer = 0L
+                        buffer.clear()
+                    }
+                }
+
                 if (rawBatch is PipelineRawBatchData) {
 
                     val buildersBatch = createMessageBuilders(rawBatch.payload)
@@ -161,15 +172,8 @@ class MessageDecoder(
                     if (buildersBatch.isImages) {
                         sendImages(buildersBatch.builders, rawBatch)
                     } else {
-                        if (messagesInBuffer < batchMergeSize) {
-                            buffer.add(buildersBatch to rawBatch)
-                            messagesInBuffer += rawBatch.payload.messageBatch.messageCount
-                        } else {
-                            val messagesRequest = getMessageRequests(buffer.map { it.first }, this)
-                            sendParsedMessages(buffer, messagesRequest)
-                            messagesInBuffer = 0L
-                            buffer.clear()
-                        }
+                        buffer.add(buildersBatch to rawBatch)
+                        messagesInBuffer += rawBatch.payload.messageBatch.messageCount
                     }
                 } else {
                     sendToChannel(rawBatch)

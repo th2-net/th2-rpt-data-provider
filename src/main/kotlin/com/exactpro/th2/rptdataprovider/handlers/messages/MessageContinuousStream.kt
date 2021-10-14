@@ -33,11 +33,19 @@ class MessageContinuousStream(
     private val startMessageId: StoredMessageId?,
     private val initializer: StreamInitializer,
     private val startTimestamp: Instant,
-    externalScope: CoroutineScope
-) : PipelineComponent(initializer.context, initializer.request, externalScope, initializer.stream) {
+    externalScope: CoroutineScope,
+    messageFlowCapacity: Int
+) : PipelineComponent(
+    initializer.context,
+    initializer.request,
+    externalScope,
+    initializer.stream,
+    messageFlowCapacity = messageFlowCapacity
+) {
 
 
     private val sseSearchDelay = context.configuration.sseSearchDelay.value.toLong()
+    private val sendEmptyDelay = context.configuration.sendEmptyDelay.value.toLong()
     private val maxMessagesLimit = context.configuration.maxMessagesLimit.value.toInt()
     private var perStreamLimit = min(maxMessagesLimit, searchRequest.resultCountLimit ?: 25)
 
@@ -126,7 +134,7 @@ class MessageContinuousStream(
         while (parentScope.isActive) {
             lastElement?.let {
                 sendToChannel(EmptyPipelineObject(isStreamEmpty, lastElement, lastTimestamp))
-                delay(sseSearchDelay)
+                delay(sendEmptyDelay)
             }
         }
     }

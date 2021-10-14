@@ -50,12 +50,18 @@ class CustomConfigurationClass {
     val rabbitMergedBatchSize: Long = 50
     val decodeMessageConsumerCount: Int = 64
 
+    val messageContinuousStreamBuffer = 50
+    val messageDecoderBuffer = 500
+    val messageFilterBuffer = 500
+    val messageStreamMergerBuffer = 500
+    val sendEmptyDelay = 100
+
     val eventSearchChunkSize: Int = 64
 
     val serverType: ServerType = ServerType.HTTP
 
     override fun toString(): String {
-        return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, clientCacheTimeout=$clientCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, codecResponseTimeout=$codecResponseTimeout, codecCacheSize=$codecCacheSize, codecBatchesCacheSize=$codecBatchesCacheSize, checkRequestsAliveDelay=$checkRequestsAliveDelay, enableCaching=$enableCaching, notModifiedObjectsLifetime=$notModifiedObjectsLifetime, rarelyModifiedObjects=$rarelyModifiedObjects, maxMessagesLimit=$maxMessagesLimit, messageSearchPipelineBuffer=$messageSearchPipelineBuffer, sseEventSearchStep=$sseEventSearchStep, keepAliveTimeout=$keepAliveTimeout, dbRetryDelay=$dbRetryDelay, cradleDispatcherPoolSize=$cradleDispatcherPoolSize, sseSearchDelay=$sseSearchDelay, rabbitBatchMergeFrequency=$rabbitBatchMergeFrequency, rabbitBatchMergeBuffer=$rabbitBatchMergeBuffer, rabbitMergedBatchSize=$rabbitMergedBatchSize, decodeMessageConsumerCount=$decodeMessageConsumerCount, eventSearchChunkSize=$eventSearchChunkSize, serverType='$serverType')"
+        return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, clientCacheTimeout=$clientCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, codecResponseTimeout=$codecResponseTimeout, codecCacheSize=$codecCacheSize, codecBatchesCacheSize=$codecBatchesCacheSize, checkRequestsAliveDelay=$checkRequestsAliveDelay, enableCaching=$enableCaching, notModifiedObjectsLifetime=$notModifiedObjectsLifetime, rarelyModifiedObjects=$rarelyModifiedObjects, maxMessagesLimit=$maxMessagesLimit, messageSearchPipelineBuffer=$messageSearchPipelineBuffer, sseEventSearchStep=$sseEventSearchStep, keepAliveTimeout=$keepAliveTimeout, dbRetryDelay=$dbRetryDelay, cradleDispatcherPoolSize=$cradleDispatcherPoolSize, sseSearchDelay=$sseSearchDelay, rabbitBatchMergeFrequency=$rabbitBatchMergeFrequency, rabbitBatchMergeBuffer=$rabbitBatchMergeBuffer, rabbitMergedBatchSize=$rabbitMergedBatchSize, decodeMessageConsumerCount=$decodeMessageConsumerCount, messageContinuousStreamBuffer=$messageContinuousStreamBuffer, messageDecoderBuffer=$messageDecoderBuffer, messageFilterBuffer=$messageFilterBuffer, messageStreamMergerBuffer=$messageStreamMergerBuffer, sendEmptyDelay=$sendEmptyDelay, eventSearchChunkSize=$eventSearchChunkSize, serverType=$serverType)"
     }
 }
 
@@ -152,4 +158,18 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
     val serverType: Variable =
         Variable("serverType", customConfiguration.serverType.toString(), "HTTP")
 
+    val messageContinuousStreamBuffer: Variable =
+        Variable("messageContinuousStreamBuffer", customConfiguration.messageContinuousStreamBuffer.toString(), "50")
+
+    val messageDecoderBuffer: Variable =
+        Variable("messageDecoderBuffer", customConfiguration.messageDecoderBuffer.toString(), "500")
+
+    val messageFilterBuffer: Variable =
+        Variable("messageFilterBuffer", customConfiguration.messageFilterBuffer.toString(), "500")
+
+    val messageStreamMergerBuffer: Variable =
+        Variable("messageStreamMergerBuffer", customConfiguration.messageStreamMergerBuffer.toString(), "500")
+
+    val sendEmptyDelay: Variable =
+        Variable("sendEmptyDelay", customConfiguration.sendEmptyDelay.toString(), "100")
 }

@@ -30,6 +30,12 @@ class ChainBuilder(
     private val externalScope: CoroutineScope
 ) {
 
+    private val messageContinuousStreamBuffer = context.configuration.messageContinuousStreamBuffer.value.toInt()
+    private val messageDecoderBuffer = context.configuration.messageDecoderBuffer.value.toInt()
+    private val messageFilterBuffer = context.configuration.messageFilterBuffer.value.toInt()
+    private val messageStreamMergerBuffer = context.configuration.messageStreamMergerBuffer.value.toInt()
+
+
     private suspend fun chooseStartTimestamp(request: SseMessageSearchRequest): Instant {
         val messageId = request.resumeFromId?.let { StoredMessageId.fromString(it) }
 
@@ -71,14 +77,15 @@ class ChainBuilder(
                 resumeFromIds[streamName],
                 streamInitializer,
                 startTimestamp,
-                externalScope
+                externalScope,
+                messageContinuousStreamBuffer
             )
 
-            val messageDecoder = MessageDecoder(messageStream)
+            val messageDecoder = MessageDecoder(messageStream, messageDecoderBuffer)
 
-            MessageFilter(messageDecoder)
+            MessageFilter(messageDecoder, messageFilterBuffer)
         }
 
-        return StreamMerger(context, request, externalScope, dataStreams)
+        return StreamMerger(context, request, externalScope, dataStreams, messageStreamMergerBuffer)
     }
 }

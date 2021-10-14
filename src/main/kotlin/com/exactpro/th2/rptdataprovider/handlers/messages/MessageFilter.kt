@@ -28,18 +28,20 @@ class MessageFilter(
     searchRequest: SseMessageSearchRequest,
     streamName: StreamName?,
     externalScope: CoroutineScope,
-    previousComponent: PipelineComponent?
-) : PipelineComponent(context, searchRequest, externalScope, streamName, previousComponent) {
+    previousComponent: PipelineComponent?,
+    messageFlowCapacity: Int
+) : PipelineComponent(context, searchRequest, externalScope, streamName, previousComponent, messageFlowCapacity) {
 
-    private val emptySendDelay: Long = 1000
+    private val sendEmptyDelay: Long = context.configuration.sendEmptyDelay.value.toLong()
     private var lastScannedObject: PipelineStepObject? = null
 
-    constructor(pipelineComponent: MessageDecoder) : this(
+    constructor(pipelineComponent: MessageDecoder, messageFlowCapacity: Int) : this(
         pipelineComponent.context,
         pipelineComponent.searchRequest,
         pipelineComponent.streamName,
         pipelineComponent.externalScope,
-        pipelineComponent
+        pipelineComponent,
+        messageFlowCapacity
     )
 
     private fun updateState(parsedMessage: PipelineParsedMessage) {
@@ -59,7 +61,7 @@ class MessageFilter(
         while (parentScope.isActive) {
             lastScannedObject?.let {
                 sendToChannel(EmptyPipelineObject(it))
-                delay(emptySendDelay)
+                delay(sendEmptyDelay)
             }
         }
     }
