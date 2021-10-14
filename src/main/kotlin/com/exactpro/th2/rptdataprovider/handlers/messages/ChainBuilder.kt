@@ -41,9 +41,6 @@ class ChainBuilder(
 
         return messageId?.let { context.cradleService.getMessageSuspend(it)?.timestamp }
             ?: request.startTimestamp
-//            ?: request.resumeFromIdsList
-//                .mapNotNull { context.cradleService.getMessageSuspend(it)?.timestamp }
-//                .minBy { it }
             ?: Instant.now()
     }
 

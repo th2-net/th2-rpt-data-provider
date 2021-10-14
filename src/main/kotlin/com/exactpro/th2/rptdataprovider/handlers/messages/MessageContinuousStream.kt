@@ -42,7 +42,7 @@ class MessageContinuousStream(
     messageFlowCapacity = messageFlowCapacity
 ) {
 
-    private val messageLoader: MessageLoader? = null
+    private var messageLoader: MessageLoader? = null
 
     private val sseSearchDelay = context.configuration.sseSearchDelay.value.toLong()
     private val sendEmptyDelay = context.configuration.sendEmptyDelay.value.toLong()
@@ -70,7 +70,7 @@ class MessageContinuousStream(
                 firstPull = false
             }
         }
-        messageLoader = 
+        messageLoader = MessageLoader(context, startTimestamp, searchRequest.searchDirection)
     }
 
 
@@ -121,7 +121,7 @@ class MessageContinuousStream(
         if (lastElement == null || !needLoadMessage || messageLoader == null) {
             return emptyList()
         }
-        return messageLoader.pullMoreMessage(lastElement!!, firstPull, perStreamLimit).also { messages ->
+        return messageLoader!!.pullMoreMessage(lastElement!!, firstPull, perStreamLimit).also { messages ->
             changeStreamMessageIndex(messages).let {
                 lastElement = it.first
                 lastTimestamp = it.second
