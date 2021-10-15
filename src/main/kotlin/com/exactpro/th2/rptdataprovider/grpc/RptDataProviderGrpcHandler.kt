@@ -271,6 +271,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     }
 
 
+    @InternalCoroutinesApi
     @FlowPreview
     override fun searchMessages(grpcRequest: MessageSearchRequest, responseObserver: StreamObserver<StreamResponse>) {
         handleRequest(responseObserver, "grpc search message", useStream = true, request = grpcRequest) {
