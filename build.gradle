@@ -50,8 +50,8 @@ dependencies {
 
     implementation group: 'net.jpountz.lz4', name: 'lz4', version: '1.3.0'
 
-    implementation 'com.exactpro.th2:cradle-core:2.19.1-TH2-2551-1371064995-SNAPSHOT'
-    implementation 'com.exactpro.th2:cradle-cassandra:2.19.1-TH2-2551-1371064995-SNAPSHOT'
+    implementation 'com.exactpro.th2:cradle-core:2.19.3-TH2-2535-1380399480-SNAPSHOT'
+    implementation 'com.exactpro.th2:cradle-cassandra:2.19.3-TH2-2535-1380399480-SNAPSHOT'
 
     implementation "com.exactpro.th2:grpc-data-provider:1.0.0"
 
