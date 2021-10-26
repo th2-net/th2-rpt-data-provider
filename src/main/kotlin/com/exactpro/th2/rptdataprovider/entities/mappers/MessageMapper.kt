@@ -23,11 +23,20 @@ import com.exactpro.th2.dataprovider.grpc.MessageData
 import com.exactpro.th2.rptdataprovider.convertToProto
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
+import com.exactpro.th2.rptdataprovider.entities.responses.BodyHttpMessage
 import com.exactpro.th2.rptdataprovider.entities.responses.HttpBodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.responses.HttpMessage
+import com.google.gson.Gson
 import java.util.*
 
 object MessageMapper {
+
+    private val gson = Gson()
+
+    private fun isMessageTypeUnique(bodiesAll: List<HttpBodyWrapper>): Boolean {
+        val messagesType = bodiesAll.map { it.messageType }.toSet()
+        return messagesType.size == bodiesAll.size
+    }
 
     private fun bodyWrapperToProto(bodyWrapper: BodyWrapper, isFiltered: Boolean = true): MessageBodyWrapper {
         return MessageBodyWrapper.newBuilder()
@@ -57,19 +66,50 @@ object MessageMapper {
 
     suspend fun convertToHttpMessage(messageWithMetadata: MessageWithMetadata): HttpMessage {
         return with(messageWithMetadata) {
-            HttpMessage(
+            val body = message.messageBody?.let {
+                it.zip(filteredBody).map { (msg, filtered) ->
+                    HttpBodyWrapper.from(msg, filtered)
+                }
+            }
+            val convertedBody = if (body != null) {
+                if (body.size == 1) {
+                    Gson().fromJson(body[0].message, BodyHttpMessage::class.java)
+                } else {
+                    mergeFieldsHttp(body)
+                }
+            } else null
+            val httpMessage = HttpMessage(
                 timestamp = message.timestamp,
                 direction = message.direction,
                 sessionId = message.sessionId,
                 attachedEventIds = message.attachedEventIds,
                 messageId = message.id.toString(),
-                body = message.messageBody?.let {
-                    it.zip(filteredBody).map { (msg, filtered) ->
-                        HttpBodyWrapper.from(msg, filtered)
-                    }
-                },
+                body = convertedBody,
                 bodyBase64 = message.rawMessageBody?.let { Base64.getEncoder().encodeToString(it.toByteArray()) }
             )
+            httpMessage
         }
+    }
+
+    private fun mergeFieldsHttp(body: List<HttpBodyWrapper>): BodyHttpMessage {
+        val isMessageTypeUnique = isMessageTypeUnique(body)
+        val res = gson.fromJson(body[0].message, BodyHttpMessage::class.java)
+        res.fields = emptyMap<String, Any>().toMutableMap()
+        body.forEach {
+            val singleMessage = Gson().fromJson(body[0].message, BodyHttpMessage::class.java)
+            val id =
+                if (isMessageTypeUnique) it.messageType else "${it.messageType}-${it.subsequenceId.joinToString("-")}"
+            res.fields?.set(
+                id,
+                BodyHttpMessage(
+                    emptyMap<String, Any>().toMutableMap(),
+                    emptyMap<String, Any>().toMutableMap(),
+                    emptyMap<String, Any>().toMutableMap()
+                )
+            )
+            (res.fields?.get(id) as BodyHttpMessage)
+                .messageValue?.put("fields", singleMessage.fields!!)
+        }
+        return res
     }
 }

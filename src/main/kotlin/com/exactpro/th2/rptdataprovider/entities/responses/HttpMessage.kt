@@ -53,6 +53,12 @@ data class HttpMessage(
     val sessionId: String,
     val attachedEventIds: Set<String>,
     val messageId: String,
-    var body: List<HttpBodyWrapper>?,
+    var body: BodyHttpMessage?,
     var bodyBase64: String?
+)
+
+data class BodyHttpMessage(
+    var metadata: MutableMap<String,Any>?,
+    var fields: MutableMap<String,Any>?,
+    var messageValue: MutableMap<String,Any>?
 )
