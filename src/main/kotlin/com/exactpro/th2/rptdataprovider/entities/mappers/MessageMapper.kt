@@ -26,12 +26,18 @@ import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.entities.responses.BodyHttpMessage
 import com.exactpro.th2.rptdataprovider.entities.responses.HttpBodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.responses.HttpMessage
-import com.google.gson.Gson
+import com.fasterxml.jackson.databind.DeserializationFeature
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.kotlin.KotlinModule
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import java.util.*
 
 object MessageMapper {
 
-    private val gson = Gson()
+    private val jacksonMapper: ObjectMapper = jacksonObjectMapper()
+        .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
+        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+        .registerModule(KotlinModule())
 
     private fun isMessageTypeUnique(bodiesAll: List<HttpBodyWrapper>): Boolean {
         val messagesType = bodiesAll.map { it.messageType }.toSet()
@@ -73,7 +79,7 @@ object MessageMapper {
             }
             val convertedBody = if (body != null) {
                 if (body.size == 1) {
-                    Gson().fromJson(body[0].message, BodyHttpMessage::class.java)
+                    jacksonMapper.readValue<BodyHttpMessage>(body[0].message,BodyHttpMessage::class.java)
                 } else {
                     mergeFieldsHttp(body)
                 }
@@ -93,10 +99,10 @@ object MessageMapper {
 
     private fun mergeFieldsHttp(body: List<HttpBodyWrapper>): BodyHttpMessage {
         val isMessageTypeUnique = isMessageTypeUnique(body)
-        val res = gson.fromJson(body[0].message, BodyHttpMessage::class.java)
+        val res = jacksonMapper.readValue(body[0].message, BodyHttpMessage::class.java)
         res.fields = emptyMap<String, Any>().toMutableMap()
         body.forEach {
-            val singleMessage = Gson().fromJson(body[0].message, BodyHttpMessage::class.java)
+            val singleMessage = jacksonMapper.readValue(body[0].message, BodyHttpMessage::class.java)
             val id =
                 if (isMessageTypeUnique) it.messageType else "${it.messageType}-${it.subsequenceId.joinToString("-")}"
             res.fields?.set(

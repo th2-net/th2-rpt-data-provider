@@ -18,6 +18,8 @@ package com.exactpro.th2.rptdataprovider.entities.responses
 
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.Direction
+import com.fasterxml.jackson.annotation.JsonAutoDetect
+import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.annotation.JsonRawValue
 import com.google.protobuf.util.JsonFormat
 import java.time.Instant
@@ -57,8 +59,11 @@ data class HttpMessage(
     var bodyBase64: String?
 )
 
+//fixme this is a workaround to revert the old message format
 data class BodyHttpMessage(
+    @JsonProperty("metadata")
     var metadata: MutableMap<String,Any>?,
+    @JsonProperty("fields")
     var fields: MutableMap<String,Any>?,
-    var messageValue: MutableMap<String,Any>?
+    var messageValue: MutableMap<String,Any>? = null
 )
