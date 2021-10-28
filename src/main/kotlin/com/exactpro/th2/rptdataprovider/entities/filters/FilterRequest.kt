@@ -59,11 +59,12 @@ data class GrpcFilter(val filterName: String, val filter: Filter) : FilterReques
     }
 
     override fun isConjunct(): Boolean {
-        return if (filter.hasConjunct()) {
-            filter.conjunct.value
-        } else {
-            false
-        }
+//        return if (filter.hasConjunct()) {
+//            filter.conjunct.value
+//        } else {
+//            false
+//        }
+        return false
     }
 
     override fun getValues(): List<String>? {

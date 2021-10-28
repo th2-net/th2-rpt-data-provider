@@ -53,7 +53,7 @@ dependencies {
     implementation 'com.exactpro.th2:cradle-core:2.19.0'
     implementation 'com.exactpro.th2:cradle-cassandra:2.19.0'
 
-    implementation "com.exactpro.th2:grpc-data-provider:1.0.0"
+    implementation "com.exactpro.th2:grpc-data-provider:0.0.4"
 
     implementation 'io.github.microutils:kotlin-logging:1.7.10'
 

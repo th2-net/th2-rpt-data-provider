@@ -16,12 +16,9 @@
 
 package com.exactpro.th2.rptdataprovider.entities.mappers
 
-import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.message.toTimestamp
-import com.exactpro.th2.dataprovider.grpc.MessageBodyWrapper
 import com.exactpro.th2.dataprovider.grpc.MessageData
 import com.exactpro.th2.rptdataprovider.convertToProto
-import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.entities.responses.BodyHttpMessage
 import com.exactpro.th2.rptdataprovider.entities.responses.HttpBodyWrapper
@@ -44,33 +41,7 @@ object MessageMapper {
         return messagesType.size == bodiesAll.size
     }
 
-    private fun bodyWrapperToProto(bodyWrapper: BodyWrapper, isFiltered: Boolean = true): MessageBodyWrapper {
-        return MessageBodyWrapper.newBuilder()
-            .setMessage(bodyWrapper.message)
-            .setFiltered(isFiltered)
-            .build()
-    }
-
-    fun convertToGrpcMessageData(messageWithMetadata: MessageWithMetadata): MessageData {
-        return with(messageWithMetadata) {
-            MessageData.newBuilder()
-                .setMessageId(message.id.convertToProto())
-                .setTimestamp(message.timestamp.toTimestamp())
-                .addAllAttachedEventIds(message.attachedEventIds.map { EventID.newBuilder().setId(it).build() })
-                .setBodyRaw(message.rawMessageBody)
-                .also { builder ->
-                    message.messageBody?.let {
-                        builder.addAllMessages(
-                            it.zip(filteredBody).map { (msg, filtered) ->
-                                bodyWrapperToProto(msg, filtered)
-                            }
-                        )
-                    }
-                }.build()
-        }
-    }
-
-    suspend fun convertToHttpMessage(messageWithMetadata: MessageWithMetadata): HttpMessage {
+    private suspend fun getBodyMessage(messageWithMetadata: MessageWithMetadata):BodyHttpMessage? {
         return with(messageWithMetadata) {
             val body = message.messageBody?.let {
                 it.zip(filteredBody).map { (msg, filtered) ->
@@ -79,18 +50,35 @@ object MessageMapper {
             }
             val convertedBody = if (body != null) {
                 if (body.size == 1) {
-                    jacksonMapper.readValue<BodyHttpMessage>(body[0].message,BodyHttpMessage::class.java)
+                    jacksonMapper.readValue<BodyHttpMessage>(body[0].message, BodyHttpMessage::class.java)
                 } else {
                     mergeFieldsHttp(body)
                 }
             } else null
+            convertedBody
+        }
+    }
+
+    suspend fun convertToGrpcMessageData(messageWithMetadata: MessageWithMetadata): MessageData {
+        return with(messageWithMetadata) {
+            MessageData.newBuilder()
+                .setMessageId(message.id.convertToProto())
+                .setTimestamp(message.timestamp.toTimestamp())
+                .setBodyBase64Bytes(message.rawMessageBody)
+                .setBody(jacksonMapper.writeValueAsString(getBodyMessage(messageWithMetadata)))
+                .build()
+        }
+    }
+
+    suspend fun convertToHttpMessage(messageWithMetadata: MessageWithMetadata): HttpMessage {
+        return with(messageWithMetadata) {
             val httpMessage = HttpMessage(
                 timestamp = message.timestamp,
                 direction = message.direction,
                 sessionId = message.sessionId,
                 attachedEventIds = message.attachedEventIds,
                 messageId = message.id.toString(),
-                body = convertedBody,
+                body = getBodyMessage(messageWithMetadata),
                 bodyBase64 = message.rawMessageBody?.let { Base64.getEncoder().encodeToString(it.toByteArray()) }
             )
             httpMessage
