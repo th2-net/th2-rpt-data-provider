@@ -97,8 +97,8 @@ data class SseMessageSearchRequest(
             request.keepOpen.value
         } else false,
 
-        resumeFromIdsList = if (request.resumeFromIdsList.isNotEmpty()) {
-            request.resumeFromIdsList.map {
+        resumeFromIdsList = if (request.messageIdList.isNotEmpty()) {
+            request.messageIdList.map {
                 StoredMessageId(
                     it.connectionId.sessionAlias,
                     grpcDirectionToCradle(it.direction),
@@ -107,13 +107,9 @@ data class SseMessageSearchRequest(
             }
         } else emptyList(),
 
-        attachedEvents = if (request.hasAttachedEvents()) {
-            request.attachedEvents.value
-        } else false,
+        attachedEvents = false,
 
-        lookupLimitDays = if (request.hasLookupLimitDays()) {
-            request.lookupLimitDays.value
-        } else null,
+        lookupLimitDays = null,
 
         resumeFromId = null
     )

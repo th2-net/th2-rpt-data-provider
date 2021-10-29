@@ -224,22 +224,6 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
         }
     }
 
-    override fun getEvents(request: EventIds, responseObserver: StreamObserver<Events>) {
-        handleRequest(responseObserver, "get events", useStream = false, request = request) {
-            val ids = request.idsList.map { it.id }
-            when {
-                ids.isNullOrEmpty() ->
-                    throw InvalidRequestException("Ids set must not be empty: $ids")
-                ids.size > getEventsLimit ->
-                    throw InvalidRequestException("Too many id in request: ${ids.size}, max is: $getEventsLimit")
-                else -> eventCache.getOrPutMany(ids.toSet())
-                    .map { it.convertToEvent().convertToGrpcEventData() }
-            }.let {
-                Events.newBuilder().addAllEvents(it).build()
-            }
-        }
-    }
-
     @InternalCoroutinesApi
     override fun getMessage(request: MessageID, responseObserver: StreamObserver<MessageData>) {
         handleRequest(responseObserver, "get message", useStream = false, request = request) {
@@ -257,7 +241,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     }
 
 
-    override fun getMessageStreams(request: MessageStreamNamesRequest, responseObserver: StreamObserver<StringList>) {
+    override fun getMessageStreams(request: com.google.protobuf.Empty, responseObserver: StreamObserver<StringList>) {
         handleRequest(
             responseObserver,
             "get message streams",
@@ -302,7 +286,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     }
 
 
-    override fun getMessagesFilters(request: MessageFiltersRequest, responseObserver: StreamObserver<ListFilterName>) {
+    override fun getMessagesFilters(request: com.google.protobuf.Empty, responseObserver: StreamObserver<ListFilterName>) {
         handleRequest(responseObserver, "get message filters names", useStream = false, request = request) {
             ListFilterName.newBuilder()
                 .addAllFilterNames(
@@ -314,7 +298,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     }
 
 
-    override fun getEventsFilters(request: EventFiltersRequest, responseObserver: StreamObserver<ListFilterName>) {
+    override fun getEventsFilters(request: com.google.protobuf.Empty, responseObserver: StreamObserver<ListFilterName>) {
         handleRequest(responseObserver, "get event filters names", useStream = false, request = request) {
             ListFilterName.newBuilder()
                 .addAllFilterNames(
