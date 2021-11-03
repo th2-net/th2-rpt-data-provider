@@ -117,9 +117,9 @@ class MessageContinuousStream(
         } else {
             val lastMessage =
                 if (searchRequest.searchDirection == TimeRelation.AFTER) {
-                    batchWrapper.messageBatch.firstMessage
-                } else {
                     batchWrapper.messageBatch.lastMessage
+                } else {
+                    batchWrapper.messageBatch.firstMessage
                 }
             lastMessage.id to lastMessage.timestamp
         }
@@ -146,10 +146,8 @@ class MessageContinuousStream(
 
     private suspend fun emptySender(parentScope: CoroutineScope) {
         while (parentScope.isActive) {
-            lastElement?.let {
-                sendToChannel(EmptyPipelineObject(isStreamEmpty, it, lastTimestamp))
-                delay(sendEmptyDelay)
-            }
+            sendToChannel(EmptyPipelineObject(isStreamEmpty, lastElement, lastTimestamp))
+            delay(sendEmptyDelay)
         }
     }
 
