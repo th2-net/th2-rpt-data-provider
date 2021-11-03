@@ -23,6 +23,7 @@ import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchReques
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import mu.KotlinLogging
 
 data class StreamName(val name: String, val direction: Direction) {
     override fun toString(): String {
@@ -38,6 +39,11 @@ abstract class PipelineComponent(
     val previousComponent: PipelineComponent? = null,
     messageFlowCapacity: Int
 ) {
+
+    companion object {
+        private val logger = KotlinLogging.logger { }
+    }
+
     private val messageFlow = Channel<PipelineStepObject>(messageFlowCapacity)
     protected var processedMessagesCounter: Long = 0
 
@@ -49,11 +55,14 @@ abstract class PipelineComponent(
 
 
     protected suspend fun sendToChannel(message: PipelineStepObject) {
+        logger.trace { message.lastProcessedId }
         messageFlow.send(message)
     }
     
 
     suspend fun pollMessage(): PipelineStepObject {
-        return messageFlow.receive()
+        val res =  messageFlow.receive()
+        logger.trace { res.lastProcessedId }
+        return res
     }
 }

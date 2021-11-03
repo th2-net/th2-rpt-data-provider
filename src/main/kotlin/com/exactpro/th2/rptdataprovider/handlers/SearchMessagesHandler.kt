@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.*
 import mu.KotlinLogging
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
+import kotlin.math.log
 
 class SearchMessagesHandler(private val context: Context) {
 
@@ -40,7 +41,6 @@ class SearchMessagesHandler(private val context: Context) {
     @ExperimentalCoroutinesApi
     suspend fun searchMessagesSse(request: SseMessageSearchRequest, writer: StreamWriter) {
         withContext(coroutineContext) {
-
             val lastMessageIdCounter = AtomicLong(0)
             var streamMerger: StreamMerger? = null
 
@@ -49,6 +49,7 @@ class SearchMessagesHandler(private val context: Context) {
 
                 do {
                     val message = streamMerger?.pollMessage()
+                    logger.trace { message?.lastProcessedId }
                     message?.let { emit(it) }
                 } while (true)
             }
@@ -64,9 +65,13 @@ class SearchMessagesHandler(private val context: Context) {
                 .collect {
                     coroutineContext.ensureActive()
 
+                    logger.trace { it.lastProcessedId }
+
                     if (it is PipelineFilteredMessage) {
+                        logger.trace { it.lastProcessedId }
                         writer.write(it.payload, lastMessageIdCounter)
                     } else if (it is PipelineKeepAlive) {
+                        logger.trace { it.lastProcessedId }
                         writer.write(LastScannedMessageInfo(it), lastMessageIdCounter)
                     }
                 }

@@ -24,6 +24,7 @@ import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatchData
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import kotlinx.coroutines.*
+import mu.KotlinLogging
 import java.lang.Integer.min
 import java.time.Instant
 
@@ -41,6 +42,10 @@ class MessageContinuousStream(
     initializer.stream,
     messageFlowCapacity = messageFlowCapacity
 ) {
+
+    companion object {
+        private val logger = KotlinLogging.logger { }
+    }
 
     private var messageLoader: MessageLoader? = null
 
@@ -113,6 +118,7 @@ class MessageContinuousStream(
     private fun changeStreamMessageIndex(filteredIdsList: List<MessageBatchWrapper>): Pair<StoredMessageId?, Instant> {
         val batchWrapper = filteredIdsList.lastOrNull { !it.messageBatch.isEmpty }
         return if (batchWrapper == null) {
+            logger.trace { lastElement }
             lastElement to lastTimestamp
         } else {
             val lastMessage =
@@ -133,6 +139,7 @@ class MessageContinuousStream(
         }
         return messageLoader!!.pullMoreMessage(lastElement!!, firstPull, perStreamLimit).also { messages ->
             changeStreamMessageIndex(messages).let {
+                logger.trace { it.first }
                 lastElement = it.first
                 lastTimestamp = it.second
             }
@@ -165,6 +172,7 @@ class MessageContinuousStream(
                 val messageBatches = loadMoreMessage()
 
                 for (parsedMessage in messageBatches) {
+                    logger.trace { parsedMessage.messageBatch.id }
                     sendToChannel(PipelineRawBatchData(isStreamEmpty, lastElement, lastTimestamp, parsedMessage))
                 }
 

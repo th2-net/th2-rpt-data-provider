@@ -28,6 +28,7 @@ import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import kotlinx.coroutines.*
+import mu.KotlinLogging
 import java.time.Instant
 import kotlin.coroutines.coroutineContext
 
@@ -39,6 +40,10 @@ class StreamMerger(
     pipelineStreams: List<PipelineComponent>,
     messageFlowCapacity: Int
 ) : PipelineComponent(context, searchRequest, externalScope, messageFlowCapacity = messageFlowCapacity) {
+
+    companion object {
+        private val logger = KotlinLogging.logger { }
+    }
 
     private class StreamHolder(
         val messageStream: PipelineComponent
@@ -55,10 +60,13 @@ class StreamMerger(
 
         suspend fun pop(): PipelineStepObject {
             return messageStream.pollMessage().let {
+                logger.trace { it.lastProcessedId }
                 if (previousElement == null && currentElement == null) {
+                    logger.trace { it.lastProcessedId }
                     previousElement = it
                     currentElement = it
                 } else {
+                    logger.trace { it.lastProcessedId }
                     previousElement = currentElement
                     currentElement = it
                 }
@@ -144,7 +152,10 @@ class StreamMerger(
 
                 val nextMessage = getNextMessage()
 
+                logger.trace { nextMessage.lastProcessedId }
+
                 if (nextMessage !is EmptyPipelineObject) {
+                    logger.trace { nextMessage.lastProcessedId }
                     sendToChannel(nextMessage)
                 }
 
