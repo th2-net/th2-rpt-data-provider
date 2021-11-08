@@ -17,6 +17,7 @@
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.cradle.TimeRelation
+import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.dayStart
 import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
@@ -60,6 +61,7 @@ class MessageContinuousStream(
 
     private var lastElement: StoredMessageId? = null
     private var lastTimestamp: Instant = startTimestamp
+    private var firstMessageInRequest: StoredMessage? = null
 
 
     init {
@@ -116,16 +118,20 @@ class MessageContinuousStream(
 
 
     private fun changeStreamMessageIndex(filteredIdsList: List<MessageBatchWrapper>): Pair<StoredMessageId?, Instant> {
-        val batchWrapper = filteredIdsList.lastOrNull { !it.messageBatch.isEmpty }
-        return if (batchWrapper == null) {
+        val lastBatchWrapper = filteredIdsList.lastOrNull { !it.messageBatch.isEmpty }
+        val firstBatchWrapper = filteredIdsList.firstOrNull { !it.messageBatch.isEmpty }
+
+        return if (lastBatchWrapper == null) {
             logger.trace { lastElement }
             lastElement to lastTimestamp
         } else {
             val lastMessage =
                 if (searchRequest.searchDirection == TimeRelation.AFTER) {
-                    batchWrapper.messageBatch.lastMessage
+                    firstMessageInRequest = firstBatchWrapper!!.messageBatch.firstMessage
+                    lastBatchWrapper.messageBatch.lastMessage
                 } else {
-                    batchWrapper.messageBatch.firstMessage
+                    firstMessageInRequest = firstBatchWrapper!!.messageBatch.lastMessage
+                    lastBatchWrapper.messageBatch.firstMessage
                 }
             lastMessage.id to lastMessage.timestamp
         }
@@ -153,7 +159,14 @@ class MessageContinuousStream(
 
     private suspend fun emptySender(parentScope: CoroutineScope) {
         while (parentScope.isActive) {
-            sendToChannel(EmptyPipelineObject(isStreamEmpty, lastElement, lastTimestamp))
+//            sendToChannel(EmptyPipelineObject(isStreamEmpty, lastElement, lastTimestamp))
+            sendToChannel(
+                EmptyPipelineObject(
+                    isStreamEmpty,
+                    firstMessageInRequest?.id,
+                    firstMessageInRequest?.timestamp ?: lastTimestamp
+                )
+            )
             delay(sendEmptyDelay)
         }
     }

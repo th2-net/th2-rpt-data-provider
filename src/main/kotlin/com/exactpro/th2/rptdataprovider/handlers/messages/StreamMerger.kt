@@ -103,7 +103,12 @@ class StreamMerger(
 
     private fun keepSearch(pipelineStepObject: PipelineStepObject): Boolean {
         val isKeepOpen = searchRequest.keepOpen && searchRequest.searchDirection == TimeRelation.AFTER
-        return (!allStreamIsEmpty || isKeepOpen) && timestampInRange(pipelineStepObject)
+        val inTimeRange = if (pipelineStepObject !is EmptyPipelineObject) {
+            timestampInRange(pipelineStepObject)
+        } else {
+            true
+        }
+        return (!allStreamIsEmpty || isKeepOpen) && inTimeRange
     }
 
 
@@ -165,12 +170,15 @@ class StreamMerger(
         }
     }
 
+    private fun isStreamEmpty(messageStream: StreamHolder): Boolean {
+        return allStreamIsEmpty && messageStream.top().streamEmpty && messageStream.top() is EmptyPipelineObject
+    }
 
     private suspend fun selectMessage(comparator: (PipelineStepObject, PipelineStepObject) -> Boolean): PipelineStepObject {
         return coroutineScope {
             var resultElement: StreamHolder = messageStreams.first()
             for (messageStream in messageStreams) {
-                allStreamIsEmpty = allStreamIsEmpty && messageStream.top().streamEmpty
+                allStreamIsEmpty = isStreamEmpty(messageStream)
                 if (comparator(messageStream.top(), resultElement.top())) {
                     resultElement = messageStream
                 }
