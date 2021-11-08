@@ -19,7 +19,6 @@ package com.exactpro.th2.rptdataprovider.entities.responses
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.Direction
 import com.fasterxml.jackson.annotation.JsonAutoDetect
-import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.annotation.JsonRawValue
 import com.google.protobuf.util.JsonFormat
@@ -51,18 +50,12 @@ class HttpBodyWrapper(
 
 data class HttpMessage(
     val type: String = "message",
-    @JsonIgnore
     val timestamp: Instant,
-    @JsonIgnore
     val direction: Direction?,
-    @JsonIgnore
     val sessionId: String,
-    @JsonIgnore
     val attachedEventIds: Set<String>,
     val messageId: String,
-    @JsonIgnore
     var body: BodyHttpMessage?,
-    @JsonIgnore
     var bodyBase64: String?
 )
 
