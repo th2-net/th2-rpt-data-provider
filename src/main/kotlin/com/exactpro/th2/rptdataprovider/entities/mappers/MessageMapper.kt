@@ -41,7 +41,7 @@ object MessageMapper {
         return messagesType.size == bodiesAll.size
     }
 
-    private suspend fun getBodyMessage(messageWithMetadata: MessageWithMetadata):BodyHttpMessage? {
+    private suspend fun getBodyMessage(messageWithMetadata: MessageWithMetadata): BodyHttpMessage? {
         return with(messageWithMetadata) {
             val body = message.messageBody?.let {
                 it.zip(filteredBody).map { (msg, filtered) ->
@@ -64,7 +64,7 @@ object MessageMapper {
             MessageData.newBuilder()
                 .setMessageId(message.id.convertToProto())
                 .setTimestamp(message.timestamp.toTimestamp())
-                .setBodyBase64Bytes(message.rawMessageBody)
+                .setBodyBase64(message.rawMessageBody?.let { Base64.getEncoder().encodeToString(it.toByteArray()) })
                 .setBody(jacksonMapper.writeValueAsString(getBodyMessage(messageWithMetadata)))
                 .build()
         }
