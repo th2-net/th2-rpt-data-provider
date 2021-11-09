@@ -151,7 +151,7 @@ class MessageContinuousStream(
             }
 
             firstPull = false
-            isStreamEmpty = messages.size < perStreamLimit
+            isStreamEmpty = messages.isEmpty()
             perStreamLimit = min(perStreamLimit * 2, maxMessagesLimit)
         }
     }
@@ -159,12 +159,15 @@ class MessageContinuousStream(
 
     private suspend fun emptySender(parentScope: CoroutineScope) {
         while (parentScope.isActive) {
-//            sendToChannel(EmptyPipelineObject(isStreamEmpty, lastElement, lastTimestamp))
             sendToChannel(
                 EmptyPipelineObject(
                     isStreamEmpty,
                     firstMessageInRequest?.id,
-                    firstMessageInRequest?.timestamp ?: lastTimestamp
+                    if (!isStreamEmpty && firstMessageInRequest?.timestamp != null)
+                        firstMessageInRequest!!.timestamp
+                    else {
+                        lastTimestamp
+                    }
                 )
             )
             delay(sendEmptyDelay)

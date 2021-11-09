@@ -116,8 +116,10 @@ class MessageLoader(
     suspend fun pullMoreMessage(startId: StoredMessageId, include: Boolean, limit: Int): List<MessageBatchWrapper> {
         return databaseRequestRetry(dbRetryDelay) {
             pullMore(startId, include, limit)
-        }.map { batch ->
-            MessageBatchWrapper(batch, getFirstIdInRange(startId, include, batch), searchDirection)
+        }.mapNotNull { batch ->
+            getFirstIdInRange(startId, include, batch)?.let {
+                MessageBatchWrapper(batch, it, searchDirection)
+            }
         }
     }
 }

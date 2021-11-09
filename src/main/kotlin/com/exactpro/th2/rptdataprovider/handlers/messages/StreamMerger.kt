@@ -170,19 +170,21 @@ class StreamMerger(
         }
     }
 
-    private fun isStreamEmpty(messageStream: StreamHolder): Boolean {
-        return allStreamIsEmpty && messageStream.top().streamEmpty && messageStream.top() is EmptyPipelineObject
+    private fun isStreamEmpty(streamsEmpty: Boolean, messageStream: StreamHolder): Boolean {
+        return streamsEmpty && messageStream.top().streamEmpty && messageStream.top() is EmptyPipelineObject
     }
 
     private suspend fun selectMessage(comparator: (PipelineStepObject, PipelineStepObject) -> Boolean): PipelineStepObject {
         return coroutineScope {
             var resultElement: StreamHolder = messageStreams.first()
+            var streamsEmpty = true
             for (messageStream in messageStreams) {
-                allStreamIsEmpty = isStreamEmpty(messageStream)
+                streamsEmpty = isStreamEmpty(streamsEmpty, messageStream)
                 if (comparator(messageStream.top(), resultElement.top())) {
                     resultElement = messageStream
                 }
             }
+            allStreamIsEmpty = streamsEmpty
             resultElement.pop()
         }
     }
