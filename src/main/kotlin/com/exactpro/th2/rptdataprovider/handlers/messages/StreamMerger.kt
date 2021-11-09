@@ -213,8 +213,7 @@ class StreamMerger(
             }
         }
     }
-
-
+    
     fun getStreamsInfo(): List<StreamInfo> {
         return messageStreams.map {
             StreamInfo(
