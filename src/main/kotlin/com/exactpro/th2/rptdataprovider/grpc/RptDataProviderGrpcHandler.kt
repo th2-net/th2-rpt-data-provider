@@ -130,7 +130,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
         val stringParameters = lazy { request?.let { TextFormat.shortDebugString(request) } ?: "" }
         val context = io.grpc.Context.current()
 
-        CoroutineScope(Dispatchers.Default).launch {
+        CoroutineScope(Dispatchers.IO).launch {
             logMetrics(if (useStream) grpcStreamRequestsProcessedInParallelQuantity else grpcSingleRequestsProcessedInParallelQuantity) {
                 measureTimeMillis {
                     logger.debug { "handling '$requestName' request with parameters '${stringParameters.value}'" }
