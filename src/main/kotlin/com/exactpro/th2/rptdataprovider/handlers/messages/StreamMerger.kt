@@ -101,14 +101,18 @@ class StreamMerger(
     }
 
 
-    private fun keepSearch(pipelineStepObject: PipelineStepObject): Boolean {
+    private fun keepSearch(): Boolean {
         val isKeepOpen = searchRequest.keepOpen && searchRequest.searchDirection == TimeRelation.AFTER
-        val inTimeRange = if (pipelineStepObject !is EmptyPipelineObject) {
+        return (!allStreamIsEmpty || isKeepOpen)
+    }
+
+
+    private fun inTimeRange(pipelineStepObject: PipelineStepObject): Boolean {
+        return if (pipelineStepObject !is EmptyPipelineObject) {
             timestampInRange(pipelineStepObject)
         } else {
             true
         }
-        return (!allStreamIsEmpty || isKeepOpen) && inTimeRange
     }
 
 
@@ -157,14 +161,16 @@ class StreamMerger(
 
                 val nextMessage = getNextMessage()
 
+                val inTimeRange = inTimeRange(nextMessage)
+
                 logger.trace { nextMessage.lastProcessedId }
 
-                if (nextMessage !is EmptyPipelineObject) {
+                if (nextMessage !is EmptyPipelineObject && inTimeRange) {
                     logger.trace { nextMessage.lastProcessedId }
                     sendToChannel(nextMessage)
                 }
 
-            } while (keepSearch(nextMessage))
+            } while (keepSearch() && inTimeRange)
 
             sendToChannel(StreamEndObject(false, null, Instant.ofEpochMilli(0)))
         }

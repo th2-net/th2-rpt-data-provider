@@ -78,24 +78,24 @@ class MessageLoader(
 
 
     private fun isLessThenStart(message: StoredMessage, include: Boolean, startId: StoredMessageId): Boolean {
-        return message.timestamp.isBefore(startTimestamp) ||
+        return message.timestamp.isBefore(startTimestamp) &&
                 startId.let {
                     if (include) {
-                        message.index < it.index
-                    } else {
                         message.index <= it.index
+                    } else {
+                        message.index < it.index
                     }
                 }
     }
 
 
     private fun isGreaterThenStart(message: StoredMessage, include: Boolean, startId: StoredMessageId): Boolean {
-        return message.timestamp.isAfter(startTimestamp) ||
+        return message.timestamp.isAfter(startTimestamp) &&
                 startId.let {
                     if (include) {
-                        message.index > it.index
-                    } else {
                         message.index >= it.index
+                    } else {
+                        message.index > it.index
                     }
                 }
     }
@@ -104,9 +104,9 @@ class MessageLoader(
     private fun getFirstIdInRange(startId: StoredMessageId, include: Boolean, batch: StoredMessageBatch): Int? {
         val firstMessageInRange =
             if (searchDirection == AFTER) {
-                batch.messages.indexOfFirst { !isLessThenStart(it, include, startId) }
+                batch.messages.indexOfFirst { isGreaterThenStart(it, include, startId) }
             } else {
-                batch.messagesReverse.indexOfFirst { !isGreaterThenStart(it, include, startId) }
+                batch.messagesReverse.indexOfFirst { isLessThenStart(it, include, startId) }
             }
 
         return firstMessageInRange.takeIf { it != -1 }
