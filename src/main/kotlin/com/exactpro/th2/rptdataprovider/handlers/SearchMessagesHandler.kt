@@ -54,9 +54,6 @@ class SearchMessagesHandler(private val context: Context) {
                 } while (true)
             }
                 .takeWhile { it !is StreamEndObject }
-                .let { messageFlow ->
-                    request.resultCountLimit?.let { messageFlow.take(it) } ?: messageFlow
-                }
                 .onCompletion {
                     streamMerger?.let { merger -> writer.write(merger.getStreamsInfo()) }
                     coroutineContext.cancelChildren()

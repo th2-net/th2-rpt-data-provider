@@ -77,7 +77,7 @@ class StreamMerger(
 
     private val messageStreams = pipelineStreams.map { StreamHolder(it) }
     private var allStreamIsEmpty: Boolean = false
-
+    private var resultCountLimit = searchRequest.resultCountLimit?.dec()
 
     init {
         externalScope.launch {
@@ -103,7 +103,8 @@ class StreamMerger(
 
     private fun keepSearch(): Boolean {
         val isKeepOpen = searchRequest.keepOpen && searchRequest.searchDirection == TimeRelation.AFTER
-        return (!allStreamIsEmpty || isKeepOpen)
+        val haveNotReachedLimit = resultCountLimit?.let { it > 0 } ?: true
+        return (!allStreamIsEmpty || isKeepOpen) && haveNotReachedLimit
     }
 
 
@@ -168,6 +169,7 @@ class StreamMerger(
                 if (nextMessage !is EmptyPipelineObject && inTimeRange) {
                     logger.trace { nextMessage.lastProcessedId }
                     sendToChannel(nextMessage)
+                    resultCountLimit = resultCountLimit?.dec()
                 }
 
             } while (keepSearch() && inTimeRange)
@@ -219,7 +221,7 @@ class StreamMerger(
             }
         }
     }
-    
+
     fun getStreamsInfo(): List<StreamInfo> {
         return messageStreams.map {
             StreamInfo(
