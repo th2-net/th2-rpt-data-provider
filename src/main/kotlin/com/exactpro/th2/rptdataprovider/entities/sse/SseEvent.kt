@@ -72,9 +72,11 @@ class LastScannedMessageInfo(
 
     override fun convertToGrpc(): com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo {
         return com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo.newBuilder()
-            .setId(id)
-            .setTimestampMillis(timestamp)
             .setScanCounter(scanCounter)
+            .also { builder ->
+                instantTimestamp?.let { builder.setTimestamp(it.toTimestamp()) }
+                messageId?.let { builder.setMessageId(it.convertToProto()) }
+            }
             .build()
     }
 }
@@ -98,9 +100,11 @@ class LastScannedEventInfo(
 
     override fun convertToGrpc(): com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo {
         return com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo.newBuilder()
-            .setId(id)
-            .setTimestampMillis(timestamp)
             .setScanCounter(scanCounter)
+            .also { builder ->
+                instantTimestamp?.let { builder.setTimestamp(it.toTimestamp()) }
+                eventId?.let { builder.setEventId(EventID.newBuilder().setId(id)) }
+            }
             .build()
     }
 }

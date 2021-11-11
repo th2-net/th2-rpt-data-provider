@@ -43,6 +43,8 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.SerializationFeature
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import io.ktor.http.*
 
@@ -57,7 +59,9 @@ class Context(
 
     val jacksonMapper: ObjectMapper = jacksonObjectMapper()
         .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
-        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES),
+        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+        .registerModule(JavaTimeModule())
+        .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false),
 
     val cradleManager: CradleManager,
     val messageRouterRawBatch: MessageRouter<RawMessageBatch>,

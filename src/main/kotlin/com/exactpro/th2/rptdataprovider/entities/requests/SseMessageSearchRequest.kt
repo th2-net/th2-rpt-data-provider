@@ -22,6 +22,7 @@ import com.exactpro.th2.dataprovider.grpc.TimeRelation.PREVIOUS
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.internal.FilteredMessageWrapper
+import com.exactpro.th2.rptdataprovider.entities.internal.MessageIdWithSubsequences
 import com.exactpro.th2.rptdataprovider.grpcDirectionToCradle
 import java.time.Instant
 
@@ -50,16 +51,18 @@ data class SseMessageSearchRequest(
 
     constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<FilteredMessageWrapper>) : this(
         filterPredicate = filterPredicate,
-        startTimestamp = parameters["startTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
+        startTimestamp = parameters["startTimestamp"]?.firstOrNull()?.let { Instant.parse(it) },
         stream = parameters["stream"] ?: emptyList(),
         searchDirection = parameters["searchDirection"]?.firstOrNull()?.let {
             asCradleTimeRelation(
                 it
             )
         } ?: TimeRelation.AFTER,
-        endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
+        endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.parse(it) },
         resumeFromId = parameters["resumeFromId"]?.firstOrNull(),
-        resumeFromIdsList = parameters["messageId"]?.map { StoredMessageId.fromString(it) } ?: emptyList(),
+        resumeFromIdsList = parameters["messageId"]?.map {
+            MessageIdWithSubsequences.from(it).messageId
+        } ?: emptyList(),
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt(),
         keepOpen = parameters["keepOpen"]?.firstOrNull()?.toBoolean() ?: false,
         attachedEvents = parameters["attachedEvents"]?.firstOrNull()?.toBoolean() ?: false,
@@ -97,8 +100,8 @@ data class SseMessageSearchRequest(
             request.keepOpen.value
         } else false,
 
-        resumeFromIdsList = if (request.messageIdList.isNotEmpty()) {
-            request.messageIdList.map {
+        resumeFromIdsList = if (request.resumeFromIdsList.isNotEmpty()) {
+            request.resumeFromIdsList.map {
                 StoredMessageId(
                     it.connectionId.sessionAlias,
                     grpcDirectionToCradle(it.direction),

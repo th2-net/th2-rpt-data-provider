@@ -235,13 +235,13 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
                     messageIdWithoutSubsequence.sequence
                 ).toString()
             ).let {
-                MessageMapper.convertToGrpcMessageData(FilteredMessageWrapper(it, request))
+                MessageMapper.convertToGrpcMessageData(FilteredMessageWrapper(it, request.subsequenceList))
             }
         }
     }
 
 
-    override fun getMessageStreams(request: com.google.protobuf.Empty, responseObserver: StreamObserver<StringList>) {
+    override fun getMessageStreams(request: MessageStreamNamesRequest, responseObserver: StreamObserver<StringList>) {
         handleRequest(
             responseObserver,
             "get message streams",
@@ -286,7 +286,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     }
 
 
-    override fun getMessagesFilters(request: com.google.protobuf.Empty, responseObserver: StreamObserver<ListFilterName>) {
+    override fun getMessagesFilters(request: MessageFiltersRequest, responseObserver: StreamObserver<ListFilterName>) {
         handleRequest(responseObserver, "get message filters names", useStream = false, request = request) {
             ListFilterName.newBuilder()
                 .addAllFilterNames(
@@ -298,7 +298,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     }
 
 
-    override fun getEventsFilters(request: com.google.protobuf.Empty, responseObserver: StreamObserver<ListFilterName>) {
+    override fun getEventsFilters(request: EventFiltersRequest, responseObserver: StreamObserver<ListFilterName>) {
         handleRequest(responseObserver, "get event filters names", useStream = false, request = request) {
             ListFilterName.newBuilder()
                 .addAllFilterNames(

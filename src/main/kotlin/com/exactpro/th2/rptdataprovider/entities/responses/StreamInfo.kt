@@ -26,7 +26,8 @@ data class StreamInfo(val stream: StreamName, val lastElement: StoredMessageId? 
     fun convertToProto(): Stream {
         return Stream.newBuilder()
             .setDirection(cradleDirectionToGrpc(stream.direction))
-            .setSession(stream.name).also { builder ->
+            .setSession(stream.name)
+            .also { builder ->
                 lastElement?.let { builder.setLastId(it.convertToProto()) }
             }.build()
     }

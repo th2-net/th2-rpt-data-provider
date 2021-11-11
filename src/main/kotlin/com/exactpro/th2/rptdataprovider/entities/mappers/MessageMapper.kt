@@ -16,13 +16,18 @@
 
 package com.exactpro.th2.rptdataprovider.entities.mappers
 
+import com.exactpro.cradle.Direction
+import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.message.toTimestamp
+import com.exactpro.th2.dataprovider.grpc.MessageBodyWrapper
 import com.exactpro.th2.dataprovider.grpc.MessageData
 import com.exactpro.th2.rptdataprovider.convertToProto
+import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.FilteredMessageWrapper
-import com.exactpro.th2.rptdataprovider.entities.responses.BodyHttpMessage
 import com.exactpro.th2.rptdataprovider.entities.responses.HttpBodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.responses.HttpMessage
+import com.exactpro.th2.rptdataprovider.grpcDirectionToCradle
+import com.exactpro.th2.rptdataprovider.providerDirectionToCradle
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.KotlinModule
@@ -37,7 +42,22 @@ object MessageMapper {
         .registerModule(KotlinModule())
 
 
+    private fun wrapSubMessage(message: BodyWrapper, matched: Boolean): MessageBodyWrapper {
+        return MessageBodyWrapper.newBuilder()
+            .setMessage(message.message)
+            .setFiltered(matched)
+            .build()
+    }
 
+    private fun wrapSubMessages(filteredMessageWrapper: FilteredMessageWrapper): List<MessageBodyWrapper> {
+        return with(filteredMessageWrapper) {
+            message.messageBody?.let { subMessages ->
+                (subMessages zip filteredBody).map { (subMessage, matched) ->
+                    wrapSubMessage(subMessage, matched)
+                }
+            } ?: emptyList()
+        }
+    }
 
     suspend fun convertToGrpcMessageData(filteredMessageWrapper: FilteredMessageWrapper): MessageData {
         return with(filteredMessageWrapper) {
@@ -45,8 +65,8 @@ object MessageMapper {
                 .setMessageId(message.id.convertToProto())
                 .setTimestamp(message.timestamp.toTimestamp())
                 .setBodyRaw(message.rawMessageBody)
-                .setAttachedEventIds(message.attachedEventIds.map { it. })
-                .setBody(jacksonMapper.writeValueAsString(getBodyMessage(filteredMessageWrapper)))
+                .addAllAttachedEventIds(message.attachedEventIds.map { EventID.newBuilder().setId(it).build() })
+                .addAllMessages(wrapSubMessages(filteredMessageWrapper))
                 .build()
         }
     }
@@ -54,13 +74,18 @@ object MessageMapper {
     suspend fun convertToHttpMessage(filteredMessageWrapper: FilteredMessageWrapper): HttpMessage {
         return with(filteredMessageWrapper) {
             val httpMessage = HttpMessage(
+                id = message.messageId,
                 timestamp = message.timestamp,
-                direction = message.direction,
                 sessionId = message.sessionId,
+                direction = providerDirectionToCradle(message.direction),
+                sequence = message.id.index.toString(),
                 attachedEventIds = message.attachedEventIds,
-                messageId = message.id.toString(),
-                body = getBodyMessage(filteredMessageWrapper),
-                bodyBase64 = message.rawMessageBody?.let { Base64.getEncoder().encodeToString(it.toByteArray()) }
+                rawMessageBase64 = message.rawMessageBody?.let { Base64.getEncoder().encodeToString(it.toByteArray()) },
+                parsedMessages = message.messageBody?.let {
+                    it.zip(filteredBody).map { (msg, filtered) ->
+                        HttpBodyWrapper.from(msg, filtered)
+                    }
+                }
             )
             httpMessage
         }

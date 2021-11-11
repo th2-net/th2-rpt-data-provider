@@ -17,6 +17,8 @@
 package com.exactpro.th2.rptdataprovider
 
 import com.exactpro.cradle.Direction
+import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.th2.common.grpc.MessageID
 
 fun cradleDirectionToGrpc(direction: Direction): com.exactpro.th2.common.grpc.Direction {
     return if (direction == Direction.FIRST)
@@ -30,4 +32,26 @@ fun grpcDirectionToCradle(direction: com.exactpro.th2.common.grpc.Direction): Di
         Direction.FIRST
     else
         Direction.SECOND
+}
+
+fun providerDirectionToCradle(direction: com.exactpro.th2.rptdataprovider.entities.internal.Direction?): Direction? {
+    return direction?.let {
+        if (it == com.exactpro.th2.rptdataprovider.entities.internal.Direction.IN) {
+            Direction.FIRST
+        } else {
+            Direction.SECOND
+        }
+    }
+}
+
+fun grpcMessageIdToString(messageId: MessageID): String {
+    val storedMessageId = StoredMessageId(
+        messageId.connectionId.sessionAlias,
+        grpcDirectionToCradle(messageId.direction),
+        messageId.sequence
+    )
+
+    return messageId.subsequenceList.joinToString(
+        prefix = "$storedMessageId.", separator = "."
+    )
 }

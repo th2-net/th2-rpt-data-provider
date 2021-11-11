@@ -21,6 +21,7 @@ import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.internal.FilteredMessageWrapper
+import com.exactpro.th2.rptdataprovider.entities.internal.MessageIdWithSubsequences
 import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
@@ -335,7 +336,9 @@ class HttpServer(private val applicationContext: Context) {
                         call, context, "get single message",
                         notModifiedCacheControl, probe, false, call.parameters.toMap()
                     ) {
-                        FilteredMessageWrapper(messageCache.getOrPut(call.parameters["id"]!!)).let {
+                        val id = MessageIdWithSubsequences.from(call.parameters["id"]!!)
+                        val message = messageCache.getOrPut(id.messageId.toString())
+                        FilteredMessageWrapper(message, id.subsequences).let {
                             MessageMapper.convertToHttpMessage(it)
                         }
                     }

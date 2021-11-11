@@ -28,7 +28,6 @@ import kotlinx.coroutines.flow.*
 import mu.KotlinLogging
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
-import kotlin.math.log
 
 class SearchMessagesHandler(private val context: Context) {
 

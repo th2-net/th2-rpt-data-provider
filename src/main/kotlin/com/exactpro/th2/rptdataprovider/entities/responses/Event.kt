@@ -66,14 +66,14 @@ data class Event(
             .setIsBatched(isBatched)
             .setEventName(eventName)
             .setStartTimestamp(startTimestamp.toTimestamp())
-            .setSuccessful(if (successful) SUCCESS else FAILED)
+            .setStatus(if (successful) SUCCESS else FAILED)
+            .addAllAttachedMessageIds(convertMessageIdToProto(attachedMessageIds))
             .addAllAttachedMessageIds(convertMessageIdToProto(attachedMessageIds))
             .let { builder ->
                 batchId?.let { builder.setBatchId(EventID.newBuilder().setId(it)) }
                 eventType?.let { builder.setEventType(it) }
                 endTimestamp?.let { builder.setEndTimestamp(it.toTimestamp()) }
                 parentEventId?.let { builder.setParentEventId(EventID.newBuilder().setId(it)) }
-                attachedMessageIds?.let { builder.addAllAttachedMessageIds(convertMessageIdToProto(it)) }
                 body?.let { builder.setBody(ByteString.copyFrom(it.toByteArray())) }
                 builder
             }.build()

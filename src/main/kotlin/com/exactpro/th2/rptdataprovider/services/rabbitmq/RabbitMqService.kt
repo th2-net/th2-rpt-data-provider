@@ -79,7 +79,7 @@ class RabbitMqService(
                     }
                 }
             }
-            logger.debug { "${decodeRequests.size} decode requests remaining" }
+            logger.trace { "${decodeRequests.size} decode requests remaining" }
         },
         "from_codec"
     )
@@ -134,7 +134,7 @@ class RabbitMqService(
 
                         withTimeout(responseTimeout) {
                             requests.map { async { it.get() } }.awaitAll()
-                                .also { logger.debug { "codec response received $requestDebugInfo" } }
+                                .also { logger.trace { "codec response received $requestDebugInfo" } }
                         }
                     }
                 } catch (e: Exception) {
@@ -196,7 +196,7 @@ class RabbitMqService(
             if (!alreadyRequested) {
                 try {
                     messageRouterRawBatch.sendAll(batch, firstId?.connectionId?.sessionAlias)
-                    logger.debug { "codec request published $requestDebugInfo" }
+                    logger.trace { "codec request published $requestDebugInfo" }
                 } catch (e: IOException) {
                     logger.error(e) { "cannot send message $requestDebugInfo" }
                 }

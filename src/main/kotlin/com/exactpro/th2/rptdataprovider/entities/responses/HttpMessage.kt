@@ -16,33 +16,27 @@
 
 package com.exactpro.th2.rptdataprovider.entities.responses
 
+import com.exactpro.cradle.Direction
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
-import com.exactpro.th2.rptdataprovider.entities.internal.Direction
-import com.fasterxml.jackson.annotation.JsonAutoDetect
-import com.fasterxml.jackson.annotation.JsonIgnore
-import com.fasterxml.jackson.annotation.JsonProperty
+import com.exactpro.th2.rptdataprovider.grpcMessageIdToString
 import com.fasterxml.jackson.annotation.JsonRawValue
 import com.google.protobuf.util.JsonFormat
 import java.time.Instant
 
 
 class HttpBodyWrapper(
-    val subsequenceId: List<Int>,
-    val protocol: String,
-    val messageType: String,
+    val match: Boolean,
+    val id: String,
     @JsonRawValue
-    val message: String,
-    val filtered: Boolean
+    val message: String
 ) {
 
     companion object {
-        suspend fun from(bodyWrapper: BodyWrapper, filtered: Boolean): HttpBodyWrapper {
+        suspend fun from(bodyWrapper: BodyWrapper, match: Boolean): HttpBodyWrapper {
             return HttpBodyWrapper(
-                bodyWrapper.id.subsequenceList,
-                bodyWrapper.protocol,
-                bodyWrapper.messageType,
-                JsonFormat.printer().print(bodyWrapper.message),
-                filtered
+                match,
+                grpcMessageIdToString(bodyWrapper.id),
+                JsonFormat.printer().print(bodyWrapper.message)
             )
         }
     }
@@ -51,21 +45,16 @@ class HttpBodyWrapper(
 
 data class HttpMessage(
     val type: String = "message",
+    val id: String,
+//    @com.fasterxml.jackson.annotation.JsonFormat(
+//        shape = com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING,
+//        pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS"
+//    )
     val timestamp: Instant,
-    val direction: Direction?,
     val sessionId: String,
+    val direction: Direction?,
+    val sequence: String,
     val attachedEventIds: Set<String>,
-    val messageId: String,
-    var body: BodyHttpMessage?,
-    var bodyBase64: String?
-)
-
-//fixme this is a workaround to revert the old message format
-data class BodyHttpMessage(
-    @JsonProperty("metadata")
-    var metadata: MutableMap<String,Any>?,
-    @JsonProperty("fields")
-    var fields: MutableMap<String,Any>?,
-    @JsonIgnore
-    var messageValue: MutableMap<String,Any>? = null
+    var rawMessageBase64: String?,
+    var parsedMessages: List<HttpBodyWrapper>?
 )
