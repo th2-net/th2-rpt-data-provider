@@ -77,7 +77,7 @@ class StreamMerger(
 
     private val messageStreams = pipelineStreams.map { StreamHolder(it) }
     private var allStreamIsEmpty: Boolean = false
-    private var resultCountLimit = searchRequest.resultCountLimit?.dec()
+    private var resultCountLimit = searchRequest.resultCountLimit
 
     init {
         externalScope.launch {
