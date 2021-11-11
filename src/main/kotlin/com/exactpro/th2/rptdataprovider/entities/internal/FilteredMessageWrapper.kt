@@ -18,16 +18,16 @@ package com.exactpro.th2.rptdataprovider.entities.internal
 
 import com.exactpro.th2.common.grpc.MessageID
 
-interface DataWrapper<T> {
+interface FilteredDataWrapper<T> {
     val message: T
     var finalFiltered: Boolean
 }
 
-data class MessageWithMetadata(
+data class FilteredMessageWrapper(
     override val message: Message,
     val filteredBody: MutableList<Boolean> = mutableListOf(),
     override var finalFiltered: Boolean = true
-) : DataWrapper<Message> {
+) : FilteredDataWrapper<Message> {
 
     constructor(message: Message) : this(
         message = message,

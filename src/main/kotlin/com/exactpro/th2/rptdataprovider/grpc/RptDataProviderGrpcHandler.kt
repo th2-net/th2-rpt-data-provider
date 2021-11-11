@@ -25,7 +25,7 @@ import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
-import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
+import com.exactpro.th2.rptdataprovider.entities.internal.FilteredMessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
@@ -98,7 +98,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     private val searchMessagesHandler = this.context.searchMessagesHandler
 
     private val eventFiltersPredicateFactory = this.context.eventFiltersPredicateFactory
-    private val messageFiltersPredicateFactory = this.context.messageFiltersPredicateFactory
+    private val messageFiltersPredicateFactory = this.context.filteredMessageFiltersPredicateFactory
 
 
     private suspend fun checkContext(context: io.grpc.Context) {
@@ -235,7 +235,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
                     messageIdWithoutSubsequence.sequence
                 ).toString()
             ).let {
-                MessageMapper.convertToGrpcMessageData(MessageWithMetadata(it, request))
+                MessageMapper.convertToGrpcMessageData(FilteredMessageWrapper(it, request))
             }
         }
     }
@@ -339,7 +339,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
             val filterPredicate = messageFiltersPredicateFactory.build(request.filtersList)
             IsMatched.newBuilder().setIsMatched(
                 filterPredicate.apply(
-                    MessageWithMetadata(
+                    FilteredMessageWrapper(
                         messageCache.getOrPut(
                             StoredMessageId(
                                 request.messageId.connectionId.sessionAlias,

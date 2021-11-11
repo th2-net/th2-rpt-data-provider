@@ -16,22 +16,15 @@
 
 package com.exactpro.th2.rptdataprovider.server
 
-import com.exactpro.cradle.Order
-import com.exactpro.cradle.TimeRelation
-import com.exactpro.cradle.messages.StoredMessageFilterBuilder
-import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.utils.CradleIdException
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
-import com.exactpro.th2.rptdataprovider.entities.internal.Message
-import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
+import com.exactpro.th2.rptdataprovider.entities.internal.FilteredMessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.entities.sse.*
-import com.exactpro.th2.rptdataprovider.handlers.messages.MessageLoader
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import io.ktor.application.*
 import io.ktor.features.*
@@ -46,8 +39,6 @@ import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.nio.channels.ClosedChannelException
-import java.time.Instant
-import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -289,7 +280,7 @@ class HttpServer(private val applicationContext: Context) {
         val searchMessagesHandler = this.applicationContext.searchMessagesHandler
 
         val eventFiltersPredicateFactory = this.applicationContext.eventFiltersPredicateFactory
-        val messageFiltersPredicateFactory = this.applicationContext.messageFiltersPredicateFactory
+        val messageFiltersPredicateFactory = this.applicationContext.filteredMessageFiltersPredicateFactory
 
         val getEventsLimit = this.applicationContext.configuration.eventSearchChunkSize.value.toInt()
 
@@ -344,7 +335,7 @@ class HttpServer(private val applicationContext: Context) {
                         call, context, "get single message",
                         notModifiedCacheControl, probe, false, call.parameters.toMap()
                     ) {
-                        MessageWithMetadata(messageCache.getOrPut(call.parameters["id"]!!)).let {
+                        FilteredMessageWrapper(messageCache.getOrPut(call.parameters["id"]!!)).let {
                             MessageMapper.convertToHttpMessage(it)
                         }
                     }
@@ -417,7 +408,7 @@ class HttpServer(private val applicationContext: Context) {
                     handleRequest(call, context, "match message", null, false, false, queryParametersMap) {
                         val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
                         val message = messageCache.getOrPut(call.parameters["id"]!!)
-                        filterPredicate.apply(MessageWithMetadata(message))
+                        filterPredicate.apply(FilteredMessageWrapper(message))
                     }
                 }
             }

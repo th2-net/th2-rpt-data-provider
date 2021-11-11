@@ -32,7 +32,7 @@ import com.exactpro.th2.rptdataprovider.entities.filters.messages.AttachedEventF
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyBinaryFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageTypeFilter
-import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
+import com.exactpro.th2.rptdataprovider.entities.internal.FilteredMessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.handlers.SearchEventsHandler
 import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
@@ -99,7 +99,7 @@ class Context(
         ), cradleService
     ),
 
-    val messageFiltersPredicateFactory: PredicateFactory<MessageWithMetadata> = PredicateFactory(
+    val filteredMessageFiltersPredicateFactory: PredicateFactory<FilteredMessageWrapper> = PredicateFactory(
         mapOf(
             AttachedEventFilters.filterInfo to AttachedEventFilters.Companion::build,
             MessageTypeFilter.filterInfo to MessageTypeFilter.Companion::build,

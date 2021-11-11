@@ -24,7 +24,7 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterTyp
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
-import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
+import com.exactpro.th2.rptdataprovider.entities.internal.FilteredMessageWrapper
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.google.protobuf.util.JsonFormat
 
@@ -32,10 +32,10 @@ class MessageBodyFilter private constructor(
     private var body: List<String>,
     override var negative: Boolean = false,
     override var conjunct: Boolean = false
-) : Filter<MessageWithMetadata> {
+) : Filter<FilteredMessageWrapper> {
 
     companion object {
-        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<MessageWithMetadata> {
+        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<FilteredMessageWrapper> {
             return MessageBodyFilter(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
@@ -63,7 +63,7 @@ class MessageBodyFilter private constructor(
         return negative.xor(if (conjunct) body.all(predicate) else body.any(predicate))
     }
 
-    override fun match(element: MessageWithMetadata): Boolean {
+    override fun match(element: FilteredMessageWrapper): Boolean {
         return element.message.messageBody?.let { messageBody ->
             messageBody.forEachIndexed { index, bodyWrapper ->
                 predicate(bodyWrapper).also {

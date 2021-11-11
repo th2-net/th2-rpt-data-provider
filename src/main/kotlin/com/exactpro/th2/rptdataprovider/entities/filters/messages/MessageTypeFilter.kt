@@ -23,17 +23,17 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
-import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
+import com.exactpro.th2.rptdataprovider.entities.internal.FilteredMessageWrapper
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
 class MessageTypeFilter(
     private var type: List<String>,
     override var negative: Boolean = false,
     override var conjunct: Boolean = false
-) : Filter<MessageWithMetadata> {
+) : Filter<FilteredMessageWrapper> {
 
     companion object {
-        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<MessageWithMetadata> {
+        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<FilteredMessageWrapper> {
             return MessageTypeFilter(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
@@ -61,7 +61,7 @@ class MessageTypeFilter(
         return negative.xor(if (conjunct) type.all(predicate) else type.any(predicate))
     }
 
-    override fun match(element: MessageWithMetadata): Boolean {
+    override fun match(element: FilteredMessageWrapper): Boolean {
         return element.message.messageBody?.let { messageBody ->
             messageBody.forEachIndexed { index, bodyWrapper ->
                 predicate(bodyWrapper).also {

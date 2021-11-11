@@ -89,9 +89,9 @@ data class PipelineFilteredMessage(
     override val streamEmpty: Boolean,
     override val lastProcessedId: StoredMessageId?,
     override val lastScannedTime: Instant,
-    val payload: MessageWithMetadata
+    val payload: FilteredMessageWrapper
 ) : PipelineStepObject {
-    constructor(pipelineStepObject: PipelineStepObject, payload: MessageWithMetadata) : this(
+    constructor(pipelineStepObject: PipelineStepObject, payload: FilteredMessageWrapper) : this(
         pipelineStepObject.streamEmpty, pipelineStepObject.lastProcessedId, pipelineStepObject.lastScannedTime, payload
     )
 }
