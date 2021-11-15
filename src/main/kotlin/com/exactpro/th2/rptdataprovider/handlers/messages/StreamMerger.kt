@@ -228,8 +228,7 @@ class StreamMerger(
         return messageStreams.map {
             StreamInfo(
                 it.messageStream.streamName!!,
-                it.previousElement?.lastProcessedId,
-                it.previousElement?.lastScannedTime
+                it.previousElement?.lastProcessedId
             )
         }
     }

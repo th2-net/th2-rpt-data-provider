@@ -31,9 +31,7 @@ data class StreamInfo(
     @JsonUnwrapped
     val stream: StreamName,
     @JsonIgnore
-    val lastElement: StoredMessageId? = null,
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'Z'", timezone = "UTC")
-    val lastTimestamp: Instant?
+    val lastElement: StoredMessageId? = null
 ) {
 
     @JsonProperty("lastId")
