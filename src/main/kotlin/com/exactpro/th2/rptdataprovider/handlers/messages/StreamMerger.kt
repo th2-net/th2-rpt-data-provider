@@ -18,19 +18,59 @@ package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.th2.rptdataprovider.Context
-import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
-import com.exactpro.th2.rptdataprovider.entities.internal.PipelineKeepAlive
-import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepObject
-import com.exactpro.th2.rptdataprovider.entities.internal.StreamEndObject
+import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
+import io.ktor.util.pipeline.*
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.time.Instant
-import kotlin.coroutines.coroutineContext
+
+
+private class StreamHolder(val messageStream: PipelineComponent) {
+
+    companion object {
+        private val logger = KotlinLogging.logger { }
+    }
+
+    var currentElement: PipelineStepObject? = null
+        private set
+    var previousElement: PipelineStepObject? = null
+        private set
+
+
+    private fun changePreviousElement(currentElement: PipelineStepObject?) {
+        if (previousElement == null
+            || previousElement is EmptyPipelineObject
+            || currentElement is PipelineFilteredMessage
+        ) {
+            previousElement = currentElement
+        }
+    }
+
+    fun top(): PipelineStepObject {
+        return currentElement!!
+    }
+
+    suspend fun pop(): PipelineStepObject {
+        return messageStream.pollMessage().let {
+            logger.trace { it.lastProcessedId }
+            if (previousElement == null && currentElement == null) {
+                logger.trace { it.lastProcessedId }
+                previousElement = it
+                currentElement = it
+            } else {
+                logger.trace { it.lastProcessedId }
+                changePreviousElement(currentElement)
+                currentElement = it
+            }
+            previousElement!!
+        }
+    }
+}
 
 
 class StreamMerger(
@@ -45,35 +85,6 @@ class StreamMerger(
         private val logger = KotlinLogging.logger { }
     }
 
-    private class StreamHolder(
-        val messageStream: PipelineComponent
-    ) {
-
-        var currentElement: PipelineStepObject? = null
-            private set
-        var previousElement: PipelineStepObject? = null
-            private set
-
-        fun top(): PipelineStepObject {
-            return currentElement!!
-        }
-
-        suspend fun pop(): PipelineStepObject {
-            return messageStream.pollMessage().let {
-                logger.trace { it.lastProcessedId }
-                if (previousElement == null && currentElement == null) {
-                    logger.trace { it.lastProcessedId }
-                    previousElement = it
-                    currentElement = it
-                } else {
-                    logger.trace { it.lastProcessedId }
-                    previousElement = currentElement
-                    currentElement = it
-                }
-                previousElement!!
-            }
-        }
-    }
 
     private val messageStreams = pipelineStreams.map { StreamHolder(it) }
     private var allStreamIsEmpty: Boolean = false
@@ -89,7 +100,6 @@ class StreamMerger(
         messageStreams.forEach { it.pop() }
     }
 
-
     private fun timestampInRange(pipelineStepObject: PipelineStepObject): Boolean {
         return pipelineStepObject.lastScannedTime.let { timestamp ->
             if (searchRequest.searchDirection == TimeRelation.AFTER) {
@@ -100,13 +110,11 @@ class StreamMerger(
         }
     }
 
-
     private fun keepSearch(): Boolean {
         val isKeepOpen = searchRequest.keepOpen && searchRequest.searchDirection == TimeRelation.AFTER
         val haveNotReachedLimit = resultCountLimit?.let { it > 0 } ?: true
         return (!allStreamIsEmpty || isKeepOpen) && haveNotReachedLimit
     }
-
 
     private fun inTimeRange(pipelineStepObject: PipelineStepObject): Boolean {
         return if (pipelineStepObject !is EmptyPipelineObject) {
@@ -116,26 +124,23 @@ class StreamMerger(
         }
     }
 
-
     private fun getLastScannedObject(): PipelineStepObject? {
         return if (searchRequest.searchDirection == TimeRelation.AFTER) {
             messageStreams
-                .maxBy { it.previousElement?.lastScannedTime ?: Instant.MIN }
+                .minBy { it.previousElement?.lastScannedTime ?: Instant.MAX }
                 ?.previousElement
         } else {
             messageStreams
-                .minBy { it.previousElement?.lastScannedTime ?: Instant.MAX }
+                .maxBy { it.previousElement?.lastScannedTime ?: Instant.MIN }
                 ?.previousElement
         }
     }
-
 
     private fun getScannedObjectCount(): Long {
         return messageStreams
             .map { it.messageStream.processedMessageCount }
             .reduceRight { acc, value -> acc + value }
     }
-
 
     private suspend fun keepAliveGenerator(coroutineScope: CoroutineScope) {
         while (coroutineScope.isActive) {
@@ -150,7 +155,6 @@ class StreamMerger(
             delay(context.keepAliveTimeout)
         }
     }
-
 
     override suspend fun processMessage() {
         coroutineScope {
@@ -202,11 +206,9 @@ class StreamMerger(
         return firstMessage.lastScannedTime.isBefore(secondMessage.lastScannedTime)
     }
 
-
     private fun isGreater(firstMessage: PipelineStepObject, secondMessage: PipelineStepObject): Boolean {
         return firstMessage.lastScannedTime.isAfter(secondMessage.lastScannedTime)
     }
-
 
     private suspend fun getNextMessage(): PipelineStepObject {
         return coroutineScope {
