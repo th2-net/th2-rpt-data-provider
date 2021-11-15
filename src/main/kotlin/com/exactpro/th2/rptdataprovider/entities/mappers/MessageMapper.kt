@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider.entities.mappers
 
-import com.exactpro.cradle.Direction
 import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.message.toTimestamp
 import com.exactpro.th2.dataprovider.grpc.MessageBodyWrapper
@@ -26,7 +25,6 @@ import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.FilteredMessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.responses.HttpBodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.responses.HttpMessage
-import com.exactpro.th2.rptdataprovider.grpcDirectionToCradle
 import com.exactpro.th2.rptdataprovider.providerDirectionToCradle
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
