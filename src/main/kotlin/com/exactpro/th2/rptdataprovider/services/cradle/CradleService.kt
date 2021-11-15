@@ -185,7 +185,7 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
         stream: StreamName,
         timelineDirection: TimeRelation
     ): StoredMessageId? {
-        return getFirstMessageIdSuspend(timestamp, stream.name, stream.direction, timelineDirection)
+        return getFirstMessageIdSuspend(timestamp, stream.session, stream.direction, timelineDirection)
     }
 
     suspend fun getMessageBatchSuspend(id: StoredMessageId): Collection<StoredMessage> {

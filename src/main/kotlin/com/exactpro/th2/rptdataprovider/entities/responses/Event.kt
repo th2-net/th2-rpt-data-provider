@@ -26,6 +26,7 @@ import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.message.toTimestamp
 import com.exactpro.th2.dataprovider.grpc.EventData
 import com.exactpro.th2.rptdataprovider.cradleDirectionToGrpc
+import com.fasterxml.jackson.annotation.JsonFormat
 import com.fasterxml.jackson.annotation.JsonRawValue
 import com.google.protobuf.ByteString
 import java.time.Instant
@@ -37,7 +38,9 @@ data class Event(
     val isBatched: Boolean,
     val eventName: String,
     val eventType: String?,
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'Z'", timezone = "UTC")
     val endTimestamp: Instant?,
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'Z'", timezone = "UTC")
     val startTimestamp: Instant,
 
     val parentEventId: String?,

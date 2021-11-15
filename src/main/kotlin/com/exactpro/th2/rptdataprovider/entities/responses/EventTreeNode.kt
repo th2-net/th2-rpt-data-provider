@@ -25,6 +25,7 @@ import com.exactpro.th2.common.message.toTimestamp
 import com.exactpro.th2.dataprovider.grpc.EventMetadata
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ParseEventTreeNodeException
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
+import com.fasterxml.jackson.annotation.JsonFormat
 import com.fasterxml.jackson.annotation.JsonIgnore
 import mu.KotlinLogging
 import java.time.Instant
@@ -35,6 +36,7 @@ data class EventTreeNode(
     val eventName: String,
     val eventType: String,
     val successful: Boolean,
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'Z'", timezone = "UTC")
     val startTimestamp: Instant,
 
     @JsonIgnore

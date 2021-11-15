@@ -21,12 +21,34 @@ import com.exactpro.th2.dataprovider.grpc.Stream
 import com.exactpro.th2.rptdataprovider.convertToProto
 import com.exactpro.th2.rptdataprovider.cradleDirectionToGrpc
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
+import com.fasterxml.jackson.annotation.JsonFormat
+import com.fasterxml.jackson.annotation.JsonIgnore
+import com.fasterxml.jackson.annotation.JsonProperty
+import com.fasterxml.jackson.annotation.JsonUnwrapped
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers.Default
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.time.Instant
 
-data class StreamInfo(val stream: StreamName, val lastElement: StoredMessageId? = null) {
+data class StreamInfo(
+    @JsonUnwrapped
+    val stream: StreamName,
+    @JsonIgnore
+    val lastElement: StoredMessageId? = null,
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'Z'", timezone = "UTC")
+    val lastTimestamp: Instant?
+) {
+
+    @JsonProperty("lastId")
+    val lastId = lastElement?.toString()
+
     fun convertToProto(): Stream {
         return Stream.newBuilder()
             .setDirection(cradleDirectionToGrpc(stream.direction))
-            .setSession(stream.name)
+            .setSession(stream.session)
             .also { builder ->
                 lastElement?.let { builder.setLastId(it.convertToProto()) }
             }.build()

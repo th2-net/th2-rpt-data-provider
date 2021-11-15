@@ -79,13 +79,13 @@ class StreamInitializer(
 
 
     private suspend fun getFirstMessageInStream(stream: StreamName): StoredMessage? {
-        val index = context.cradleService.getFirstMessageIndex(stream.name, stream.direction)
+        val index = context.cradleService.getFirstMessageIndex(stream.session, stream.direction)
 
         if (index == -1L) {
             return null
         }
 
-        return StoredMessageId(stream.name, stream.direction, index).let {
+        return StoredMessageId(stream.session, stream.direction, index).let {
             context.cradleService.getMessageSuspend(it)
         }
     }

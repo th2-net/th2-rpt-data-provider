@@ -24,11 +24,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import mu.KotlinLogging
 
-data class StreamName(val name: String, val direction: Direction) {
-    override fun toString(): String {
-        return "$name:$direction"
-    }
-}
+data class StreamName(val session: String, val direction: Direction)
+
 
 abstract class PipelineComponent(
     val context: Context,
@@ -60,7 +57,7 @@ abstract class PipelineComponent(
     
 
     suspend fun pollMessage(): PipelineStepObject {
-        val res =  messageFlow.receive()
+        val res = messageFlow.receive()
         logger.trace { res.lastProcessedId }
         return res
     }

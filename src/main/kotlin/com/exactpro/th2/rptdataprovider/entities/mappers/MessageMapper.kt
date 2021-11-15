@@ -45,7 +45,7 @@ object MessageMapper {
     private fun wrapSubMessage(message: BodyWrapper, matched: Boolean): MessageBodyWrapper {
         return MessageBodyWrapper.newBuilder()
             .setMessage(message.message)
-            .setFiltered(matched)
+            .setMatch(matched)
             .build()
     }
 

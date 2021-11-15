@@ -64,12 +64,17 @@ class MessageContinuousStream(
     private var firstMessageInRequest: StoredMessage? = null
 
 
+    private data class StreamState(
+        val firstMessageInRequest: StoredMessage?,
+        val lastMessageInRequest: StoredMessageId?,
+        val lastTimestamp: Instant
+    )
+
     init {
         externalScope.launch {
             processMessage()
         }
     }
-
 
     private suspend fun initialize() {
         if (startMessageId == null) {
@@ -86,7 +91,6 @@ class MessageContinuousStream(
         }
         messageLoader = MessageLoader(context, startTimestamp, searchRequest.searchDirection)
     }
-
 
     private suspend fun tryToLoadStreamAfter() {
         if (lastElement == null || isStreamEmpty) {
@@ -107,7 +111,6 @@ class MessageContinuousStream(
         }
     }
 
-
     private suspend fun tryToReloadStream() {
         if (searchRequest.searchDirection == TimeRelation.AFTER) {
             tryToLoadStreamAfter()
@@ -116,67 +119,74 @@ class MessageContinuousStream(
         }
     }
 
-
-    private fun changeStreamMessageIndex(filteredIdsList: List<MessageBatchWrapper>): Pair<StoredMessageId?, Instant> {
+    private fun getNewStreamState(filteredIdsList: List<MessageBatchWrapper>): StreamState {
         val lastBatchWrapper = filteredIdsList.lastOrNull { !it.messageBatch.isEmpty }
         val firstBatchWrapper = filteredIdsList.firstOrNull { !it.messageBatch.isEmpty }
 
         return if (lastBatchWrapper == null) {
             logger.trace { lastElement }
-            lastElement to lastTimestamp
+            StreamState(null, lastElement, lastTimestamp)
         } else {
-            val lastMessage =
+            val (firstMessage, lastMessage) =
                 if (searchRequest.searchDirection == TimeRelation.AFTER) {
-                    firstMessageInRequest = firstBatchWrapper!!.messageBatch.firstMessage
-                    lastBatchWrapper.messageBatch.lastMessage
+                    firstBatchWrapper!!.messageBatch.firstMessage to
+                            lastBatchWrapper.messageBatch.lastMessage
                 } else {
-                    firstMessageInRequest = firstBatchWrapper!!.messageBatch.lastMessage
-                    lastBatchWrapper.messageBatch.firstMessage
+                    firstBatchWrapper!!.messageBatch.lastMessage to
+                            lastBatchWrapper.messageBatch.firstMessage
                 }
-            lastMessage.id to lastMessage.timestamp
+            StreamState(firstMessage, lastMessage.id, lastMessage.timestamp)
         }
     }
 
+    private fun changeStreamState(messages: List<MessageBatchWrapper>) {
+        isStreamEmpty = messages.isEmpty()
+
+        getNewStreamState(messages).let {
+            logger.trace { it.lastMessageInRequest }
+            firstMessageInRequest = it.firstMessageInRequest
+            lastElement = it.lastMessageInRequest
+            lastTimestamp = it.lastTimestamp
+        }
+    }
 
     private suspend fun loadMoreMessage(): List<MessageBatchWrapper> {
         if (lastElement == null || messageLoader == null) {
-            isStreamEmpty = true
             return emptyList()
         }
-        return messageLoader!!.pullMoreMessage(lastElement!!, firstPull, perStreamLimit).also { messages ->
-            changeStreamMessageIndex(messages).let {
-                logger.trace { it.first }
-                lastElement = it.first
-                lastTimestamp = it.second
-            }
-
+        return messageLoader!!.pullMoreMessage(lastElement!!, firstPull, perStreamLimit).also {
             firstPull = false
-            isStreamEmpty = messages.isEmpty()
             perStreamLimit = min(perStreamLimit * 2, maxMessagesLimit)
         }
     }
 
+    private fun getEmptyMessage(): EmptyPipelineObject {
+        return EmptyPipelineObject(
+            isStreamEmpty,
+            firstMessageInRequest?.id,
+            if (!isStreamEmpty && firstMessageInRequest?.timestamp != null)
+                firstMessageInRequest!!.timestamp
+            else {
+                lastTimestamp
+            }
+        )
+    }
 
     private suspend fun emptySender(parentScope: CoroutineScope) {
         while (parentScope.isActive) {
-            sendToChannel(
-                EmptyPipelineObject(
-                    isStreamEmpty,
-                    firstMessageInRequest?.id,
-                    if (!isStreamEmpty && firstMessageInRequest?.timestamp != null)
-                        firstMessageInRequest!!.timestamp
-                    else {
-                        lastTimestamp
-                    }
-                )
-            )
+            sendToChannel(getEmptyMessage())
             delay(sendEmptyDelay)
         }
     }
 
+    private fun makeRawBatchData(message: MessageBatchWrapper): PipelineRawBatchData {
+        return PipelineRawBatchData(isStreamEmpty, lastElement, lastTimestamp, message)
+    }
 
     override suspend fun processMessage() {
         coroutineScope {
+
+            sendToChannel(getEmptyMessage())
             launch { emptySender(this) }
 
             initialize()
@@ -187,10 +197,12 @@ class MessageContinuousStream(
 
                 val messageBatches = loadMoreMessage()
 
-                for (parsedMessage in messageBatches) {
-                    logger.trace { parsedMessage.messageBatch.id }
-                    sendToChannel(PipelineRawBatchData(isStreamEmpty, lastElement, lastTimestamp, parsedMessage))
+                for (message in messageBatches) {
+                    logger.trace { message.messageBatch.id }
+                    sendToChannel(makeRawBatchData(message))
                 }
+
+                changeStreamState(messageBatches)
 
                 if (isStreamEmpty) {
                     delay(sseSearchDelay)

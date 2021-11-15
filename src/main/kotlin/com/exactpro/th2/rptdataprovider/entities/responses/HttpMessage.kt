@@ -46,10 +46,10 @@ class HttpBodyWrapper(
 data class HttpMessage(
     val type: String = "message",
     val id: String,
-//    @com.fasterxml.jackson.annotation.JsonFormat(
-//        shape = com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING,
-//        pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS"
-//    )
+    @com.fasterxml.jackson.annotation.JsonFormat(
+        pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'Z'",
+        timezone = "UTC"
+    )
     val timestamp: Instant,
     val sessionId: String,
     val direction: Direction?,
