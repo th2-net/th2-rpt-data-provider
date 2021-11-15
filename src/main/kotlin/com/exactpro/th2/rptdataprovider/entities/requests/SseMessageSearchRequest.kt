@@ -21,14 +21,14 @@ import com.exactpro.th2.dataprovider.grpc.MessageSearchRequest
 import com.exactpro.th2.dataprovider.grpc.TimeRelation.PREVIOUS
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
-import com.exactpro.th2.rptdataprovider.entities.responses.Message
+import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.grpcDirectionToCradle
 import java.time.Instant
 
 data class SseMessageSearchRequest(
-    val filterPredicate: FilterPredicate<Message>,
+    val filterPredicate: FilterPredicate<MessageWithMetadata>,
     val startTimestamp: Instant?,
-    val stream: List<String>?,
+    val stream: List<String>,
     val searchDirection: TimeRelation,
     val endTimestamp: Instant?,
     val resumeFromId: String?,
@@ -36,7 +36,7 @@ data class SseMessageSearchRequest(
     val keepOpen: Boolean,
     val attachedEvents: Boolean,
     val lookupLimitDays: Int?,
-    val resumeFromIdsList: List<StoredMessageId>?
+    val resumeFromIdsList: List<StoredMessageId>
 ) {
 
     companion object {
@@ -48,10 +48,10 @@ data class SseMessageSearchRequest(
         }
     }
 
-    constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<Message>) : this(
+    constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<MessageWithMetadata>) : this(
         filterPredicate = filterPredicate,
         startTimestamp = parameters["startTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
-        stream = parameters["stream"],
+        stream = parameters["stream"] ?: emptyList(),
         searchDirection = parameters["searchDirection"]?.firstOrNull()?.let {
             asCradleTimeRelation(
                 it
@@ -59,14 +59,14 @@ data class SseMessageSearchRequest(
         } ?: TimeRelation.AFTER,
         endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
         resumeFromId = parameters["resumeFromId"]?.firstOrNull(),
-        resumeFromIdsList = parameters["messageId"]?.map { StoredMessageId.fromString(it) },
+        resumeFromIdsList = parameters["messageId"]?.map { StoredMessageId.fromString(it) } ?: emptyList(),
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt(),
         keepOpen = parameters["keepOpen"]?.firstOrNull()?.toBoolean() ?: false,
         attachedEvents = parameters["attachedEvents"]?.firstOrNull()?.toBoolean() ?: false,
         lookupLimitDays = parameters["lookupLimitDays"]?.firstOrNull()?.toInt()
     )
 
-    constructor(request: MessageSearchRequest, filterPredicate: FilterPredicate<Message>) : this(
+    constructor(request: MessageSearchRequest, filterPredicate: FilterPredicate<MessageWithMetadata>) : this(
         filterPredicate = filterPredicate,
         startTimestamp = if (request.hasStartTimestamp())
             request.startTimestamp.let {
@@ -89,16 +89,6 @@ data class SseMessageSearchRequest(
                 Instant.ofEpochSecond(it.seconds, it.nanos.toLong())
             } else null,
 
-        resumeFromId = if (request.hasResumeFromId()) {
-            request.resumeFromId.let {
-                StoredMessageId(
-                    it.connectionId.sessionAlias,
-                    grpcDirectionToCradle(it.direction),
-                    it.sequence
-                ).toString()
-            }
-        } else null,
-
         resultCountLimit = if (request.hasResultCountLimit()) {
             request.resultCountLimit.value
         } else null,
@@ -115,15 +105,13 @@ data class SseMessageSearchRequest(
                     it.sequence
                 )
             }
-        } else null,
+        } else emptyList(),
 
-        attachedEvents = if (request.hasAttachedEvents()) {
-            request.attachedEvents.value
-        } else false,
+        attachedEvents = false,
 
-        lookupLimitDays = if (request.hasLookupLimitDays()) {
-            request.lookupLimitDays.value
-        } else null
+        lookupLimitDays = null,
+
+        resumeFromId = null
     )
 
     private fun checkEndTimestamp() {
@@ -139,13 +127,20 @@ data class SseMessageSearchRequest(
     }
 
     private fun checkStartPoint() {
-        if (startTimestamp == null && resumeFromId == null && resumeFromIdsList == null)
+        if (startTimestamp == null && resumeFromId == null && resumeFromIdsList.isEmpty())
             throw InvalidRequestException("One of the 'startTimestamp' or 'resumeFromId' or 'messageId' must not be null")
+    }
+
+    private fun checkStreamList() {
+        if (stream.isEmpty()) {
+            throw InvalidRequestException("Streams list can not be empty")
+        }
     }
 
     fun checkRequest() {
         checkStartPoint()
         checkEndTimestamp()
+        checkStreamList()
     }
 }
 

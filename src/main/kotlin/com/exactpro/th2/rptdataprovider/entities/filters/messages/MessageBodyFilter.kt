@@ -21,18 +21,21 @@ import com.exactpro.th2.rptdataprovider.entities.filters.Filter
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterRequest
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
+import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
-import com.exactpro.th2.rptdataprovider.entities.responses.Message
+import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
+import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
+import com.google.protobuf.util.JsonFormat
 
 class MessageBodyFilter private constructor(
     private var body: List<String>,
     override var negative: Boolean = false,
     override var conjunct: Boolean = false
-) : Filter<Message> {
+) : Filter<MessageWithMetadata> {
 
     companion object {
-        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<Message> {
+        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<MessageWithMetadata> {
             return MessageBodyFilter(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
@@ -48,15 +51,27 @@ class MessageBodyFilter private constructor(
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("conjunct", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("values", FilterParameterType.STRING_LIST, null, "FGW, ..."))
-            }
+            },
+            FilterSpecialType.NEED_JSON_BODY
         )
     }
 
-    override fun match(element: Message): Boolean {
+    private fun predicate(element: BodyWrapper): Boolean {
         val predicate: (String) -> Boolean = { item ->
-            element.body?.toLowerCase()?.contains(item.toLowerCase()) ?: false
+            JsonFormat.printer().print(element.message).toLowerCase().contains(item.toLowerCase())
         }
         return negative.xor(if (conjunct) body.all(predicate) else body.any(predicate))
+    }
+
+    override fun match(element: MessageWithMetadata): Boolean {
+        return element.message.messageBody?.let { messageBody ->
+            messageBody.forEachIndexed { index, bodyWrapper ->
+                predicate(bodyWrapper).also {
+                    element.filteredBody[index] = element.filteredBody[index] && it
+                }
+            }
+            element.filteredBody
+        }?.any { it } ?: false
     }
 
     override fun getInfo(): FilterInfo {

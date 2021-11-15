@@ -16,11 +16,15 @@
 
 package com.exactpro.th2.rptdataprovider.entities.sse
 
-import com.exactpro.cradle.Direction
 import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.th2.common.grpc.EventID
+import com.exactpro.th2.common.message.toTimestamp
 import com.exactpro.th2.rptdataprovider.asStringSuspend
+import com.exactpro.th2.rptdataprovider.convertToProto
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineKeepAlive
+import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.responses.*
-import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
+import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.ktor.util.*
 import java.time.Instant
@@ -35,25 +39,38 @@ enum class EventType {
     }
 }
 
-data class LastScannedObjectInfo(var id: String = "", var timestamp: Long = 0, var scanCounter: Long = 0) {
+abstract class LastScannedObjectInfo(
+    @JsonIgnore protected open var instantTimestamp: Instant? = null,
+    open var scanCounter: Long = 0
+) {
+
+    val timestamp: Long
+        get() = instantTimestamp?.toEpochMilli() ?: 0
 
     fun update(lastTimestamp: Instant) {
-        timestamp = lastTimestamp.toEpochMilli()
+        instantTimestamp = lastTimestamp
     }
 
-    fun update(event: BaseEventEntity, scanCnt: AtomicLong) {
-        id = event.id.toString()
-        timestamp = event.startTimestamp.toEpochMilli()
-        scanCounter = scanCnt.incrementAndGet()
-    }
+    abstract fun convertToGrpc(): com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo
 
-    fun update(message: Message, scanCnt: AtomicLong) {
-        id = message.id.toString()
-        timestamp = message.timestamp.toEpochMilli()
-        scanCounter = scanCnt.incrementAndGet()
-    }
+}
 
-    fun convertToGrpc(): com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo {
+class LastScannedMessageInfo(
+    @JsonIgnore var messageId: StoredMessageId? = null,
+    timestamp: Instant? = null,
+    scanCounter: Long = 0
+) : LastScannedObjectInfo(timestamp, scanCounter) {
+
+    val id: String
+        get() = messageId?.toString() ?: ""
+
+    constructor(pipelineStepObject: PipelineKeepAlive) : this(
+        messageId = pipelineStepObject.lastProcessedId,
+        timestamp = pipelineStepObject.lastScannedTime,
+        scanCounter = pipelineStepObject.scannedObjectsCount
+    )
+
+    override fun convertToGrpc(): com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo {
         return com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo.newBuilder()
             .setId(id)
             .setTimestampMillis(timestamp)
@@ -61,6 +78,33 @@ data class LastScannedObjectInfo(var id: String = "", var timestamp: Long = 0, v
             .build()
     }
 }
+
+
+class LastScannedEventInfo(
+    @JsonIgnore var eventId: ProviderEventId? = null,
+    timestamp: Instant? = null,
+    scanCounter: Long = 0
+) : LastScannedObjectInfo(timestamp, scanCounter) {
+
+    val id: String
+        get() = eventId?.toString() ?: ""
+
+
+    fun update(event: BaseEventEntity, scanCnt: AtomicLong) {
+        eventId = event.id
+        instantTimestamp = event.startTimestamp
+        scanCounter = scanCnt.incrementAndGet()
+    }
+
+    override fun convertToGrpc(): com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo {
+        return com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo.newBuilder()
+            .setId(id)
+            .setTimestampMillis(timestamp)
+            .setScanCounter(scanCounter)
+            .build()
+    }
+}
+
 
 data class ExceptionInfo(val exceptionName: String, val exceptionCause: String)
 
@@ -86,7 +130,7 @@ data class SseEvent(val data: String = "empty data", val event: EventType? = nul
             )
         }
 
-        suspend fun build(jacksonMapper: ObjectMapper, message: Message, counter: AtomicLong): SseEvent {
+        suspend fun build(jacksonMapper: ObjectMapper, message: HttpMessage, counter: AtomicLong): SseEvent {
             return SseEvent(
                 jacksonMapper.asStringSuspend(message),
                 EventType.MESSAGE,
@@ -114,28 +158,11 @@ data class SseEvent(val data: String = "empty data", val event: EventType? = nul
             )
         }
 
-        suspend fun build(
-            jacksonMapper: ObjectMapper,
-            streamsInfo: List<StreamInfo>
-        ): SseEvent {
+        suspend fun build(jacksonMapper: ObjectMapper, streamsInfo: List<StreamInfo>): SseEvent {
             return SseEvent(
                 jacksonMapper.asStringSuspend(
                     mapOf(
-                        "messageIds" to streamsInfo.associate { it.stream to it.lastElement?.toString() }
-                    )
-                ),
-                event = EventType.MESSAGE_IDS
-            )
-        }
-
-        suspend fun build(
-            jacksonMapper: ObjectMapper,
-            lastIdInStream: Map<Pair<String, Direction>, StoredMessageId?>
-        ): SseEvent {
-            return SseEvent(
-                jacksonMapper.asStringSuspend(
-                    mapOf(
-                        "messageIds" to lastIdInStream.entries.associate { it.key to it.value?.toString() }
+                        "messageIds" to streamsInfo.associate { it.stream.toString() to it.lastElement?.toString() }
                     )
                 ),
                 event = EventType.MESSAGE_IDS

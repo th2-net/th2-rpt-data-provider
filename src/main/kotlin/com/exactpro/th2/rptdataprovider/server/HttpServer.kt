@@ -16,12 +16,22 @@
 
 package com.exactpro.th2.rptdataprovider.server
 
+import com.exactpro.cradle.Order
+import com.exactpro.cradle.TimeRelation
+import com.exactpro.cradle.messages.StoredMessageFilterBuilder
+import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.utils.CradleIdException
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
-import com.exactpro.th2.rptdataprovider.entities.requests.*
+import com.exactpro.th2.rptdataprovider.entities.internal.Message
+import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
+import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
+import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.entities.sse.*
+import com.exactpro.th2.rptdataprovider.handlers.messages.MessageLoader
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import io.ktor.application.*
 import io.ktor.features.*
@@ -36,14 +46,15 @@ import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.nio.channels.ClosedChannelException
+import java.time.Instant
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
-private typealias Streaming =
-        suspend (StreamWriter, suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit) -> Unit
+private typealias Streaming = suspend (StreamWriter) -> Unit
 
-class HttpServer(private val context: Context) {
+
+class HttpServer(private val applicationContext: Context) {
 
     private val sseRequestsProcessedInParallelQuantity: Metrics =
         Metrics("th2_sse_requests_processed_in_parallel_quantity", "SSE requests processed in parallel")
@@ -73,10 +84,10 @@ class HttpServer(private val context: Context) {
         private val logger = KotlinLogging.logger {}
     }
 
-    private val jacksonMapper = context.jacksonMapper
-    private val checkRequestAliveDelay = context.configuration.checkRequestsAliveDelay.value.toLong()
-    private val keepAliveTimeout = context.configuration.keepAliveTimeout.value.toLong()
-    private val configuration = context.configuration
+    private val jacksonMapper = applicationContext.jacksonMapper
+    private val checkRequestAliveDelay = applicationContext.configuration.checkRequestsAliveDelay.value.toLong()
+    private val keepAliveTimeout = applicationContext.configuration.keepAliveTimeout.value.toLong()
+    private val configuration = applicationContext.configuration
 
     private class Timeouts {
         class Config(var requestTimeout: Long = 5000L, var excludes: List<String> = listOf("sse"))
@@ -117,16 +128,6 @@ class HttpServer(private val context: Context) {
         }
     }
 
-    private suspend fun keepAlive(
-        writer: StreamWriter,
-        lastScannedObjectInfo: LastScannedObjectInfo,
-        counter: AtomicLong
-    ) {
-        while (coroutineContext.isActive) {
-            writer.write(lastScannedObjectInfo, counter)
-            delay(keepAliveTimeout)
-        }
-    }
 
     @InternalAPI
     private suspend fun sendErrorCode(call: ApplicationCall, e: Exception, code: HttpStatusCode) {
@@ -217,7 +218,7 @@ class HttpServer(private val context: Context) {
                 call.response.headers.append(HttpHeaders.CacheControl, "no-cache, no-store")
                 call.respondTextWriter(contentType = ContentType.Text.EventStream) {
                     try {
-                        calledFun.invoke(SseWriter(this, jacksonMapper), ::keepAlive)
+                        calledFun.invoke(SseWriter(this, jacksonMapper))
                     } catch (e: Exception) {
                         eventWrite(SseEvent.build(jacksonMapper, e))
                         throw e
@@ -269,35 +270,34 @@ class HttpServer(private val context: Context) {
         }
     }
 
+    @InternalCoroutinesApi
     @FlowPreview
     @ExperimentalCoroutinesApi
     @EngineAPI
     @InternalAPI
     fun run() {
 
-        val notModifiedCacheControl = this.context.cacheControlNotModified
-        val rarelyModifiedCacheControl = this.context.cacheControlRarelyModified
+        val notModifiedCacheControl = this.applicationContext.cacheControlNotModified
+        val rarelyModifiedCacheControl = this.applicationContext.cacheControlRarelyModified
 
-        val cradleService = this.context.cradleService
+        val cradleService = this.applicationContext.cradleService
 
-        val eventCache = this.context.eventCache
-        val messageCache = this.context.messageCache
+        val eventCache = this.applicationContext.eventCache
+        val messageCache = this.applicationContext.messageCache
 
-        val searchEventsHandler = this.context.searchEventsHandler
-        val searchMessagesHandler = this.context.searchMessagesHandler
+        val searchEventsHandler = this.applicationContext.searchEventsHandler
+        val searchMessagesHandler = this.applicationContext.searchMessagesHandler
 
-        val eventFiltersPredicateFactory = this.context.eventFiltersPredicateFactory
-        val messageFiltersPredicateFactory = this.context.messageFiltersPredicateFactory
+        val eventFiltersPredicateFactory = this.applicationContext.eventFiltersPredicateFactory
+        val messageFiltersPredicateFactory = this.applicationContext.messageFiltersPredicateFactory
 
-        val sseEventSearchStep = this.context.sseEventSearchStep
-
-        val getEventsLimit = this.context.configuration.eventSearchChunkSize.value.toInt()
+        val getEventsLimit = this.applicationContext.configuration.eventSearchChunkSize.value.toInt()
 
         embeddedServer(Netty, configuration.port.value.toInt()) {
 
             install(Compression)
             install(Timeouts) {
-                requestTimeout = context.timeout
+                requestTimeout = applicationContext.timeout
             }
 
             routing {
@@ -344,21 +344,20 @@ class HttpServer(private val context: Context) {
                         call, context, "get single message",
                         notModifiedCacheControl, probe, false, call.parameters.toMap()
                     ) {
-                        messageCache.getOrPut(call.parameters["id"]!!)
+                        MessageWithMetadata(messageCache.getOrPut(call.parameters["id"]!!)).let {
+                            MessageMapper.convertToHttpMessage(it)
+                        }
                     }
                 }
 
                 get("search/sse/messages") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "search messages sse", null, false, true, queryParametersMap) {
-                        suspend fun(
-                            w: StreamWriter,
-                            keepAlive: suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit
-                        ) {
+                        suspend fun(streamWriter: StreamWriter) {
                             val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
                             val request = SseMessageSearchRequest(queryParametersMap, filterPredicate)
                             request.checkRequest()
-                            searchMessagesHandler.searchMessagesSse(request, jacksonMapper, keepAlive, w)
+                            searchMessagesHandler.searchMessagesSse(request, streamWriter)
                         }
                     }
                 }
@@ -366,21 +365,12 @@ class HttpServer(private val context: Context) {
                 get("search/sse/events") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "search events sse", null, false, true, queryParametersMap) {
-                        suspend fun(
-                            w: StreamWriter,
-                            keepAlive: suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit
-                        ) {
-                            val filterPredicate =
-                                eventFiltersPredicateFactory.build(queryParametersMap)
+                        suspend fun(streamWriter: StreamWriter) {
+                            val filterPredicate = eventFiltersPredicateFactory.build(queryParametersMap)
                             val request = SseEventSearchRequest(queryParametersMap, filterPredicate)
                             request.checkRequest()
-                            searchEventsHandler.searchEventsSse(
-                                request,
-                                jacksonMapper,
-                                sseEventSearchStep,
-                                keepAlive,
-                                w
-                            )
+
+                            searchEventsHandler.searchEventsSse(request, streamWriter)
                         }
                     }
                 }
@@ -426,8 +416,8 @@ class HttpServer(private val context: Context) {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "match message", null, false, false, queryParametersMap) {
                         val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
-                        val event = messageCache.getOrPut(call.parameters["id"]!!)
-                        filterPredicate.apply(event)
+                        val message = messageCache.getOrPut(call.parameters["id"]!!)
+                        filterPredicate.apply(MessageWithMetadata(message))
                     }
                 }
             }
