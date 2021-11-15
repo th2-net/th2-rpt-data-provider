@@ -18,6 +18,7 @@ package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidInitializationException
 import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
@@ -55,19 +56,27 @@ private class StreamHolder(val messageStream: PipelineComponent) {
         return currentElement!!
     }
 
-    suspend fun pop(): PipelineStepObject {
-        return messageStream.pollMessage().let {
-            logger.trace { it.lastProcessedId }
+    suspend fun init() {
+        messageStream.pollMessage().let {
             if (previousElement == null && currentElement == null) {
                 logger.trace { it.lastProcessedId }
                 previousElement = it
                 currentElement = it
             } else {
-                logger.trace { it.lastProcessedId }
-                changePreviousElement(currentElement)
-                currentElement = it
+                throw InvalidInitializationException("StreamHolder ${messageStream.streamName} already initialized")
             }
-            previousElement!!
+        }
+    }
+
+    suspend fun pop(): PipelineStepObject {
+        return messageStream.pollMessage().let { newElement ->
+            val currentElementTemporary = currentElement
+
+            currentElementTemporary?.also {
+                logger.trace { newElement.lastProcessedId }
+                changePreviousElement(currentElement)
+                currentElement = newElement
+            } ?: throw InvalidInitializationException("StreamHolder ${messageStream.streamName} need initialization")
         }
     }
 }
@@ -97,7 +106,7 @@ class StreamMerger(
     }
 
     private suspend fun messageStreamsInit() {
-        messageStreams.forEach { it.pop() }
+        messageStreams.forEach { it.init() }
     }
 
     private fun timestampInRange(pipelineStepObject: PipelineStepObject): Boolean {

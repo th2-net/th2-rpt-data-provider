@@ -186,7 +186,6 @@ class MessageContinuousStream(
     override suspend fun processMessage() {
         coroutineScope {
 
-            sendToChannel(getEmptyMessage())
             launch { emptySender(this) }
 
             initialize()
