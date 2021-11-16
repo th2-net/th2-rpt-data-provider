@@ -140,12 +140,12 @@ class MessageDecoder(
 
                     val buildersBatch = createMessageBuilders(rawBatch.payload)
 
-//                    if (buildersBatch.isImages) {
+                    if (buildersBatch.isImages) {
                         sendImages(buildersBatch.builders, rawBatch)
-//                    } else {
-//                        buffer.add(buildersBatch to rawBatch)
-//                        messagesInBuffer += rawBatch.payload.messageBatch.messageCount
-//                    }
+                    } else {
+                        buffer.add(buildersBatch to rawBatch)
+                        messagesInBuffer += rawBatch.payload.messageBatch.messageCount
+                    }
                 } else {
                     sendToChannel(rawBatch)
                 }
