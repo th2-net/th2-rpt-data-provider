@@ -147,14 +147,14 @@ Event metadata object example (in sse):
 
 
 `http://localhost:8080/search/sse/messages` - create a sse channel of messages that matches the filter. Accepts following query parameters:
-- `startTimestamp` - string, unix timestamp in a format ('2021-10-14T15:00:02.238700000Z') - Sets the search starting point. **'startTimestamp' must not be null or 'messageId' must not be empty**
+- `startTimestamp` - string, unix timestamp in a format ('2021-10-14T15:00:02.238700000Z') - Sets the search starting point. **`startTimestamp` must not be null or `resumeFromIds` must not be empty**
 
 - `stream` - text, accepts multiple values - Sets the stream ids to search in. Case-sensitive. **Required**. 
 - `searchDirection` - `next`/`previous` - Sets the lookup direction. Can be used for pagination. Defaults to `next`.
 - `resultCountLimit` - number - Sets the maximum amount of messages to return. Defaults to `null (unlimited)`.
 - `endTimestamp` - string, unix timestamp in a format ('2021-10-14T15:00:02.238700000Z') - Sets the timestamp to which the search will be performed, starting with `startTimestamp`. When `searchDirection` is `previous`, `endTimestamp` must be less then `startTimestamp`. Defaults to `null` (the search is carried out endlessly into the past or the future).
 - `keepOpen` - boolean - If the search has reached the current moment, is it necessary to wait further for the appearance of new data. Default `false`.
-- `messageId` - text, accepts multiple values - List of message IDs to restore search. If given, streams whose id were specified start with this id (not inclusive). Other streams start with `startTimestamp` (if specified) or calculate `startTimestamp` based on the passed id. Defaults to `null`
+- `resumeFromIds` - text, accepts multiple values - List of message IDs to restore search. If given, streams whose id were specified start with this id (not inclusive). Other streams start with `startTimestamp` (if specified) or calculate `startTimestamp` based on the passed id. Defaults to `null`
 - `attachedEvents`- boolean - If `true`, additionally load `attachedEventIds`. Default `false`.
 - `lookupLimitDays` - number - The number of days that will be viewed on the first request to get the one closest to the specified timestamp. Default `null` - not limited to the past and up to the present moment to the future.
 

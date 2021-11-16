@@ -58,7 +58,7 @@ data class SseMessageSearchRequest(
             )
         } ?: TimeRelation.AFTER,
         endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.parse(it) },
-        resumeFromIdsList = parameters["messageId"]?.map {
+        resumeFromIdsList = parameters["resumeFromIds"]?.map {
             MessageIdWithSubsequences.from(it).messageId
         } ?: emptyList(),
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt(),
