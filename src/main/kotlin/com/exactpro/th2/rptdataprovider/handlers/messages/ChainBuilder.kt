@@ -17,6 +17,7 @@
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.cradle.Direction
+import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
@@ -36,32 +37,32 @@ class ChainBuilder(
     private val messageFilterBuffer = context.configuration.messageFilterBuffer.value.toInt()
     private val messageStreamMergerBuffer = context.configuration.messageStreamMergerBuffer.value.toInt()
 
+    private suspend fun getTimestampFromResumeIds(request: SseMessageSearchRequest): Instant? {
+        val resumeTimestamps = request.resumeFromIdsList
+            .mapNotNull { context.cradleService.getMessageSuspend(it)?.timestamp }
 
-    private suspend fun chooseStartTimestamp(request: SseMessageSearchRequest): Instant {
-        val messageId = request.resumeFromId?.let { StoredMessageId.fromString(it) }
-
-        return messageId?.let { context.cradleService.getMessageSuspend(it)?.timestamp }
-            ?: request.startTimestamp
-            ?: Instant.now()
+        return if (request.searchDirection == TimeRelation.AFTER) {
+            resumeTimestamps.minBy { it }
+        } else {
+            resumeTimestamps.maxBy { it }
+        }
     }
 
+    private suspend fun chooseStartTimestamp(request: SseMessageSearchRequest): Instant {
+        return request.startTimestamp
+            ?: getTimestampFromResumeIds(request)
+            ?: Instant.now()
+    }
 
     private fun getRequestStreamNames(request: SseMessageSearchRequest): List<StreamName> {
         return request.stream
             .flatMap { stream -> Direction.values().map { StreamName(stream, it) } }
     }
 
-
     private fun getRequestResumeId(request: SseMessageSearchRequest): Map<StreamName, StoredMessageId?> {
-        val resumeFromId = request.resumeFromId?.let {
-            listOf(StoredMessageId.fromString(it))
-        } ?: emptyList()
-
-        val idsList = request.resumeFromIdsList + resumeFromId
-
-        return idsList.associateBy { StreamName(it.streamName, it.direction) }
+        return request.resumeFromIdsList
+            .associateBy { StreamName(it.streamName, it.direction) }
     }
-
 
     @InternalCoroutinesApi
     suspend fun buildChain(): StreamMerger {
@@ -69,7 +70,6 @@ class ChainBuilder(
         val streamNames = getRequestStreamNames(request)
         val resumeFromIds = getRequestResumeId(request)
         val startTimestamp = chooseStartTimestamp(request)
-
 
         val dataStreams = streamNames.map { streamName ->
             val streamInitializer = StreamInitializer(context, request, streamName)

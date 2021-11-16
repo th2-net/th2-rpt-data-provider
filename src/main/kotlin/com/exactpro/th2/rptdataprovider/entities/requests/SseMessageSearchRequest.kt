@@ -32,7 +32,6 @@ data class SseMessageSearchRequest(
     val stream: List<String>,
     val searchDirection: TimeRelation,
     val endTimestamp: Instant?,
-    val resumeFromId: String?,
     val resultCountLimit: Int?,
     val keepOpen: Boolean,
     val attachedEvents: Boolean,
@@ -59,7 +58,6 @@ data class SseMessageSearchRequest(
             )
         } ?: TimeRelation.AFTER,
         endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.parse(it) },
-        resumeFromId = parameters["resumeFromId"]?.firstOrNull(),
         resumeFromIdsList = parameters["messageId"]?.map {
             MessageIdWithSubsequences.from(it).messageId
         } ?: emptyList(),
@@ -112,9 +110,7 @@ data class SseMessageSearchRequest(
 
         attachedEvents = false,
 
-        lookupLimitDays = null,
-
-        resumeFromId = null
+        lookupLimitDays = null
     )
 
     private fun checkEndTimestamp() {
@@ -130,8 +126,8 @@ data class SseMessageSearchRequest(
     }
 
     private fun checkStartPoint() {
-        if (startTimestamp == null && resumeFromId == null && resumeFromIdsList.isEmpty())
-            throw InvalidRequestException("One of the 'startTimestamp' or 'resumeFromId' or 'messageId' must not be null")
+        if (startTimestamp == null && resumeFromIdsList.isEmpty())
+            throw InvalidRequestException("One of the 'startTimestamp' or 'messageId' must not be null")
     }
 
     private fun checkStreamList() {
