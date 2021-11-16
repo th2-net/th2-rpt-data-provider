@@ -60,7 +60,6 @@ private class StreamHolder(val messageStream: PipelineComponent) {
         messageStream.pollMessage().let {
             if (previousElement == null && currentElement == null) {
                 logger.trace { it.lastProcessedId }
-                previousElement = it
                 currentElement = it
             } else {
                 throw InvalidInitializationException("StreamHolder ${messageStream.streamName} already initialized")
