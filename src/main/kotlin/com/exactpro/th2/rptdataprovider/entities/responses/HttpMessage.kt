@@ -52,6 +52,7 @@ class HttpBodyWrapper(
 data class HttpMessage(
     val type: String = "message",
     val timestamp: Instant,
+    val messageType: String,
     val direction: Direction?,
     val sessionId: String,
     val attachedEventIds: Set<String>,
