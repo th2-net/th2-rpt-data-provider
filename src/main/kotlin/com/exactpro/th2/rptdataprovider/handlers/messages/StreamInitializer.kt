@@ -102,14 +102,14 @@ class StreamInitializer(
     }
 
 
-    private fun searchInPastLimit(endTimestamp: Instant?, lastTimestamp: Instant?): (Instant) -> Boolean {
+    private fun searchInPastLimit(endTimestamp: Instant?, firstTimestamp: Instant?): (Instant) -> Boolean {
         if (endTimestamp != null) {
             return { timestamp: Instant ->
                 timestamp.isAfter(endTimestamp)
-                        || lastTimestamp?.let { timestamp.isAfterOrEqual(it) } ?: true
+                        || firstTimestamp?.let { timestamp.isAfterOrEqual(it) } ?: false
             }
         } else {
-            return { timestamp: Instant -> lastTimestamp?.let { timestamp.isAfterOrEqual(it) } ?: true }
+            return { timestamp: Instant -> firstTimestamp?.let { timestamp.isAfterOrEqual(it) } ?: false }
         }
     }
 
