@@ -106,7 +106,7 @@ class StreamInitializer(
         if (endTimestamp != null) {
             return { timestamp: Instant ->
                 timestamp.isAfter(endTimestamp)
-                        || firstTimestamp?.let { timestamp.isAfterOrEqual(it) } ?: true
+                        || firstTimestamp?.let { timestamp.isAfterOrEqual(it) } ?: false
             }
         } else {
             return { timestamp: Instant -> firstTimestamp?.let { timestamp.isAfterOrEqual(it) } ?: false }
