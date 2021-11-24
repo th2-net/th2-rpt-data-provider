@@ -18,10 +18,8 @@ package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.th2.rptdataprovider.Context
-import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
-import com.exactpro.th2.rptdataprovider.entities.internal.PipelineKeepAlive
-import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepObject
-import com.exactpro.th2.rptdataprovider.entities.internal.StreamEndObject
+import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidInitializationException
+import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
@@ -39,38 +37,59 @@ class StreamMerger(
     externalScope: CoroutineScope,
     pipelineStreams: List<PipelineComponent>,
     messageFlowCapacity: Int
-) : PipelineComponent(context, searchRequest, externalScope, messageFlowCapacity = messageFlowCapacity) {
+) : PipelineComponent(null, context, searchRequest, externalScope, messageFlowCapacity = messageFlowCapacity) {
 
     companion object {
         private val logger = KotlinLogging.logger { }
     }
 
-    private class StreamHolder(
-        val messageStream: PipelineComponent
-    ) {
+    private class StreamHolder(val messageStream: PipelineComponent) {
+
+        companion object {
+            private val logger = KotlinLogging.logger { }
+        }
+
+        val startId = messageStream.startId
 
         var currentElement: PipelineStepObject? = null
             private set
         var previousElement: PipelineStepObject? = null
             private set
 
+
+        private fun changePreviousElement(currentElement: PipelineStepObject?) {
+            if (previousElement == null
+                || currentElement is PipelineFilteredMessage
+            ) {
+                previousElement = currentElement
+            }
+        }
+
         fun top(): PipelineStepObject {
             return currentElement!!
         }
 
-        suspend fun pop(): PipelineStepObject {
-            return messageStream.pollMessage().let {
-                logger.trace { it.lastProcessedId }
+        suspend fun init() {
+            messageStream.pollMessage().let {
                 if (previousElement == null && currentElement == null) {
                     logger.trace { it.lastProcessedId }
-                    previousElement = it
                     currentElement = it
                 } else {
-                    logger.trace { it.lastProcessedId }
-                    previousElement = currentElement
-                    currentElement = it
+                    throw InvalidInitializationException("StreamHolder ${messageStream.streamName} already initialized")
                 }
-                previousElement!!
+            }
+        }
+
+        suspend fun pop(): PipelineStepObject {
+            return messageStream.pollMessage().let { newElement ->
+                val currentElementTemporary = currentElement
+
+                currentElementTemporary?.also {
+                    logger.trace { newElement.lastProcessedId }
+                    changePreviousElement(currentElement)
+                    currentElement = newElement
+                }
+                    ?: throw InvalidInitializationException("StreamHolder ${messageStream.streamName} need initialization")
             }
         }
     }
@@ -86,7 +105,7 @@ class StreamMerger(
     }
 
     private suspend fun messageStreamsInit() {
-        messageStreams.forEach { it.pop() }
+        messageStreams.forEach { it.init() }
     }
 
 
@@ -120,11 +139,11 @@ class StreamMerger(
     private fun getLastScannedObject(): PipelineStepObject? {
         return if (searchRequest.searchDirection == TimeRelation.AFTER) {
             messageStreams
-                .maxBy { it.previousElement?.lastScannedTime ?: Instant.MIN }
+                .minBy { it.top().lastScannedTime }
                 ?.previousElement
         } else {
             messageStreams
-                .minBy { it.previousElement?.lastScannedTime ?: Instant.MAX }
+                .maxBy { it.top().lastScannedTime }
                 ?.previousElement
         }
     }
@@ -226,7 +245,7 @@ class StreamMerger(
         return messageStreams.map {
             StreamInfo(
                 it.messageStream.streamName!!,
-                it.previousElement?.lastProcessedId
+                it.previousElement?.lastProcessedId ?: it.startId
             )
         }
     }

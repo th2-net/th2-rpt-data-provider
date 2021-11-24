@@ -37,7 +37,15 @@ class MessageDecoder(
     externalScope: CoroutineScope,
     previousComponent: PipelineComponent?,
     messageFlowCapacity: Int
-) : PipelineComponent(context, searchRequest, externalScope, streamName, previousComponent, messageFlowCapacity) {
+) : PipelineComponent(
+    previousComponent?.startId,
+    context,
+    searchRequest,
+    externalScope,
+    streamName,
+    previousComponent,
+    messageFlowCapacity
+) {
 
     private val batchMergeSize = context.configuration.rabbitMergedBatchSize.value.toLong()
 
