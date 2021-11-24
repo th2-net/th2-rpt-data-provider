@@ -37,6 +37,7 @@ class MessageContinuousStream(
     externalScope: CoroutineScope,
     messageFlowCapacity: Int
 ) : PipelineComponent(
+    startMessageId,
     initializer.context,
     initializer.request,
     externalScope,
@@ -163,7 +164,7 @@ class MessageContinuousStream(
     private fun getEmptyMessage(): EmptyPipelineObject {
         return EmptyPipelineObject(
             isStreamEmpty,
-            firstMessageInRequest?.id,
+            firstMessageInRequest?.id ?: startMessageId,
             if (!isStreamEmpty && firstMessageInRequest?.timestamp != null)
                 firstMessageInRequest!!.timestamp
             else {

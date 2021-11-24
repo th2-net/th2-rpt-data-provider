@@ -31,7 +31,15 @@ class MessageFilter(
     externalScope: CoroutineScope,
     previousComponent: PipelineComponent?,
     messageFlowCapacity: Int
-) : PipelineComponent(context, searchRequest, externalScope, streamName, previousComponent, messageFlowCapacity) {
+) : PipelineComponent(
+    previousComponent?.startId,
+    context,
+    searchRequest,
+    externalScope,
+    streamName,
+    previousComponent,
+    messageFlowCapacity
+) {
 
     private val sendEmptyDelay: Long = context.configuration.sendEmptyDelay.value.toLong()
     private var lastScannedObject: PipelineStepObject? = null

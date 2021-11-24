@@ -37,6 +37,8 @@ private class StreamHolder(val messageStream: PipelineComponent) {
         private val logger = KotlinLogging.logger { }
     }
 
+    val startId = messageStream.startId
+
     var currentElement: PipelineStepObject? = null
         private set
     var previousElement: PipelineStepObject? = null
@@ -44,10 +46,7 @@ private class StreamHolder(val messageStream: PipelineComponent) {
 
 
     private fun changePreviousElement(currentElement: PipelineStepObject?) {
-        if (previousElement == null
-            || previousElement is EmptyPipelineObject
-            || currentElement is PipelineFilteredMessage
-        ) {
+        if (previousElement == null || currentElement is PipelineFilteredMessage) {
             previousElement = currentElement
         }
     }
@@ -87,7 +86,7 @@ class StreamMerger(
     externalScope: CoroutineScope,
     pipelineStreams: List<PipelineComponent>,
     messageFlowCapacity: Int
-) : PipelineComponent(context, searchRequest, externalScope, messageFlowCapacity = messageFlowCapacity) {
+) : PipelineComponent(null, context, searchRequest, externalScope, messageFlowCapacity = messageFlowCapacity) {
 
     companion object {
         private val logger = KotlinLogging.logger { }
@@ -135,11 +134,11 @@ class StreamMerger(
     private fun getLastScannedObject(): PipelineStepObject? {
         return if (searchRequest.searchDirection == TimeRelation.AFTER) {
             messageStreams
-                .minBy { it.previousElement?.lastScannedTime ?: Instant.MAX }
+                .minBy { it.currentElement?.lastScannedTime ?: Instant.MAX }
                 ?.previousElement
         } else {
             messageStreams
-                .maxBy { it.previousElement?.lastScannedTime ?: Instant.MIN }
+                .maxBy { it.currentElement?.lastScannedTime ?: Instant.MIN }
                 ?.previousElement
         }
     }
@@ -236,7 +235,7 @@ class StreamMerger(
         return messageStreams.map {
             StreamInfo(
                 it.messageStream.streamName!!,
-                it.previousElement?.lastProcessedId
+                it.previousElement?.lastProcessedId ?: it.startId
             )
         }
     }

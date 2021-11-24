@@ -37,7 +37,15 @@ class MessageDecoder(
     externalScope: CoroutineScope,
     previousComponent: PipelineComponent?,
     messageFlowCapacity: Int
-) : PipelineComponent(context, searchRequest, externalScope, streamName, previousComponent, messageFlowCapacity) {
+) : PipelineComponent(
+    previousComponent?.startId,
+    context,
+    searchRequest,
+    externalScope,
+    streamName,
+    previousComponent,
+    messageFlowCapacity
+) {
 
     private val batchMergeSize = context.configuration.rabbitMergedBatchSize.value.toLong()
 
@@ -140,12 +148,12 @@ class MessageDecoder(
 
                     val buildersBatch = createMessageBuilders(rawBatch.payload)
 
-                    if (buildersBatch.isImages) {
-                        sendImages(buildersBatch.builders, rawBatch)
-                    } else {
-                        buffer.add(buildersBatch to rawBatch)
-                        messagesInBuffer += rawBatch.payload.messageBatch.messageCount
-                    }
+//                    if (buildersBatch.isImages) {
+                    sendImages(buildersBatch.builders, rawBatch)
+//                    } else {
+//                        buffer.add(buildersBatch to rawBatch)
+//                        messagesInBuffer += rawBatch.payload.messageBatch.messageCount
+//                    }
                 } else {
                     sendToChannel(rawBatch)
                 }
