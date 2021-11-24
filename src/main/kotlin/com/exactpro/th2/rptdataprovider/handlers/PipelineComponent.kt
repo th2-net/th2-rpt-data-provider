@@ -17,6 +17,7 @@
 package com.exactpro.th2.rptdataprovider.handlers
 
 import com.exactpro.cradle.Direction
+import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepObject
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
@@ -32,6 +33,7 @@ data class StreamName(val name: String, val direction: Direction) {
 }
 
 abstract class PipelineComponent(
+    val startId: StoredMessageId?,
     val context: Context,
     val searchRequest: SseMessageSearchRequest,
     val externalScope: CoroutineScope,
