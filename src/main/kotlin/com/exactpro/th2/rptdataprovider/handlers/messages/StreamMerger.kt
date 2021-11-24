@@ -59,7 +59,6 @@ class StreamMerger(
 
         private fun changePreviousElement(currentElement: PipelineStepObject?) {
             if (previousElement == null
-                || previousElement is EmptyPipelineObject
                 || currentElement is PipelineFilteredMessage
             ) {
                 previousElement = currentElement
@@ -89,7 +88,8 @@ class StreamMerger(
                     logger.trace { newElement.lastProcessedId }
                     changePreviousElement(currentElement)
                     currentElement = newElement
-                } ?: throw InvalidInitializationException("StreamHolder ${messageStream.streamName} need initialization")
+                }
+                    ?: throw InvalidInitializationException("StreamHolder ${messageStream.streamName} need initialization")
             }
         }
     }
@@ -139,11 +139,11 @@ class StreamMerger(
     private fun getLastScannedObject(): PipelineStepObject? {
         return if (searchRequest.searchDirection == TimeRelation.AFTER) {
             messageStreams
-                .minBy { it.previousElement?.lastScannedTime ?: Instant.MAX }
+                .minBy { it.top().lastScannedTime }
                 ?.previousElement
         } else {
             messageStreams
-                .maxBy { it.previousElement?.lastScannedTime ?: Instant.MIN }
+                .maxBy { it.top().lastScannedTime }
                 ?.previousElement
         }
     }
