@@ -21,6 +21,7 @@ import com.exactpro.th2.dataprovider.grpc.MessageData
 import com.exactpro.th2.rptdataprovider.convertToProto
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.entities.responses.BodyHttpMessage
+import com.exactpro.th2.rptdataprovider.entities.responses.BodyHttpSubMessage
 import com.exactpro.th2.rptdataprovider.entities.responses.HttpBodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.responses.HttpMessage
 import com.fasterxml.jackson.databind.DeserializationFeature
@@ -91,19 +92,19 @@ object MessageMapper {
         val isMessageTypeUnique = isMessageTypeUnique(body)
         val res = jacksonMapper.readValue(body[0].message, BodyHttpMessage::class.java)
         res.fields = emptyMap<String, Any>().toMutableMap()
-        body.forEach {
-            val singleMessage = jacksonMapper.readValue(body[0].message, BodyHttpMessage::class.java)
+        body.forEachIndexed { index, it ->
+            val singleMessage = jacksonMapper.readValue(body[index].message, BodyHttpMessage::class.java)
             val id =
                 if (isMessageTypeUnique) it.messageType else "${it.messageType}-${it.subsequenceId.joinToString("-")}"
             res.fields?.set(
                 id,
-                BodyHttpMessage(
+                BodyHttpSubMessage(
                     emptyMap<String, Any>().toMutableMap(),
                     emptyMap<String, Any>().toMutableMap(),
                     emptyMap<String, Any>().toMutableMap()
                 )
             )
-            (res.fields?.get(id) as BodyHttpMessage)
+            (res.fields?.get(id) as BodyHttpSubMessage)
                 .messageValue?.put("fields", singleMessage.fields!!)
         }
         return res
