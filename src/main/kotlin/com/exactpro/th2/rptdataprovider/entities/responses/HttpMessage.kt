@@ -61,12 +61,11 @@ data class HttpMessage(
     var bodyBase64: String?
 )
 
-//fixme this is a workaround to revert the old message format
 data class BodyHttpMessage(
     @JsonProperty("metadata")
     var metadata: MutableMap<String,Any>?,
     @JsonProperty("fields")
     var fields: MutableMap<String,Any>?,
-    @JsonIgnore
+    @JsonProperty("messageValue")
     var messageValue: MutableMap<String,Any>? = null
 )

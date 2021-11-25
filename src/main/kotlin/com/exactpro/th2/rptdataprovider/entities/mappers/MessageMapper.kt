@@ -91,8 +91,8 @@ object MessageMapper {
         val isMessageTypeUnique = isMessageTypeUnique(body)
         val res = jacksonMapper.readValue(body[0].message, BodyHttpMessage::class.java)
         res.fields = emptyMap<String, Any>().toMutableMap()
-        body.forEach {
-            val singleMessage = jacksonMapper.readValue(body[0].message, BodyHttpMessage::class.java)
+        body.forEachIndexed { index, it ->
+            val singleMessage = jacksonMapper.readValue(body[index].message, BodyHttpMessage::class.java)
             val id =
                 if (isMessageTypeUnique) it.messageType else "${it.messageType}-${it.subsequenceId.joinToString("-")}"
             res.fields?.set(
