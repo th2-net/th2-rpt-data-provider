@@ -18,28 +18,23 @@ package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.cradle.Order
 import com.exactpro.cradle.TimeRelation
+import com.exactpro.cradle.messages.MessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageBatch
-import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
+import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
+import com.exactpro.th2.rptdataprovider.entities.internal.StreamPointer
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.requests.StreamPointer
 import com.exactpro.th2.rptdataprovider.entities.responses.StoredMessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
-import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.time.Instant
 
@@ -102,9 +97,9 @@ class MessageExtractor(
             val start = resumeFromId.sequence
             messages.dropWhile {
                 if (order == Order.DIRECT) {
-                    it.index < start
+                    it.sequence < start
                 } else {
-                    it.index > start
+                    it.sequence > start
                 }
             }
         } else {
@@ -149,7 +144,7 @@ class MessageExtractor(
             streamName!!
 
             val resumeFromId = request.resumeFromIdsList.firstOrNull {
-                it.streamName == streamName.name && it.direction == streamName.direction
+                it.stream.name == streamName.name && it.stream.direction == streamName.direction
             }
 
             logger.debug { "acquiring cradle iterator for stream $streamName" }
@@ -159,13 +154,16 @@ class MessageExtractor(
 
             if (resumeFromId == null || resumeFromId.hasStarted) {
                 val cradleMessageIterable = context.cradleService.getMessagesBatchesSuspend(
-                    StoredMessageFilterBuilder().streamName().isEqualTo(streamName.name).direction()
-                        .isEqualTo(streamName.direction).order(order)
+                    MessageFilterBuilder()
+                        .sessionAlias(streamName.name)
+                        .direction(streamName.direction)
+                        .order(order)
+                        .bookId(streamName.bookId)
 
                         // timestamps will be ignored if resumeFromId is present
                         .also { builder ->
                             if (resumeFromId != null) {
-                                builder.index().let {
+                                builder.sequence().let {
                                     if (order == Order.DIRECT) {
                                         it.isGreaterThanOrEqualTo(resumeFromId.sequence)
                                     } else {
@@ -197,7 +195,7 @@ class MessageExtractor(
                         val timeStart = System.currentTimeMillis()
 
                         pipelineStatus.fetchedStart(streamName.toString())
-                        logger.trace { "batch ${batch.id.index} of stream $streamName with ${batch.messageCount} messages (${batch.batchSize} bytes) has been extracted" }
+                        logger.trace { "batch ${batch.id.sequence} of stream $streamName with ${batch.messageCount} messages (${batch.batchSize} bytes) has been extracted" }
 
                         val trimmedMessages = getMessagesFromBatch(batch)
                             .let { trimMessagesListHead(it, resumeFromId) }
@@ -211,7 +209,7 @@ class MessageExtractor(
                         val lastMessage = if (order == Order.DIRECT) batch.messages.last() else batch.messages.first()
 
                         logger.trace {
-                            "batch ${batch.id.index} of stream $streamName has been trimmed (targetStartTimestamp=${request.startTimestamp} targetEndTimestamp=${request.endTimestamp} targetId=${resumeFromId?.sequence}) - ${trimmedMessages.size} of ${batch.messages.size} messages left (firstId=${firstMessage.id.index} firstTimestamp=${firstMessage.timestamp} lastId=${lastMessage.id.index} lastTimestamp=${lastMessage.timestamp})"
+                            "batch ${batch.id.sequence} of stream $streamName has been trimmed (targetStartTimestamp=${request.startTimestamp} targetEndTimestamp=${request.endTimestamp} targetId=${resumeFromId?.sequence}) - ${trimmedMessages.size} of ${batch.messages.size} messages left (firstId=${firstMessage.id.sequence} firstTimestamp=${firstMessage.timestamp} lastId=${lastMessage.id.sequence} lastTimestamp=${lastMessage.timestamp})"
                         }
 
                         pipelineStatus.fetchedEnd(streamName.toString())
@@ -231,16 +229,16 @@ class MessageExtractor(
                                 lastElement = message.id
                                 lastTimestamp = message.timestamp
 
-                                logger.trace { "batch ${batch.id.index} of stream $streamName has been sent downstream" }
+                                logger.trace { "batch ${batch.id.sequence} of stream $streamName has been sent downstream" }
 
                             }
                         } catch (e: NoSuchElementException) {
-                            logger.trace { "skipping batch ${batch.id.index} of stream $streamName - no messages left after trimming" }
+                            logger.trace { "skipping batch ${batch.id.sequence} of stream $streamName - no messages left after trimming" }
                             pipelineStatus.countSkippedBatches(streamName.toString())
                         }
                         pipelineStatus.fetchedSendDownstream(streamName.toString())
 
-                        pipelineStatus.countFetchedBytes(streamName.toString(), batch.batchSize)
+                        pipelineStatus.countFetchedBytes(streamName.toString(), batch.batchSize.toLong())
                         pipelineStatus.countFetchedBatches(streamName.toString())
                         pipelineStatus.countFetchedMessages(streamName.toString(), trimmedMessages.size.toLong())
                         pipelineStatus.countSkippedMessages(

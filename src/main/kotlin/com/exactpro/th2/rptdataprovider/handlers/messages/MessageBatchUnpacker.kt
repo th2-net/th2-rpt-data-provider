@@ -5,16 +5,12 @@ import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.MessageGroup
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.exceptions.CodecResponseException
-import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
-import com.exactpro.th2.rptdataprovider.entities.internal.Message
-import com.exactpro.th2.rptdataprovider.entities.internal.PipelineDecodedBatch
-import com.exactpro.th2.rptdataprovider.entities.internal.PipelineParsedMessage
+import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
-import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -78,8 +74,8 @@ class MessageBatchUnpacker(
 
         val errorMessage = """"codec response is null 
                     | (stream=${streamName} 
-                    | firstRequestId=${messages.first().id.index}
-                    | lastRequestId=${messages.last().id.index} 
+                    | firstRequestId=${messages.first().id.sequence}
+                    | lastRequestId=${messages.last().id.sequence} 
                     | requestSize=${messages.size})
                     | responseSize=${responses?.size ?: 0})"""
             .trimMargin().replace("\n", " ")
@@ -126,8 +122,8 @@ class MessageBatchUnpacker(
                 throw CodecResponseException(
                     """codec dont parsed all messages
                     | (stream=${streamName} 
-                    | firstRequestId=${messages.first().id.index}
-                    | lastRequestId=${messages.last().id.index}
+                    | firstRequestId=${messages.first().id.sequence}
+                    | lastRequestId=${messages.last().id.sequence}
                     | notParsedMessagesId=$notParsed
                 """.trimMargin().replace("\n", " ")
                 )
@@ -157,7 +153,7 @@ class MessageBatchUnpacker(
                 }
             }.also {
                 logger.debug {
-                    "awaited codec response for ${it.duration.inMilliseconds}ms (stream=${streamName} firstRequestId=${requests.first().id.index} lastRequestId=${requests.last().id.index} requestSize=${requests.size} responseSize=${it.value?.messageGroupBatch?.groupsList?.size})"
+                    "awaited codec response for ${it.duration.inMilliseconds}ms (stream=${streamName} firstRequestId=${requests.first().id.sequence} lastRequestId=${requests.last().id.sequence} requestSize=${requests.size} responseSize=${it.value?.messageGroupBatch?.groupsList?.size})"
                 }
 
             }.value?.messageGroupBatch?.groupsList
@@ -196,7 +192,7 @@ class MessageBatchUnpacker(
 
             val messages = pipelineMessage.storedBatchWrapper.trimmedMessages
 
-            logger.debug { "codec response unpacking took ${result.duration.inMilliseconds}ms (stream=${streamName.toString()} firstId=${messages.first().id.index} lastId=${messages.last().id.index} messages=${messages.size})" }
+            logger.debug { "codec response unpacking took ${result.duration.inMilliseconds}ms (stream=${streamName.toString()} firstId=${messages.first().id.sequence} lastId=${messages.last().id.sequence} messages=${messages.size})" }
 
             pipelineMessage.info.buildMessage = result.duration.inMilliseconds.toLong()
             StreamWriter.setBuildMessage(pipelineMessage.info)
@@ -213,7 +209,7 @@ class MessageBatchUnpacker(
                 pipelineMessage.storedBatchWrapper.trimmedMessages.size.toLong()
             )
 
-            logger.debug { "unpacked responses are sent (stream=${streamName.toString()} firstId=${messages.first().id.index} lastId=${messages.last().id.index} messages=${result.value.size})" }
+            logger.debug { "unpacked responses are sent (stream=${streamName.toString()} firstId=${messages.first().id.sequence} lastId=${messages.last().id.sequence} messages=${result.value.size})" }
 
         } else {
             sendToChannel(pipelineMessage)

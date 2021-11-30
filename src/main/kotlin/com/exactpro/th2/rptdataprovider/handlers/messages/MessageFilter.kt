@@ -22,10 +22,8 @@ import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchReques
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
-import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import kotlinx.coroutines.*
 import mu.KotlinLogging
-import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.ExperimentalTime
 import kotlin.time.measureTimedValue
 
@@ -98,7 +96,7 @@ class MessageFilter(
 
                         applyFilter(parsedMessage.payload)
                     }.also {
-                        logger.trace { "message filtering took ${it.duration.inMilliseconds}ms (stream=$streamName sequence=${parsedMessage.payload.id.index})" }
+                        logger.trace { "message filtering took ${it.duration.inMilliseconds}ms (stream=$streamName sequence=${parsedMessage.payload.id.sequence})" }
                     }.value
 
                     pipelineStatus.filterEnd(streamName.toString())

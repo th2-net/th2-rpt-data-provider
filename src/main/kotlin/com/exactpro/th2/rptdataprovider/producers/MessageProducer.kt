@@ -77,7 +77,7 @@ class MessageProducer(
                         .await()
                         ?.messageGroupBatch
                         ?.groupsList
-                        ?.find { it.messagesList.first().message.metadata.id.sequence == id.index }
+                        ?.find { it.messagesList.first().message.metadata.id.sequence == id.sequence }
                         ?.messagesList
                         ?.map { BodyWrapper(it.message) }
                 } else null

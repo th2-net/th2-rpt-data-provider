@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider.grpc
 
-import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.utils.CradleIdException
 import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.grpc.MessageID
@@ -26,13 +25,8 @@ import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.CodecResponseException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
-import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
-import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
-import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.sse.GrpcWriter
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
-import com.exactpro.th2.rptdataprovider.grpcDirectionToCradle
 import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import com.google.protobuf.MessageOrBuilder
@@ -94,6 +88,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     private val eventCache = this.context.eventCache
     private val messageCache = this.context.messageCache
     private val checkRequestAliveDelay = context.configuration.checkRequestsAliveDelay.value.toLong()
+    private val getEventsLimit = this.context.configuration.eventSearchChunkSize.value.toInt()
 
     private val searchEventsHandler = this.context.searchEventsHandler
     private val searchMessagesHandler = this.context.searchMessagesHandler
@@ -252,18 +247,18 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
 
     @InternalCoroutinesApi
     override fun getMessage(request: MessageID, responseObserver: StreamObserver<MessageData>) {
-        handleRequest(responseObserver, "get message", useStream = false, request = request) {
-            val messageIdWithoutSubsequence = request.toBuilder().clearSubsequence().build()
-            messageCache.getOrPut(
-                StoredMessageId(
-                    messageIdWithoutSubsequence.connectionId.sessionAlias,
-                    grpcDirectionToCradle(messageIdWithoutSubsequence.direction),
-                    messageIdWithoutSubsequence.sequence
-                ).toString()
-            ).let {
-                MessageMapper.convertToGrpcMessageData(MessageWithMetadata(it, request))
-            }
-        }
+//        handleRequest(responseObserver, "get message", useStream = false, request = request) {
+//            val messageIdWithoutSubsequence = request.toBuilder().clearSubsequence().build()
+//            messageCache.getOrPut(
+//                StoredMessageId(
+//                    messageIdWithoutSubsequence.connectionId.sessionAlias,
+//                    grpcDirectionToCradle(messageIdWithoutSubsequence.direction),
+//                    messageIdWithoutSubsequence.sequence
+//                ).toString()
+//            ).let {
+//                MessageMapper.convertToGrpcMessageData(MessageWithMetadata(it, request))
+//            }
+//        }
     }
 
 
@@ -274,9 +269,9 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
             useStream = false,
             request = request
         ) {
-            StringList.newBuilder()
-                .addAllListString(cradleService.getMessageStreams())
-                .build()
+//            StringList.newBuilder()
+//                .addAllListString(cradleService.getMessageStreams())
+//                .build()
         }
     }
 
@@ -284,31 +279,31 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     @InternalCoroutinesApi
     @FlowPreview
     override fun searchMessages(grpcRequest: MessageSearchRequest, responseObserver: StreamObserver<StreamResponse>) {
-        handleRequest(responseObserver, "grpc search message", useStream = true, request = grpcRequest) {
-
-            suspend fun(streamWriter: StreamWriter) {
-                val filterPredicate = messageFiltersPredicateFactory.build(grpcRequest.filtersList)
-                val request = SseMessageSearchRequest(grpcRequest, filterPredicate)
-                request.checkRequest() // FIXME: Encapsulate into the SseMessageSearchRequest's constructor
-
-                searchMessagesHandler.searchMessagesSse(request, streamWriter)
-            }
-        }
+//        handleRequest(responseObserver, "grpc search message", useStream = true, request = grpcRequest) {
+//
+//            suspend fun(streamWriter: StreamWriter) {
+//                val filterPredicate = messageFiltersPredicateFactory.build(grpcRequest.filtersList)
+//                val request = SseMessageSearchRequest(grpcRequest, filterPredicate)
+//                request.checkRequest() // FIXME: Encapsulate into the SseMessageSearchRequest's constructor
+//
+//                searchMessagesHandler.searchMessagesSse(request, streamWriter)
+//            }
+//        }
     }
 
 
     @FlowPreview
     override fun searchEvents(grpcRequest: EventSearchRequest, responseObserver: StreamObserver<StreamResponse>) {
-        handleRequest(responseObserver, "grpc search events", useStream = true, request = grpcRequest) {
-
-            suspend fun(streamWriter: StreamWriter) {
-                val filterPredicate = eventFiltersPredicateFactory.build(grpcRequest.filtersList)
-                val request = SseEventSearchRequest(grpcRequest, filterPredicate)
-                request.checkRequest()
-
-                searchEventsHandler.searchEventsSse(request, streamWriter)
-            }
-        }
+//        handleRequest(responseObserver, "grpc search events", useStream = true, request = grpcRequest) {
+//
+//            suspend fun(streamWriter: StreamWriter) {
+//                val filterPredicate = eventFiltersPredicateFactory.build(grpcRequest.filtersList)
+//                val request = SseEventSearchRequest(grpcRequest, filterPredicate)
+//                request.checkRequest()
+//
+//                searchEventsHandler.searchEventsSse(request, streamWriter)
+//            }
+//        }
     }
 
 
@@ -367,21 +362,21 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
 
     @InternalCoroutinesApi
     override fun matchMessage(request: MatchRequest, responseObserver: StreamObserver<IsMatched>) {
-        handleRequest(responseObserver, "match message", useStream = false, request = request) {
-            val filterPredicate = messageFiltersPredicateFactory.build(request.filtersList)
-            IsMatched.newBuilder().setIsMatched(
-                filterPredicate.apply(
-                    MessageWithMetadata(
-                        messageCache.getOrPut(
-                            StoredMessageId(
-                                request.messageId.connectionId.sessionAlias,
-                                grpcDirectionToCradle(request.messageId.direction),
-                                request.messageId.sequence
-                            ).toString()
-                        )
-                    )
-                )
-            ).build()
-        }
+//        handleRequest(responseObserver, "match message", useStream = false, request = request) {
+//            val filterPredicate = messageFiltersPredicateFactory.build(request.filtersList)
+//            IsMatched.newBuilder().setIsMatched(
+//                filterPredicate.apply(
+//                    MessageWithMetadata(
+//                        messageCache.getOrPut(
+//                            StoredMessageId(
+//                                request.messageId.connectionId.sessionAlias,
+//                                grpcDirectionToCradle(request.messageId.direction),
+//                                request.messageId.sequence
+//                            ).toString()
+//                        )
+//                    )
+//                )
+//            ).build()
+//        }
     }
 }

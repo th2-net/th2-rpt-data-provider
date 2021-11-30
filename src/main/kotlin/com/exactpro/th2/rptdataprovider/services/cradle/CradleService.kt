@@ -17,13 +17,16 @@
 
 package com.exactpro.th2.rptdataprovider.services.cradle
 
+import com.exactpro.cradle.BookId
 import com.exactpro.cradle.CradleManager
+import com.exactpro.cradle.Order
+import com.exactpro.cradle.messages.MessageFilter
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageBatch
-import com.exactpro.cradle.messages.StoredMessageFilter
 import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.cradle.testevents.StoredTestEvent
 import com.exactpro.cradle.testevents.StoredTestEventId
-import com.exactpro.cradle.testevents.StoredTestEventWrapper
+import com.exactpro.cradle.testevents.TestEventFilter
 import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.convertToString
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
@@ -62,13 +65,13 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
     private val cradleDispatcher = Executors.newFixedThreadPool(cradleDispatcherPoolSize).asCoroutineDispatcher()
 
     //FIXME: change cradle api or wrap every blocking iterator the same way
-    suspend fun getMessagesBatchesSuspend(filter: StoredMessageFilter): Channel<StoredMessageBatch> {
+    suspend fun getMessagesBatchesSuspend(filter: MessageFilter): Channel<StoredMessageBatch> {
         val iteratorScope = CoroutineScope(cradleDispatcher)
 
         return withContext(cradleDispatcher) {
             (logMetrics(getMessagesBatches) {
                 logTime("getMessagesBatches (filter=${filter.convertToString()})") {
-                    storage.getMessagesBatchesAsync(filter).await()
+                    storage.getMessageBatchesAsync(filter).await().asIterable()
                 }
             } ?: listOf())
                 .let { iterable ->
@@ -81,20 +84,10 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
                                     logger.trace { "message batch ${it.id} has been sent to the channel" }
                                 }
                                 channel.close()
-                                logger.debug { "message batch channel for stream ${filter.streamName}:${filter.direction} has been closed" }
+                                logger.debug { "message batch channel for stream ${filter.sessionAlias}:${filter.direction} has been closed" }
                             }
                         }
                 }
-        }
-    }
-
-    suspend fun getMessagesBatches(filter: StoredMessageFilter): Iterable<StoredMessageBatch> {
-        return withContext(cradleDispatcher) {
-            logMetrics(getMessagesBatches) {
-                logTime("getMessagesBatches (filter=${filter.convertToString()})") {
-                    storage.getMessagesBatchesAsync(filter).await()
-                }
-            } ?: listOf()
         }
     }
 
@@ -108,27 +101,34 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
         }
     }
 
-    suspend fun getEventsSuspend(from: Instant, to: Instant): Iterable<StoredTestEventWrapper> {
+    suspend fun getEventsSuspend(
+        eventFilter: TestEventFilter
+    ): Iterable<StoredTestEvent> {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
-                logTime("Get events from: $from to: $to") {
-                    storage.getTestEventsAsync(from, to).await()
+                logTime("Get events from: ${eventFilter.startTimestampFrom} to: ${eventFilter.startTimestampTo}") {
+                    storage.getTestEventsAsync(eventFilter).await().asIterable()
                 }
             } ?: listOf()
         }
     }
 
-    suspend fun getEventsSuspend(parentId: StoredTestEventId, from: Instant, to: Instant): Iterable<StoredTestEventWrapper> {
+    suspend fun getEventsSuspend(
+        parentId: StoredTestEventId,
+        from: Instant,
+        to: Instant,
+        order: Order = Order.DIRECT
+    ): Iterable<StoredTestEvent> {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
                 logTime("Get events parent: $parentId from: $from to: $to") {
-                    storage.getTestEventsAsync(parentId, from, to).await()
+                    storage.getTestEventsAsync(TestEventFilter(parentId.bookId, parentId.scope)).await().asIterable()
                 }
             } ?: listOf()
         }
     }
 
-    suspend fun getEventSuspend(id: StoredTestEventId): StoredTestEventWrapper? {
+    suspend fun getEventSuspend(id: StoredTestEventId): StoredTestEvent? {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventAsyncMetric) {
                 logTime("getTestEvent (id=$id)") {
@@ -138,14 +138,29 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
         }
     }
 
-    suspend fun getMessageStreams(): Collection<String> {
+    suspend fun getMessageStreams(bookId: BookId): Collection<String> {
         return withContext(cradleDispatcher) {
             logMetrics(getStreamsMetric) {
                 logTime("getStreams") {
-                    storage.streams
+                    storage.getSessionAliases(bookId)
                 }
-            } ?: emptyList()
+            } ?: emptyList<String>()
         }
+    }
+
+    suspend fun getSessionAliases(bookId: BookId): Collection<String> {
+        return withContext(cradleDispatcher) {
+            logMetrics(getStreamsMetric) {
+                logTime("getStreams") {
+                    storage.getSessionAliases(bookId)
+                }
+            } ?: emptyList<String>()
+        }
+    }
+
+
+    fun getBookIds(): List<BookId> {
+        return storage.books.map { it.id }
     }
 }
 

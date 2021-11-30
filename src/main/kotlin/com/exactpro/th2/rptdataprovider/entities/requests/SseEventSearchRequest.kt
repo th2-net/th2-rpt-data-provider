@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider.entities.requests
 
+import com.exactpro.cradle.BookId
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.th2.dataprovider.grpc.EventSearchRequest
 import com.exactpro.th2.dataprovider.grpc.TimeRelation.PREVIOUS
@@ -35,7 +36,8 @@ data class SseEventSearchRequest(
     val resultCountLimit: Int?,
     val limitForParent: Long?,
     val metadataOnly: Boolean,
-    val attachedMessages: Boolean
+    val attachedMessages: Boolean,
+    val bookId: BookId
 ) {
     companion object {
         private fun asCradleTimeRelation(value: String): TimeRelation {
@@ -58,10 +60,12 @@ data class SseEventSearchRequest(
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt(),
         limitForParent = parameters["limitForParent"]?.firstOrNull()?.toLong(),
         metadataOnly = parameters["metadataOnly"]?.firstOrNull()?.toBoolean() ?: true,
-        attachedMessages = parameters["attachedMessages"]?.firstOrNull()?.toBoolean() ?: false
+        attachedMessages = parameters["attachedMessages"]?.firstOrNull()?.toBoolean() ?: false,
+        bookId = parameters["bookId"]?.firstOrNull()?.let { BookId(it) }
+            ?: throw InvalidRequestException("'bookId' is required parameter and it must not be null")
     )
 
-    constructor(request: EventSearchRequest, filterPredicate: FilterPredicate<BaseEventEntity>) : this(
+    constructor(request: EventSearchRequest, filterPredicate: FilterPredicate<BaseEventEntity>, bookId: BookId) : this(
         filterPredicate = filterPredicate,
         startTimestamp = if (request.hasStartTimestamp())
             request.startTimestamp.let {
@@ -94,7 +98,9 @@ data class SseEventSearchRequest(
         } else true,
         attachedMessages = if (request.hasAttachedMessages()) {
             request.attachedMessages.value
-        } else false
+        } else false,
+
+        bookId = bookId
     )
 
     private fun checkEndTimestamp() {

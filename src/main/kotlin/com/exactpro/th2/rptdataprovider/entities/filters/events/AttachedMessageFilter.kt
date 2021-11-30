@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider.entities.filters.events
 
+import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.Filter
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterRequest

@@ -16,10 +16,11 @@
 
 package com.exactpro.th2.rptdataprovider.producers
 
+import com.exactpro.cradle.testevents.StoredTestEvent
 import com.exactpro.cradle.testevents.StoredTestEventBatch
 import com.exactpro.cradle.testevents.StoredTestEventId
-import com.exactpro.cradle.testevents.StoredTestEventMetadata
-import com.exactpro.cradle.testevents.StoredTestEventWithContent
+import com.exactpro.cradle.testevents.StoredTestEventSingle
+import com.exactpro.cradle.testevents.TestEventSingle
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType.NEED_ATTACHED_MESSAGES
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType.NEED_BODY
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
@@ -37,7 +38,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
         private val logger = KotlinLogging.logger { }
     }
 
-    private suspend fun fromSingle(batch: List<ProviderEventId>): List<StoredTestEventWithContent?> {
+    private suspend fun fromSingle(batch: List<ProviderEventId>): List<TestEventSingle?> {
         return batch
             .map { it.eventId }
             .distinct()
@@ -55,7 +56,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
     private suspend fun fromBatchIds(
         batchId: StoredTestEventId,
         ids: List<ProviderEventId>
-    ): List<StoredTestEventWithContent?> {
+    ): List<TestEventSingle?> {
         val batchedEvents = cradle.getEventSuspend(batchId).let {
             if (it == null) {
                 logger.error { "unable to find event '$batchId'. It is not a valid id" }
@@ -91,7 +92,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
 
         return fromStoredEvent(storedEvent, batch).let {
             setBody(storedEvent, it).apply {
-                it.attachedMessageIds = storedEvent.messageIds?.map(Any::toString)?.toSet() ?: emptySet()
+                it.attachedMessageIds = storedEvent.messages?.map(Any::toString)?.toSet() ?: emptySet()
             }
         }
     }
@@ -101,20 +102,20 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
             if (batchId == null) {
                 fromSingle(events)
             } else {
-                fromBatchIds(StoredTestEventId(batchId.toString()), events)
+                fromBatchIds(batchId, events)
             }
         }
             .filterNotNull()
             .map {
                 setBody(it, fromStoredEvent(it, null)).apply {
-                    attachedMessageIds = it.messageIds?.map(Any::toString)?.toSet() ?: emptySet()
+                    attachedMessageIds = it.messages?.map(Any::toString)?.toSet() ?: emptySet()
                 }
             }
             .toList()
     }
 
     fun fromEventsProcessed(
-        events: List<Pair<StoredTestEventWithContent, BaseEventEntity>>,
+        events: List<Pair<TestEventSingle, BaseEventEntity>>,
         request: SseEventSearchRequest
     ): List<BaseEventEntity> {
 
@@ -132,7 +133,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
             ) {
                 it.map { (content, event) ->
                     event.apply {
-                        attachedMessageIds = content.messageIds?.map(Any::toString)?.toSet() ?: emptySet()
+                        attachedMessageIds = content.messages?.map(Any::toString)?.toSet() ?: emptySet()
                     }
                 }
             } else {
@@ -143,11 +144,11 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
 
 
     fun fromStoredEvent(
-        storedEvent: StoredTestEventWithContent,
+        storedEvent: TestEventSingle,
         batch: StoredTestEventBatch?
     ): BaseEventEntity {
         return BaseEventEntity(
-            StoredTestEventMetadata(storedEvent),
+            storedEvent,
             ProviderEventId(batch?.id, storedEvent.id),
             batch?.id,
             storedEvent.parentId?.let { parentId ->
@@ -162,7 +163,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
 
 
     private fun setBody(
-        storedEvent: StoredTestEventWithContent,
+        storedEvent: TestEventSingle,
         baseEvent: BaseEventEntity
     ): BaseEventEntity {
         return baseEvent.apply {

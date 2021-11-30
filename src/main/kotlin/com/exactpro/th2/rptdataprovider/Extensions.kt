@@ -16,32 +16,21 @@
 
 package com.exactpro.th2.rptdataprovider
 
-import com.exactpro.cradle.TimeRelation
-import com.exactpro.cradle.messages.StoredMessageFilter
+
+import com.exactpro.cradle.messages.MessageFilter
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.cradle.testevents.BatchedStoredTestEvent
-import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
-import com.exactpro.cradle.testevents.StoredTestEventBatch
-import com.exactpro.cradle.testevents.StoredTestEventId
-import com.exactpro.cradle.testevents.StoredTestEventMetadata
-import com.exactpro.cradle.testevents.StoredTestEventWrapper
+import com.exactpro.cradle.testevents.*
 import com.exactpro.th2.common.grpc.ConnectionID
 import com.exactpro.th2.common.grpc.MessageID
-import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
-import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
-import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.prometheus.client.Gauge
 import io.prometheus.client.Histogram
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope.coroutineContext
-import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
 import mu.KotlinLogging
 import java.io.IOException
-import java.io.Writer
 import java.time.Instant
-import java.util.concurrent.Executors
 import kotlin.system.measureTimeMillis
 
 private val logger = KotlinLogging.logger { }
@@ -54,16 +43,19 @@ suspend fun ObjectMapper.asStringSuspend(data: Any?): String {
     }
 }
 
-fun StoredMessageFilter.convertToString(): String {
+fun MessageFilter.convertToString(): String {
     val filter = this
 
     return "(limit=${filter.limit} " +
-            "direction=${filter.direction?.value} " +
+            "direction=${filter.direction?.name} " +
             "timestampFrom=${filter.timestampFrom?.value} " +
             "timestampTo=${filter.timestampTo?.value} " +
-            "stream=${filter.streamName?.value} " +
-            "indexValue=${filter.index?.value} " +
-            "indexOperation=${filter.index?.operation?.name}"
+            "sessionAlias=${filter.sessionAlias} " +
+            "bookId=${filter.bookId} " +
+            "pageId=${filter.pageId}" +
+            "limit=${filter.limit}" +
+            "sequence=${filter.sequence}" +
+            "order=${filter.order}"
 }
 
 suspend fun <T> logTime(methodName: String, lambda: suspend () -> T): T? {
@@ -166,7 +158,6 @@ fun Instant.isAfterOrEqual(other: Instant): Boolean {
     return this.isAfter(other) || this == other
 }
 
-
 fun StoredTestEventBatch.tryToGetTestEvents(parentEventId: StoredTestEventId? = null): Collection<BatchedStoredTestEvent> {
     return try {
         this.testEvents?.let { events ->
@@ -185,8 +176,8 @@ fun StoredTestEventBatch.tryToGetTestEvents(parentEventId: StoredTestEventId? = 
 
 fun StoredMessageId.convertToProto(): MessageID {
     return MessageID.newBuilder()
-        .setSequence(index)
+        .setSequence(this.sequence)
         .setDirection(cradleDirectionToGrpc(direction))
-        .setConnectionId(ConnectionID.newBuilder().setSessionAlias(streamName))
+        .setConnectionId(ConnectionID.newBuilder().setSessionAlias(this.sessionAlias))
         .build()
 }

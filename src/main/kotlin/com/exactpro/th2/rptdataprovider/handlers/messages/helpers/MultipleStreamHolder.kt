@@ -40,11 +40,11 @@ class MultipleStreamHolder(pipelineComponents: List<PipelineComponent>) {
         return mutex.withLock {
             if (direction == TimeRelation.AFTER) {
                 messageStreams
-                    .maxBy { it.currentElement?.lastScannedTime ?: Instant.MIN }
+                    .maxByOrNull { it.currentElement?.lastScannedTime ?: Instant.MIN }
                     ?.previousElement
             } else {
                 messageStreams
-                    .minBy { it.currentElement?.lastScannedTime ?: Instant.MIN }
+                    .minByOrNull { it.currentElement?.lastScannedTime ?: Instant.MIN }
                     ?.previousElement
             }
         }

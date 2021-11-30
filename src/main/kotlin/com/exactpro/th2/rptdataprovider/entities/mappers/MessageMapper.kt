@@ -62,7 +62,7 @@ object MessageMapper {
         return messageWithMetadata.message.parsedMessageGroup?.map { groupElement ->
             MessageData.newBuilder()
                 .setMessageId(groupElement.id)
-                .setTimestamp(groupElement.message.metadata.timestamp)
+                .setTimestamp(groupElement.id.timestamp)
 //                .setBodyBase64(messageWithMetadata.message.rawMessageBody.let {
 //                    Base64.getEncoder().encodeToString(it)
 //                })

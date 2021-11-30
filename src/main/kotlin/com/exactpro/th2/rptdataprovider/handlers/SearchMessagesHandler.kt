@@ -62,6 +62,7 @@ class SearchMessagesHandler(private val applicationContext: Context) {
             val lastMessageIdCounter = AtomicLong(0)
             val pipelineStatus = PipelineStatus(context = applicationContext)
             var streamMerger: StreamMerger? = null
+
             val chainScope = CoroutineScope(coroutineContext + Job(coroutineContext[Job]))
 
             flow {
@@ -112,8 +113,10 @@ class SearchMessagesHandler(private val applicationContext: Context) {
         val message = resumeId?.let {
             applicationContext.cradleService.getMessageSuspend(
                 StoredMessageId(
-                    it.streamName,
-                    it.direction,
+                    it.stream.bookId,
+                    it.stream.name,
+                    it.stream.direction,
+                    it.timestamp,
                     it.sequence
                 )
             )
@@ -126,7 +129,7 @@ class SearchMessagesHandler(private val applicationContext: Context) {
         val pipelineStatus = PipelineStatus(context = applicationContext)
 
         val streamNames = resultRequest.stream.flatMap { stream ->
-            Direction.values().map { StreamName(stream, it) }
+            Direction.values().map { StreamName(stream, it, request.bookId) }
         }
 
         val coroutineScope = CoroutineScope(coroutineContext + Job(coroutineContext[Job]))

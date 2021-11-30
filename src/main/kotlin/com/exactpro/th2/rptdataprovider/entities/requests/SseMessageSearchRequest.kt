@@ -16,23 +16,20 @@
 package com.exactpro.th2.rptdataprovider.entities.requests
 
 import com.exactpro.cradle.Direction
+import com.exactpro.cradle.BookId
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.th2.common.util.toInstant
 import com.exactpro.th2.dataprovider.grpc.MessageSearchRequest
 import com.exactpro.th2.dataprovider.grpc.TimeRelation.PREVIOUS
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
+import com.exactpro.th2.rptdataprovider.entities.internal.StreamPointer
 import com.exactpro.th2.rptdataprovider.entities.mappers.TimeRelationMapper
 import com.exactpro.th2.rptdataprovider.grpcDirectionToCradle
 import java.time.Instant
 
-data class StreamPointer(
-    val sequence: Long,
-    val streamName: String,
-    val direction: Direction,
-    val hasStarted: Boolean
-)
 
 data class SseMessageSearchRequest(
     val filterPredicate: FilterPredicate<MessageWithMetadata>,
@@ -45,7 +42,8 @@ data class SseMessageSearchRequest(
     val lookupLimitDays: Int?,
     val resumeFromIdsList: List<StreamPointer>,
     val includeProtocols: List<String>?,
-    val excludeProtocols: List<String>?
+    val excludeProtocols: List<String>?,
+    val bookId: BookId
 ) {
     constructor(
         parameters: Map<String, List<String>>,
@@ -64,7 +62,7 @@ data class SseMessageSearchRequest(
             ?.map {
                 StoredMessageId.fromString(it).let { id ->
                     StreamPointer(
-                        id.index, id.streamName, id.direction, id.index > 0
+                        id.sequence, id.sessionAlias, id.direction, id.bookId, id.timestamp, id.sequence > 0
                     )
                 }
             }
@@ -75,12 +73,15 @@ data class SseMessageSearchRequest(
         lookupLimitDays = parameters["lookupLimitDays"]?.firstOrNull()?.toInt(),
 
         includeProtocols = parameters["includeProtocols"],
-        excludeProtocols = parameters["excludeProtocols"]
+        excludeProtocols = parameters["excludeProtocols"],
+        bookId = parameters["bookId"]?.firstOrNull()?.let { BookId(it) }
+            ?: throw InvalidRequestException("'bookId' is required parameter and it must not be null")
     )
 
     constructor(
         request: MessageSearchRequest,
         filterPredicate: FilterPredicate<MessageWithMetadata>,
+        bookId: BookId,
         searchDirection: TimeRelation
     ) : this(
         filterPredicate = filterPredicate,
@@ -114,7 +115,12 @@ data class SseMessageSearchRequest(
         resumeFromIdsList = if (request.messageIdList.isNotEmpty()) {
             request.messageIdList.map {
                 StreamPointer(
-                    it.sequence, it.connectionId.sessionAlias, grpcDirectionToCradle(it.direction), it.sequence > 0
+                    it.sequence,
+                    it.connectionId.sessionAlias,
+                    grpcDirectionToCradle(it.direction),
+                    bookId,
+                    it.timestamp.toInstant(),
+                    it.sequence > 0
                 )
             }
         } else emptyList(),
@@ -125,7 +131,8 @@ data class SseMessageSearchRequest(
 
         includeProtocols = null,
 
-        excludeProtocols = null
+        excludeProtocols = null,
+        bookId = bookId
     )
 
     constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<MessageWithMetadata>) : this(
@@ -134,10 +141,15 @@ data class SseMessageSearchRequest(
         searchDirection = TimeRelation.AFTER
     )
 
-    constructor(request: MessageSearchRequest, filterPredicate: FilterPredicate<MessageWithMetadata>) : this(
+    constructor(
+        request: MessageSearchRequest,
+        filterPredicate: FilterPredicate<MessageWithMetadata>,
+        bookId: BookId
+    ) : this(
         request = request,
         filterPredicate = filterPredicate,
-        searchDirection = TimeRelation.AFTER
+        searchDirection = TimeRelation.AFTER,
+        bookId = bookId
     )
 
     private fun checkEndTimestamp() {
@@ -177,9 +189,9 @@ data class SseMessageSearchRequest(
         if (resumeFromIdsList.isEmpty()) return
 
         val mapStreams = stream.associateWith { mutableListOf<StreamPointer>() }
-        resumeFromIdsList.forEach { mapStreams[it.streamName]?.add(it) }
+        resumeFromIdsList.forEach { mapStreams[it.stream.name]?.add(it) }
         mapStreams.forEach {
-            val messageDirectionList = it.value.map { streamPointer -> streamPointer.direction }
+            val messageDirectionList = it.value.map { streamPointer -> streamPointer.stream.direction }
 
             if (!messageDirectionList.containsAll(Direction.values().toList())) {
                 throw InvalidRequestException("ResumeId was not passed for the stream: ${it.key}")

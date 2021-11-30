@@ -48,6 +48,7 @@ data class Message(
         events: Set<String>,
         imageType: String? = null
     ) : this(
+
         id = messageWrapper.id,
         direction = messageWrapper.direction,
         timestamp = messageWrapper.timestamp,

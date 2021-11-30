@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider.entities.filters.messages
 
+import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.Filter
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterRequest
@@ -51,7 +52,7 @@ class AttachedEventFilters private constructor(
                         }
 
                         (batch?.getTestEvent(id.eventId) ?: cradleService.getEventSuspend(id.eventId)
-                            ?.asSingle())?.messageIds?.map(Any::toString)
+                            ?.asSingle())?.messages?.map(Any::toString)
                             ?.toSet()
                             ?: emptySet<String>()
                     }

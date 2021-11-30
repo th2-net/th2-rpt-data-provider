@@ -17,18 +17,20 @@
 package com.exactpro.th2.rptdataprovider.handlers
 
 
+import com.exactpro.cradle.BookId
+import com.exactpro.cradle.Order
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.TimeRelation.AFTER
-import com.exactpro.cradle.testevents.StoredTestEventWrapper
+import com.exactpro.cradle.testevents.*
 import com.exactpro.th2.rptdataprovider.*
+import com.exactpro.cradle.filters.FilterForGreater
+import com.exactpro.cradle.filters.FilterForLess
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedEventInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
-import com.exactpro.th2.rptdataprovider.isAfterOrEqual
-import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import io.prometheus.client.Counter
@@ -102,25 +104,33 @@ class SearchEventsHandler(private val context: Context) {
     private suspend fun getEventsSuspend(
         parentEvent: ProviderEventId?,
         timestampFrom: Instant,
-        timestampTo: Instant
-    ): Iterable<StoredTestEventWrapper> {
+        timestampTo: Instant,
+        searchDirection: TimeRelation,
+        bookId: BookId
+    ): Iterable<StoredTestEvent> {
         return coroutineScope {
+            val order = if (searchDirection == AFTER) Order.DIRECT else Order.REVERSE
             if (parentEvent != null) {
                 if (parentEvent.batchId != null) {
                     cradle.getEventSuspend(parentEvent.batchId)?.let {
-                        listOf(StoredTestEventWrapper(it.asBatch()))
+                        listOf(StoredTestEventBatch(it.asBatch(), it.pageId))
                     } ?: emptyList()
                 } else {
-                    cradle.getEventsSuspend(parentEvent.eventId, timestampFrom, timestampTo)
+                    cradle.getEventsSuspend(parentEvent.eventId, timestampFrom, timestampTo, order)
                 }
             } else {
-                cradle.getEventsSuspend(timestampFrom, timestampTo)
+                val eventFilter = TestEventFilterBuilder()
+                    .bookId(bookId)
+                    .build()
+                eventFilter.startTimestampTo = FilterForLess(timestampTo)
+                eventFilter.startTimestampFrom = FilterForGreater<Instant>(timestampFrom)
+                cradle.getEventsSuspend(eventFilter)
             }
         }
     }
 
-    private suspend fun prepareEvents(
-        wrappers: List<StoredTestEventWrapper>,
+    private fun prepareEvents(
+        wrappers: List<StoredTestEvent>,
         request: SseEventSearchRequest
     ): List<BaseEventEntity> {
         return wrappers.flatMap { entry ->
@@ -149,7 +159,7 @@ class SearchEventsHandler(private val context: Context) {
         return coroutineScope {
             flow {
                 val eventsCollection =
-                    getEventsSuspend(request.parentEvent, timestampFrom, timestampTo)
+                    getEventsSuspend(request.parentEvent, timestampFrom, timestampTo, request.searchDirection, request.bookId)
                         .asSequence()
                         .chunked(eventSearchChunkSize)
                 for (event in eventsCollection)

@@ -17,15 +17,14 @@
 package com.exactpro.th2.rptdataprovider.entities.responses
 
 import com.exactpro.cradle.messages.StoredMessage
-import com.exactpro.cradle.messages.StoredMessageBatch
-import com.exactpro.cradle.messages.StoredMessageBatchId
+import com.exactpro.cradle.messages.StoredMessageId
 
 data class MessageBatchWrapper(
-    val batchId: StoredMessageBatchId,
+    val batchId: StoredMessageId,
     val trimmedMessages: Collection<MessageWrapper>
 )
 
 data class StoredMessageBatchWrapper(
-    val batchId: StoredMessageBatchId,
+    val batchId: StoredMessageId,
     val trimmedMessages: Collection<StoredMessage>
 )

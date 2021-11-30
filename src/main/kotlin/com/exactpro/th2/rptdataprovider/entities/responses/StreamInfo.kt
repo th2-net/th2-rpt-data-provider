@@ -17,23 +17,29 @@
 package com.exactpro.th2.rptdataprovider.entities.responses
 
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.common.grpc.ConnectionID
-import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.dataprovider.grpc.Stream
 import com.exactpro.th2.rptdataprovider.convertToProto
 import com.exactpro.th2.rptdataprovider.cradleDirectionToGrpc
-import com.exactpro.th2.rptdataprovider.handlers.StreamName
+import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
+import com.exactpro.th2.rptdataprovider.entities.internal.StreamPointer
 import com.fasterxml.jackson.annotation.JsonIgnore
 import mu.KotlinLogging
+import java.time.Instant
 
-data class StreamInfo(val stream: StreamName, @JsonIgnore val messageId: StoredMessageId? = null) {
+data class StreamInfo(val streamPointer: StreamName, @JsonIgnore val messageId: StoredMessageId? = null) {
 
     @JsonIgnore
     private val lastMessage = messageId ?: let {
         // set sequence to a negative value if stream has not started to avoid mistaking it for the default value
         // FIXME change interface to make that case explicit
-        logger.trace { "lastElement is null - StreamInfo should be build as if the stream $stream has no messages" }
-        StoredMessageId(stream.name, stream.direction, -1)
+        logger.trace { "lastElement is null - StreamInfo should be build as if the stream $streamPointer has no messages" }
+        StoredMessageId(
+            streamPointer.bookId,
+            streamPointer.name,
+            streamPointer.direction,
+            Instant.ofEpochMilli(Long.MIN_VALUE),
+            -1
+        )
     }
 
     val lastElement = lastMessage.toString()
@@ -44,11 +50,11 @@ data class StreamInfo(val stream: StreamName, @JsonIgnore val messageId: StoredM
 
     fun convertToProto(): Stream {
         return Stream.newBuilder()
-            .setDirection(cradleDirectionToGrpc(stream.direction))
-            .setSession(stream.name)
+            .setDirection(cradleDirectionToGrpc(streamPointer.direction))
+            .setSession(streamPointer.name)
             .setLastId(
                 lastMessage.let {
-                    logger.trace { "stream $stream - lastElement is ${it.index}" }
+                    logger.trace { "stream $streamPointer - lastElement is ${it.sequence}" }
                     it.convertToProto()
 
                 }
