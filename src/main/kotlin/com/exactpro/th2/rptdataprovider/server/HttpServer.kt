@@ -16,22 +16,16 @@
 
 package com.exactpro.th2.rptdataprovider.server
 
-import com.exactpro.cradle.Order
-import com.exactpro.cradle.TimeRelation
-import com.exactpro.cradle.messages.StoredMessageFilterBuilder
-import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.cradle.BookId
 import com.exactpro.cradle.utils.CradleIdException
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
-import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.entities.sse.*
-import com.exactpro.th2.rptdataprovider.handlers.messages.MessageLoader
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import io.ktor.application.*
 import io.ktor.features.*
@@ -46,8 +40,6 @@ import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.nio.channels.ClosedChannelException
-import java.time.Instant
-import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -334,7 +326,9 @@ class HttpServer(private val applicationContext: Context) {
                         call, context, "get message streams", rarelyModifiedCacheControl,
                         probe = false, useSse = false
                     ) {
-                        cradleService.getMessageStreams()
+                        val bookId = call.request.queryParameters["bookId"]
+                        if (!bookId.isNullOrEmpty()) cradleService.getSessionAliases(BookId(bookId))
+                        else throw InvalidRequestException("BookId set must not be empty: $bookId")
                     }
                 }
 
@@ -357,7 +351,8 @@ class HttpServer(private val applicationContext: Context) {
                             val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
                             val request = SseMessageSearchRequest(queryParametersMap, filterPredicate)
                             request.checkRequest()
-                            searchMessagesHandler.searchMessagesSse(request, streamWriter)
+                            if (request.bookId!=null) searchMessagesHandler.searchMessagesSse(request, streamWriter)
+                            else throw InvalidRequestException("bookID cannot be empty")
                         }
                     }
                 }
@@ -369,8 +364,8 @@ class HttpServer(private val applicationContext: Context) {
                             val filterPredicate = eventFiltersPredicateFactory.build(queryParametersMap)
                             val request = SseEventSearchRequest(queryParametersMap, filterPredicate)
                             request.checkRequest()
-
-                            searchEventsHandler.searchEventsSse(request, streamWriter)
+                            if (request.bookId!=null) searchEventsHandler.searchEventsSse(request, streamWriter)
+                            else throw InvalidRequestException("bookID cannot be empty")
                         }
                     }
                 }
@@ -418,6 +413,12 @@ class HttpServer(private val applicationContext: Context) {
                         val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
                         val message = messageCache.getOrPut(call.parameters["id"]!!)
                         filterPredicate.apply(MessageWithMetadata(message))
+                    }
+                }
+
+                get("/bookIds") {
+                    handleRequest(call,context,"book ids",null,false,false){
+                        cradleService.getBookIds()
                     }
                 }
             }

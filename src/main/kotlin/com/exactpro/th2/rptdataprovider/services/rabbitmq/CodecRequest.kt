@@ -16,7 +16,8 @@
 
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
-import com.exactpro.cradle.messages.StoredMessageBatchId
+import com.exactpro.cradle.messages.StoredMessageBatch
+import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
@@ -87,7 +88,7 @@ data class MessageRequest(
 
 
 data class BatchRequest(
-    val batchId: StoredMessageBatchId,
+    val batchId: StoredMessageId,
     val messagesCount: Int,
     val requests: List<MessageRequest?>,
     val context: CoroutineScope

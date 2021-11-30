@@ -16,8 +16,11 @@
 
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
+import com.exactpro.cradle.BookId
 import com.exactpro.cradle.TimeRelation
+import com.exactpro.cradle.messages.MessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessage
+import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
@@ -78,14 +81,13 @@ class StreamInitializer(
     }
 
 
-    private suspend fun getFirstMessageInStream(stream: StreamName): StoredMessage? {
-        val index = context.cradleService.getFirstMessageIndex(stream.name, stream.direction)
-
-        if (index == -1L) {
+    private suspend fun getFirstMessageInStream(sessionAlias: StreamName,bookId: BookId,timestamp: Instant): StoredMessage? {
+        val sequence = context.cradleService.getFirstMessageSequence(sessionAlias.name, sessionAlias.direction)
+        if (sequence == -1L) {
             return null
         }
 
-        return StoredMessageId(stream.name, stream.direction, index).let {
+        return StoredMessageId(bookId,sessionAlias.name, sessionAlias.direction, timestamp, sequence).let {
             context.cradleService.getMessageSuspend(it)
         }
     }
@@ -114,30 +116,30 @@ class StreamInitializer(
     }
 
 
-    private suspend fun getTimeSearchLimit(): ((Instant) -> Boolean) {
+    private suspend fun getTimeSearchLimit(bookId: BookId,timestamp: Instant): ((Instant) -> Boolean) {
         return if (request.searchDirection == TimeRelation.AFTER) {
             searchInFutureLimit(request.endTimestamp)
         } else {
-            val firstMessageInStream = getFirstMessageInStream(stream)
+            val firstMessageInStream = getFirstMessageInStream(stream,bookId,timestamp)
             searchInPastLimit(request.endTimestamp, firstMessageInStream?.timestamp)
         }
     }
 
 
-    private suspend fun getFirstMessageIdDifferentDays(startTimestamp: Instant, stream: StreamName): StoredMessageId? {
+    private suspend fun getFirstMessageIdDifferentDays(startTimestamp: Instant, sessionAlias: StreamName, bookId: BookId): StoredMessageId? {
         var isCurrentDay = true
         var timestamp = startTimestamp
         var messageId: StoredMessageId? = null
         var daysChecking = request.lookupLimitDays
 
-        val timeLimit = getTimeSearchLimit()
+        val timeLimit = getTimeSearchLimit(bookId,timestamp)
 
         while (messageId == null && timeLimit(timestamp) && daysChecking?.let { it >= 0 } != false) {
             messageId =
                 if (isCurrentDay) {
-                    getFirstMessageCurrentDay(timestamp, stream)
+                    getFirstMessageCurrentDay(timestamp, sessionAlias)
                 } else {
-                    context.cradleService.getFirstMessageIdSuspend(timestamp, stream, request.searchDirection)
+                    context.cradleService.getFirstMessageIdSuspend(timestamp, sessionAlias, request.searchDirection)
                 }
             daysChecking = daysChecking?.dec()
             isCurrentDay = false
@@ -147,18 +149,23 @@ class StreamInitializer(
     }
 
 
-    private suspend fun getStartMessageFromTime(stream: StreamName, timestamp: Instant): StoredMessage? {
-        val storedMessageId = getFirstMessageIdDifferentDays(timestamp, stream)
+    private suspend fun getStartMessageFromTime(sessionAlias: StreamName, timestamp: Instant,bookId: BookId): StoredMessage? {
+        val storedMessageId = getFirstMessageIdDifferentDays(timestamp, sessionAlias,bookId)
 
         return storedMessageId?.let {
-            val messageBatch = context.cradleService.getMessageBatchSuspend(storedMessageId)
+            val filter = MessageFilterBuilder()
+                .bookId(it.bookId)
+                .direction(it.direction)
+                .sessionAlias(it.sessionAlias)
+                .build()
+            val messageBatch = context.cradleService.getMessagesSuspend(filter).toList()
             getNearestMessage(messageBatch, request.searchDirection, timestamp)
         }
     }
 
 
-    suspend fun initStream(startTimestamp: Instant): StoredMessage? {
-        return getStartMessageFromTime(stream, startTimestamp)
+    suspend fun initStream(startTimestamp: Instant,bookId: BookId): StoredMessage? {
+        return getStartMessageFromTime(stream, startTimestamp,bookId)
     }
 
 

@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
+import com.exactpro.cradle.BookId
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
@@ -59,12 +60,12 @@ class ChainBuilder(
 
         val idsList = request.resumeFromIdsList + resumeFromId
 
-        return idsList.associateBy { StreamName(it.streamName, it.direction) }
+        return idsList.associateBy { StreamName(it.sessionAlias, it.direction) }
     }
 
 
     @InternalCoroutinesApi
-    suspend fun buildChain(): StreamMerger {
+    suspend fun buildChain(bookId: BookId): StreamMerger {
 
         val streamNames = getRequestStreamNames(request)
         val resumeFromIds = getRequestResumeId(request)
@@ -79,14 +80,15 @@ class ChainBuilder(
                 streamInitializer,
                 startTimestamp,
                 externalScope,
-                messageContinuousStreamBuffer
+                messageContinuousStreamBuffer,
+                bookId
             )
 
-            val messageDecoder = MessageDecoder(messageStream, messageDecoderBuffer)
+            val messageDecoder = MessageDecoder(messageStream, messageDecoderBuffer,bookId)
 
-            MessageFilter(messageDecoder, messageFilterBuffer)
+            MessageFilter(messageDecoder, messageFilterBuffer,bookId)
         }
 
-        return StreamMerger(context, request, externalScope, dataStreams, messageStreamMergerBuffer)
+        return StreamMerger(context, request, externalScope, dataStreams, messageStreamMergerBuffer,bookId)
     }
 }

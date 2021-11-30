@@ -68,7 +68,7 @@ class Main {
             serverType = ServerType.valueOf(configuration.serverType.value),
 
             cradleManager = configurationFactory.cradleManager.also {
-                resources += AutoCloseable { it.dispose() }
+                resources += AutoCloseable { it.close() }
             },
             messageRouterRawBatch = configurationFactory.messageRouterRawBatch.also {
                 resources += it

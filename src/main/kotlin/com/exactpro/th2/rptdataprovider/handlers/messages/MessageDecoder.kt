@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
+import com.exactpro.cradle.BookId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
 import com.exactpro.th2.rptdataprovider.entities.internal.Message
@@ -36,24 +37,26 @@ class MessageDecoder(
     streamName: StreamName?,
     externalScope: CoroutineScope,
     previousComponent: PipelineComponent?,
-    messageFlowCapacity: Int
+    messageFlowCapacity: Int,
+    bookId: BookId
 ) : PipelineComponent(context, searchRequest, externalScope, streamName, previousComponent, messageFlowCapacity) {
 
     private val batchMergeSize = context.configuration.rabbitMergedBatchSize.value.toLong()
 
     init {
         externalScope.launch {
-            processMessage()
+            processMessage(bookId)
         }
     }
 
-    constructor(pipelineComponent: MessageContinuousStream, messageFlowCapacity: Int) : this(
+    constructor(pipelineComponent: MessageContinuousStream, messageFlowCapacity: Int,bookId: BookId) : this(
         pipelineComponent.context,
         pipelineComponent.searchRequest,
         pipelineComponent.streamName,
         pipelineComponent.externalScope,
         pipelineComponent,
-        messageFlowCapacity
+        messageFlowCapacity,
+        bookId
     )
 
     private suspend fun createMessageBuilders(rawBatch: MessageBatchWrapper): BuildersBatch {
@@ -120,7 +123,7 @@ class MessageDecoder(
 
 
     @InternalCoroutinesApi
-    override suspend fun processMessage() {
+    override suspend fun processMessage(bookId: BookId) {
         coroutineScope {
             val buffer = mutableListOf<Pair<BuildersBatch, PipelineRawBatchData>>()
             var messagesInBuffer = 0L

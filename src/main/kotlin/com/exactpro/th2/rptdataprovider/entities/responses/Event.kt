@@ -17,7 +17,7 @@
 package com.exactpro.th2.rptdataprovider.entities.responses
 
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.cradle.testevents.StoredTestEventWithContent
+import com.exactpro.cradle.testevents.StoredTestEvent
 import com.exactpro.th2.common.grpc.ConnectionID
 import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.grpc.EventStatus.FAILED
@@ -52,9 +52,9 @@ data class Event(
         return attachedMessageIds.map { id ->
             StoredMessageId.fromString(id).let {
                 MessageID.newBuilder()
-                    .setConnectionId(ConnectionID.newBuilder().setSessionAlias(it.streamName))
+                    .setConnectionId(ConnectionID.newBuilder().setSessionAlias(it.sessionAlias))
                     .setDirection(cradleDirectionToGrpc(it.direction))
-                    .setSequence(it.index)
+                    .setSequence(it.sequence)
                     .build()
             }
         }
@@ -80,7 +80,7 @@ data class Event(
     }
 
     constructor(
-        stored: StoredTestEventWithContent,
+        stored: StoredTestEvent,
         eventId: String,
         messages: Set<String>,
         batchId: String?,

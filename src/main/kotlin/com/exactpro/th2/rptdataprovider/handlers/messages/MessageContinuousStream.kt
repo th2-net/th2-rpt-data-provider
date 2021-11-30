@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
+import com.exactpro.cradle.BookId
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
@@ -35,7 +36,8 @@ class MessageContinuousStream(
     private val initializer: StreamInitializer,
     private val startTimestamp: Instant,
     externalScope: CoroutineScope,
-    messageFlowCapacity: Int
+    messageFlowCapacity: Int,
+    bookId: BookId
 ) : PipelineComponent(
     initializer.context,
     initializer.request,
@@ -66,14 +68,14 @@ class MessageContinuousStream(
 
     init {
         externalScope.launch {
-            processMessage()
+            processMessage(bookId)
         }
     }
 
 
-    private suspend fun initialize() {
+    private suspend fun initialize(bookId: BookId) {
         if (startMessageId == null) {
-            initializer.initStream(startTimestamp)?.let {
+            initializer.initStream(startTimestamp,bookId)?.let {
                 lastElement = it.id
                 lastTimestamp = it.timestamp
             }
@@ -175,11 +177,11 @@ class MessageContinuousStream(
     }
 
 
-    override suspend fun processMessage() {
+    override suspend fun processMessage(bookId: BookId) {
         coroutineScope {
             launch { emptySender(this) }
 
-            initialize()
+            initialize(bookId)
 
             while (isActive && needLoadMessage) {
 

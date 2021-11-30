@@ -17,8 +17,7 @@
 package com.exactpro.th2.rptdataprovider.producers
 
 import com.exactpro.cradle.messages.StoredMessage
-import com.exactpro.cradle.messages.StoredMessageBatchId
-import com.exactpro.cradle.messages.StoredMessageFilterBuilder
+import com.exactpro.cradle.messages.MessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.rptdataprovider.cache.CodecCache
@@ -38,7 +37,7 @@ data class BuildersBatch(
     val builders: List<Message.Builder>,
     val rawMessages: List<RawMessage?>,
     val isImages: Boolean,
-    val batchId: StoredMessageBatchId,
+    val batchId: StoredMessageId,
     val messageCount: Int
 )
 
@@ -134,7 +133,8 @@ class MessageProducer(
                 async {
                     val eventsId = builder.rawStoredMessage.id.let {
                         try {
-                            cradle.getEventIdsSuspend(it).map(Any::toString).toSet()
+                            emptySet<String>()
+//                            cradle.getEventIdsSuspend(it).map(Any::toString).toSet()
                         } catch (e: Exception) {
                             logger.error(e) { "unable to get events attached to message (id=$it)" }
 
@@ -190,10 +190,9 @@ class MessageProducer(
         codecCache.get(id.toString())?.let { return it }
 
         val rawBatchNullable = cradle.getMessagesBatchesSuspend(
-            StoredMessageFilterBuilder()
-                .streamName().isEqualTo(id.streamName)
-                .direction().isEqualTo(id.direction)
-                .index().isEqualTo(id.index)
+            MessageFilterBuilder()
+                .sessionAlias(id.sessionAlias)
+                .direction(id.direction)
                 .build()
         ).firstOrNull()?.takeIf { !it.isEmpty }
 

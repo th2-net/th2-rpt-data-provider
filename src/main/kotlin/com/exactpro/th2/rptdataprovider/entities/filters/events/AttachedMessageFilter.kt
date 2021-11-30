@@ -28,7 +28,6 @@ import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
 class AttachedMessageFilter private constructor(
-    private var eventIds: Set<String>,
     override var negative: Boolean,
     override var conjunct: Boolean = false
 ) : Filter<BaseEventEntity> {
@@ -38,22 +37,7 @@ class AttachedMessageFilter private constructor(
 
             return AttachedMessageFilter(
                 negative = filterRequest.isNegative(),
-                conjunct = filterRequest.isConjunct(),
-                eventIds = filterRequest.getValues()
-                    ?.map {
-                        cradleService.getEventIdsSuspend(
-                            StoredMessageId.fromString(it)
-                        )
-                            .map { id -> id.toString() }
-                            .toSet()
-                    }
-                    ?.reduce { set, element ->
-                        if (filterRequest.isConjunct()) {
-                            set intersect element
-                        } else {
-                            set union element
-                        }
-                    }
+                conjunct = filterRequest.isConjunct()
                     ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
             )
         }
@@ -77,7 +61,7 @@ class AttachedMessageFilter private constructor(
 
 
     override fun match(element: BaseEventEntity): Boolean {
-        return negative.xor(eventIds.contains(element.id.toString()))
+        return false
     }
 
     override fun getInfo(): FilterInfo {

@@ -16,13 +16,13 @@
 
 package com.exactpro.th2.rptdataprovider.handlers
 
+import com.exactpro.cradle.BookId
 import com.exactpro.cradle.Direction
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepObject
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.launch
 import mu.KotlinLogging
 
 data class StreamName(val name: String, val direction: Direction) {
@@ -51,7 +51,7 @@ abstract class PipelineComponent(
         get() = processedMessagesCounter
 
 
-    protected abstract suspend fun processMessage()
+    protected abstract suspend fun processMessage(bookId: BookId)
 
 
     protected suspend fun sendToChannel(message: PipelineStepObject) {

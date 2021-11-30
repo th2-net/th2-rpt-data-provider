@@ -16,10 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider.producers
 
-import com.exactpro.cradle.testevents.StoredTestEventBatch
-import com.exactpro.cradle.testevents.StoredTestEventId
-import com.exactpro.cradle.testevents.StoredTestEventMetadata
-import com.exactpro.cradle.testevents.StoredTestEventWithContent
+import com.exactpro.cradle.testevents.*
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType.NEED_ATTACHED_MESSAGES
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType.NEED_BODY
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
@@ -34,6 +31,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import mu.KotlinLogging
 import java.util.*
+import javax.xml.stream.EventFilter
 
 class EventProducer(private val cradle: CradleService, private val mapper: ObjectMapper) {
 
@@ -46,8 +44,10 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
         batch: List<Pair<StoredTestEventId, List<BaseEventEntity>>>
     ): List<BaseEventEntity> {
         val requestIds = batch.map { it.first }.toSet()
-        val completedEvents =
-            cradle.getCompletedEventSuspend(requestIds).map { it.asBatch() }.associateBy { it.id }
+        val testEventFilters = requestIds.map { TestEventFilter(it.bookId,it.scope) }
+        val storedTestEventBatch = emptyList<StoredTestEvent>().toMutableList()
+        testEventFilters.map { cradle.getCompletedEventSuspend(it).forEach { event -> storedTestEventBatch.add(event) } }
+        val completedEvents = storedTestEventBatch.map { it.asBatch() }.associateBy { it.id }
 
         return coroutineScope {
             batch.flatMap {
@@ -65,10 +65,12 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
         }
     }
 
-    private suspend fun fromSingle(batch: List<ProviderEventId>): List<StoredTestEventWithContent?> {
+    private suspend fun fromSingle(batch: List<ProviderEventId>): List<StoredTestEventSingle?> {
         val requestIds = batch.map { it.eventId }.toSet()
-        val completedEvents =
-            cradle.getCompletedEventSuspend(requestIds).map { it.asSingle() }.associateBy { it.id }
+        val testEventFilters = requestIds.map { TestEventFilter(it.bookId,it.scope) }
+        val storedTestEvents = emptyList<StoredTestEvent>().toMutableList()
+        testEventFilters.map { cradle.getCompletedEventSuspend(it).forEach { event -> storedTestEvents.add(event) } }
+        val completedEvents = storedTestEvents.map { it.asSingle() }.associateBy { it.id }
 
         return coroutineScope {
             batch.map {
@@ -94,7 +96,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
     private suspend fun fromBatchIds(
         batch: StoredTestEventBatch?,
         ids: List<ProviderEventId>
-    ): List<StoredTestEventWithContent?> {
+    ): List<TestEventSingle?> {
         return ids.map {
             val storedEvent =
                 batch?.getTestEvent(it.eventId) ?: cradle.getEventSuspend(it.eventId)?.asSingle()
@@ -138,12 +140,14 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
 
         val batchedEvents = batchOrSingle.keys
             .filterNotNull()
-            .map { StoredTestEventId(it.toString()) }
+            .map { StoredTestEventId(it.bookId,it.scope,it.startTimestamp,it.id) }
             .toSet()
             .let { batchIds ->
-                val batches = cradle.getCompletedEventSuspend(batchIds)
-                    .map { event -> event.asBatch() }
-                    .associateBy { it.id }
+                val filters = batchIds.map { TestEventFilter(it.bookId,it.scope) }
+
+                val storedTestEvents = emptyList<StoredTestEvent>().toMutableList()
+                filters.map { cradle.getCompletedEventSuspend(it).forEach { storedTestEvents.add(it) } }
+                val batches = storedTestEvents.map { it.asBatch() }.associateBy { it.id }
 
                 batchIds.flatMap { batchId ->
                     val storedEventBatch = batches[batchId]
@@ -201,8 +205,8 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
 
 
     fun fromEventMetadata(
-        storedEvent: StoredTestEventMetadata,
-        batch: StoredTestEventMetadata?
+        storedEvent: TestEventSingle,
+        batch: StoredTestEventBatch?
     ): BaseEventEntity {
         return BaseEventEntity(
             storedEvent,
@@ -220,11 +224,11 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
 
 
     fun fromStoredEvent(
-        storedEvent: StoredTestEventWithContent,
+        storedEvent: TestEventSingle,
         batch: StoredTestEventBatch?
     ): BaseEventEntity {
         return BaseEventEntity(
-            StoredTestEventMetadata(storedEvent),
+            storedEvent,
             ProviderEventId(batch?.id, storedEvent.id),
             batch?.id,
             storedEvent.parentId?.let { parentId ->
@@ -262,7 +266,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
 
 
     private suspend fun setBody(
-        storedEvent: StoredTestEventWithContent,
+        storedEvent: TestEventSingle,
         baseEvent: BaseEventEntity
     ): BaseEventEntity {
         return baseEvent.apply {

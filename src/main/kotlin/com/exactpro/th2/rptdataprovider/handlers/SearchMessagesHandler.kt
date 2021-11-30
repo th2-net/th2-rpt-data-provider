@@ -43,9 +43,8 @@ class SearchMessagesHandler(private val context: Context) {
         withContext(coroutineContext) {
             val lastMessageIdCounter = AtomicLong(0)
             var streamMerger: StreamMerger? = null
-
             flow {
-                streamMerger = ChainBuilder(context, request, this@withContext).buildChain()
+                streamMerger = request.bookId?.let { ChainBuilder(context, request, this@withContext).buildChain(it) }
 
                 do {
                     val message = streamMerger?.pollMessage()

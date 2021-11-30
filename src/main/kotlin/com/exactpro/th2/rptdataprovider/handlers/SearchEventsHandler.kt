@@ -17,11 +17,13 @@
 package com.exactpro.th2.rptdataprovider.handlers
 
 
+import com.exactpro.cradle.BookId
 import com.exactpro.cradle.Order
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.TimeRelation.AFTER
-import com.exactpro.cradle.testevents.StoredTestEventId
-import com.exactpro.cradle.testevents.StoredTestEventMetadata
+import com.exactpro.cradle.filters.FilterForGreater
+import com.exactpro.cradle.filters.FilterForLess
+import com.exactpro.cradle.testevents.*
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
@@ -107,31 +109,38 @@ class SearchEventsHandler(private val context: Context) {
         parentEvent: ProviderEventId?,
         timestampFrom: Instant,
         timestampTo: Instant,
-        searchDirection: TimeRelation
-    ): Iterable<StoredTestEventMetadata> {
+        searchDirection: TimeRelation,
+        bookId: BookId
+    ): Iterable<StoredTestEvent> {
         return coroutineScope {
             val order = if (searchDirection == AFTER) Order.DIRECT else Order.REVERSE
             if (parentEvent != null) {
                 if (parentEvent.batchId != null) {
                     cradle.getEventSuspend(parentEvent.batchId)?.let {
-                        listOf(StoredTestEventMetadata(it.asBatch()))
+                        listOf(StoredTestEventBatch(it.asBatch(),it.pageId))
                     } ?: emptyList()
                 } else {
                     cradle.getEventsSuspend(parentEvent.eventId, timestampFrom, timestampTo, order)
                 }
             } else {
-                cradle.getEventsSuspend(timestampFrom, timestampTo, order)
+                val eventFilter = TestEventFilterBuilder()
+                    .bookId(bookId)
+                    .parent(parentEvent)
+                    .build()
+                eventFilter.startTimestampTo = FilterForLess(timestampTo)
+                eventFilter.startTimestampFrom = FilterForGreater<Instant>(timestampFrom)
+                cradle.getEventsSuspend(eventFilter)
             }
         }
     }
 
 
     private suspend fun prepareNonBatchedEvent(
-        metadata: List<StoredTestEventMetadata>,
+        metadata: List<StoredTestEvent>,
         request: SseEventSearchRequest
     ): List<BaseEventEntity> {
         return metadata.map {
-            eventProducer.fromEventMetadata(it, null)
+            eventProducer.fromEventMetadata(it.asSingle(), null)
         }.let { eventTreesNodes ->
             eventProducer.fromSingleEventsProcessed(eventTreesNodes, request)
         }
@@ -139,15 +148,15 @@ class SearchEventsHandler(private val context: Context) {
 
 
     private suspend fun prepareBatchedEvent(
-        metadata: List<StoredTestEventMetadata>,
+        metadata: List<StoredTestEvent>,
         timestampFrom: Instant,
         timestampTo: Instant,
         request: SseEventSearchRequest
     ): List<BaseEventEntity> {
-        return metadata.map { it to it.tryToGetTestEvents(request.parentEvent?.eventId) }.let { eventsWithBatch ->
+        return metadata.map { it to it.asBatch().tryToGetTestEvents(request.parentEvent?.eventId) }.let { eventsWithBatch ->
             eventsWithBatch.map { (batch, events) ->
                 batch.id to events?.map {
-                    eventProducer.fromEventMetadata(StoredTestEventMetadata(it), batch)
+                    eventProducer.fromEventMetadata(StoredTestEventSingle(it,it.pageId), batch.asBatch())
                 }
             }.filter { it.second?.isNotEmpty() ?: true }
                 .let { eventTreeNodes ->
@@ -182,7 +191,7 @@ class SearchEventsHandler(private val context: Context) {
             flow {
                 val eventsCollection =
                     databaseRequestRetry(dbRetryDelay) {
-                        getEventsSuspend(request.parentEvent, timestampFrom, timestampTo, request.searchDirection)
+                        getEventsSuspend(request.parentEvent, timestampFrom, timestampTo, request.searchDirection,request.bookId!!)
                     }.asSequence().chunked(eventSearchChunkSize)
 
                 for (event in eventsCollection)

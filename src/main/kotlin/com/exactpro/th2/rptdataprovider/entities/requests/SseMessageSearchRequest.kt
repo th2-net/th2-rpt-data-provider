@@ -15,6 +15,7 @@
  ******************************************************************************/
 package com.exactpro.th2.rptdataprovider.entities.requests
 
+import com.exactpro.cradle.BookId
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.dataprovider.grpc.MessageSearchRequest
@@ -36,7 +37,8 @@ data class SseMessageSearchRequest(
     val keepOpen: Boolean,
     val attachedEvents: Boolean,
     val lookupLimitDays: Int?,
-    val resumeFromIdsList: List<StoredMessageId>
+    val resumeFromIdsList: List<StoredMessageId>,
+    val bookId: BookId?
 ) {
 
     companion object {
@@ -63,10 +65,11 @@ data class SseMessageSearchRequest(
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt(),
         keepOpen = parameters["keepOpen"]?.firstOrNull()?.toBoolean() ?: false,
         attachedEvents = parameters["attachedEvents"]?.firstOrNull()?.toBoolean() ?: false,
-        lookupLimitDays = parameters["lookupLimitDays"]?.firstOrNull()?.toInt()
+        lookupLimitDays = parameters["lookupLimitDays"]?.firstOrNull()?.toInt(),
+        bookId = parameters["bookId"]?.firstOrNull()?.let { BookId(it) }
     )
 
-    constructor(request: MessageSearchRequest, filterPredicate: FilterPredicate<MessageWithMetadata>) : this(
+    constructor(request: MessageSearchRequest, filterPredicate: FilterPredicate<MessageWithMetadata>,bookId: BookId) : this(
         filterPredicate = filterPredicate,
         startTimestamp = if (request.hasStartTimestamp())
             request.startTimestamp.let {
@@ -100,8 +103,10 @@ data class SseMessageSearchRequest(
         resumeFromIdsList = if (request.messageIdList.isNotEmpty()) {
             request.messageIdList.map {
                 StoredMessageId(
+                    bookId,
                     it.connectionId.sessionAlias,
                     grpcDirectionToCradle(it.direction),
+                    Instant.ofEpochSecond(request.startTimestamp.seconds,request.startTimestamp.nanos.toLong()),
                     it.sequence
                 )
             }
@@ -111,7 +116,9 @@ data class SseMessageSearchRequest(
 
         lookupLimitDays = null,
 
-        resumeFromId = null
+        resumeFromId = null,
+
+        bookId = bookId
     )
 
     private fun checkEndTimestamp() {

@@ -21,7 +21,7 @@ import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.TimeRelation.AFTER
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageBatch
-import com.exactpro.cradle.messages.StoredMessageFilterBuilder
+import com.exactpro.cradle.messages.MessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
@@ -50,25 +50,25 @@ class MessageLoader(
         logger.debug { "pulling more messages (id=$startId limit=$limit direction=${searchDirection})" }
 
         return context.cradleService.getMessagesBatchesSuspend(
-            StoredMessageFilterBuilder().apply {
-                streamName().isEqualTo(startId.streamName)
-                direction().isEqualTo(startId.direction)
+            MessageFilterBuilder().apply {
+                sessionAlias(startId.sessionAlias)
+                direction(startId.direction)
                 limit(limit)
 
                 if (searchDirection == AFTER) {
-                    index().let {
+                    sequence().let {
                         if (include)
-                            it.isGreaterThanOrEqualTo(startId.index)
+                            it.isGreaterThanOrEqualTo(startId.sequence)
                         else
-                            it.isGreaterThan(startId.index)
+                            it.isGreaterThan(startId.sequence)
                     }
                     order(Order.DIRECT)
                 } else {
-                    index().let {
+                    sequence().let {
                         if (include)
-                            it.isLessThanOrEqualTo(startId.index)
+                            it.isLessThanOrEqualTo(startId.sequence)
                         else
-                            it.isLessThan(startId.index)
+                            it.isLessThan(startId.sequence)
                     }
                     order(Order.REVERSE)
                 }
@@ -81,9 +81,9 @@ class MessageLoader(
         return message.timestamp.isBefore(startTimestamp) &&
                 startId.let {
                     if (include) {
-                        message.index <= it.index
+                        message.sequence <= it.sequence
                     } else {
-                        message.index < it.index
+                        message.sequence < it.sequence
                     }
                 }
     }
@@ -93,9 +93,9 @@ class MessageLoader(
         return message.timestamp.isAfter(startTimestamp) &&
                 startId.let {
                     if (include) {
-                        message.index >= it.index
+                        message.sequence >= it.sequence
                     } else {
-                        message.index > it.index
+                        message.sequence > it.sequence
                     }
                 }
     }

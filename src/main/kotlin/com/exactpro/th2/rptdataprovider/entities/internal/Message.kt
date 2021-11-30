@@ -47,7 +47,7 @@ data class Message(
         id = rawStoredMessage.id,
         direction = Direction.fromStored(rawStoredMessage.direction ?: com.exactpro.cradle.Direction.FIRST),
         timestamp = rawStoredMessage.timestamp ?: Instant.ofEpochMilli(0),
-        sessionId = rawStoredMessage.streamName ?: "",
+        sessionId = rawStoredMessage.sessionAlias ?: "",
         attachedEventIds = events ?: emptySet(),
         rawMessageBody = rawBody,
         messageBody = messageBody
