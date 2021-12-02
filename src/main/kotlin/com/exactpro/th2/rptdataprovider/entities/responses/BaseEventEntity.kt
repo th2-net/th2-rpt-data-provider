@@ -20,6 +20,7 @@ import com.exactpro.cradle.testevents.StoredTestEvent
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.TestEventSingle
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
+import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.annotation.JsonRawValue
 import java.time.Instant
 
@@ -43,6 +44,10 @@ data class BaseEventEntity(
     @JsonRawValue
     var body: String? = null
 
+    @JsonIgnore
+    var rawValue: TestEventSingle? = null
+        private set
+
     constructor(
         stored: TestEventSingle,
         eventId: ProviderEventId,
@@ -58,7 +63,9 @@ data class BaseEventEntity(
         endTimestamp = stored.endTimestamp,
         parentEventId = parentEventId,
         successful = stored.isSuccess
-    )
+    ) {
+        this.rawValue = stored
+    }
 
     fun convertToEventTreeNode(): EventTreeNode {
         return EventTreeNode(

@@ -102,29 +102,31 @@ class SearchEventsHandler(private val context: Context) {
 
 
     private suspend fun getEventsSuspend(
-        parentEvent: ProviderEventId?,
+        request: SseEventSearchRequest,
         timestampFrom: Instant,
-        timestampTo: Instant,
-        searchDirection: TimeRelation,
-        bookId: BookId
+        timestampTo: Instant
     ): Iterable<StoredTestEvent> {
         return coroutineScope {
-            val order = if (searchDirection == AFTER) Order.DIRECT else Order.REVERSE
-            if (parentEvent != null) {
-                if (parentEvent.batchId != null) {
-                    cradle.getEventSuspend(parentEvent.batchId)?.let {
-                        listOf(StoredTestEventBatch(it.asBatch(), it.pageId))
+
+            val order = if (request.searchDirection == AFTER) Order.DIRECT else Order.REVERSE
+
+            val filter = TestEventFilter.builder()
+                .startTimestampFrom().isGreaterThanOrEqualTo(timestampFrom)
+                .startTimestampTo().isLessThan(timestampTo)
+                .order(order)
+                .bookId(request.bookId)
+                .build()
+
+            if (request.parentEvent != null) {
+                if (request.parentEvent.batchId != null) {
+                    cradle.getEventSuspend(request.parentEvent.batchId)?.let {
+                        listOf(it.asBatch())
                     } ?: emptyList()
                 } else {
-                    cradle.getEventsSuspend(parentEvent.eventId, timestampFrom, timestampTo, order)
+                    cradle.getEventsSuspend(request.parentEvent.eventId, filter)
                 }
             } else {
-                val eventFilter = TestEventFilterBuilder()
-                    .bookId(bookId)
-                    .build()
-                eventFilter.startTimestampTo = FilterForLess(timestampTo)
-                eventFilter.startTimestampFrom = FilterForGreater<Instant>(timestampFrom)
-                cradle.getEventsSuspend(eventFilter)
+                cradle.getEventsSuspend(filter)
             }
         }
     }
@@ -159,7 +161,7 @@ class SearchEventsHandler(private val context: Context) {
         return coroutineScope {
             flow {
                 val eventsCollection =
-                    getEventsSuspend(request.parentEvent, timestampFrom, timestampTo, request.searchDirection, request.bookId)
+                    getEventsSuspend(request, timestampFrom, timestampTo)
                         .asSequence()
                         .chunked(eventSearchChunkSize)
                 for (event in eventsCollection)

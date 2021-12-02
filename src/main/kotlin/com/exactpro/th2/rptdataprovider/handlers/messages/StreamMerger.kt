@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
-import com.exactpro.cradle.BookId
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
@@ -95,6 +94,7 @@ class StreamMerger(
             delay(context.keepAliveTimeout)
         }
     }
+
 
     @OptIn(ExperimentalTime::class)
     override suspend fun processMessage() {

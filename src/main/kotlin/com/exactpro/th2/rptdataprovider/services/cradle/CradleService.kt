@@ -17,35 +17,30 @@
 
 package com.exactpro.th2.rptdataprovider.services.cradle
 
-import com.exactpro.cradle.BookId
-import com.exactpro.cradle.CradleManager
-import com.exactpro.cradle.Order
-import com.exactpro.cradle.messages.MessageFilter
+import com.exactpro.cradle.*
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageBatch
+import com.exactpro.cradle.messages.MessageFilter
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.cradle.testevents.StoredTestEvent
-import com.exactpro.cradle.testevents.StoredTestEventId
-import com.exactpro.cradle.testevents.TestEventFilter
+import com.exactpro.cradle.testevents.*
 import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.convertToString
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.logTime
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.asCoroutineDispatcher
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.future.await
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import mu.KotlinLogging
 import java.time.Instant
 import java.util.concurrent.Executors
 
-class CradleService(configuration: Configuration, cradleManager: CradleManager) {
+class CradleService(configuration: Configuration, private val cradleManager: CradleManager) {
 
     companion object {
         val logger = KotlinLogging.logger {}
+
+        private val getMessagesAsyncMetric: Metrics = Metrics("get_messages_async", "getMessagesAsync")
 
         private val getMessagesBatches: Metrics = Metrics("get_messages_batches_async", "getMessagesBatchesAsync")
 
@@ -61,33 +56,26 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
 
     private val storage = cradleManager.storage
 
-    // FIXME: Change thread name patter to something easily identifiable in the logs
+
     private val cradleDispatcher = Executors.newFixedThreadPool(cradleDispatcherPoolSize).asCoroutineDispatcher()
 
-    //FIXME: change cradle api or wrap every blocking iterator the same way
-    suspend fun getMessagesBatchesSuspend(filter: MessageFilter): Channel<StoredMessageBatch> {
-        val iteratorScope = CoroutineScope(cradleDispatcher)
-
+    suspend fun getMessagesSuspend(filter: MessageFilter): Iterable<StoredMessage> {
         return withContext(cradleDispatcher) {
-            (logMetrics(getMessagesBatches) {
+            logMetrics(getMessagesAsyncMetric) {
+                logTime("getMessages (filter=${filter.convertToString()})") {
+                    storage.getMessagesAsync(filter).await().asIterable()
+                }
+            } ?: listOf()
+        }
+    }
+
+    suspend fun getMessagesBatchesSuspend(filter: MessageFilter): Iterable<StoredMessageBatch> {
+        return withContext(cradleDispatcher) {
+            logMetrics(getMessagesBatches) {
                 logTime("getMessagesBatches (filter=${filter.convertToString()})") {
                     storage.getMessageBatchesAsync(filter).await().asIterable()
                 }
-            } ?: listOf())
-                .let { iterable ->
-                    Channel<StoredMessageBatch>(1)
-                        .also { channel ->
-                            iteratorScope.launch {
-                                iterable.forEach {
-                                    logger.trace { "message batch ${it.id} has been received from the iterator" }
-                                    channel.send(it)
-                                    logger.trace { "message batch ${it.id} has been sent to the channel" }
-                                }
-                                channel.close()
-                                logger.debug { "message batch channel for stream ${filter.sessionAlias}:${filter.direction} has been closed" }
-                            }
-                        }
-                }
+            } ?: listOf()
         }
     }
 
@@ -113,16 +101,12 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
         }
     }
 
-    suspend fun getEventsSuspend(
-        parentId: StoredTestEventId,
-        from: Instant,
-        to: Instant,
-        order: Order = Order.DIRECT
-    ): Iterable<StoredTestEvent> {
+    suspend fun getEventsSuspend(parentId: StoredTestEventId, eventFilter: TestEventFilter): Iterable<StoredTestEvent> {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
-                logTime("Get events parent: $parentId from: $from to: $to") {
-                    storage.getTestEventsAsync(TestEventFilter(parentId.bookId, parentId.scope)).await().asIterable()
+                logTime("Get events parent: $parentId from: ${eventFilter.startTimestampFrom} to: ${eventFilter.startTimestampTo}") {
+                    eventFilter.setParentId(parentId)
+                    storage.getTestEventsAsync(eventFilter).await().asIterable()
                 }
             } ?: listOf()
         }
@@ -138,15 +122,6 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
         }
     }
 
-    suspend fun getMessageStreams(bookId: BookId): Collection<String> {
-        return withContext(cradleDispatcher) {
-            logMetrics(getStreamsMetric) {
-                logTime("getStreams") {
-                    storage.getSessionAliases(bookId)
-                }
-            } ?: emptyList<String>()
-        }
-    }
 
     suspend fun getSessionAliases(bookId: BookId): Collection<String> {
         return withContext(cradleDispatcher) {
@@ -158,9 +133,11 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
         }
     }
 
-
-    fun getBookIds(): List<BookId> {
-        return storage.books.map { it.id }
+    suspend fun getBookIds(): List<BookId> {
+        return logMetrics(getStreamsMetric) {
+            logTime("getBookIds") {
+                storage.books.map { it.id }
+            }
+        } ?: emptyList()
     }
 }
-
