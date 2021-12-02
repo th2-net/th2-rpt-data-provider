@@ -28,7 +28,6 @@ import kotlinx.coroutines.flow.*
 import mu.KotlinLogging
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
-import kotlin.math.log
 
 class SearchMessagesHandler(private val context: Context) {
 
@@ -44,7 +43,7 @@ class SearchMessagesHandler(private val context: Context) {
             val lastMessageIdCounter = AtomicLong(0)
             var streamMerger: StreamMerger? = null
             flow {
-                streamMerger = request.bookId?.let { ChainBuilder(context, request, this@withContext).buildChain(it) }
+                streamMerger = ChainBuilder(context, request, this@withContext).buildChain()
 
                 do {
                     val message = streamMerger?.pollMessage()

@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider.handlers
 
-import com.exactpro.cradle.BookId
 import com.exactpro.cradle.Direction
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepObject
@@ -25,9 +24,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import mu.KotlinLogging
 
-data class StreamName(val name: String, val direction: Direction) {
+data class StreamName(val sessionAlias: String, val direction: Direction) {
     override fun toString(): String {
-        return "$name:$direction"
+        return "$sessionAlias:$direction"
     }
 }
 
@@ -51,7 +50,7 @@ abstract class PipelineComponent(
         get() = processedMessagesCounter
 
 
-    protected abstract suspend fun processMessage(bookId: BookId)
+    protected abstract suspend fun processMessage()
 
 
     protected suspend fun sendToChannel(message: PipelineStepObject) {

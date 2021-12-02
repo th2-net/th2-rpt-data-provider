@@ -38,7 +38,7 @@ data class SseEventSearchRequest(
     val limitForParent: Long?,
     val metadataOnly: Boolean,
     val attachedMessages: Boolean,
-    val bookId: BookId?
+    val bookId: BookId
 ) {
     companion object {
         private fun asCradleTimeRelation(value: String): TimeRelation {
@@ -64,9 +64,10 @@ data class SseEventSearchRequest(
         metadataOnly = parameters["metadataOnly"]?.firstOrNull()?.toBoolean() ?: true,
         attachedMessages = parameters["attachedMessages"]?.firstOrNull()?.toBoolean() ?: false,
         bookId = parameters["bookId"]?.firstOrNull()?.let { BookId(it) }
+            ?: throw InvalidRequestException("'bookId' is required parameter and it must not be null")
     )
 
-    constructor(request: EventSearchRequest, filterPredicate: FilterPredicate<BaseEventEntity>,bookId: BookId?) : this(
+    constructor(request: EventSearchRequest, filterPredicate: FilterPredicate<BaseEventEntity>) : this(
         filterPredicate = filterPredicate,
         startTimestamp = if (request.hasStartTimestamp())
             request.startTimestamp.let {
@@ -103,7 +104,11 @@ data class SseEventSearchRequest(
         attachedMessages = if (request.hasAttachedMessages()) {
             request.attachedMessages.value
         } else false,
-        bookId = bookId
+        bookId = if (true) {
+            BookId("sd")
+        } else {
+            throw InvalidRequestException("'bookId' is required parameter and it must not be null")
+        }
     )
 
     private fun checkEndTimestamp() {
@@ -122,6 +127,7 @@ data class SseEventSearchRequest(
         if (startTimestamp == null && resumeFromId == null)
             throw InvalidRequestException("One of the 'startTimestamp' or 'resumeFromId' must not be null")
     }
+
 
     fun checkRequest() {
         checkStartPoint()

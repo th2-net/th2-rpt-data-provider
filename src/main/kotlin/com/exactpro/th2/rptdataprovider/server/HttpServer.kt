@@ -262,6 +262,7 @@ class HttpServer(private val applicationContext: Context) {
         }
     }
 
+    @KtorExperimentalAPI
     @InternalCoroutinesApi
     @FlowPreview
     @ExperimentalCoroutinesApi
@@ -300,7 +301,7 @@ class HttpServer(private val applicationContext: Context) {
                         call, context, "get single event", notModifiedCacheControl, probe,
                         false, call.parameters.toMap()
                     ) {
-                        eventCache.getOrPut(call.parameters["id"]!!).convertToEvent()
+                        eventCache.getOrPut(call.parameters.getOrFail("id")).convertToEvent()
                     }
                 }
 
@@ -323,12 +324,11 @@ class HttpServer(private val applicationContext: Context) {
 
                 get("/messageStreams") {
                     handleRequest(
-                        call, context, "get message streams", rarelyModifiedCacheControl,
-                        probe = false, useSse = false
+                        call, context, "get message streams",
+                        rarelyModifiedCacheControl, probe = false, useSse = false
                     ) {
-                        val bookId = call.request.queryParameters["bookId"]
-                        if (!bookId.isNullOrEmpty()) cradleService.getSessionAliases(BookId(bookId))
-                        else throw InvalidRequestException("BookId set must not be empty: $bookId")
+                        val bookId = call.request.queryParameters.getOrFail("bookId")
+                        cradleService.getSessionAliases(BookId(bookId))
                     }
                 }
 
@@ -338,7 +338,7 @@ class HttpServer(private val applicationContext: Context) {
                         call, context, "get single message",
                         notModifiedCacheControl, probe, false, call.parameters.toMap()
                     ) {
-                        MessageWithMetadata(messageCache.getOrPut(call.parameters["id"]!!)).let {
+                        MessageWithMetadata(messageCache.getOrPut(call.parameters.getOrFail("id"))).let {
                             MessageMapper.convertToHttpMessage(it)
                         }
                     }
@@ -351,8 +351,7 @@ class HttpServer(private val applicationContext: Context) {
                             val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
                             val request = SseMessageSearchRequest(queryParametersMap, filterPredicate)
                             request.checkRequest()
-                            if (request.bookId!=null) searchMessagesHandler.searchMessagesSse(request, streamWriter)
-                            else throw InvalidRequestException("bookID cannot be empty")
+                            searchMessagesHandler.searchMessagesSse(request, streamWriter)
                         }
                     }
                 }
@@ -364,8 +363,7 @@ class HttpServer(private val applicationContext: Context) {
                             val filterPredicate = eventFiltersPredicateFactory.build(queryParametersMap)
                             val request = SseEventSearchRequest(queryParametersMap, filterPredicate)
                             request.checkRequest()
-                            if (request.bookId!=null) searchEventsHandler.searchEventsSse(request, streamWriter)
-                            else throw InvalidRequestException("bookID cannot be empty")
+                            searchEventsHandler.searchEventsSse(request, streamWriter)
                         }
                     }
                 }
@@ -387,7 +385,7 @@ class HttpServer(private val applicationContext: Context) {
                 get("filters/sse-messages/{name}") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "get message filters", null, false, false, queryParametersMap) {
-                        messageFiltersPredicateFactory.getFilterInfo(call.parameters["name"]!!)
+                        messageFiltersPredicateFactory.getFilterInfo(call.parameters.getOrFail("name"))
                     }
                 }
 
@@ -395,7 +393,7 @@ class HttpServer(private val applicationContext: Context) {
                 get("filters/sse-events/{name}") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "get event filters", null, false, false, queryParametersMap) {
-                        eventFiltersPredicateFactory.getFilterInfo(call.parameters["name"]!!)
+                        eventFiltersPredicateFactory.getFilterInfo(call.parameters.getOrFail("name"))
                     }
                 }
 
@@ -403,7 +401,7 @@ class HttpServer(private val applicationContext: Context) {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "match event", null, false, false, queryParametersMap) {
                         val filterPredicate = eventFiltersPredicateFactory.build(queryParametersMap)
-                        filterPredicate.apply(eventCache.getOrPut(call.parameters["id"]!!))
+                        filterPredicate.apply(eventCache.getOrPut(call.parameters.getOrFail("id")))
                     }
                 }
 
@@ -411,13 +409,13 @@ class HttpServer(private val applicationContext: Context) {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "match message", null, false, false, queryParametersMap) {
                         val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
-                        val message = messageCache.getOrPut(call.parameters["id"]!!)
+                        val message = messageCache.getOrPut(call.parameters.getOrFail("id"))
                         filterPredicate.apply(MessageWithMetadata(message))
                     }
                 }
 
                 get("/bookIds") {
-                    handleRequest(call,context,"book ids",null,false,false){
+                    handleRequest(call, context, "book ids", null, false, false) {
                         cradleService.getBookIds()
                     }
                 }

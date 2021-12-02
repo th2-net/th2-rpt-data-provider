@@ -39,12 +39,14 @@ import com.google.protobuf.MessageOrBuilder
 import com.google.protobuf.TextFormat
 import io.grpc.Status
 import io.grpc.stub.StreamObserver
+import io.ktor.application.*
 import io.ktor.server.engine.*
 import io.ktor.util.*
 import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import org.apache.commons.lang3.exception.ExceptionUtils
+import java.time.Instant
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -225,64 +227,62 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
         }
     }
 
-//    @InternalCoroutinesApi
-//    override fun getMessage(request: MessageID, responseObserver: StreamObserver<MessageData>) {
-//        handleRequest(responseObserver, "get message", useStream = false, request = request) {
-//            val messageIdWithoutSubsequence = request.toBuilder().clearSubsequence().build()
-//            messageCache.getOrPut(
-//                StoredMessageId(
-//                    messageIdWithoutSubsequence.connectionId.sessionAlias,
-//                    grpcDirectionToCradle(messageIdWithoutSubsequence.direction),
-//                    messageIdWithoutSubsequence.sequence
-//                ).toString()
-//            ).let {
-//                MessageMapper.convertToGrpcMessageData(MessageWithMetadata(it, request))
-//            }
-//        }
-//    }
+    @InternalCoroutinesApi
+    override fun getMessage(request: MessageID, responseObserver: StreamObserver<MessageData>) {
+        handleRequest(responseObserver, "get message", useStream = false, request = request) {
+            val messageIdWithoutSubsequence = request.toBuilder().clearSubsequence().build()
+            messageCache.getOrPut(
+                StoredMessageId(
+                    BookId(""),
+                    messageIdWithoutSubsequence.connectionId.sessionAlias,
+                    grpcDirectionToCradle(messageIdWithoutSubsequence.direction),
+                    Instant.now(),
+                    messageIdWithoutSubsequence.sequence
+                ).toString()
+            ).let {
+                MessageMapper.convertToGrpcMessageData(MessageWithMetadata(it, request))
+            }
+        }
+    }
 
 
-//    override fun getMessageStreams(request: com.google.protobuf.Empty, responseObserver: StreamObserver<StringList>) {
-//        handleRequest(
-//            responseObserver,
-//            "get message streams",
-//            useStream = false,
-//            request = request
-//        ) {
-//            StringList.newBuilder()
-//                .addAllListString(cradleService.getMessageStreams())
-//                .build()
-//        }
-//    }
+    override fun getMessageStreams(request: com.google.protobuf.Empty, responseObserver: StreamObserver<StringList>) {
+        handleRequest(responseObserver, "get message streams", useStream = false, request = request) {
+            val bookId = ""
+            StringList.newBuilder()
+                .addAllListString(cradleService.getSessionAliases(BookId(bookId)))
+                .build()
+        }
+    }
 
 
-//    @InternalCoroutinesApi
-//    @FlowPreview
-//    override fun searchMessages(grpcRequest: MessageSearchRequest, responseObserver: StreamObserver<StreamResponse>) {
-//        handleRequest(responseObserver, "grpc search message", useStream = true, request = grpcRequest) {
-//            suspend fun(streamWriter: StreamWriter) {
-//                val filterPredicate = messageFiltersPredicateFactory.build(grpcRequest.filtersList)
-//                val request = SseMessageSearchRequest(grpcRequest, filterPredicate,)
-//                request.checkRequest()
-//                searchMessagesHandler.searchMessagesSse(request, streamWriter)
-//            }
-//        }
-//    }
+    @InternalCoroutinesApi
+    @FlowPreview
+    override fun searchMessages(grpcRequest: MessageSearchRequest, responseObserver: StreamObserver<StreamResponse>) {
+        handleRequest(responseObserver, "grpc search message", useStream = true, request = grpcRequest) {
+            suspend fun(streamWriter: StreamWriter) {
+                val filterPredicate = messageFiltersPredicateFactory.build(grpcRequest.filtersList)
+                val request = SseMessageSearchRequest(grpcRequest, filterPredicate)
+                request.checkRequest()
+                searchMessagesHandler.searchMessagesSse(request, streamWriter)
+            }
+        }
+    }
 
 
-//    @FlowPreview
-//    override fun searchEvents(grpcRequest: EventSearchRequest, responseObserver: StreamObserver<StreamResponse>) {
-//        handleRequest(responseObserver, "grpc search events", useStream = true, request = grpcRequest) {
-//
-//            suspend fun(streamWriter: StreamWriter) {
-//                val filterPredicate = eventFiltersPredicateFactory.build(grpcRequest.filtersList)
-//                val request = SseEventSearchRequest(grpcRequest, filterPredicate)
-//                request.checkRequest()
-//
-//                searchEventsHandler.searchEventsSse(request, streamWriter)
-//            }
-//        }
-//    }
+    @FlowPreview
+    override fun searchEvents(grpcRequest: EventSearchRequest, responseObserver: StreamObserver<StreamResponse>) {
+        handleRequest(responseObserver, "grpc search events", useStream = true, request = grpcRequest) {
+
+            suspend fun(streamWriter: StreamWriter) {
+                val filterPredicate = eventFiltersPredicateFactory.build(grpcRequest.filtersList)
+                val request = SseEventSearchRequest(grpcRequest, filterPredicate)
+                request.checkRequest()
+
+                searchEventsHandler.searchEventsSse(request, streamWriter)
+            }
+        }
+    }
 
 
     override fun getMessagesFilters(request: com.google.protobuf.Empty, responseObserver: StreamObserver<ListFilterName>) {

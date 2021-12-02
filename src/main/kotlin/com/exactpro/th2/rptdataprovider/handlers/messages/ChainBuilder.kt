@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
-import com.exactpro.cradle.BookId
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
@@ -32,10 +31,10 @@ class ChainBuilder(
     private val externalScope: CoroutineScope
 ) {
 
-    private val messageContinuousStreamBuffer = context.configuration.messageContinuousStreamBuffer.value.toInt()
-    private val messageDecoderBuffer = context.configuration.messageDecoderBuffer.value.toInt()
-    private val messageFilterBuffer = context.configuration.messageFilterBuffer.value.toInt()
-    private val messageStreamMergerBuffer = context.configuration.messageStreamMergerBuffer.value.toInt()
+    private val messageContinuousStreamBufferSize = context.configuration.messageContinuousStreamBuffer.value.toInt()
+    private val messageDecoderBufferSize = context.configuration.messageDecoderBuffer.value.toInt()
+    private val messageFilterBufferSize = context.configuration.messageFilterBuffer.value.toInt()
+    private val messageStreamMergerBufferSize = context.configuration.messageStreamMergerBuffer.value.toInt()
 
 
     private suspend fun chooseStartTimestamp(request: SseMessageSearchRequest): Instant {
@@ -65,7 +64,7 @@ class ChainBuilder(
 
 
     @InternalCoroutinesApi
-    suspend fun buildChain(bookId: BookId): StreamMerger {
+    suspend fun buildChain(): StreamMerger {
 
         val streamNames = getRequestStreamNames(request)
         val resumeFromIds = getRequestResumeId(request)
@@ -73,22 +72,22 @@ class ChainBuilder(
 
 
         val dataStreams = streamNames.map { streamName ->
-            val streamInitializer = StreamInitializer(context, request, streamName)
 
             val messageStream = MessageContinuousStream(
                 resumeFromIds[streamName],
-                streamInitializer,
                 startTimestamp,
+                streamName,
+                context,
+                request,
                 externalScope,
-                messageContinuousStreamBuffer,
-                bookId
+                messageContinuousStreamBufferSize
             )
 
-            val messageDecoder = MessageDecoder(messageStream, messageDecoderBuffer,bookId)
+            val messageDecoder = MessageDecoder(messageStream, messageDecoderBufferSize)
 
-            MessageFilter(messageDecoder, messageFilterBuffer,bookId)
+            MessageFilter(messageDecoder, messageFilterBufferSize)
         }
 
-        return StreamMerger(context, request, externalScope, dataStreams, messageStreamMergerBuffer,bookId)
+        return StreamMerger(context, request, externalScope, dataStreams, messageStreamMergerBufferSize)
     }
 }

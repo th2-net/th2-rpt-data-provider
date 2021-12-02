@@ -38,7 +38,7 @@ data class SseMessageSearchRequest(
     val attachedEvents: Boolean,
     val lookupLimitDays: Int?,
     val resumeFromIdsList: List<StoredMessageId>,
-    val bookId: BookId?
+    val bookId: BookId
 ) {
 
     companion object {
@@ -67,9 +67,10 @@ data class SseMessageSearchRequest(
         attachedEvents = parameters["attachedEvents"]?.firstOrNull()?.toBoolean() ?: false,
         lookupLimitDays = parameters["lookupLimitDays"]?.firstOrNull()?.toInt(),
         bookId = parameters["bookId"]?.firstOrNull()?.let { BookId(it) }
+            ?: throw InvalidRequestException("'bookId' is required parameter and it must not be null")
     )
 
-    constructor(request: MessageSearchRequest, filterPredicate: FilterPredicate<MessageWithMetadata>,bookId: BookId) : this(
+    constructor(request: MessageSearchRequest, filterPredicate: FilterPredicate<MessageWithMetadata>) : this(
         filterPredicate = filterPredicate,
         startTimestamp = if (request.hasStartTimestamp())
             request.startTimestamp.let {
@@ -103,10 +104,10 @@ data class SseMessageSearchRequest(
         resumeFromIdsList = if (request.messageIdList.isNotEmpty()) {
             request.messageIdList.map {
                 StoredMessageId(
-                    bookId,
+                    BookId(""),
                     it.connectionId.sessionAlias,
                     grpcDirectionToCradle(it.direction),
-                    Instant.ofEpochSecond(request.startTimestamp.seconds,request.startTimestamp.nanos.toLong()),
+                    Instant.now(),
                     it.sequence
                 )
             }
@@ -118,7 +119,11 @@ data class SseMessageSearchRequest(
 
         resumeFromId = null,
 
-        bookId = bookId
+        bookId = if (true) {
+            BookId("sd")
+        } else {
+            throw InvalidRequestException("'bookId' is required parameter and it must not be null")
+        }
     )
 
     private fun checkEndTimestamp() {

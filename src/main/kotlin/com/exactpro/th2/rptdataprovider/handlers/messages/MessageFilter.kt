@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
-import com.exactpro.cradle.BookId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
@@ -31,8 +30,7 @@ class MessageFilter(
     streamName: StreamName?,
     externalScope: CoroutineScope,
     previousComponent: PipelineComponent?,
-    messageFlowCapacity: Int,
-    bookId: BookId
+    messageFlowCapacity: Int
 ) : PipelineComponent(context, searchRequest, externalScope, streamName, previousComponent, messageFlowCapacity) {
 
     private val sendEmptyDelay: Long = context.configuration.sendEmptyDelay.value.toLong()
@@ -41,19 +39,18 @@ class MessageFilter(
 
     init {
         externalScope.launch {
-            processMessage(bookId)
+            processMessage()
         }
     }
 
 
-    constructor(pipelineComponent: MessageDecoder, messageFlowCapacity: Int,bookId: BookId) : this(
+    constructor(pipelineComponent: MessageDecoder, messageFlowCapacity: Int) : this(
         pipelineComponent.context,
         pipelineComponent.searchRequest,
         pipelineComponent.streamName,
         pipelineComponent.externalScope,
         pipelineComponent,
-        messageFlowCapacity,
-        bookId
+        messageFlowCapacity
     )
 
     private fun updateState(parsedMessage: PipelineParsedMessage) {
@@ -79,7 +76,7 @@ class MessageFilter(
     }
 
 
-    override suspend fun processMessage(bookId: BookId) {
+    override suspend fun processMessage() {
         coroutineScope {
             launch { emptySender(this) }
             while (isActive) {

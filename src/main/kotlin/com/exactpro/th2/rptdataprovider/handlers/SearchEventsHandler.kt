@@ -21,8 +21,6 @@ import com.exactpro.cradle.BookId
 import com.exactpro.cradle.Order
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.TimeRelation.AFTER
-import com.exactpro.cradle.filters.FilterForGreater
-import com.exactpro.cradle.filters.FilterForLess
 import com.exactpro.cradle.testevents.*
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
@@ -92,89 +90,78 @@ class SearchEventsHandler(private val context: Context) {
         }
     }
 
-
-    private suspend fun keepAlive(
-        writer: StreamWriter,
-        lastScannedObjectInfo: LastScannedObjectInfo,
-        counter: AtomicLong
-    ) {
+    private suspend fun keepAlive(writer: StreamWriter, lastScanned: LastScannedObjectInfo, counter: AtomicLong) {
         while (coroutineContext.isActive) {
-            writer.write(lastScannedObjectInfo, counter)
+            writer.write(lastScanned, counter)
             delay(keepAliveTimeout)
         }
     }
 
-
-    private suspend fun getEventsSuspend(
-        parentEvent: ProviderEventId?,
+    private fun buildEventFilter(
         timestampFrom: Instant,
         timestampTo: Instant,
-        searchDirection: TimeRelation,
-        bookId: BookId
+        bookId: BookId,
+        order: Order
+    ): TestEventFilter {
+        return TestEventFilter.builder()
+            .startTimestampFrom().isGreaterThanOrEqualTo(timestampFrom)
+            .startTimestampTo().isLessThan(timestampTo)
+            .order(order)
+            .bookId(bookId)
+            .build()
+    }
+
+    private suspend fun getEventsSuspend(
+        request: SseEventSearchRequest,
+        timestampFrom: Instant,
+        timestampTo: Instant
     ): Iterable<StoredTestEvent> {
         return coroutineScope {
-            val order = if (searchDirection == AFTER) Order.DIRECT else Order.REVERSE
-            if (parentEvent != null) {
-                if (parentEvent.batchId != null) {
-                    cradle.getEventSuspend(parentEvent.batchId)?.let {
-                        listOf(StoredTestEventBatch(it.asBatch(),it.pageId))
+
+            val order = if (request.searchDirection == AFTER) Order.DIRECT else Order.REVERSE
+
+            val filter = buildEventFilter(timestampFrom, timestampTo, request.bookId, order)
+
+            if (request.parentEvent != null) {
+                if (request.parentEvent.batchId != null) {
+                    cradle.getEventSuspend(request.parentEvent.batchId)?.let {
+                        listOf(it.asBatch())
                     } ?: emptyList()
                 } else {
-                    cradle.getEventsSuspend(parentEvent.eventId, timestampFrom, timestampTo, order)
+                    cradle.getEventsSuspend(request.parentEvent.eventId, filter)
                 }
             } else {
-                val eventFilter = TestEventFilterBuilder()
-                    .bookId(bookId)
-                    .parent(parentEvent)
-                    .build()
-                eventFilter.startTimestampTo = FilterForLess(timestampTo)
-                eventFilter.startTimestampFrom = FilterForGreater<Instant>(timestampFrom)
-                cradle.getEventsSuspend(eventFilter)
+                cradle.getEventsSuspend(filter)
             }
         }
     }
 
-
     private suspend fun prepareNonBatchedEvent(
-        metadata: List<StoredTestEvent>,
+        event: StoredTestEvent,
         request: SseEventSearchRequest
-    ): List<BaseEventEntity> {
-        return metadata.map {
-            eventProducer.fromEventMetadata(it.asSingle(), null)
-        }.let { eventTreesNodes ->
-            eventProducer.fromSingleEventsProcessed(eventTreesNodes, request)
+    ): BaseEventEntity {
+        return eventProducer.fromStoredEvent(event.asSingle(), null).let {
+            eventProducer.fromSingleEventsProcessed(it, request)
         }
     }
 
-
     private suspend fun prepareBatchedEvent(
-        metadata: List<StoredTestEvent>,
-        timestampFrom: Instant,
-        timestampTo: Instant,
-        request: SseEventSearchRequest
+        event: StoredTestEvent, timestampFrom: Instant,
+        timestampTo: Instant, request: SseEventSearchRequest
     ): List<BaseEventEntity> {
-        return metadata.map { it to it.asBatch().tryToGetTestEvents(request.parentEvent?.eventId) }.let { eventsWithBatch ->
-            eventsWithBatch.map { (batch, events) ->
-                batch.id to events?.map {
-                    eventProducer.fromEventMetadata(StoredTestEventSingle(it,it.pageId), batch.asBatch())
-                }
-            }.filter { it.second?.isNotEmpty() ?: true }
-                .let { eventTreeNodes ->
-                    val notNullEvents = eventTreeNodes.mapNotNull { (batch, events) ->
-                        events?.let { batch to it }
-                    }
-                    val nullEvents = eventTreeNodes.filter { it.second == null }
 
-                    val parsedEvents = eventProducer.fromBatchIdsProcessed(notNullEvents, request)
+        val batch = event.asBatch()
 
-                    parsedEvents.toMutableList().apply {
-                        addAll(
-                            nullEvents.flatMap { (batch, _) ->
-                                getDirectBatchedChildren(batch, timestampFrom, timestampTo, request)
-                            }
-                        )
-                    }
-                }
+        val events = batch.tryToGetTestEvents(request.parentEvent?.eventId)
+
+        val bathToEvents = batch.id to events?.map {
+            eventProducer.fromStoredEvent(it, batch)
+        }
+
+        return if (!bathToEvents.second.isNullOrEmpty()) {
+            eventProducer.fromBatchIdsProcessed(bathToEvents.second!!, request)
+        } else {
+            getDirectBatchedChildren(batch.id, timestampFrom, timestampTo, request)
         }
     }
 
@@ -191,28 +178,26 @@ class SearchEventsHandler(private val context: Context) {
             flow {
                 val eventsCollection =
                     databaseRequestRetry(dbRetryDelay) {
-                        getEventsSuspend(request.parentEvent, timestampFrom, timestampTo, request.searchDirection,request.bookId!!)
-                    }.asSequence().chunked(eventSearchChunkSize)
+                        getEventsSuspend(request, timestampFrom, timestampTo)
+                    }
 
                 for (event in eventsCollection)
                     emit(event)
             }
-                .map { metadata ->
+                .map { event ->
                     async(parentContext) {
-                        metadata.groupBy { it.isBatch }.flatMap { entry ->
-                            if (entry.key) {
-                                prepareBatchedEvent(
-                                    entry.value, timestampFrom, timestampTo, request
-                                )
-                            } else {
-                                prepareNonBatchedEvent(entry.value, request)
-                            }
-                        }.let { events ->
-                            if (request.searchDirection == AFTER)
-                                events.sortedBy { it.startTimestamp }
-                            else
-                                events.sortedByDescending { it.startTimestamp }
-                        }.also { parentContext.ensureActive() }
+                        val events = if (event.isBatch) {
+                            prepareBatchedEvent(event, timestampFrom, timestampTo, request)
+                        } else {
+                            listOf(prepareNonBatchedEvent(event, request))
+                        }
+
+                        val sortedEvents = if (request.searchDirection == AFTER)
+                            events.sortedBy { it.startTimestamp }
+                        else
+                            events.sortedByDescending { it.startTimestamp }
+
+                        sortedEvents.also { parentContext.ensureActive() }
                     }
                 }
                 .buffer(BUFFERED)
@@ -298,7 +283,6 @@ class SearchEventsHandler(private val context: Context) {
         }
     }
 
-
     private suspend fun dropByTimestampFilter(
         request: SseEventSearchRequest,
         resumeFromEvent: BaseEventEntity
@@ -311,7 +295,6 @@ class SearchEventsHandler(private val context: Context) {
             }
         }
     }
-
 
     @ExperimentalCoroutinesApi
     private suspend fun dropBeforeResumeId(
@@ -445,7 +428,7 @@ class SearchEventsHandler(private val context: Context) {
             .map { testEvent ->
                 eventProducer.fromStoredEvent(testEvent, batch)
             }.let { events ->
-                eventProducer.fromBatchIdsProcessed(listOf(batch.id to events), request)
+                eventProducer.fromBatchIdsProcessed(events, request)
             }
     }
 }

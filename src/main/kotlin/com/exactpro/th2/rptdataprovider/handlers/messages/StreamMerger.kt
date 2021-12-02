@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
-import com.exactpro.cradle.BookId
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
@@ -31,7 +30,6 @@ import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.time.Instant
-import kotlin.coroutines.coroutineContext
 
 
 class StreamMerger(
@@ -39,8 +37,7 @@ class StreamMerger(
     searchRequest: SseMessageSearchRequest,
     externalScope: CoroutineScope,
     pipelineStreams: List<PipelineComponent>,
-    messageFlowCapacity: Int,
-    bookId: BookId
+    messageFlowCapacity: Int
 ) : PipelineComponent(context, searchRequest, externalScope, messageFlowCapacity = messageFlowCapacity) {
 
     companion object {
@@ -83,7 +80,7 @@ class StreamMerger(
 
     init {
         externalScope.launch {
-            processMessage(bookId)
+            processMessage()
         }
     }
 
@@ -154,7 +151,7 @@ class StreamMerger(
     }
 
 
-    override suspend fun processMessage(bookId: BookId) {
+    override suspend fun processMessage() {
         coroutineScope {
 
             launch { keepAliveGenerator(this@coroutineScope) }

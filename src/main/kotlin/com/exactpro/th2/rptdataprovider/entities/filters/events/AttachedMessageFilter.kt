@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  ******************************************************************************/
-
 package com.exactpro.th2.rptdataprovider.entities.filters.events
 
 import com.exactpro.cradle.messages.StoredMessageId
@@ -28,6 +27,7 @@ import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
 class AttachedMessageFilter private constructor(
+    private var attachedMessageIds: Set<StoredMessageId>,
     override var negative: Boolean,
     override var conjunct: Boolean = false
 ) : Filter<BaseEventEntity> {
@@ -37,7 +37,9 @@ class AttachedMessageFilter private constructor(
 
             return AttachedMessageFilter(
                 negative = filterRequest.isNegative(),
-                conjunct = filterRequest.isConjunct()
+                conjunct = filterRequest.isConjunct(),
+                attachedMessageIds = filterRequest.getValues()
+                    ?.map { StoredMessageId.fromString(it) }?.toSet()
                     ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
             )
         }
@@ -59,9 +61,8 @@ class AttachedMessageFilter private constructor(
         )
     }
 
-
     override fun match(element: BaseEventEntity): Boolean {
-        return false
+        return negative.xor(attachedMessageIds.intersect(element.attachedMessageIds).isNotEmpty())
     }
 
     override fun getInfo(): FilterInfo {

@@ -17,23 +17,24 @@
 
 package com.exactpro.th2.rptdataprovider.services.cradle
 
-import com.exactpro.cradle.*
+import com.exactpro.cradle.BookId
+import com.exactpro.cradle.CradleManager
+import com.exactpro.cradle.messages.MessageFilter
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageBatch
-import com.exactpro.cradle.messages.MessageFilter
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.cradle.testevents.*
+import com.exactpro.cradle.testevents.StoredTestEvent
+import com.exactpro.cradle.testevents.StoredTestEventId
+import com.exactpro.cradle.testevents.TestEventFilter
 import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.convertToString
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
-import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.logTime
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.withContext
 import mu.KotlinLogging
-import java.time.Instant
 import java.util.concurrent.Executors
 
 class CradleService(configuration: Configuration, private val cradleManager: CradleManager) {
@@ -110,9 +111,7 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
         }
     }
 
-    suspend fun getEventsSuspend(
-        eventFilter: TestEventFilter
-    ): Iterable<StoredTestEvent> {
+    suspend fun getEventsSuspend(eventFilter: TestEventFilter): Iterable<StoredTestEvent> {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
                 logTime("Get events from: ${eventFilter.startTimestampFrom} to: ${eventFilter.startTimestampTo}") {
@@ -122,16 +121,12 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
         }
     }
 
-    suspend fun getEventsSuspend(
-        parentId: StoredTestEventId,
-        from: Instant,
-        to: Instant,
-        order: Order = Order.DIRECT
-    ): Iterable<StoredTestEvent> {
+    suspend fun getEventsSuspend(parentId: StoredTestEventId, eventFilter: TestEventFilter): Iterable<StoredTestEvent> {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
-                logTime("Get events parent: $parentId from: $from to: $to") {
-                    storage.getTestEventsAsync(TestEventFilter(parentId.bookId,parentId.scope)).await().asIterable()
+                logTime("Get events parent: $parentId from: ${eventFilter.startTimestampFrom} to: ${eventFilter.startTimestampTo}") {
+                    eventFilter.setParentId(parentId)
+                    storage.getTestEventsAsync(eventFilter).await().asIterable()
                 }
             } ?: listOf()
         }
@@ -155,29 +150,6 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
                 }
             } ?: emptyList()
         }
-    }
-
-    suspend fun getFirstMessageIdSuspend(
-        timestamp: Instant,
-        stream: String,
-        direction: Direction,
-        timelineDirection: TimeRelation
-    ): StoredMessageId? {
-        return withContext(cradleDispatcher) {
-            logMetrics(getNearestMessageIdMetric) {
-                logTime(("getFirstMessageId (timestamp=$timestamp stream=$stream direction=${direction.label} )")) {
-                    storage.getNearestMessageId(stream, direction, timestamp, timelineDirection)
-                }
-            }
-        }
-    }
-
-    suspend fun getFirstMessageIdSuspend(
-        timestamp: Instant,
-        stream: StreamName,
-        timelineDirection: TimeRelation
-    ): StoredMessageId? {
-        return getFirstMessageIdSuspend(timestamp, stream.name, stream.direction, timelineDirection)
     }
 
     suspend fun getMessageBatchSuspend(filter: MessageFilter): Iterable<StoredMessageBatch> {
@@ -211,15 +183,11 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
         }
     }
 
-    suspend fun getFirstMessageSequence(sessionAlias: String, direction: Direction): Long {
-        return withContext(cradleDispatcher) {
-            logTime("getFirstIdInStream") {
-                storage.getFirstMessageSequence(sessionAlias, direction)
+    suspend fun getBookIds(): List<BookId> {
+        return logMetrics(getStreamsMetric) {
+            logTime("getBookIds") {
+                storage.books.map { it.id }
             }
-        } ?: -1
-    }
-
-    fun getBookIds(): List<BookId> {
-        return storage.books.map { it.id }
+        } ?: emptyList()
     }
 }
