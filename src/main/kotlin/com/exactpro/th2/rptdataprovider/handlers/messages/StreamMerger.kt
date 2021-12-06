@@ -119,11 +119,11 @@ class StreamMerger(
     private fun getLastScannedObject(): PipelineStepObject? {
         return if (searchRequest.searchDirection == TimeRelation.AFTER) {
             messageStreams
-                .maxBy { it.previousElement?.lastScannedTime ?: Instant.MIN }
+                .maxByOrNull { it.previousElement?.lastScannedTime ?: Instant.MIN }
                 ?.previousElement
         } else {
             messageStreams
-                .minBy { it.previousElement?.lastScannedTime ?: Instant.MAX }
+                .minByOrNull { it.previousElement?.lastScannedTime ?: Instant.MAX }
                 ?.previousElement
         }
     }
