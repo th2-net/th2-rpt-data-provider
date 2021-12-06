@@ -42,7 +42,7 @@ class AttachedEventFilters private constructor(
                 messagesFromAttachedId = filterRequest.getValues()
                     ?.map {
                         cradleService.getMessageIdsSuspend(
-                            StoredTestEventId(it)
+                            StoredTestEventId.fromString(it)
                         )
                             .map { id -> id.toString() }
                             .toSet()

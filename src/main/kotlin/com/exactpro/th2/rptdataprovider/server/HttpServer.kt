@@ -16,22 +16,16 @@
 
 package com.exactpro.th2.rptdataprovider.server
 
-import com.exactpro.cradle.Order
-import com.exactpro.cradle.TimeRelation
-import com.exactpro.cradle.messages.StoredMessageFilterBuilder
-import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.cradle.BookId
 import com.exactpro.cradle.utils.CradleIdException
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
-import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.entities.sse.*
-import com.exactpro.th2.rptdataprovider.handlers.messages.MessageLoader
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import io.ktor.application.*
 import io.ktor.features.*
@@ -46,8 +40,6 @@ import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.nio.channels.ClosedChannelException
-import java.time.Instant
-import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -270,6 +262,7 @@ class HttpServer(private val applicationContext: Context) {
         }
     }
 
+    @KtorExperimentalAPI
     @InternalCoroutinesApi
     @FlowPreview
     @ExperimentalCoroutinesApi
@@ -308,7 +301,7 @@ class HttpServer(private val applicationContext: Context) {
                         call, context, "get single event", notModifiedCacheControl, probe,
                         false, call.parameters.toMap()
                     ) {
-                        eventCache.getOrPut(call.parameters["id"]!!).convertToEvent()
+                        eventCache.getOrPut(call.parameters.getOrFail("id")).convertToEvent()
                     }
                 }
 
@@ -331,10 +324,11 @@ class HttpServer(private val applicationContext: Context) {
 
                 get("/messageStreams") {
                     handleRequest(
-                        call, context, "get message streams", rarelyModifiedCacheControl,
-                        probe = false, useSse = false
+                        call, context, "get message streams",
+                        rarelyModifiedCacheControl, probe = false, useSse = false
                     ) {
-                        cradleService.getMessageStreams()
+                        val bookId = call.request.queryParameters.getOrFail("bookId")
+                        cradleService.getSessionAliases(BookId(bookId))
                     }
                 }
 
@@ -344,7 +338,7 @@ class HttpServer(private val applicationContext: Context) {
                         call, context, "get single message",
                         notModifiedCacheControl, probe, false, call.parameters.toMap()
                     ) {
-                        MessageWithMetadata(messageCache.getOrPut(call.parameters["id"]!!)).let {
+                        MessageWithMetadata(messageCache.getOrPut(call.parameters.getOrFail("id"))).let {
                             MessageMapper.convertToHttpMessage(it)
                         }
                     }
@@ -369,7 +363,6 @@ class HttpServer(private val applicationContext: Context) {
                             val filterPredicate = eventFiltersPredicateFactory.build(queryParametersMap)
                             val request = SseEventSearchRequest(queryParametersMap, filterPredicate)
                             request.checkRequest()
-
                             searchEventsHandler.searchEventsSse(request, streamWriter)
                         }
                     }
@@ -392,7 +385,7 @@ class HttpServer(private val applicationContext: Context) {
                 get("filters/sse-messages/{name}") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "get message filters", null, false, false, queryParametersMap) {
-                        messageFiltersPredicateFactory.getFilterInfo(call.parameters["name"]!!)
+                        messageFiltersPredicateFactory.getFilterInfo(call.parameters.getOrFail("name"))
                     }
                 }
 
@@ -400,7 +393,7 @@ class HttpServer(private val applicationContext: Context) {
                 get("filters/sse-events/{name}") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "get event filters", null, false, false, queryParametersMap) {
-                        eventFiltersPredicateFactory.getFilterInfo(call.parameters["name"]!!)
+                        eventFiltersPredicateFactory.getFilterInfo(call.parameters.getOrFail("name"))
                     }
                 }
 
@@ -408,7 +401,7 @@ class HttpServer(private val applicationContext: Context) {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "match event", null, false, false, queryParametersMap) {
                         val filterPredicate = eventFiltersPredicateFactory.build(queryParametersMap)
-                        filterPredicate.apply(eventCache.getOrPut(call.parameters["id"]!!))
+                        filterPredicate.apply(eventCache.getOrPut(call.parameters.getOrFail("id")))
                     }
                 }
 
@@ -416,8 +409,14 @@ class HttpServer(private val applicationContext: Context) {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "match message", null, false, false, queryParametersMap) {
                         val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
-                        val message = messageCache.getOrPut(call.parameters["id"]!!)
+                        val message = messageCache.getOrPut(call.parameters.getOrFail("id"))
                         filterPredicate.apply(MessageWithMetadata(message))
+                    }
+                }
+
+                get("/bookIds") {
+                    handleRequest(call, context, "book ids", null, false, false) {
+                        cradleService.getBookIds()
                     }
                 }
             }

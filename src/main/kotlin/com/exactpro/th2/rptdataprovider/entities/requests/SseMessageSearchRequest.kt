@@ -15,6 +15,7 @@
  ******************************************************************************/
 package com.exactpro.th2.rptdataprovider.entities.requests
 
+import com.exactpro.cradle.BookId
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.dataprovider.grpc.MessageSearchRequest
@@ -36,7 +37,8 @@ data class SseMessageSearchRequest(
     val keepOpen: Boolean,
     val attachedEvents: Boolean,
     val lookupLimitDays: Int?,
-    val resumeFromIdsList: List<StoredMessageId>
+    val resumeFromIdsList: List<StoredMessageId>,
+    val bookId: BookId
 ) {
 
     companion object {
@@ -63,7 +65,9 @@ data class SseMessageSearchRequest(
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt(),
         keepOpen = parameters["keepOpen"]?.firstOrNull()?.toBoolean() ?: false,
         attachedEvents = parameters["attachedEvents"]?.firstOrNull()?.toBoolean() ?: false,
-        lookupLimitDays = parameters["lookupLimitDays"]?.firstOrNull()?.toInt()
+        lookupLimitDays = parameters["lookupLimitDays"]?.firstOrNull()?.toInt(),
+        bookId = parameters["bookId"]?.firstOrNull()?.let { BookId(it) }
+            ?: throw InvalidRequestException("'bookId' is required parameter and it must not be null")
     )
 
     constructor(request: MessageSearchRequest, filterPredicate: FilterPredicate<MessageWithMetadata>) : this(
@@ -100,8 +104,10 @@ data class SseMessageSearchRequest(
         resumeFromIdsList = if (request.messageIdList.isNotEmpty()) {
             request.messageIdList.map {
                 StoredMessageId(
+                    BookId(""),
                     it.connectionId.sessionAlias,
                     grpcDirectionToCradle(it.direction),
+                    Instant.now(),
                     it.sequence
                 )
             }
@@ -111,7 +117,13 @@ data class SseMessageSearchRequest(
 
         lookupLimitDays = null,
 
-        resumeFromId = null
+        resumeFromId = null,
+
+        bookId = if (true) {
+            BookId("sd")
+        } else {
+            throw InvalidRequestException("'bookId' is required parameter and it must not be null")
+        }
     )
 
     private fun checkEndTimestamp() {

@@ -19,11 +19,13 @@ package com.exactpro.th2.rptdataprovider.handlers.messages
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.rptdataprovider.dayStart
+import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatchData
+import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
+import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.lang.Integer.min
@@ -32,18 +34,13 @@ import java.time.Instant
 
 class MessageContinuousStream(
     private val startMessageId: StoredMessageId?,
-    private val initializer: StreamInitializer,
     private val startTimestamp: Instant,
+    private val stream: StreamName,
+    context: Context,
+    request: SseMessageSearchRequest,
     externalScope: CoroutineScope,
     messageFlowCapacity: Int
-) : PipelineComponent(
-    startMessageId,
-    initializer.context,
-    initializer.request,
-    externalScope,
-    initializer.stream,
-    messageFlowCapacity = messageFlowCapacity
-) {
+) : PipelineComponent(startMessageId, context, request, externalScope, stream, messageFlowCapacity = messageFlowCapacity) {
 
     companion object {
         private val logger = KotlinLogging.logger { }
@@ -71,33 +68,26 @@ class MessageContinuousStream(
         }
     }
 
+    private data class StreamState(
+        val firstMessageInRequest: StoredMessage?,
+        val lastMessageInRequest: StoredMessageId?,
+        val lastTimestamp: Instant
+    )
 
     private suspend fun initialize() {
-        if (startMessageId == null) {
-            initializer.initStream(startTimestamp)?.let {
-                lastElement = it.id
-                lastTimestamp = it.timestamp
-            }
-        } else {
+        if (startMessageId != null) {
             context.cradleService.getMessageSuspend(startMessageId)?.let {
                 lastElement = it.id
                 lastTimestamp = it.timestamp
                 firstPull = false
             }
         }
-        messageLoader = MessageLoader(context, startTimestamp, searchRequest.searchDirection)
+        messageLoader = MessageLoader(context, stream, startTimestamp, searchRequest)
     }
 
-
-    private suspend fun tryToLoadStreamAfter() {
+    private fun tryToLoadStreamAfter() {
         if (lastElement == null || isStreamEmpty) {
-            val currentTimestamp = Instant.now()
-            if (lastElement == null) {
-                initializer.tryToGetStartId(currentTimestamp.dayStart())?.let {
-                    lastElement = it
-                }
-            }
-            lastTimestamp = currentTimestamp
+            lastTimestamp = Instant.now()
         }
     }
 
@@ -108,8 +98,7 @@ class MessageContinuousStream(
         }
     }
 
-
-    private suspend fun tryToReloadStream() {
+    private fun tryToReloadStream() {
         if (searchRequest.searchDirection == TimeRelation.AFTER) {
             tryToLoadStreamAfter()
         } else {
@@ -117,46 +106,55 @@ class MessageContinuousStream(
         }
     }
 
-
-    private fun changeStreamMessageIndex(filteredIdsList: List<MessageBatchWrapper>): Pair<StoredMessageId?, Instant> {
+    private fun getNewStreamState(filteredIdsList: List<MessageBatchWrapper>): StreamState {
         val lastBatchWrapper = filteredIdsList.lastOrNull { !it.messageBatch.isEmpty }
         val firstBatchWrapper = filteredIdsList.firstOrNull { !it.messageBatch.isEmpty }
 
         return if (lastBatchWrapper == null) {
             logger.trace { lastElement }
-            lastElement to lastTimestamp
+            StreamState(null, lastElement, lastTimestamp)
         } else {
-            val lastMessage =
+            val (firstMessage, lastMessage) =
                 if (searchRequest.searchDirection == TimeRelation.AFTER) {
-                    firstMessageInRequest = firstBatchWrapper!!.messageBatch.firstMessage
-                    lastBatchWrapper.messageBatch.lastMessage
+                    firstBatchWrapper!!.messageBatch.firstMessage to
+                            lastBatchWrapper.messageBatch.lastMessage
                 } else {
-                    firstMessageInRequest = firstBatchWrapper!!.messageBatch.lastMessage
-                    lastBatchWrapper.messageBatch.firstMessage
+                    firstBatchWrapper!!.messageBatch.lastMessage to
+                            lastBatchWrapper.messageBatch.firstMessage
                 }
-            lastMessage.id to lastMessage.timestamp
+            StreamState(firstMessage, lastMessage.id, lastMessage.timestamp)
         }
     }
 
+    private fun changeStreamState(messages: List<MessageBatchWrapper>) {
+        isStreamEmpty = messages.isEmpty()
+
+        getNewStreamState(messages).let {
+            logger.trace { it.lastMessageInRequest }
+            firstMessageInRequest = it.firstMessageInRequest
+            lastElement = it.lastMessageInRequest
+            lastTimestamp = it.lastTimestamp
+        }
+    }
 
     private suspend fun loadMoreMessage(): List<MessageBatchWrapper> {
         if (lastElement == null || messageLoader == null) {
-            isStreamEmpty = true
             return emptyList()
         }
-        return messageLoader!!.pullMoreMessage(lastElement!!, firstPull, perStreamLimit).also { messages ->
-            changeStreamMessageIndex(messages).let {
-                logger.trace { it.first }
-                lastElement = it.first
-                lastTimestamp = it.second
-            }
 
-            firstPull = false
-            isStreamEmpty = messages.isEmpty()
-            perStreamLimit = min(perStreamLimit * 2, maxMessagesLimit)
+        val messages = if (lastElement != null) {
+            messageLoader!!.pullMoreMessageById(lastElement!!, firstPull, perStreamLimit)
+        } else {
+            messageLoader!!.pullMoreMessageById(lastElement!!, firstPull, perStreamLimit)
+        }
+
+        return messages.also {
+            if (it.isNotEmpty()) {
+                firstPull = false
+                perStreamLimit = min(perStreamLimit * 2, maxMessagesLimit)
+            }
         }
     }
-
 
     private suspend fun emptySender(parentScope: CoroutineScope) {
         while (parentScope.isActive) {
@@ -192,6 +190,8 @@ class MessageContinuousStream(
                     logger.trace { parsedMessage.messageBatch.id }
                     sendToChannel(PipelineRawBatchData(isStreamEmpty, lastElement, lastTimestamp, parsedMessage))
                 }
+
+                changeStreamState(messageBatches)
 
                 if (isStreamEmpty) {
                     delay(sseSearchDelay)

@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider.grpc
 
+import com.exactpro.cradle.BookId
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.utils.CradleIdException
 import com.exactpro.th2.common.grpc.EventID
@@ -38,12 +39,14 @@ import com.google.protobuf.MessageOrBuilder
 import com.google.protobuf.TextFormat
 import io.grpc.Status
 import io.grpc.stub.StreamObserver
+import io.ktor.application.*
 import io.ktor.server.engine.*
 import io.ktor.util.*
 import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import org.apache.commons.lang3.exception.ExceptionUtils
+import java.time.Instant
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -230,8 +233,10 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
             val messageIdWithoutSubsequence = request.toBuilder().clearSubsequence().build()
             messageCache.getOrPut(
                 StoredMessageId(
+                    BookId(""),
                     messageIdWithoutSubsequence.connectionId.sessionAlias,
                     grpcDirectionToCradle(messageIdWithoutSubsequence.direction),
+                    Instant.now(),
                     messageIdWithoutSubsequence.sequence
                 ).toString()
             ).let {
@@ -242,14 +247,10 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
 
 
     override fun getMessageStreams(request: com.google.protobuf.Empty, responseObserver: StreamObserver<StringList>) {
-        handleRequest(
-            responseObserver,
-            "get message streams",
-            useStream = false,
-            request = request
-        ) {
+        handleRequest(responseObserver, "get message streams", useStream = false, request = request) {
+            val bookId = ""
             StringList.newBuilder()
-                .addAllListString(cradleService.getMessageStreams())
+                .addAllListString(cradleService.getSessionAliases(BookId(bookId)))
                 .build()
         }
     }
@@ -259,12 +260,10 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     @FlowPreview
     override fun searchMessages(grpcRequest: MessageSearchRequest, responseObserver: StreamObserver<StreamResponse>) {
         handleRequest(responseObserver, "grpc search message", useStream = true, request = grpcRequest) {
-
             suspend fun(streamWriter: StreamWriter) {
                 val filterPredicate = messageFiltersPredicateFactory.build(grpcRequest.filtersList)
                 val request = SseMessageSearchRequest(grpcRequest, filterPredicate)
                 request.checkRequest()
-
                 searchMessagesHandler.searchMessagesSse(request, streamWriter)
             }
         }
@@ -333,23 +332,23 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
         }
     }
 
-    @InternalCoroutinesApi
-    override fun matchMessage(request: MatchRequest, responseObserver: StreamObserver<IsMatched>) {
-        handleRequest(responseObserver, "match message", useStream = false, request = request) {
-            val filterPredicate = messageFiltersPredicateFactory.build(request.filtersList)
-            IsMatched.newBuilder().setIsMatched(
-                filterPredicate.apply(
-                    MessageWithMetadata(
-                        messageCache.getOrPut(
-                            StoredMessageId(
-                                request.messageId.connectionId.sessionAlias,
-                                grpcDirectionToCradle(request.messageId.direction),
-                                request.messageId.sequence
-                            ).toString()
-                        )
-                    )
-                )
-            ).build()
-        }
-    }
+//    @InternalCoroutinesApi
+//    override fun matchMessage(request: MatchRequest, responseObserver: StreamObserver<IsMatched>) {
+//        handleRequest(responseObserver, "match message", useStream = false, request = request) {
+//            val filterPredicate = messageFiltersPredicateFactory.build(request.filtersList)
+//            IsMatched.newBuilder().setIsMatched(
+//                filterPredicate.apply(
+//                    MessageWithMetadata(
+//                        messageCache.getOrPut(
+//                            StoredMessageId(
+//                                request.messageId.connectionId.sessionAlias,
+//                                grpcDirectionToCradle(request.messageId.direction),
+//                                request.messageId.sequence
+//                            ).toString()
+//                        )
+//                    )
+//                )
+//            ).build()
+//        }
+//    }
 }

@@ -17,22 +17,26 @@
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.cradle.Order
-import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.TimeRelation.AFTER
+import com.exactpro.cradle.messages.MessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageBatch
-import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
+import com.exactpro.th2.rptdataprovider.handlers.StreamName
+import com.exactpro.th2.rptdataprovider.isAfterOrEqual
+import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
 import mu.KotlinLogging
 import java.time.Instant
 
 class MessageLoader(
     private val context: Context,
+    private val streamName: StreamName,
     private val startTimestamp: Instant,
-    private val searchDirection: TimeRelation
+    private val request: SseMessageSearchRequest
 ) {
 
     companion object {
@@ -41,34 +45,36 @@ class MessageLoader(
 
     private val dbRetryDelay = context.configuration.dbRetryDelay.value.toLong()
 
-    private suspend fun pullMore(
+
+    private suspend fun pullMoreById(
         startId: StoredMessageId,
         include: Boolean,
         limit: Int
     ): Iterable<StoredMessageBatch> {
 
-        logger.debug { "pulling more messages (id=$startId limit=$limit direction=${searchDirection})" }
+        logger.debug { "pulling more messages (id=$startId limit=$limit direction=${request.searchDirection})" }
 
         return context.cradleService.getMessagesBatchesSuspend(
-            StoredMessageFilterBuilder().apply {
-                streamName().isEqualTo(startId.streamName)
-                direction().isEqualTo(startId.direction)
+            MessageFilterBuilder().apply {
+                sessionAlias(startId.sessionAlias)
+                direction(startId.direction)
+                bookId(request.bookId)
                 limit(limit)
 
-                if (searchDirection == AFTER) {
-                    index().let {
+                if (request.searchDirection == AFTER) {
+                    sequence().let {
                         if (include)
-                            it.isGreaterThanOrEqualTo(startId.index)
+                            it.isGreaterThanOrEqualTo(startId.sequence)
                         else
-                            it.isGreaterThan(startId.index)
+                            it.isGreaterThan(startId.sequence)
                     }
                     order(Order.DIRECT)
                 } else {
-                    index().let {
+                    sequence().let {
                         if (include)
-                            it.isLessThanOrEqualTo(startId.index)
+                            it.isLessThanOrEqualTo(startId.sequence)
                         else
-                            it.isLessThan(startId.index)
+                            it.isLessThan(startId.sequence)
                     }
                     order(Order.REVERSE)
                 }
@@ -76,49 +82,77 @@ class MessageLoader(
         )
     }
 
+    private suspend fun pullMoreByTimestamp(limit: Int): Iterable<StoredMessageBatch> {
 
-    private fun isLessThenStart(message: StoredMessage, include: Boolean, startId: StoredMessageId): Boolean {
-        return message.timestamp.isBefore(startTimestamp) &&
-                startId.let {
-                    if (include) {
-                        message.index <= it.index
-                    } else {
-                        message.index < it.index
-                    }
+        logger.debug { "pulling more messages (startTimestamp=$startTimestamp limit=$limit direction=${request.searchDirection})" }
+
+        return context.cradleService.getMessagesBatchesSuspend(
+            MessageFilterBuilder().apply {
+                sessionAlias(streamName.sessionAlias)
+                direction(streamName.direction)
+                bookId(request.bookId)
+                limit(limit)
+
+                if (request.searchDirection == AFTER) {
+                    timestampFrom().isGreaterThanOrEqualTo(startTimestamp)
+                    order(Order.DIRECT)
+                } else {
+                    timestampTo().isLessThanOrEqualTo(startTimestamp)
+                    order(Order.REVERSE)
                 }
+            }.build()
+        )
     }
 
-
-    private fun isGreaterThenStart(message: StoredMessage, include: Boolean, startId: StoredMessageId): Boolean {
-        return message.timestamp.isAfter(startTimestamp) &&
-                startId.let {
+    private fun isLessThenStart(message: StoredMessage, startId: StoredMessageId?, include: Boolean = true): Boolean {
+        return message.timestamp.isBeforeOrEqual(startTimestamp) &&
+                startId?.let {
                     if (include) {
-                        message.index >= it.index
+                        message.sequence <= it.sequence
                     } else {
-                        message.index > it.index
+                        message.sequence < it.sequence
                     }
-                }
+                } ?: true
     }
 
+    private fun isGreaterThenStart(message: StoredMessage, startId: StoredMessageId?,include: Boolean = true): Boolean {
+        return message.timestamp.isAfterOrEqual(startTimestamp) &&
+                startId?.let {
+                    if (include) {
+                        message.sequence >= it.sequence
+                    } else {
+                        message.sequence > it.sequence
+                    }
+                } ?: true
+    }
 
-    private fun getFirstIdInRange(startId: StoredMessageId, include: Boolean, batch: StoredMessageBatch): Int? {
+    private fun getFirstIdInRange(batch: StoredMessageBatch, startId: StoredMessageId? = null, include: Boolean = true): Int? {
         val firstMessageInRange =
-            if (searchDirection == AFTER) {
-                batch.messages.indexOfFirst { isGreaterThenStart(it, include, startId) }
+            if (request.searchDirection == AFTER) {
+                batch.messages.indexOfFirst { isGreaterThenStart(it, startId, include) }
             } else {
-                batch.messagesReverse.indexOfFirst { isLessThenStart(it, include, startId) }
+                batch.messagesReverse.indexOfFirst { isLessThenStart(it, startId, include) }
             }
 
         return firstMessageInRange.takeIf { it != -1 }
     }
 
-
-    suspend fun pullMoreMessage(startId: StoredMessageId, include: Boolean, limit: Int): List<MessageBatchWrapper> {
+    suspend fun pullMoreMessageByTimestamp(limit: Int): List<MessageBatchWrapper> {
         return databaseRequestRetry(dbRetryDelay) {
-            pullMore(startId, include, limit)
+            pullMoreByTimestamp(limit)
         }.mapNotNull { batch ->
-            getFirstIdInRange(startId, include, batch)?.let {
-                MessageBatchWrapper(batch, it, searchDirection)
+            getFirstIdInRange(batch)?.let {
+                MessageBatchWrapper(batch, it, request.searchDirection)
+            }
+        }
+    }
+
+    suspend fun pullMoreMessageById(startId: StoredMessageId, include: Boolean, limit: Int): List<MessageBatchWrapper> {
+        return databaseRequestRetry(dbRetryDelay) {
+            pullMoreById(startId, include, limit)
+        }.mapNotNull { batch ->
+            getFirstIdInRange(batch, startId, include)?.let {
+                MessageBatchWrapper(batch, it, request.searchDirection)
             }
         }
     }

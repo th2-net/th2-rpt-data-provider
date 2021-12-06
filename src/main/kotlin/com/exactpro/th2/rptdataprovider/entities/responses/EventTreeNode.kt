@@ -16,9 +16,9 @@
 
 package com.exactpro.th2.rptdataprovider.entities.responses
 
-import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
-import com.exactpro.cradle.testevents.StoredTestEventBatchMetadata
-import com.exactpro.cradle.testevents.StoredTestEventMetadata
+import com.exactpro.cradle.testevents.BatchedStoredTestEvent
+import com.exactpro.cradle.testevents.StoredTestEvent
+import com.exactpro.cradle.testevents.StoredTestEventBatch
 import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.grpc.EventStatus
 import com.exactpro.th2.common.message.toTimestamp
@@ -56,9 +56,9 @@ data class EventTreeNode(
     }
 
     constructor(
-        batch: StoredTestEventBatchMetadata?,
-        nonBatchedEvent: StoredTestEventMetadata?,
-        batchedEvent: BatchedStoredTestEventMetadata?
+        batch: StoredTestEventBatch?,
+        nonBatchedEvent: StoredTestEvent?,
+        batchedEvent: BatchedStoredTestEvent?
     ) : this(
         batch = batch,
         batchedEvent = nonBatchedEvent,
@@ -77,9 +77,9 @@ data class EventTreeNode(
     )
 
     constructor(
-        batch: StoredTestEventBatchMetadata?,
-        batchedEvent: StoredTestEventMetadata?,
-        nonBatchedEvent: BatchedStoredTestEventMetadata?,
+        batch: StoredTestEventBatch?,
+        batchedEvent: StoredTestEvent?,
+        nonBatchedEvent: BatchedStoredTestEvent?,
         providerEventId: ProviderEventId,
         parentEventId: ProviderEventId?
     ) : this(
@@ -96,11 +96,11 @@ data class EventTreeNode(
         ?: throw ParseEventTreeNodeException(error)
     )
 
-    constructor(batch: StoredTestEventBatchMetadata?, event: StoredTestEventMetadata) : this(
+    constructor(batch: StoredTestEventBatch?, event: StoredTestEvent) : this(
         batch, event, null
     )
 
-    constructor(batch: StoredTestEventBatchMetadata?, event: BatchedStoredTestEventMetadata) : this(
+    constructor(batch: StoredTestEventBatch?, event: BatchedStoredTestEvent) : this(
         batch, null, event
     )
 

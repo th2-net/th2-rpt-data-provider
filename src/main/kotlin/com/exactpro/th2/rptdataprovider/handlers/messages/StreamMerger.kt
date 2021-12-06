@@ -28,7 +28,6 @@ import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.time.Instant
-import kotlin.coroutines.coroutineContext
 
 
 class StreamMerger(
@@ -139,11 +138,11 @@ class StreamMerger(
     private fun getLastScannedObject(): PipelineStepObject? {
         return if (searchRequest.searchDirection == TimeRelation.AFTER) {
             messageStreams
-                .minBy { it.currentElement?.lastScannedTime ?: Instant.MAX }
+                .maxByOrNull { it.previousElement?.lastScannedTime ?: Instant.MIN }
                 ?.previousElement
         } else {
             messageStreams
-                .maxBy { it.currentElement?.lastScannedTime ?: Instant.MIN }
+                .minByOrNull { it.previousElement?.lastScannedTime ?: Instant.MAX }
                 ?.previousElement
         }
     }

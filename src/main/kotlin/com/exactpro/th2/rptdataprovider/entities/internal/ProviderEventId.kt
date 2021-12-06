@@ -24,10 +24,10 @@ class ProviderEventId(val batchId: StoredTestEventId?, val eventId: StoredTestEv
     }
 
     constructor(id: String) : this(
-        batchId = id.split(divider).getOrNull(0)?.let { StoredTestEventId(it) }?.takeIf { id.contains(
+        batchId = id.split(divider).getOrNull(0)?.let { StoredTestEventId.fromString(it) }?.takeIf { id.contains(
             divider
         ) },
-        eventId = id.split(divider).getOrNull(1)?.let { StoredTestEventId(it) } ?: StoredTestEventId(id)
+        eventId = id.split(divider).getOrNull(1)?.let { StoredTestEventId.fromString(it) } ?: StoredTestEventId.fromString(id)
     )
 
     override fun toString(): String {
