@@ -18,7 +18,6 @@ package com.exactpro.th2.rptdataprovider.entities.internal
 
 import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.common.grpc.MessageID
-import com.exactpro.th2.common.message.getField
 
 
 data class BodyWrapper(
@@ -33,13 +32,4 @@ data class BodyWrapper(
         message.metadata.messageType,
         message
     )
-
-    /*fun removeFields (body:BodyWrapper)
-    {
-        var key = body.message.getField("fields")
-        //body.message.allFields.remove(key)
-        body.message.allFields.map { it.key.toString().toUpperCase() }
-        body.message.allFields.map { println("KEY = " + it.key.jsonName) }
-        println("FIELDS " + body.message.fieldsMap.get("fields"))
-    };*/
 }
