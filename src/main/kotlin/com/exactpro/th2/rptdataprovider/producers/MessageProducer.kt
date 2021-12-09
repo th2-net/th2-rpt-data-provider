@@ -22,6 +22,7 @@ import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.rptdataprovider.cache.CodecCache
+import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
@@ -37,10 +38,12 @@ import mu.KotlinLogging
 data class BuildersBatch(
     val builders: List<Message.Builder>,
     val rawMessages: List<RawMessage?>,
-    val isImages: Boolean,
+    val imagesType: String?,
     val batchId: StoredMessageBatchId,
     val messageCount: Int
-)
+) {
+    val isImages get() = imagesType != null
+}
 
 
 class MessageProducer(
@@ -117,6 +120,7 @@ class MessageProducer(
 
                 messages.builders.mapIndexed { index, builder ->
                     builder.parsedMessage(parsedMessages?.get(index)?.get())
+                    builder.imageType(messages.imagesType)
                     builder.build().also {
                         if (it.messageBody != null && it.rawMessageBody != null) {
                             codecCache.put(it.messageId, it)
@@ -176,7 +180,7 @@ class MessageProducer(
             return@coroutineScope BuildersBatch(
                 messageBuilders,
                 parsedRawMessage,
-                isImage(parsedRawMessageProtocol),
+                if (isImage(parsedRawMessageProtocol)) parsedRawMessageProtocol else null,
                 batchWrapper.messageBatch.id,
                 batchWrapper.messageBatch.messageCount
             )
