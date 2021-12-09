@@ -56,6 +56,7 @@ object MessageMapper {
                     mergeFieldsHttp(body)
                 }
             } else null
+            println("convertedBody = $convertedBody")
             convertedBody
         }
     }
@@ -99,8 +100,6 @@ object MessageMapper {
             res.fields?.set(
                 id,
                 BodyHttpSubMessage(
-                    emptyMap<String, Any>().toMutableMap(),
-                    emptyMap<String, Any>().toMutableMap(),
                     emptyMap<String, Any>().toMutableMap()
                 )
             )
