@@ -195,7 +195,7 @@ class RabbitMqService(
 
             if (!alreadyRequested) {
                 try {
-                    messageRouterRawBatch.sendAll(batch)
+                    messageRouterRawBatch.sendAll(batch, firstId?.connectionId?.sessionAlias)
                     logger.trace { "codec request published $requestDebugInfo" }
                 } catch (e: IOException) {
                     logger.error(e) { "cannot send message $requestDebugInfo" }
