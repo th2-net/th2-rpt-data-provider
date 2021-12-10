@@ -57,14 +57,14 @@ data class Message(
     )
 
     private constructor(builder: Builder) : this(
-        builder.rawStoredMessage,
+        builder.storedMessage,
         builder.messageBody,
-        builder.rawMessage?.body,
+        builder.protobufMessage?.body,
         builder.events,
         builder.imageType
     )
 
-    class Builder(val rawStoredMessage: StoredMessage, val rawMessage: RawMessage?) {
+    class Builder(val storedMessage: StoredMessage, val protobufMessage: RawMessage?) {
         var messageBody: List<BodyWrapper>? = null
             private set
 
