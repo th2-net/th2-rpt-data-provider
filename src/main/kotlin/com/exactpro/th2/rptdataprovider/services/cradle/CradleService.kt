@@ -190,4 +190,10 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
             }
         } ?: emptyList()
     }
+
+    suspend fun getEventScopes(bookId: BookId): List<String> {
+        return logTime("getEventScopes") {
+            storage.getScopes(bookId).filterNotNull().toList()
+        } ?: emptyList()
+    }
 }
