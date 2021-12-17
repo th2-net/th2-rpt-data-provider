@@ -15,6 +15,7 @@
  ******************************************************************************/
 package com.exactpro.th2.rptdataprovider
 
+import com.exactpro.th2.common.grpc.EventBatch
 import com.exactpro.th2.common.metrics.liveness
 import com.exactpro.th2.common.metrics.readiness
 import com.exactpro.th2.common.schema.factory.CommonFactory
@@ -43,7 +44,7 @@ private val logger = KotlinLogging.logger {}
 
 class Main {
 
-    private val configurationFactory: CommonFactory
+    private val commonFactory: CommonFactory
 
     private val context: Context
 
@@ -56,28 +57,27 @@ class Main {
 
         configureShutdownHook(resources, lock, condition)
 
-        configurationFactory = CommonFactory.createFromArguments(*args)
-        resources += configurationFactory
+        commonFactory = CommonFactory.createFromArguments(*args)
+        resources += commonFactory
 
         val configuration =
-            Configuration(configurationFactory.getCustomConfiguration(CustomConfigurationClass::class.java))
-
+            Configuration(commonFactory.getCustomConfiguration(CustomConfigurationClass::class.java))
 
         context = Context(
             configuration,
 
             serverType = ServerType.valueOf(configuration.serverType.value),
 
-            cradleManager = configurationFactory.cradleManager.also {
+            cradleManager = commonFactory.cradleManager.also {
                 resources += it
             },
-            messageRouterRawBatch = configurationFactory.messageRouterMessageGroupBatch.also {
+            messageRouterRawBatch = commonFactory.messageRouterMessageGroupBatch.also {
                 resources += it
             },
-            messageRouterParsedBatch = configurationFactory.messageRouterMessageGroupBatch.also {
+            messageRouterParsedBatch = commonFactory.messageRouterMessageGroupBatch.also {
                 resources += it
             },
-            grpcConfig = configurationFactory.grpcConfiguration
+            grpcConfig = commonFactory.grpcConfiguration
         )
     }
 
@@ -113,7 +113,7 @@ class Main {
                 HttpServer(context).run()
             }
             GRPC -> {
-                val grpcRouter = configurationFactory.grpcRouter
+                val grpcRouter = commonFactory.grpcRouter
                 resources += grpcRouter
 
                 val grpcServer = GrpcServer(context, grpcRouter)

@@ -16,16 +16,13 @@
 
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
+import com.exactpro.cradle.BookId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import kotlinx.coroutines.*
-import mu.KotlinLogging
-import kotlin.time.ExperimentalTime
-import kotlin.time.measureTimedValue
 
 class MessageFilter(
     context: Context,
@@ -35,16 +32,11 @@ class MessageFilter(
     previousComponent: PipelineComponent?,
     messageFlowCapacity: Int,
     private val pipelineStatus: PipelineStatus
-) : PipelineComponent(
-    context,
-    searchRequest,
-    externalScope,
-    streamName,
-    previousComponent,
-    messageFlowCapacity
-) {
+) : PipelineComponent(context, searchRequest, externalScope, streamName, previousComponent, messageFlowCapacity) {
 
+    private val sendEmptyDelay: Long = context.configuration.sendEmptyDelay.value.toLong()
     private var lastScannedObject: PipelineStepObject? = null
+
 
     init {
         externalScope.launch {
@@ -73,60 +65,41 @@ class MessageFilter(
     }
 
 
-    private fun applyFilter(parsedMessage: Message): MessageWithMetadata {
+    private suspend fun applyFilter(parsedMessage: Message): MessageWithMetadata {
         return MessageWithMetadata(parsedMessage).apply {
             finalFiltered = searchRequest.filterPredicate.apply(this)
         }
     }
 
 
-    @OptIn(ExperimentalTime::class)
+    private suspend fun emptySender(parentScope: CoroutineScope) {
+        while (parentScope.isActive) {
+            lastScannedObject?.let {
+                sendToChannel(EmptyPipelineObject(it))
+                delay(sendEmptyDelay)
+            }
+        }
+    }
+
+
     override suspend fun processMessage() {
         coroutineScope {
+            launch { emptySender(this) }
             while (isActive) {
                 val parsedMessage = previousComponent!!.pollMessage()
-
                 if (parsedMessage is PipelineParsedMessage) {
 
-                    pipelineStatus.filterStart(streamName.toString())
-                    val timeStart = System.currentTimeMillis()
-                    val filtered = measureTimedValue {
-                        pipelineStatus.countFilteredTotal(streamName.toString())
-                        updateState(parsedMessage)
+                    updateState(parsedMessage)
 
-                        applyFilter(parsedMessage.payload)
-                    }.also {
-                        logger.trace { "message filtering took ${it.duration.inMilliseconds}ms (stream=$streamName sequence=${parsedMessage.payload.id.sequence})" }
-                    }.value
-
-                    pipelineStatus.filterEnd(streamName.toString())
-
-                    parsedMessage.also {
-                        it.info.startFilter = timeStart
-                        it.info.endFilter = System.currentTimeMillis()
-                        StreamWriter.setFilter(it.info)
-                    }
+                    val filtered = applyFilter(parsedMessage.payload)
 
                     if (filtered.finalFiltered) {
-                        sendToChannel(
-                            PipelineFilteredMessage(
-                                parsedMessage,
-                                filtered
-                            )
-                        )
-                        pipelineStatus.countFilterAccepted(streamName.toString())
-                    } else {
-                        pipelineStatus.countFilterDiscarded(streamName.toString())
+                        sendToChannel(PipelineFilteredMessage(parsedMessage, filtered))
                     }
-                    pipelineStatus.filterSendDownstream(streamName.toString())
                 } else {
                     sendToChannel(parsedMessage)
                 }
             }
         }
-    }
-
-    companion object {
-        val logger = KotlinLogging.logger {}
     }
 }

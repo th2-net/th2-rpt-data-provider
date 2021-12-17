@@ -456,6 +456,13 @@ class HttpServer(private val applicationContext: Context) {
                         cradleService.getBookIds()
                     }
                 }
+
+                get("/scopeIds") {
+                    val book = call.parameters["bookId"]!!
+                    handleRequest(call, context, "event scopes", null, false, false) {
+                        cradleService.getEventScopes(BookId(book))
+                    }
+                }
             }
         }.start(false)
 
