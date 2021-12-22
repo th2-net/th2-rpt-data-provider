@@ -32,7 +32,6 @@ import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.withContext
 import mu.KotlinLogging
-import java.time.Instant
 import java.util.concurrent.Executors
 
 class CradleService(configuration: Configuration, private val cradleManager: CradleManager) {
@@ -49,6 +48,8 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
         private val getTestEventAsyncMetric: Metrics = Metrics("get_test_event_async", "getTestEventAsync")
         private val getStreamsMetric: Metrics =
             Metrics("get_streams", "getStreams")
+        private val getSoloMessageBatchMetric:Metrics =
+            Metrics("get_solo_message_batch_metric","getSoloMessageBatchMetric")
     }
 
 
@@ -139,5 +140,13 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
                 storage.books.map { it.id }
             }
         } ?: emptyList()
+    }
+
+    suspend fun getSingleMessageBatch(storedMessageId: StoredMessageId):StoredMessageBatch? {
+        return logMetrics(getSoloMessageBatchMetric){
+            logTime("getSoloMessageBatch") {
+                storage.getMessageBatch(storedMessageId)
+            }
+        }
     }
 }

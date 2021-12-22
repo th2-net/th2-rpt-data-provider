@@ -81,27 +81,6 @@ class StreamMerger(
         }
     }
 
-
-    private fun getLastScannedObject(): PipelineStepObject? {
-        return if (searchRequest.searchDirection == TimeRelation.AFTER) {
-            messageStreams
-                .maxByOrNull { it.previousElement?.lastScannedTime ?: Instant.MIN }
-                ?.previousElement
-        } else {
-            messageStreams
-                .minByOrNull { it.previousElement?.lastScannedTime ?: Instant.MAX }
-                ?.previousElement
-        }
-    }
-
-
-    private fun getScannedObjectCount(): Long {
-        return messageStreams
-            .map { it.messageStream.processedMessageCount }
-            .reduceRight { acc, value -> acc + value }
-    }
-
-
     private suspend fun keepAliveGenerator(coroutineScope: CoroutineScope) {
         while (coroutineScope.isActive) {
             val scannedObjectCount = messageStreams.getScannedObjectCount()
