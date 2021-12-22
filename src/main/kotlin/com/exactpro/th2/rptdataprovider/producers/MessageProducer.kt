@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider.producers
 
-import com.exactpro.cradle.messages.MessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.RawMessage
@@ -189,12 +188,7 @@ class MessageProducer(
 
         codecCache.get(id.toString())?.let { return it }
 
-        val rawBatchNullable = cradle.getMessagesBatchesSuspend(
-            MessageFilterBuilder()
-                .sessionAlias(id.sessionAlias)
-                .direction(id.direction)
-                .build()
-        ).firstOrNull()?.takeIf { !it.isEmpty }
+        val rawBatchNullable = cradle.getSingleMessageBatch(id)?.takeIf { !it.isEmpty }
 
         return rawBatchNullable?.let { rawBatch ->
 

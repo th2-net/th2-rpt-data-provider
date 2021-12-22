@@ -61,6 +61,8 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
             Metrics("get_message_ids_by_test_event_id_async", "getMessageIdsByTestEventIdAsync")
         private val getStreamsMetric: Metrics =
             Metrics("get_streams", "getStreams")
+        private val getSoloMessageBatchMetric:Metrics =
+            Metrics("get_solo_message_batch_metric","getSoloMessageBatchMetric")
     }
 
 
@@ -189,5 +191,13 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
                 storage.books.map { it.id }
             }
         } ?: emptyList()
+    }
+
+    suspend fun getSingleMessageBatch(storedMessageId: StoredMessageId):StoredMessageBatch? {
+        return logMetrics(getSoloMessageBatchMetric){
+            logTime("getSoloMessageBatch") {
+                storage.getMessageBatch(storedMessageId)
+            }
+        }
     }
 }
