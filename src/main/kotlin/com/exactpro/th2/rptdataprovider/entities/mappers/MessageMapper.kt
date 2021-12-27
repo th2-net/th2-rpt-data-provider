@@ -56,7 +56,6 @@ object MessageMapper {
                     mergeFieldsHttp(body)
                 }
             } else null
-            println("convertedBody = $convertedBody")
             convertedBody
         }
     }
