@@ -31,6 +31,7 @@ data class Message(
     val attachedEventIds: Set<String>,
     val messageBody: List<BodyWrapper>?,
     val rawMessageBody: ByteString?,
+    val imageType: String?,
     val id: StoredMessageId
 ) {
 
@@ -42,7 +43,8 @@ data class Message(
         rawStoredMessage: StoredMessage,
         messageBody: List<BodyWrapper>?,
         rawBody: ByteString?,
-        events: Set<String>?
+        events: Set<String>?,
+        imageType: String?
     ) : this(
         id = rawStoredMessage.id,
         direction = Direction.fromStored(rawStoredMessage.direction ?: com.exactpro.cradle.Direction.FIRST),
@@ -50,26 +52,33 @@ data class Message(
         sessionId = rawStoredMessage.streamName ?: "",
         attachedEventIds = events ?: emptySet(),
         rawMessageBody = rawBody,
-        messageBody = messageBody
+        messageBody = messageBody,
+        imageType = imageType
     )
 
     private constructor(builder: Builder) : this(
-        builder.rawStoredMessage,
+        builder.storedMessage,
         builder.messageBody,
-        builder.rawMessage?.body,
-        builder.events
+        builder.protobufMessage?.body,
+        builder.events,
+        builder.imageType
     )
 
-    class Builder(val rawStoredMessage: StoredMessage, val rawMessage: RawMessage?) {
+    class Builder(val storedMessage: StoredMessage, val protobufMessage: RawMessage?) {
         var messageBody: List<BodyWrapper>? = null
             private set
 
         var events: Set<String>? = null
             private set
 
+        var imageType: String? = null
+            private set
+
         fun parsedMessage(messageBody: List<BodyWrapper>?) = apply { this.messageBody = messageBody }
 
         fun attachedEvents(events: Set<String>?) = apply { this.events = events }
+
+        fun imageType(imageType: String?) = apply { this.imageType = imageType }
 
         fun build() = Message(this)
     }
