@@ -72,10 +72,6 @@ data class BodyHttpMessage(
 ) : BodyHttpBase(metadata, fields)
 
 data class BodyHttpSubMessage(
-    @JsonProperty("metadata")
-    override var metadata: MutableMap<String, Any>?,
-    @JsonProperty("fields")
-    override var fields: MutableMap<String, Any>?,
     @JsonProperty("messageValue")
     var messageValue: MutableMap<String, Any>? = null
-) : BodyHttpBase(metadata, fields)
+)

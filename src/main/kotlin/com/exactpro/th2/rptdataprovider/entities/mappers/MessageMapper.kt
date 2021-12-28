@@ -99,8 +99,6 @@ object MessageMapper {
             res.fields?.set(
                 id,
                 BodyHttpSubMessage(
-                    emptyMap<String, Any>().toMutableMap(),
-                    emptyMap<String, Any>().toMutableMap(),
                     emptyMap<String, Any>().toMutableMap()
                 )
             )
