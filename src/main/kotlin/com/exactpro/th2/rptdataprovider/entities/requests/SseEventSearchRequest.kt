@@ -38,7 +38,8 @@ data class SseEventSearchRequest(
     val limitForParent: Long?,
     val metadataOnly: Boolean,
     val attachedMessages: Boolean,
-    val bookId: BookId
+    val bookId: BookId,
+    val scope: String
 ) {
     companion object {
         private fun asCradleTimeRelation(value: String): TimeRelation {
@@ -51,11 +52,14 @@ data class SseEventSearchRequest(
 
     constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<BaseEventEntity>) : this(
         filterPredicate = filterPredicate,
+
         startTimestamp = parameters["startTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
         parentEvent = parameters["parentEvent"]?.firstOrNull()?.let { ProviderEventId(it) },
+
         searchDirection = parameters["searchDirection"]?.firstOrNull()?.let {
             asCradleTimeRelation(it)
         } ?: TimeRelation.AFTER,
+
         endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
         resumeFromId = parameters["resumeFromId"]?.firstOrNull(),
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt(),
@@ -63,8 +67,12 @@ data class SseEventSearchRequest(
         limitForParent = parameters["limitForParent"]?.firstOrNull()?.toLong(),
         metadataOnly = parameters["metadataOnly"]?.firstOrNull()?.toBoolean() ?: true,
         attachedMessages = parameters["attachedMessages"]?.firstOrNull()?.toBoolean() ?: false,
+
         bookId = parameters["bookId"]?.firstOrNull()?.let { BookId(it) }
-            ?: throw InvalidRequestException("'bookId' is required parameter and it must not be null")
+            ?: throw InvalidRequestException("'bookId' is a required parameter and it must not be null"),
+
+        scope = parameters["scope"]?.firstOrNull()
+            ?: throw InvalidRequestException("'scope' is a required parameter and it must not be null")
     )
 
     constructor(request: EventSearchRequest, filterPredicate: FilterPredicate<BaseEventEntity>) : this(
@@ -104,11 +112,11 @@ data class SseEventSearchRequest(
         attachedMessages = if (request.hasAttachedMessages()) {
             request.attachedMessages.value
         } else false,
-        bookId = if (true) {
-            BookId("sd")
-        } else {
-            throw InvalidRequestException("'bookId' is required parameter and it must not be null")
-        }
+
+        //FIXME: we need to change grpc interface, it won't work right now
+        bookId = BookId(""),
+        scope = ""
+
     )
 
     private fun checkEndTimestamp() {

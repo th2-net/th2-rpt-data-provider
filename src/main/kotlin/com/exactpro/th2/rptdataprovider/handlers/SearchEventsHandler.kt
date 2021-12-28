@@ -60,7 +60,6 @@ class SearchEventsHandler(private val context: Context) {
     private val dbRetryDelay: Long = context.configuration.dbRetryDelay.value.toLong()
     private val sseSearchDelay: Long = context.configuration.sseSearchDelay.value.toLong()
     private val sseEventSearchStep: Long = context.configuration.sseEventSearchStep.value.toLong()
-    private val eventSearchChunkSize: Int = context.configuration.eventSearchChunkSize.value.toInt()
     private val keepAliveTimeout: Long = context.configuration.keepAliveTimeout.value.toLong()
 
 
@@ -78,7 +77,7 @@ class SearchEventsHandler(private val context: Context) {
             if (limitForParent == null || event.parentEventId == null)
                 return event
 
-            return parentEventCounter!!.getOrPut(event.parentEventId.toString(), { AtomicLong(1) }).let { parentCount ->
+            return parentEventCounter!!.getOrPut(event.parentEventId.toString()) { AtomicLong(1) }.let { parentCount ->
                 if (parentCount.get() <= limitForParent) {
                     parentCount.incrementAndGet()
                     event
@@ -97,20 +96,6 @@ class SearchEventsHandler(private val context: Context) {
         }
     }
 
-    private fun buildEventFilter(
-        timestampFrom: Instant,
-        timestampTo: Instant,
-        bookId: BookId,
-        order: Order
-    ): TestEventFilter {
-        return TestEventFilter.builder()
-            .startTimestampFrom().isGreaterThanOrEqualTo(timestampFrom)
-            .startTimestampTo().isLessThan(timestampTo)
-            .order(order)
-            .bookId(bookId)
-            .build()
-    }
-
     private suspend fun getEventsSuspend(
         request: SseEventSearchRequest,
         timestampFrom: Instant,
@@ -120,7 +105,13 @@ class SearchEventsHandler(private val context: Context) {
 
             val order = if (request.searchDirection == AFTER) Order.DIRECT else Order.REVERSE
 
-            val filter = buildEventFilter(timestampFrom, timestampTo, request.bookId, order)
+            val filter = TestEventFilter.builder()
+                .startTimestampFrom().isGreaterThanOrEqualTo(timestampFrom)
+                .startTimestampTo().isLessThan(timestampTo)
+                .order(order)
+                .bookId(request.bookId)
+                .scope(request.scope)
+                .build()
 
             if (request.parentEvent != null) {
                 if (request.parentEvent.batchId != null) {

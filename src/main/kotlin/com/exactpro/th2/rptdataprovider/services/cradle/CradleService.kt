@@ -193,6 +193,12 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
         } ?: emptyList()
     }
 
+    suspend fun getEventScopes(bookId: BookId): List<String> {
+        return logTime("getEventScopes") {
+            storage.getScopes(bookId).filterNotNull().toList()
+        } ?: emptyList()
+    }
+
     suspend fun getSingleMessageBatch(storedMessageId: StoredMessageId):StoredMessageBatch? {
         return logMetrics(getSoloMessageBatchMetric){
             logTime("getSoloMessageBatch") {

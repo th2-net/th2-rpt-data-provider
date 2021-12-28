@@ -20,7 +20,9 @@ import com.exactpro.cradle.testevents.StoredTestEventId
 
 class ProviderEventId(val batchId: StoredTestEventId?, val eventId: StoredTestEventId) {
     companion object {
-        const val divider = ":"
+
+        // FIXME: we should escape any dividers in eventId properly, replacing the divider is just a temporary fix
+        const val divider = ">"
     }
 
     constructor(id: String) : this(
