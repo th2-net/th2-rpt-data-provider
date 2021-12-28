@@ -138,7 +138,7 @@ class MessageContinuousStream(
     }
 
     private suspend fun loadMoreMessage(): List<MessageBatchWrapper> {
-        if (lastElement == null && messageLoader == null) {
+        if (messageLoader == null) {
             return emptyList()
         }
 
