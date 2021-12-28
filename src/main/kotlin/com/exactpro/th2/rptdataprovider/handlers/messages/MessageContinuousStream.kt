@@ -138,14 +138,14 @@ class MessageContinuousStream(
     }
 
     private suspend fun loadMoreMessage(): List<MessageBatchWrapper> {
-        if (lastElement == null || messageLoader == null) {
+        if (lastElement == null && messageLoader == null) {
             return emptyList()
         }
 
         val messages = if (lastElement != null) {
             messageLoader!!.pullMoreMessageById(lastElement!!, firstPull, perStreamLimit)
         } else {
-            messageLoader!!.pullMoreMessageById(lastElement!!, firstPull, perStreamLimit)
+            messageLoader!!.pullMoreMessageByTimestamp(perStreamLimit)
         }
 
         return messages.also {
