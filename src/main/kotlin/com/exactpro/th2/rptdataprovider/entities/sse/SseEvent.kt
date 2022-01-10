@@ -17,10 +17,7 @@
 package com.exactpro.th2.rptdataprovider.entities.sse
 
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.common.grpc.EventID
-import com.exactpro.th2.common.message.toTimestamp
 import com.exactpro.th2.rptdataprovider.asStringSuspend
-import com.exactpro.th2.rptdataprovider.convertToProto
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineKeepAlive
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.responses.*
@@ -32,7 +29,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 
 enum class EventType {
-    MESSAGE, EVENT, CLOSE, ERROR, KEEP_ALIVE, MESSAGE_IDS;
+    MESSAGE, EVENT, CLOSE, ERROR, KEEP_ALIVE, MESSAGE_IDS, PIPELINE_STATUS;
 
     override fun toString(): String {
         return super.toString().toLowerCase()
@@ -105,6 +102,24 @@ class LastScannedEventInfo(
     }
 }
 
+data class Counters(
+    val fetched: AtomicLong = AtomicLong(0),
+    val parseRequested: AtomicLong = AtomicLong(0),
+    val parseRecieved: AtomicLong = AtomicLong(0),
+    val filterTotal: AtomicLong = AtomicLong(0),
+    val filterDiscarded: AtomicLong = AtomicLong(0),
+    val filterAccepted: AtomicLong = AtomicLong(0)
+)
+
+data class StreamCounters(
+    val counters: Counters
+)
+
+data class PipelineStatus(
+    val streams:  MutableMap<String, StreamCounters>,
+    var merger: AtomicLong = AtomicLong(0)
+    )
+
 
 data class ExceptionInfo(val exceptionName: String, val exceptionCause: String)
 
@@ -114,6 +129,14 @@ data class ExceptionInfo(val exceptionName: String, val exceptionCause: String)
 
 data class SseEvent(val data: String = "empty data", val event: EventType? = null, val metadata: String? = null) {
     companion object {
+        suspend fun build(jacksonMapper: ObjectMapper, status: PipelineStatus, counter: AtomicLong): SseEvent {
+            return SseEvent(
+                jacksonMapper.asStringSuspend(status),
+                EventType.PIPELINE_STATUS,
+                counter.incrementAndGet().toString()
+            )
+        }
+
         suspend fun build(jacksonMapper: ObjectMapper, event: EventTreeNode, counter: AtomicLong): SseEvent {
             return SseEvent(
                 jacksonMapper.asStringSuspend(event),

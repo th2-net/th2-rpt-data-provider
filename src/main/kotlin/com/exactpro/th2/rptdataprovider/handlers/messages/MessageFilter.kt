@@ -19,9 +19,11 @@ package com.exactpro.th2.rptdataprovider.handlers.messages
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.sse.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import kotlinx.coroutines.*
+import java.security.PrivateKey
 
 @InternalCoroutinesApi
 class MessageFilter(
@@ -30,7 +32,8 @@ class MessageFilter(
     streamName: StreamName?,
     externalScope: CoroutineScope,
     previousComponent: PipelineComponent?,
-    messageFlowCapacity: Int
+    messageFlowCapacity: Int,
+    val pipelineStatus: PipelineStatus
 ) : PipelineComponent(
     previousComponent?.startId,
     context,
@@ -52,13 +55,14 @@ class MessageFilter(
     }
 
 
-    constructor(pipelineComponent: MessageDecoder, messageFlowCapacity: Int) : this(
+    constructor(pipelineComponent: MessageDecoder, messageFlowCapacity: Int, pipelineStatus: PipelineStatus) : this(
         pipelineComponent.context,
         pipelineComponent.searchRequest,
         pipelineComponent.streamName,
         pipelineComponent.externalScope,
         pipelineComponent,
-        messageFlowCapacity
+        messageFlowCapacity,
+        pipelineStatus
     )
 
     private fun updateState(parsedMessage: PipelineParsedMessage) {
@@ -90,13 +94,15 @@ class MessageFilter(
             while (isActive) {
                 val parsedMessage = previousComponent!!.pollMessage()
                 if (parsedMessage is PipelineParsedMessage) {
-
+                        pipelineStatus.streams[streamName.toString()]?.counters?.filterTotal?.incrementAndGet();
                     updateState(parsedMessage)
 
                     val filtered = applyFilter(parsedMessage.payload)
-
                     if (filtered.finalFiltered) {
                         sendToChannel(PipelineFilteredMessage(parsedMessage, filtered))
+                        pipelineStatus.streams[streamName.toString()]?.counters?.filterAccepted?.incrementAndGet()
+                    } else {
+                        pipelineStatus.streams[streamName.toString()]?.counters?.filterDiscarded?.incrementAndGet()
                     }
                 } else {
                     sendToChannel(parsedMessage)

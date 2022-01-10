@@ -25,6 +25,7 @@ import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
+import com.exactpro.th2.rptdataprovider.entities.sse.PipelineStatus
 import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
 import mu.KotlinLogging
 import java.time.Instant
@@ -32,7 +33,8 @@ import java.time.Instant
 class MessageLoader(
     private val context: Context,
     private val startTimestamp: Instant,
-    private val searchDirection: TimeRelation
+    private val searchDirection: TimeRelation,
+    private val pipelineStatus: PipelineStatus
 ) {
 
     companion object {
@@ -118,6 +120,7 @@ class MessageLoader(
             pullMore(startId, include, limit)
         }.mapNotNull { batch ->
             getFirstIdInRange(startId, include, batch)?.let {
+                pipelineStatus.streams[startId.streamName + ":" +startId.direction.toString()]?.counters?.fetched?.incrementAndGet()
                 MessageBatchWrapper(batch, it, searchDirection)
             }
         }

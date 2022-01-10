@@ -23,6 +23,7 @@ import com.exactpro.th2.rptdataprovider.entities.internal.PipelineParsedMessage
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatchData
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
+import com.exactpro.th2.rptdataprovider.entities.sse.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.producers.BuildersBatch
@@ -36,7 +37,8 @@ class MessageDecoder(
     streamName: StreamName?,
     externalScope: CoroutineScope,
     previousComponent: PipelineComponent?,
-    messageFlowCapacity: Int
+    messageFlowCapacity: Int,
+    val pipelineStatus: PipelineStatus
 ) : PipelineComponent(
     previousComponent?.startId,
     context,
@@ -55,13 +57,14 @@ class MessageDecoder(
         }
     }
 
-    constructor(pipelineComponent: MessageContinuousStream, messageFlowCapacity: Int) : this(
+    constructor(pipelineComponent: MessageContinuousStream, messageFlowCapacity: Int, pipelineStatus: PipelineStatus) : this(
         pipelineComponent.context,
         pipelineComponent.searchRequest,
         pipelineComponent.streamName,
         pipelineComponent.externalScope,
         pipelineComponent,
-        messageFlowCapacity
+        messageFlowCapacity,
+        pipelineStatus
     )
 
     private suspend fun createMessageBuilders(rawBatch: MessageBatchWrapper): BuildersBatch {
@@ -117,13 +120,19 @@ class MessageDecoder(
         }
     }
 
+    private fun countParseRequested(rawBatchSize: Int, pipelineStatus: PipelineStatus, streamName: String){
+        var s: Long = pipelineStatus.streams[streamName]?.counters?.parseRequested?.get()!!
+        pipelineStatus.streams[streamName]?.counters?.parseRequested?.set(s + rawBatchSize.toLong())
+    }
 
     @InternalCoroutinesApi
     private suspend fun getMessageRequests(
         rawBatch: List<BuildersBatch>,
-        coroutineScope: CoroutineScope
+        coroutineScope: CoroutineScope,
+        pipelineStatus: PipelineStatus,
+        streamName: String
     ): List<List<MessageRequest?>> {
-        return context.messageProducer.parseMessages(rawBatch, coroutineScope)
+        return context.messageProducer.parseMessages(rawBatch, coroutineScope, streamName, pipelineStatus)
     }
 
 
@@ -137,7 +146,8 @@ class MessageDecoder(
                 val rawBatch = previousComponent!!.pollMessage()
 
                 if (messagesInBuffer >= batchMergeSize || rawBatch is EmptyPipelineObject) {
-                    getMessageRequests(buffer.map { it.first }, this).let {
+                    countParseRequested(buffer.map { it.first }.size,pipelineStatus,streamName.toString())
+                    getMessageRequests(buffer.map { it.first }, this,pipelineStatus,streamName.toString()).let {
                         sendParsedMessages(buffer, it)
                         messagesInBuffer = 0L
                         buffer.clear()

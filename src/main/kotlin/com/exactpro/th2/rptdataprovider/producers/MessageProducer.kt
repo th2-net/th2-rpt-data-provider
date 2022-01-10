@@ -24,6 +24,7 @@ import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.rptdataprovider.cache.CodecCache
 import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
+import com.exactpro.th2.rptdataprovider.entities.sse.PipelineStatus
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.BatchRequest
@@ -99,6 +100,7 @@ class MessageProducer(
         buildersBatch: BuildersBatch,
         coroutineScope: CoroutineScope
     ): List<MessageRequest?>? {
+
         return if (!buildersBatch.isImages) {
             parseMessages(listOf(buildersBatch), coroutineScope).first()
         } else {
@@ -152,10 +154,37 @@ class MessageProducer(
     suspend fun parseMessages(
         batchBuilders: List<BuildersBatch>,
         coroutineScope: CoroutineScope
+       // stream: String,
     ): List<List<MessageRequest?>> {
 
         val messageRequests =
-            batchBuilders.map { it.rawMessages.map { message -> message?.let { MessageRequest.build(message) } } }
+            batchBuilders.map { it.rawMessages.map { message -> message?.let {
+               // pipelineStatus.streams[stream]?.counters?.parseRecieved?.incrementAndGet()
+                MessageRequest.build(message);
+            } } }
+
+        val batchRequest = batchBuilders.mapIndexed { index, value ->
+            BatchRequest(value, messageRequests[index], coroutineScope)
+        }
+
+        rabbitMqService.decodeBatch(batchRequest)
+
+        return messageRequests
+    }
+
+    @InternalCoroutinesApi
+    suspend fun parseMessages(
+        batchBuilders: List<BuildersBatch>,
+        coroutineScope: CoroutineScope,
+        stream: String,
+        pipelineStatus: PipelineStatus
+    ): List<List<MessageRequest?>> {
+
+        val messageRequests =
+            batchBuilders.map { it.rawMessages.map { message -> message?.let {
+                pipelineStatus.streams[stream]?.counters?.parseRecieved?.incrementAndGet()
+                MessageRequest.build(message)
+            } } }
 
         val batchRequest = batchBuilders.mapIndexed { index, value ->
             BatchRequest(value, messageRequests[index], coroutineScope)
@@ -183,10 +212,8 @@ class MessageProducer(
         }
     }
 
-
     @InternalCoroutinesApi
     suspend fun fromId(id: StoredMessageId): Message {
-
         codecCache.get(id.toString())?.let { return it }
 
         val rawBatchNullable = cradle.getMessagesBatchesSuspend(

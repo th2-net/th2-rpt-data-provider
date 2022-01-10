@@ -20,6 +20,7 @@ import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedMessageInfo
+import com.exactpro.th2.rptdataprovider.entities.sse.PipelineStatus
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.messages.ChainBuilder
 import com.exactpro.th2.rptdataprovider.handlers.messages.StreamMerger
@@ -28,7 +29,6 @@ import kotlinx.coroutines.flow.*
 import mu.KotlinLogging
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
-import kotlin.math.log
 
 class SearchMessagesHandler(private val context: Context) {
 
@@ -42,10 +42,11 @@ class SearchMessagesHandler(private val context: Context) {
     suspend fun searchMessagesSse(request: SseMessageSearchRequest, writer: StreamWriter) {
         withContext(coroutineContext) {
             val lastMessageIdCounter = AtomicLong(0)
+            val pipelineStatus = PipelineStatus(streams = mutableMapOf());
             var streamMerger: StreamMerger? = null
 
             flow {
-                streamMerger = ChainBuilder(context, request, this@withContext).buildChain()
+                streamMerger = ChainBuilder(context, request, this@withContext, pipelineStatus).buildChain()
 
                 do {
                     val message = streamMerger?.pollMessage()
@@ -63,7 +64,7 @@ class SearchMessagesHandler(private val context: Context) {
                     coroutineContext.ensureActive()
 
                     logger.trace { it.lastProcessedId }
-
+                    writer.write(pipelineStatus, lastMessageIdCounter)
                     if (it is PipelineFilteredMessage) {
                         logger.trace { it.lastProcessedId }
                         writer.write(it.payload, lastMessageIdCounter)

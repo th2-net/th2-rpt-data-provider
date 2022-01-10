@@ -23,6 +23,7 @@ import com.exactpro.th2.rptdataprovider.dayStart
 import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatchData
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
+import com.exactpro.th2.rptdataprovider.entities.sse.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import kotlinx.coroutines.*
 import mu.KotlinLogging
@@ -35,7 +36,8 @@ class MessageContinuousStream(
     private val initializer: StreamInitializer,
     private val startTimestamp: Instant,
     externalScope: CoroutineScope,
-    messageFlowCapacity: Int
+    messageFlowCapacity: Int,
+    val pipelineStatus: PipelineStatus
 ) : PipelineComponent(
     startMessageId,
     initializer.context,
@@ -85,7 +87,7 @@ class MessageContinuousStream(
                 firstPull = false
             }
         }
-        messageLoader = MessageLoader(context, startTimestamp, searchRequest.searchDirection)
+        messageLoader = MessageLoader(context, startTimestamp, searchRequest.searchDirection, pipelineStatus)
     }
 
 

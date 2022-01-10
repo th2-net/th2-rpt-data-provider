@@ -22,6 +22,7 @@ import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidInitializatio
 import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
+import com.exactpro.th2.rptdataprovider.entities.sse.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
@@ -36,7 +37,8 @@ class StreamMerger(
     searchRequest: SseMessageSearchRequest,
     externalScope: CoroutineScope,
     pipelineStreams: List<PipelineComponent>,
-    messageFlowCapacity: Int
+    messageFlowCapacity: Int,
+    val pipelineStatus: PipelineStatus
 ) : PipelineComponent(null, context, searchRequest, externalScope, messageFlowCapacity = messageFlowCapacity) {
 
     companion object {
@@ -189,6 +191,7 @@ class StreamMerger(
                     logger.trace { nextMessage.lastProcessedId }
                     sendToChannel(nextMessage)
                     resultCountLimit = resultCountLimit?.dec()
+                    pipelineStatus.merger.incrementAndGet()
                 }
 
             } while (keepSearch() && inTimeRange)
