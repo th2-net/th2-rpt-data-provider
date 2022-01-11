@@ -38,10 +38,12 @@ import mu.KotlinLogging
 data class BuildersBatch(
     val builders: List<Message.Builder>,
     val rawMessages: List<RawMessage?>,
-    val isImages: Boolean,
+    val imagesType: String?,
     val batchId: StoredMessageBatchId,
     val messageCount: Int
-)
+) {
+    val isImages get() = imagesType != null
+}
 
 
 class MessageProducer(
@@ -70,7 +72,7 @@ class MessageProducer(
     }
 
 
-    private fun getFieldName(parsedRawMessage: RawMessage?): String? {
+    private fun getProtocolField(parsedRawMessage: RawMessage?): String? {
         return try {
             parsedRawMessage?.metadata?.getField(messageProtocolDescriptor).toString()
         } catch (e: Exception) {
@@ -94,35 +96,37 @@ class MessageProducer(
         }
     }
 
+    private suspend fun parseSingleMessage(messageBatch: MessageBatchWrapper, id: StoredMessageId): Message {
 
-    @InternalCoroutinesApi
-    private suspend fun parseNotImageMessage(
-        buildersBatch: BuildersBatch,
-        coroutineScope: CoroutineScope
-    ): List<MessageRequest?>? {
-
-        return if (!buildersBatch.isImages) {
-            parseMessages(listOf(buildersBatch), coroutineScope).first()
-        } else {
-            null
-        }
-    }
-
-
-    @InternalCoroutinesApi
-    private suspend fun fullMessageParsing(messageBatch: MessageBatchWrapper): List<Message> {
         return coroutineScope {
-            messageBatchToBuilders(messageBatch).let { messages ->
-                val parsedMessages = parseNotImageMessage(messages, this)
+            let {
+                val storedMessage = messageBatch.messages.first { it.id.equals(id) }
+                val protobufMessage = parseRawMessage(storedMessage)
+                val protocol = getProtocolField(protobufMessage)
 
-                attachEvents(messages.builders)
+                val builder = Message.Builder(storedMessage, protobufMessage)
 
-                messages.builders.mapIndexed { index, builder ->
-                    builder.parsedMessage(parsedMessages?.get(index)?.get())
-                    builder.build().also {
-                        if (it.messageBody != null && it.rawMessageBody != null) {
-                            codecCache.put(it.messageId, it)
-                        }
+                val buildersBatch = BuildersBatch(
+                    listOf(builder),
+                    listOf(protobufMessage),
+                    if (isImage(protocol)) protocol else null,
+                    messageBatch.messageBatch.id,
+                    1
+                )
+
+                val messageRequest = if (!buildersBatch.isImages) {
+                    parseMessages(listOf(buildersBatch), this).first()
+                } else {
+                    null
+                }
+
+                attachEvents(listOf(builder))
+
+                builder.parsedMessage(messageRequest?.get(0)?.get())
+                builder.imageType(buildersBatch.imagesType)
+                builder.build().also {
+                    if (it.messageBody != null && it.rawMessageBody != null) {
+                        codecCache.put(it.messageId, it)
                     }
                 }
             }
@@ -134,7 +138,7 @@ class MessageProducer(
         coroutineScope {
             builders.map { builder ->
                 async {
-                    val eventsId = builder.rawStoredMessage.id.let {
+                    val eventsId = builder.storedMessage.id.let {
                         try {
                             cradle.getEventIdsSuspend(it).map(Any::toString).toSet()
                         } catch (e: Exception) {
@@ -206,13 +210,16 @@ class MessageProducer(
     suspend fun messageBatchToBuilders(batchWrapper: MessageBatchWrapper): BuildersBatch {
         return coroutineScope {
             val parsedRawMessage = batchWrapper.messages.map { parseRawMessage(it) }
-            val parsedRawMessageProtocol = parsedRawMessage.firstOrNull()?.let { getFieldName(it) }
+            val parsedRawMessageProtocol = parsedRawMessage.firstOrNull()?.let { getProtocolField(it) }
+            val isImage = isImage(parsedRawMessageProtocol)
             val messageBuilders = createMessageBatch(batchWrapper, parsedRawMessage)
+
+            if (isImage) messageBuilders.forEach{it.imageType(parsedRawMessageProtocol)}
 
             return@coroutineScope BuildersBatch(
                 messageBuilders,
                 parsedRawMessage,
-                isImage(parsedRawMessageProtocol),
+                if (isImage) parsedRawMessageProtocol else null,
                 batchWrapper.messageBatch.id,
                 batchWrapper.messageBatch.messageCount
             )
@@ -235,7 +242,7 @@ class MessageProducer(
 
             val wrappedBatch = MessageBatchWrapper(rawBatch)
 
-            fullMessageParsing(wrappedBatch).first { it.id == id }
+            parseSingleMessage(wrappedBatch, id)
 
         } ?: throw CradleMessageNotFoundException("message '${id}' does not exist in cradle")
     }
