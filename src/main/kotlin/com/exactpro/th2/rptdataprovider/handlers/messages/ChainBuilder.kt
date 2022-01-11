@@ -20,14 +20,11 @@ import com.exactpro.cradle.Direction
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.handlers.Counters
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
-import com.exactpro.th2.rptdataprovider.handlers.StreamCounters
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.InternalCoroutinesApi
 import java.time.Instant
-import java.util.concurrent.atomic.AtomicLong
 
 class ChainBuilder(
     private val context: Context,

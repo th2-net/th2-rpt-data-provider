@@ -96,6 +96,7 @@ class MessageProducer(
         }
     }
 
+    @OptIn(InternalCoroutinesApi::class)
     private suspend fun parseSingleMessage(messageBatch: MessageBatchWrapper, id: StoredMessageId): Message {
 
         return coroutineScope {
@@ -158,14 +159,12 @@ class MessageProducer(
     suspend fun parseMessages(
         batchBuilders: List<BuildersBatch>,
         coroutineScope: CoroutineScope
-        // stream: String,
     ): List<List<MessageRequest?>> {
 
         val messageRequests =
             batchBuilders.map {
                 it.rawMessages.map { message ->
                     message?.let {
-                        // pipelineStatus.streams[stream]?.counters?.parseRecieved?.incrementAndGet()
                         MessageRequest.build(message);
                     }
                 }
