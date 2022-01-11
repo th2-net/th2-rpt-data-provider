@@ -24,7 +24,7 @@ import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.rptdataprovider.cache.CodecCache
 import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
-import com.exactpro.th2.rptdataprovider.entities.sse.PipelineStatus
+import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.BatchRequest
@@ -154,14 +154,18 @@ class MessageProducer(
     suspend fun parseMessages(
         batchBuilders: List<BuildersBatch>,
         coroutineScope: CoroutineScope
-       // stream: String,
+        // stream: String,
     ): List<List<MessageRequest?>> {
 
         val messageRequests =
-            batchBuilders.map { it.rawMessages.map { message -> message?.let {
-               // pipelineStatus.streams[stream]?.counters?.parseRecieved?.incrementAndGet()
-                MessageRequest.build(message);
-            } } }
+            batchBuilders.map {
+                it.rawMessages.map { message ->
+                    message?.let {
+                        // pipelineStatus.streams[stream]?.counters?.parseRecieved?.incrementAndGet()
+                        MessageRequest.build(message);
+                    }
+                }
+            }
 
         val batchRequest = batchBuilders.mapIndexed { index, value ->
             BatchRequest(value, messageRequests[index], coroutineScope)
@@ -181,10 +185,14 @@ class MessageProducer(
     ): List<List<MessageRequest?>> {
 
         val messageRequests =
-            batchBuilders.map { it.rawMessages.map { message -> message?.let {
-                pipelineStatus.streams[stream]?.counters?.parseRecieved?.incrementAndGet()
-                MessageRequest.build(message)
-            } } }
+            batchBuilders.map {
+                it.rawMessages.map { message ->
+                    message?.let {
+                        pipelineStatus.countParseReceived(stream)
+                        MessageRequest.build(message)
+                    }
+                }
+            }
 
         val batchRequest = batchBuilders.mapIndexed { index, value ->
             BatchRequest(value, messageRequests[index], coroutineScope)
@@ -194,7 +202,6 @@ class MessageProducer(
 
         return messageRequests
     }
-
 
     suspend fun messageBatchToBuilders(batchWrapper: MessageBatchWrapper): BuildersBatch {
         return coroutineScope {

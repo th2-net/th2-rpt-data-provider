@@ -20,13 +20,12 @@ import com.exactpro.cradle.Direction
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.sse.Counters
-import com.exactpro.th2.rptdataprovider.entities.sse.PipelineStatus
-import com.exactpro.th2.rptdataprovider.entities.sse.StreamCounters
+import com.exactpro.th2.rptdataprovider.handlers.Counters
+import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
+import com.exactpro.th2.rptdataprovider.handlers.StreamCounters
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.InternalCoroutinesApi
-import java.io.Console
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicLong
 
@@ -77,15 +76,7 @@ class ChainBuilder(
 
         val dataStreams = streamNames.map { streamName ->
             val streamInitializer = StreamInitializer(context, request, streamName, pipelineStatus)
-            pipelineStatus.streams.put(streamName.toString(), StreamCounters(
-                Counters(
-                    fetched = AtomicLong(0),
-                    parseRecieved = AtomicLong(0),
-                    parseRequested = AtomicLong(0),
-                    filterTotal = AtomicLong(0),
-                    filterDiscarded = AtomicLong(0),
-                    filterAccepted = AtomicLong(0)
-                )))
+            pipelineStatus.addStream(streamName.toString())
             val messageStream = MessageContinuousStream(
                 resumeFromIds[streamName],
                 streamInitializer,

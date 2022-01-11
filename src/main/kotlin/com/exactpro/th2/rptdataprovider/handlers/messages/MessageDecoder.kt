@@ -23,8 +23,8 @@ import com.exactpro.th2.rptdataprovider.entities.internal.PipelineParsedMessage
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatchData
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
-import com.exactpro.th2.rptdataprovider.entities.sse.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
+import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.producers.BuildersBatch
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.MessageRequest
@@ -57,7 +57,11 @@ class MessageDecoder(
         }
     }
 
-    constructor(pipelineComponent: MessageContinuousStream, messageFlowCapacity: Int, pipelineStatus: PipelineStatus) : this(
+    constructor(
+        pipelineComponent: MessageContinuousStream,
+        messageFlowCapacity: Int,
+        pipelineStatus: PipelineStatus
+    ) : this(
         pipelineComponent.context,
         pipelineComponent.searchRequest,
         pipelineComponent.streamName,
@@ -120,11 +124,6 @@ class MessageDecoder(
         }
     }
 
-    private fun countParseRequested(rawBatchSize: Int, pipelineStatus: PipelineStatus, streamName: String){
-        var s: Long = pipelineStatus.streams[streamName]?.counters?.parseRequested?.get()!!
-        pipelineStatus.streams[streamName]?.counters?.parseRequested?.set(s + rawBatchSize.toLong())
-    }
-
     @InternalCoroutinesApi
     private suspend fun getMessageRequests(
         rawBatch: List<BuildersBatch>,
@@ -146,8 +145,8 @@ class MessageDecoder(
                 val rawBatch = previousComponent!!.pollMessage()
 
                 if (messagesInBuffer >= batchMergeSize || rawBatch is EmptyPipelineObject) {
-                    countParseRequested(buffer.map { it.first }.size,pipelineStatus,streamName.toString())
-                    getMessageRequests(buffer.map { it.first }, this,pipelineStatus,streamName.toString()).let {
+                    pipelineStatus.countParseRequested(streamName.toString(), buffer.map { it.first }.size)
+                    getMessageRequests(buffer.map { it.first }, this, pipelineStatus, streamName.toString()).let {
                         sendParsedMessages(buffer, it)
                         messagesInBuffer = 0L
                         buffer.clear()

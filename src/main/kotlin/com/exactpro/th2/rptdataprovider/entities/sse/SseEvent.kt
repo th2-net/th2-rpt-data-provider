@@ -21,6 +21,7 @@ import com.exactpro.th2.rptdataprovider.asStringSuspend
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineKeepAlive
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.responses.*
+import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.ktor.util.*
@@ -101,24 +102,6 @@ class LastScannedEventInfo(
             .build()
     }
 }
-
-data class Counters(
-    val fetched: AtomicLong = AtomicLong(0),
-    val parseRequested: AtomicLong = AtomicLong(0),
-    val parseRecieved: AtomicLong = AtomicLong(0),
-    val filterTotal: AtomicLong = AtomicLong(0),
-    val filterDiscarded: AtomicLong = AtomicLong(0),
-    val filterAccepted: AtomicLong = AtomicLong(0)
-)
-
-data class StreamCounters(
-    val counters: Counters
-)
-
-data class PipelineStatus(
-    val streams:  MutableMap<String, StreamCounters>,
-    var merger: AtomicLong = AtomicLong(0)
-    )
 
 
 data class ExceptionInfo(val exceptionName: String, val exceptionCause: String)

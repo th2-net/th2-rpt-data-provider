@@ -19,11 +19,10 @@ package com.exactpro.th2.rptdataprovider.handlers.messages
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.sse.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
+import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import kotlinx.coroutines.*
-import java.security.PrivateKey
 
 @InternalCoroutinesApi
 class MessageFilter(
@@ -94,15 +93,15 @@ class MessageFilter(
             while (isActive) {
                 val parsedMessage = previousComponent!!.pollMessage()
                 if (parsedMessage is PipelineParsedMessage) {
-                        pipelineStatus.streams[streamName.toString()]?.counters?.filterTotal?.incrementAndGet();
+                    pipelineStatus.countFilteredTotal(streamName.toString())
                     updateState(parsedMessage)
 
                     val filtered = applyFilter(parsedMessage.payload)
                     if (filtered.finalFiltered) {
                         sendToChannel(PipelineFilteredMessage(parsedMessage, filtered))
-                        pipelineStatus.streams[streamName.toString()]?.counters?.filterAccepted?.incrementAndGet()
+                        pipelineStatus.countFilterAccepted(streamName.toString())
                     } else {
-                        pipelineStatus.streams[streamName.toString()]?.counters?.filterDiscarded?.incrementAndGet()
+                        pipelineStatus.countFilterDiscarded(streamName.toString())
                     }
                 } else {
                     sendToChannel(parsedMessage)

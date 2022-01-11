@@ -25,7 +25,7 @@ import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
-import com.exactpro.th2.rptdataprovider.entities.sse.PipelineStatus
+import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
 import mu.KotlinLogging
 import java.time.Instant
@@ -120,7 +120,7 @@ class MessageLoader(
             pullMore(startId, include, limit)
         }.mapNotNull { batch ->
             getFirstIdInRange(startId, include, batch)?.let {
-                pipelineStatus.streams[startId.streamName + ":" +startId.direction.toString()]?.counters?.fetched?.incrementAndGet()
+                pipelineStatus.countFetched(startId.streamName + ":" + startId.direction.toString())
                 MessageBatchWrapper(batch, it, searchDirection)
             }
         }
