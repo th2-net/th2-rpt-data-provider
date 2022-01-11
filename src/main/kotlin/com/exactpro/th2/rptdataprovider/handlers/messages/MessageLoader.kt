@@ -120,7 +120,10 @@ class MessageLoader(
             pullMore(startId, include, limit)
         }.mapNotNull { batch ->
             getFirstIdInRange(startId, include, batch)?.let {
-                pipelineStatus.countFetched(startId.streamName + ":" + startId.direction.toString())
+                val streamName = startId.streamName + ":" + startId.direction.toString()
+                pipelineStatus.countFetchedBytes(streamName, batch.batchSize)
+                pipelineStatus.countFetchedBatches(streamName)
+                pipelineStatus.countFetched(streamName, batch.messageCount)
                 MessageBatchWrapper(batch, it, searchDirection)
             }
         }

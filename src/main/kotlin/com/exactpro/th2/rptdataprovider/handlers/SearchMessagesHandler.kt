@@ -63,7 +63,6 @@ class SearchMessagesHandler(private val context: Context) {
                     coroutineContext.ensureActive()
 
                     logger.trace { it.lastProcessedId }
-                    writer.write(pipelineStatus, lastMessageIdCounter)
                     if (it is PipelineFilteredMessage) {
                         logger.trace { it.lastProcessedId }
                         writer.write(it.payload, lastMessageIdCounter)
@@ -71,6 +70,7 @@ class SearchMessagesHandler(private val context: Context) {
                         logger.trace { it.lastProcessedId }
                         writer.write(LastScannedMessageInfo(it), lastMessageIdCounter)
                     }
+                    writer.write(pipelineStatus, lastMessageIdCounter)
                 }
         }
     }

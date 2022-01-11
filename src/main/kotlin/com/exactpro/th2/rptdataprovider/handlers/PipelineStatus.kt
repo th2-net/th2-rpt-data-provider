@@ -20,6 +20,8 @@ import java.util.concurrent.atomic.AtomicLong
 
 data class Counters(
     val fetched: AtomicLong = AtomicLong(0),
+    val fetchedBytes: AtomicLong = AtomicLong(0),
+    val fetchedBatches: AtomicLong = AtomicLong(0),
     val parseRequested: AtomicLong = AtomicLong(0),
     val parseReceived: AtomicLong = AtomicLong(0),
     val filterTotal: AtomicLong = AtomicLong(0),
@@ -39,6 +41,8 @@ data class PipelineStatus(
         this.streams[streamName] = StreamCounters(
             Counters(
                 fetched = AtomicLong(0),
+                fetchedBatches = AtomicLong(0),
+                fetchedBytes = AtomicLong(0),
                 parseReceived = AtomicLong(0),
                 parseRequested = AtomicLong(0),
                 filterTotal = AtomicLong(0),
@@ -72,6 +76,24 @@ data class PipelineStatus(
         } else {
             val alreadyFetched: Long = this.streams[streamName]?.counters?.fetched?.get()!!
             this.streams[streamName]?.counters?.fetched?.set(alreadyFetched + messageBatchSize.toLong())
+        }
+    }
+
+    fun countFetchedBytes(streamName: String, messageBatchSize: Long = -1) {
+        if (messageBatchSize < 0) {
+            this.streams[streamName]?.counters?.fetchedBytes?.incrementAndGet()
+        } else {
+            val alreadyFetched: Long = this.streams[streamName]?.counters?.fetchedBytes?.get()!!
+            this.streams[streamName]?.counters?.fetchedBytes?.set(alreadyFetched + messageBatchSize.toLong())
+        }
+    }
+
+    fun countFetchedBatches(streamName: String, messageBatchSize: Int = -1) {
+        if (messageBatchSize < 0) {
+            this.streams[streamName]?.counters?.fetchedBatches?.incrementAndGet()
+        } else {
+            val alreadyFetched: Long = this.streams[streamName]?.counters?.fetchedBatches?.get()!!
+            this.streams[streamName]?.counters?.fetchedBatches?.set(alreadyFetched + messageBatchSize.toLong())
         }
     }
 
