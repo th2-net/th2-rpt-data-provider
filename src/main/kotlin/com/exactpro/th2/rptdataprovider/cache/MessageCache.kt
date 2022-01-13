@@ -55,7 +55,13 @@ class MessageCache(configuration: Configuration, private val messageProducer: Me
         return cache.get(id)
             ?: messageProducer.fromId(StoredMessageId.fromString(id)).also {
                 logger.debug { "Message cache miss for id=$id" }
-                put(id, it)
+
+                val type = it.messageBody?.get(0)?.messageType
+                val listError = listOf<String>("ErrorMessage", "th2-codec-error")
+
+                if (!listError.contains(type)) {
+                    put(id, it)
+                }
             }
     }
 }

@@ -38,7 +38,10 @@ class CodecCache(configuration: Configuration) {
     )
 
     fun put(id: String, message: Message) {
-        if (!cache.containsKey(id)) {
+        val type = message.messageBody?.get(0)?.messageType
+        val listError = listOf<String>("ErrorMessage", "th2-codec-error")
+
+        if (!cache.containsKey(id) && !listError.contains(type)) {
             cache.put(id, message)
         }
     }
