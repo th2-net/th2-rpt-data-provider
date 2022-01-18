@@ -26,13 +26,13 @@ import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
+import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedEventInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
-import com.fasterxml.jackson.databind.ObjectMapper
 import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel.Factory.BUFFERED
@@ -44,20 +44,25 @@ import java.time.ZoneOffset
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.coroutineContext
 
-class SearchEventsHandler(
-    private val cradle: CradleService,
-    private val eventProducer: EventProducer,
-    private val dbRetryDelay: Long,
-    private val sseSearchDelay: Long,
-    private val eventSearchChunkSize: Int
-) {
+class SearchEventsHandler(private val context: Context) {
+
     companion object {
         private val logger = KotlinLogging.logger { }
         private val processedEventCount = Counter.build(
             "processed_event_count", "Count of processed Events"
         ).register()
     }
+
+    private val cradle: CradleService = context.cradleService
+    private val eventProducer: EventProducer = context.eventProducer
+    private val dbRetryDelay: Long = context.configuration.dbRetryDelay.value.toLong()
+    private val sseSearchDelay: Long = context.configuration.sseSearchDelay.value.toLong()
+    private val sseEventSearchStep: Long = context.configuration.sseEventSearchStep.value.toLong()
+    private val eventSearchChunkSize: Int = context.configuration.eventSearchChunkSize.value.toInt()
+    private val keepAliveTimeout: Long = context.configuration.keepAliveTimeout.value.toLong()
+
 
     private data class ParentEventCounter private constructor(
         private val parentEventCounter: ConcurrentHashMap<String, AtomicLong>?,
@@ -86,6 +91,18 @@ class SearchEventsHandler(
     }
 
 
+    private suspend fun keepAlive(
+        writer: StreamWriter,
+        lastScannedObjectInfo: LastScannedObjectInfo,
+        counter: AtomicLong
+    ) {
+        while (coroutineContext.isActive) {
+            writer.write(lastScannedObjectInfo, counter)
+            delay(keepAliveTimeout)
+        }
+    }
+
+
     private suspend fun getEventsSuspend(
         parentEvent: ProviderEventId?,
         timestampFrom: Instant,
@@ -108,6 +125,7 @@ class SearchEventsHandler(
         }
     }
 
+
     private suspend fun prepareNonBatchedEvent(
         metadata: List<StoredTestEventMetadata>,
         request: SseEventSearchRequest
@@ -118,6 +136,7 @@ class SearchEventsHandler(
             eventProducer.fromSingleEventsProcessed(eventTreesNodes, request)
         }
     }
+
 
     private suspend fun prepareBatchedEvent(
         metadata: List<StoredTestEventMetadata>,
@@ -149,6 +168,7 @@ class SearchEventsHandler(
                 }
         }
     }
+
 
     @FlowPreview
     @ExperimentalCoroutinesApi
@@ -190,6 +210,7 @@ class SearchEventsHandler(
         }
     }
 
+
     private fun changeOfDayProcessing(from: Instant, to: Instant): Iterable<Pair<Instant, Instant>> {
         return if (from.atOffset(ZoneOffset.UTC).dayOfYear != to.atOffset(ZoneOffset.UTC).dayOfYear) {
             val pivot = from.atOffset(ZoneOffset.UTC)
@@ -201,6 +222,7 @@ class SearchEventsHandler(
         }
     }
 
+
     private fun getComparator(searchDirection: TimeRelation, endTimestamp: Instant?): (Instant) -> Boolean {
         return if (searchDirection == AFTER) {
             { timestamp: Instant -> timestamp.isBefore(endTimestamp ?: Instant.MAX) }
@@ -208,6 +230,7 @@ class SearchEventsHandler(
             { timestamp: Instant -> timestamp.isAfter(endTimestamp ?: Instant.MIN) }
         }
     }
+
 
     private fun getTimeIntervals(
         request: SseEventSearchRequest,
@@ -266,6 +289,7 @@ class SearchEventsHandler(
         }
     }
 
+
     private suspend fun dropByTimestampFilter(
         request: SseEventSearchRequest,
         resumeFromEvent: BaseEventEntity
@@ -278,6 +302,7 @@ class SearchEventsHandler(
             }
         }
     }
+
 
     @ExperimentalCoroutinesApi
     private suspend fun dropBeforeResumeId(
@@ -310,15 +335,10 @@ class SearchEventsHandler(
 
     @ExperimentalCoroutinesApi
     @FlowPreview
-    suspend fun searchEventsSse(
-        request: SseEventSearchRequest,
-        jacksonMapper: ObjectMapper,
-        sseEventSearchStep: Long,
-        keepAlive: suspend (StreamWriter, LastScannedObjectInfo, AtomicLong) -> Unit,
-        writer: StreamWriter
-    ) {
+    suspend fun searchEventsSse(request: SseEventSearchRequest, writer: StreamWriter) {
         coroutineScope {
-            val lastScannedObject = LastScannedObjectInfo()
+
+            val lastScannedObject = LastScannedEventInfo()
             val lastEventId = AtomicLong(0)
             val scanCnt = AtomicLong(0)
 
@@ -378,7 +398,7 @@ class SearchEventsHandler(
                 .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
                 .onStart {
                     launch {
-                        keepAlive.invoke(writer, lastScannedObject, lastEventId)
+                        keepAlive(writer, lastScannedObject, lastEventId)
                     }
                 }.onCompletion {
                     coroutineContext.cancelChildren()

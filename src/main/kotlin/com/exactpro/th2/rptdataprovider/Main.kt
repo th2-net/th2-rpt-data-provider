@@ -31,6 +31,7 @@ import kotlinx.atomicfu.locks.ReentrantLock
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.IO_PARALLELISM_PROPERTY_NAME
+import kotlinx.coroutines.InternalCoroutinesApi
 import mu.KotlinLogging
 import java.util.*
 import java.util.concurrent.ConcurrentLinkedDeque
@@ -80,6 +81,7 @@ class Main {
     }
 
 
+    @InternalCoroutinesApi
     @ExperimentalCoroutinesApi
     @FlowPreview
     @EngineAPI
@@ -96,6 +98,7 @@ class Main {
         awaitShutdown(lock, condition)
     }
 
+    @InternalCoroutinesApi
     @ExperimentalCoroutinesApi
     @FlowPreview
     @EngineAPI
@@ -158,6 +161,7 @@ class Main {
 }
 
 
+@InternalCoroutinesApi
 @FlowPreview
 @EngineAPI
 @InternalAPI

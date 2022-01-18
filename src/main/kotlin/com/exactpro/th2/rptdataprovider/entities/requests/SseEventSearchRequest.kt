@@ -17,12 +17,12 @@
 package com.exactpro.th2.rptdataprovider.entities.requests
 
 import com.exactpro.cradle.TimeRelation
+import com.exactpro.th2.dataprovider.grpc.EventSearchRequest
+import com.exactpro.th2.dataprovider.grpc.TimeRelation.PREVIOUS
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
-import com.exactpro.th2.dataprovider.grpc.EventSearchRequest
-import com.exactpro.th2.dataprovider.grpc.TimeRelation.*
 import java.time.Instant
 
 data class SseEventSearchRequest(

@@ -22,19 +22,20 @@ import com.exactpro.th2.rptdataprovider.entities.filters.Filter
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterRequest
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
+import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
-import com.exactpro.th2.rptdataprovider.entities.responses.Message
+import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
 class AttachedEventFilters private constructor(
     private var messagesFromAttachedId: Set<String>,
     override var negative: Boolean = false,
     override var conjunct: Boolean = false
-) : Filter<Message> {
+) : Filter<MessageWithMetadata> {
 
     companion object {
 
-        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<Message> {
+        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<MessageWithMetadata> {
             return AttachedEventFilters(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
@@ -71,12 +72,13 @@ class AttachedEventFilters private constructor(
                         "aae36f85-e638-482d-b996-b4bf710048b8, ..."
                     )
                 )
-            }
+            },
+            FilterSpecialType.NEED_ATTACHED_EVENTS
         )
     }
 
-    override fun match(element: Message): Boolean {
-        return negative.xor(messagesFromAttachedId.contains(element.messageId))
+    override fun match(element: MessageWithMetadata): Boolean {
+        return negative.xor(messagesFromAttachedId.contains(element.message.messageId))
     }
 
     override fun getInfo(): FilterInfo {
