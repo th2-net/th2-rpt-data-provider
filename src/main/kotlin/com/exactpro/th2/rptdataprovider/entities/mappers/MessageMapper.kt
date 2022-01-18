@@ -32,9 +32,10 @@ import java.util.*
 
 object MessageMapper {
 
-    private val jacksonMapper: ObjectMapper =
-        jacksonObjectMapper().enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
-            .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).registerModule(KotlinModule())
+    private val jacksonMapper: ObjectMapper = jacksonObjectMapper()
+        .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
+        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+        .registerModule(KotlinModule())
 
 
     private suspend fun getBodyMessage(messageWithMetadata: MessageWithMetadata): BodyHttpMessage? {
@@ -57,24 +58,28 @@ object MessageMapper {
 
     suspend fun convertToGrpcMessageData(messageWithMetadata: MessageWithMetadata): MessageData {
         return with(messageWithMetadata) {
-            MessageData.newBuilder().setMessageId(message.id.convertToProto())
+            MessageData.newBuilder()
+                .setMessageId(message.id.convertToProto())
                 .setTimestamp(message.timestamp.toTimestamp())
                 .setBodyBase64(message.rawMessageBody?.let { Base64.getEncoder().encodeToString(it.toByteArray()) })
-                .setBody(jacksonMapper.writeValueAsString(getBodyMessage(messageWithMetadata))).build()
+                .setBody(jacksonMapper.writeValueAsString(getBodyMessage(messageWithMetadata)))
+                .build()
         }
     }
 
     suspend fun convertToHttpMessage(messageWithMetadata: MessageWithMetadata): HttpMessage {
         return with(messageWithMetadata) {
-            val httpMessage = HttpMessage(timestamp = message.timestamp,
-                messageType = messageWithMetadata.message.messageBody?.joinToString("/") { it.messageType }
-                    ?: messageWithMetadata.message.imageType ?: "",
+            val httpMessage = HttpMessage(
+                timestamp = message.timestamp,
+                messageType = messageWithMetadata.message.messageBody
+                    ?.joinToString("/") { it.messageType } ?: messageWithMetadata.message.imageType ?: "",
                 direction = message.direction,
                 sessionId = message.sessionId,
                 attachedEventIds = message.attachedEventIds,
                 messageId = message.id.toString(),
                 body = getBodyMessage(messageWithMetadata),
-                bodyBase64 = message.rawMessageBody?.let { Base64.getEncoder().encodeToString(it.toByteArray()) })
+                bodyBase64 = message.rawMessageBody?.let { Base64.getEncoder().encodeToString(it.toByteArray()) }
+            )
             httpMessage
         }
     }
@@ -84,18 +89,21 @@ object MessageMapper {
         res.fields = emptyMap<String, Any>().toMutableMap()
         body.map {
             it.subsequenceId.joinToString("-") to it
-        }.sortedBy { it.first }.map {
-            "${it.second.messageType}-${it.first}" to jacksonMapper.readValue(
-                it.second.message,
-                BodyHttpMessage::class.java
-            )
-        }.forEach {
-            res.fields?.set(
-                it.first, BodyHttpSubMessage(
-                    mutableMapOf("fields" to it.second.fields!!)
-                )
-            )
         }
+            .sortedBy { it.first }
+            .map {
+                "${it.second.messageType}-${it.first}" to jacksonMapper.readValue(
+                    it.second.message,
+                    BodyHttpMessage::class.java
+                )
+            }
+            .forEach {
+                res.fields?.set(
+                    it.first, BodyHttpSubMessage(
+                        mutableMapOf("fields" to it.second.fields!!)
+                    )
+                )
+            }
         return res
     }
 }
