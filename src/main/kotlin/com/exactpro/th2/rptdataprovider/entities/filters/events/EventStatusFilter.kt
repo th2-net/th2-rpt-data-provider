@@ -34,10 +34,10 @@ class EventStatusFilter private constructor(
 
         suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<BaseEventEntity> {
             val status = filterRequest.getValues()?.first()?.toLowerCase()
-                ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
+                ?: throw InvalidRequestException("'${filterInfo.name}-value' cannot be empty")
 
             if (failedStatus != status && passedStatus != status) {
-                throw InvalidRequestException("'${filterInfo.name}-values' wrong value")
+                throw InvalidRequestException("'${filterInfo.name}-value' wrong value")
             }
 
             return EventStatusFilter(
