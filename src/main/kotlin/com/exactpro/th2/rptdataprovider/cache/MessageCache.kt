@@ -18,6 +18,7 @@ package com.exactpro.th2.rptdataprovider.cache
 
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
+import com.exactpro.th2.rptdataprovider.entities.internal.NonCachedMessageTypes
 import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
 import kotlinx.coroutines.InternalCoroutinesApi
@@ -30,6 +31,10 @@ import org.ehcache.config.builders.ResourcePoolsBuilder
 class MessageCache(configuration: Configuration, private val messageProducer: MessageProducer) {
     private val manager = CacheManagerBuilder.newCacheManagerBuilder().build(true)
     private val logger = KotlinLogging.logger { }
+
+    companion object {
+        private val nonCachedTypes = NonCachedMessageTypes.values().map { it.value }
+    }
 
     private val cache: Cache<String, Message> = manager.createCache(
         "messages",
@@ -57,9 +62,8 @@ class MessageCache(configuration: Configuration, private val messageProducer: Me
                 logger.debug { "Message cache miss for id=$id" }
 
                 val type = it.messageBody?.get(0)?.messageType
-                val listError = listOf<String>("ErrorMessage", "th2-codec-error")
 
-                if (!listError.contains(type)) {
+                if (!nonCachedTypes.contains(type)) {
                     put(id, it)
                 }
             }
