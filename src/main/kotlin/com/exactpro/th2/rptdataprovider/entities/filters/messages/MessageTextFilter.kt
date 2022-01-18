@@ -22,42 +22,50 @@ import com.exactpro.th2.rptdataprovider.entities.filters.FilterRequest
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
-import com.exactpro.th2.rptdataprovider.entities.responses.Message
+import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
+import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
+import com.google.protobuf.util.JsonFormat
 
 class MessageTextFilter(
-        private var text: List<String>,
-        override var negative: Boolean = false,
-        override var conjunct: Boolean = false
-) : Filter<Message> {
+    private var text: List<String>, override var negative: Boolean = false, override var conjunct: Boolean = false
+) : Filter<MessageWithMetadata> {
 
     companion object {
-        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<Message> {
+        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<MessageWithMetadata> {
             return MessageTextFilter(
-                    negative = filterRequest.isNegative(),
-                    conjunct = filterRequest.isConjunct(),
-                    text = filterRequest.getValues()
-                            ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
+                negative = filterRequest.isNegative(),
+                conjunct = filterRequest.isConjunct(),
+                text = filterRequest.getValues()
+                    ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
             )
         }
 
-        val filterInfo = FilterInfo(
-                "text",
-                "matches messages by one of the specified types",
-                mutableListOf<Parameter>().apply {
-                    add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
-                    add(Parameter("conjunct", FilterParameterType.BOOLEAN, false, null))
-                    add(Parameter("values", FilterParameterType.STRING_LIST, null, "Text, ..."))
-                }
-        )
+        val filterInfo =
+            FilterInfo("text", "matches messages by one of the specified types", mutableListOf<Parameter>().apply {
+                add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
+                add(Parameter("conjunct", FilterParameterType.BOOLEAN, false, null))
+                add(Parameter("values", FilterParameterType.STRING_LIST, null, "Text, ..."))
+            })
     }
 
-    override fun match(element: Message): Boolean {
+    private fun predicate(element: BodyWrapper): Boolean {
         val predicate: (String) -> Boolean = { item ->
-            element.messageType.toLowerCase().contains(item.toLowerCase()) ||
-                    element.body?.toLowerCase()?.contains(item.toLowerCase()) ?: false
+            element.messageType.toLowerCase().contains(item.toLowerCase())
+                .or(JsonFormat.printer().print(element.message).toLowerCase().contains(item.toLowerCase()))
         }
         return negative.xor(if (conjunct) text.all(predicate) else text.any(predicate))
+    }
+
+    override fun match(element: MessageWithMetadata): Boolean {
+        return element.message.messageBody?.let { messageBody ->
+            messageBody.forEachIndexed { index, bodyWrapper ->
+                predicate(bodyWrapper).also {
+                    element.filteredBody[index] = element.filteredBody[index] && it
+                }
+            }
+            element.filteredBody
+        }?.any { it } ?: false
     }
 
     override fun getInfo(): FilterInfo {

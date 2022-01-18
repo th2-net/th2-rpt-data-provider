@@ -23,7 +23,6 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
-import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
 class EventTextFilter private constructor(
@@ -40,22 +39,19 @@ class EventTextFilter private constructor(
             )
         }
 
-        val filterInfo = FilterInfo(
-            "text",
-            "matches events by one of the specified names",
-            mutableListOf<Parameter>().apply {
+        val filterInfo =
+            FilterInfo("text", "matches events by one of the specified names", mutableListOf<Parameter>().apply {
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("conjunct", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("values", FilterParameterType.STRING_LIST, null, "Text, ..."))
-            }
-        )
+            })
     }
 
     override fun match(element: BaseEventEntity): Boolean {
         val predicate: (String) -> Boolean = { item ->
-            element.eventName.toLowerCase().contains(item.toLowerCase()) ||
-                    element.eventType.toLowerCase().contains(item.toLowerCase()) ||
-                    element.body?.toLowerCase()?.contains(item.toLowerCase()) ?: false
+            element.eventName.toLowerCase().contains(item.toLowerCase())
+                .or(element.eventType.toLowerCase().contains(item.toLowerCase()))
+                .or(element.body?.toLowerCase()?.contains(item.toLowerCase()) ?: false)
         }
         return negative.xor(if (conjunct) text.all(predicate) else text.any(predicate))
     }
@@ -63,6 +59,4 @@ class EventTextFilter private constructor(
     override fun getInfo(): FilterInfo {
         return filterInfo
     }
-
 }
-
