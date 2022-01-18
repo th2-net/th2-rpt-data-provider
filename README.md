@@ -155,7 +155,6 @@ Event metadata object example (in sse):
 - `type` - Will match the events which type contains one of the given substrings. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.  
 - `body` - Will match the events which body contains one of the given substrings. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.  
 - `status` - Will match the events which status equals that specified. Parameters: `value` - string, one of `failed` or `passed`. `negative` - boolean.
-- `text` - Will match the events which `event name`, `event type` or `body` equals that specified values. Parameters: `value` - string, one of `failed` or `passed`. `negative` - boolean.
 
 
 `http://localhost:8080/search/sse/messages` - create a sse channel of messages that matches the filter. Accepts following query parameters:
@@ -177,7 +176,6 @@ Event metadata object example (in sse):
 - `type` - Will match the messages by their full type name. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.
 - `body` - Will match the messages by their parsed body. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.
 - `bodyBinary` - Will match the messages by their binary body. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.
-- `text` - Will match the events which `message type` or `message body` equals that specified values. Parameters: `value` - string, one of `failed` or `passed`. `negative` - boolean.
 
 Elements in channel match the format sse: 
 ```
