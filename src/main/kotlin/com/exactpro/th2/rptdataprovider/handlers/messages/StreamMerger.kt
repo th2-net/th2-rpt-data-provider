@@ -92,6 +92,56 @@ class StreamMerger(
         private val logger = KotlinLogging.logger { }
     }
 
+    private class StreamHolder(val messageStream: PipelineComponent) {
+
+        companion object {
+            private val logger = KotlinLogging.logger { }
+        }
+
+        val startId = messageStream.startId
+
+        var currentElement: PipelineStepObject? = null
+            private set
+        var previousElement: PipelineStepObject? = null
+            private set
+
+
+        private fun changePreviousElement(currentElement: PipelineStepObject?) {
+            if (previousElement == null
+                || currentElement is PipelineFilteredMessage
+            ) {
+                previousElement = currentElement
+            }
+        }
+
+        fun top(): PipelineStepObject {
+            return currentElement!!
+        }
+
+        suspend fun init() {
+            messageStream.pollMessage().let {
+                if (previousElement == null && currentElement == null) {
+                    logger.trace { it.lastProcessedId }
+                    currentElement = it
+                } else {
+                    throw InvalidInitializationException("StreamHolder ${messageStream.streamName} already initialized")
+                }
+            }
+        }
+
+        suspend fun pop(): PipelineStepObject {
+            return messageStream.pollMessage().let { newElement ->
+                val currentElementTemporary = currentElement
+
+                currentElementTemporary?.also {
+                    logger.trace { newElement.lastProcessedId }
+                    changePreviousElement(currentElement)
+                    currentElement = newElement
+                }
+                    ?: throw InvalidInitializationException("StreamHolder ${messageStream.streamName} need initialization")
+            }
+        }
+    }
 
     private val messageStreams = pipelineStreams.map { StreamHolder(it) }
     private var allStreamIsEmpty: Boolean = false

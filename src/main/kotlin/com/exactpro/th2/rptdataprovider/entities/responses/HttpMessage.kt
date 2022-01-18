@@ -19,6 +19,7 @@ package com.exactpro.th2.rptdataprovider.entities.responses
 import com.exactpro.cradle.Direction
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import com.exactpro.th2.rptdataprovider.grpcMessageIdToString
+import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.annotation.JsonRawValue
 import com.google.protobuf.util.JsonFormat
 import java.time.Instant
@@ -57,4 +58,21 @@ data class HttpMessage(
     val attachedEventIds: Set<String>,
     var rawMessageBase64: String?,
     var parsedMessages: List<HttpBodyWrapper>?
+)
+
+abstract class BodyHttpBase(
+    open val metadata: MutableMap<String, Any>?,
+    open var fields: MutableMap<String, Any>?
+)
+
+data class BodyHttpMessage(
+    @JsonProperty("metadata")
+    override var metadata: MutableMap<String, Any>?,
+    @JsonProperty("fields")
+    override var fields: MutableMap<String, Any>?
+) : BodyHttpBase(metadata, fields)
+
+data class BodyHttpSubMessage(
+    @JsonProperty("messageValue")
+    var messageValue: MutableMap<String, Any>? = null
 )
