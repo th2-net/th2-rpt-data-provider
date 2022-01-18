@@ -25,11 +25,11 @@ class FilterPredicate<T>(private val filters: List<Filter<T>>, private val speci
         specialTypes = filters.map { it.getInfo().filterSpecialType }
     )
 
-
     fun apply(element: T): Boolean {
         if (isEmpty()) return true
         return filters.all { it.match(element) }
     }
+
 
     fun getSpecialTypes(): List<FilterSpecialType> {
         return specialTypes

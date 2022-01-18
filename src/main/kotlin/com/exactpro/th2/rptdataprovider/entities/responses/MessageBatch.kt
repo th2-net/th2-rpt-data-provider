@@ -16,56 +16,26 @@
 
 package com.exactpro.th2.rptdataprovider.entities.responses
 
+import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessage
-import com.exactpro.cradle.messages.StoredMessageBatchId
-import com.exactpro.cradle.messages.StoredMessageId
-import kotlinx.coroutines.*
-import java.time.Instant
+import com.exactpro.cradle.messages.StoredMessageBatch
 
-data class MessageWrapper(
-    val id: StoredMessageId,
-    val message: StoredMessage,
-    private val result: Deferred<ParsedMessageBatch>
+data class MessageBatchWrapper(
+    val messageBatch: StoredMessageBatch,
+    val firstIndexInRange: Int? = null,
+    val timeRelation: TimeRelation = TimeRelation.AFTER
 ) {
-    companion object {
-        suspend fun build(message: StoredMessage, parseMessageBatch: Deferred<ParsedMessageBatch>): MessageWrapper {
-            return MessageWrapper(
-                id = message.id,
-                message = message,
-                result = parseMessageBatch
-            )
+    private var _messages: MutableCollection<StoredMessage>? = null
+
+    val messages: MutableCollection<StoredMessage>
+        get() {
+            if (_messages == null) {
+                _messages =
+                    if (timeRelation == TimeRelation.AFTER)
+                        messageBatch.messages
+                    else
+                        messageBatch.messagesReverse
+            }
+            return _messages!!
         }
-    }
-
-    suspend fun getParsedMessage(): Message {
-        val parsedBatch = result.await()
-        return  parsedBatch.batch.getValue(id)
-    }
 }
-
-
-data class MessageBatch(
-    val startTimestamp: Instant,
-    val endTimestamp: Instant,
-    val id: StoredMessageId,
-    val batch: Collection<StoredMessage>
-) {
-    companion object {
-        fun build(batch: Collection<StoredMessage>): MessageBatch {
-            return MessageBatch(
-                startTimestamp = batch.first().timestamp,
-                endTimestamp = batch.last().timestamp,
-                id = batch.first().id,
-                batch = batch
-            )
-        }
-    }
-}
-
-
-data class ParsedMessageBatch(
-    val id: StoredMessageBatchId,
-    val batch: Map<StoredMessageId, Message>,
-    val attachedEvents: Boolean
-)
-

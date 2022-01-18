@@ -23,14 +23,13 @@ import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.common.grpc.ConnectionID
 import com.exactpro.th2.common.grpc.MessageID
-import com.exactpro.th2.common.message.toTimestamp
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.BatchRequest
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.google.protobuf.Timestamp
 import io.prometheus.client.Gauge
 import io.prometheus.client.Histogram
 import kotlinx.coroutines.*
+import kotlinx.coroutines.GlobalScope.coroutineContext
 import kotlinx.coroutines.channels.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
@@ -41,8 +40,10 @@ import java.io.IOException
 import java.io.Writer
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalTime
+import java.time.ZoneOffset
+import java.util.*
 import java.util.concurrent.Executors
-import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
 private val logger = KotlinLogging.logger { }
@@ -168,18 +169,6 @@ fun Instant.isAfterOrEqual(other: Instant): Boolean {
 }
 
 
-suspend fun <E> ReceiveChannel<E>.receiveAvailable(): List<E> {
-    val allMessages = mutableListOf<E>()
-    allMessages.add(receive())
-    var next = poll()
-    while (next != null) {
-        allMessages.add(next)
-        next = poll()
-    }
-    return allMessages
-}
-
-
 fun StoredTestEventMetadata.tryToGetTestEvents(parentEventId: StoredTestEventId? = null): Collection<BatchedStoredTestEventMetadata>? {
     return try {
         this.batchMetadata?.testEvents?.let { events ->
@@ -200,7 +189,7 @@ fun StoredTestEventMetadata.tryToGetTestEvents(parentEventId: StoredTestEventId?
 @ExperimentalCoroutinesApi
 @InternalCoroutinesApi
 fun ReceiveChannel<BatchRequest>.chunked(size: Int, time: Long, capacity: Int = 1000) =
-    GlobalScope.produce<List<BatchRequest>>(capacity = capacity, onCompletion = consumes()) {
+    CoroutineScope(Dispatchers.Default).produce<List<BatchRequest>>(capacity = capacity, onCompletion = consumes()) {
         while (true) {
             val chunk = ArrayList<BatchRequest>()
             val ticker = ticker(time)
@@ -212,7 +201,7 @@ fun ReceiveChannel<BatchRequest>.chunked(size: Int, time: Long, capacity: Int = 
                     }
                     this@chunked.onReceive {
                         chunk += it
-                        messageCount += it.batch.messageCount
+                        messageCount += it.messagesCount
                         messageCount < size
                     }
                 }
@@ -268,4 +257,19 @@ fun StoredMessageId.convertToProto(): MessageID {
         .setDirection(cradleDirectionToGrpc(direction))
         .setConnectionId(ConnectionID.newBuilder().setSessionAlias(streamName))
         .build()
+}
+
+
+fun Instant.dayEnd(): Instant {
+    val utcTimestamp = this.atOffset(ZoneOffset.UTC)
+    return utcTimestamp
+        .with(LocalTime.of(0, 0, 0, 0))
+        .minusNanos(1)
+        .toInstant()
+}
+
+
+fun Instant.dayStart(): Instant {
+    val utcTimestamp = this.atOffset(ZoneOffset.UTC)
+    return utcTimestamp.with(LocalTime.of(0, 0, 0, 0)).toInstant()
 }

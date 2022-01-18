@@ -127,8 +127,9 @@ data class EventTreeNode(
             .setEventType(eventType)
             .setStartTimestamp(startTimestamp.toTimestamp())
             .setSuccessful(if (successful) EventStatus.SUCCESS else EventStatus.FAILED)
-            .also { builder ->
+            .let { builder ->
                 parentEventId?.let { builder.setParentEventId(EventID.newBuilder().setId(parentId)) }
+                builder
             }.build()
     }
 

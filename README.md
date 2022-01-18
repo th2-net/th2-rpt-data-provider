@@ -227,6 +227,16 @@ spec:
     
     decodeMessageConsumerCount: 64 // number of batch handlers running in parallel
 
+    messageContinuousStreamBuffer: 50 // number of batches in ContinuousStreamBuffer
+    
+    messageDecoderBuffer: 500 // number of batches in DecoderBuffer
+
+    messageFilterBuffer: 500 // number of batches in FilterBuffer
+
+    messageStreamMergerBuffer: 500 // number of batches in StreamMergerBuffer
+
+    sendEmptyDelay: 100 // frequency of sending empty messages
+
     eventSearchChunkSize: 64 // the size of event chunks during sse search and the maximum size of the batch of messages upon request getEvents
 
     serverType: HTTP // provider server type. Allows 'HTTP' and 'GRPC' (case sensetive). 
