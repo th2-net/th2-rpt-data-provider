@@ -51,8 +51,10 @@ class MessageTextFilter(
 
     private fun predicate(element: BodyWrapper): Boolean {
         val predicate: (String) -> Boolean = { item ->
-            element.messageType.toLowerCase().contains(item.toLowerCase())
-                .or(JsonFormat.printer().print(element.message).toLowerCase().contains(item.toLowerCase()))
+            val lowerCase = item.toLowerCase()
+
+            element.messageType.toLowerCase().contains(lowerCase)
+                    || JsonFormat.printer().print(element.message).toLowerCase().contains(lowerCase)
         }
         return negative.xor(if (conjunct) text.all(predicate) else text.any(predicate))
     }

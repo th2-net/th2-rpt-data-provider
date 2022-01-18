@@ -49,9 +49,11 @@ class EventTextFilter private constructor(
 
     override fun match(element: BaseEventEntity): Boolean {
         val predicate: (String) -> Boolean = { item ->
-            element.eventName.toLowerCase().contains(item.toLowerCase())
-                .or(element.eventType.toLowerCase().contains(item.toLowerCase()))
-                .or(element.body?.toLowerCase()?.contains(item.toLowerCase()) ?: false)
+            val lowerCase = item.toLowerCase()
+
+            element.eventName.toLowerCase().contains(lowerCase)
+                    || element.eventType.toLowerCase().contains(lowerCase)
+                    || element.body?.toLowerCase()?.contains(lowerCase) ?: false
         }
         return negative.xor(if (conjunct) text.all(predicate) else text.any(predicate))
     }
