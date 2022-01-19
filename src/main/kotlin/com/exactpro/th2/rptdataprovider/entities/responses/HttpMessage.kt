@@ -59,20 +59,3 @@ data class HttpMessage(
     var rawMessageBase64: String?,
     var parsedMessages: List<HttpBodyWrapper>?
 )
-
-abstract class BodyHttpBase(
-    open val metadata: MutableMap<String, Any>?,
-    open var fields: MutableMap<String, Any>?
-)
-
-data class BodyHttpMessage(
-    @JsonProperty("metadata")
-    override var metadata: MutableMap<String, Any>?,
-    @JsonProperty("fields")
-    override var fields: MutableMap<String, Any>?
-) : BodyHttpBase(metadata, fields)
-
-data class BodyHttpSubMessage(
-    @JsonProperty("messageValue")
-    var messageValue: MutableMap<String, Any>? = null
-)

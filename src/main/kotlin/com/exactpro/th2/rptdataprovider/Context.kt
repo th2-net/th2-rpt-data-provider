@@ -27,7 +27,11 @@ import com.exactpro.th2.rptdataprovider.cache.EventCache
 import com.exactpro.th2.rptdataprovider.cache.MessageCache
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.entities.filters.PredicateFactory
-import com.exactpro.th2.rptdataprovider.entities.filters.events.*
+import com.exactpro.th2.rptdataprovider.entities.filters.events.AttachedMessageFilter
+import com.exactpro.th2.rptdataprovider.entities.filters.events.EventBodyFilter
+import com.exactpro.th2.rptdataprovider.entities.filters.events.EventNameFilter
+import com.exactpro.th2.rptdataprovider.entities.filters.events.EventStatusFilter
+import com.exactpro.th2.rptdataprovider.entities.filters.events.EventTypeFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.AttachedEventFilters
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyBinaryFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyFilter
