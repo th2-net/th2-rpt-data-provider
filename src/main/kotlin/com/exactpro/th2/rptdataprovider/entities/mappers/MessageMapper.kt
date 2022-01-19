@@ -26,18 +26,9 @@ import com.exactpro.th2.rptdataprovider.entities.internal.FilteredMessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.responses.HttpBodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.responses.HttpMessage
 import com.exactpro.th2.rptdataprovider.providerDirectionToCradle
-import com.fasterxml.jackson.databind.DeserializationFeature
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.KotlinModule
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import java.util.*
 
 object MessageMapper {
-
-    private val jacksonMapper: ObjectMapper = jacksonObjectMapper()
-        .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
-        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
-        .registerModule(KotlinModule())
 
 
     private fun wrapSubMessage(message: BodyWrapper, matched: Boolean): MessageBodyWrapper {
