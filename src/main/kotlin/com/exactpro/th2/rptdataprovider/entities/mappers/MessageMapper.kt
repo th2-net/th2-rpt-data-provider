@@ -93,8 +93,7 @@ object MessageMapper {
             .sortedBy { it.first }
             .map {
                 "${it.second.messageType}-${it.first}" to jacksonMapper.readValue(
-                    it.second.message,
-                    BodyHttpMessage::class.java
+                    it.second.message, BodyHttpMessage::class.java
                 )
             }
             .forEach {
