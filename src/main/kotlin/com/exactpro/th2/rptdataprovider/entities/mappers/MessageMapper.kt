@@ -37,10 +37,6 @@ object MessageMapper {
         .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
         .registerModule(KotlinModule())
 
-    private fun isMessageTypeUnique(bodiesAll: List<HttpBodyWrapper>): Boolean {
-        val messagesType = bodiesAll.map { it.messageType }.toSet()
-        return messagesType.size == bodiesAll.size
-    }
 
     private suspend fun getBodyMessage(messageWithMetadata: MessageWithMetadata): BodyHttpMessage? {
         return with(messageWithMetadata) {
@@ -89,23 +85,26 @@ object MessageMapper {
     }
 
     private fun mergeFieldsHttp(body: List<HttpBodyWrapper>): BodyHttpMessage {
-        val isMessageTypeUnique = isMessageTypeUnique(body)
+        val messagesType = emptyMap<String, Int>().toMutableMap()
+        body.forEach {
+            messagesType.compute(it.messageType) { _, cnt -> cnt?.inc() ?: 1 }
+        }
+
         val res = jacksonMapper.readValue(body[0].message, BodyHttpMessage::class.java)
         res.fields = emptyMap<String, Any>().toMutableMap()
-        body.forEachIndexed { index, it ->
-            val singleMessage = jacksonMapper.readValue(body[index].message, BodyHttpMessage::class.java)
-            val id =
-                if (isMessageTypeUnique) it.messageType else "${it.messageType}-${it.subsequenceId.joinToString("-")}"
+        body.sortedBy { it.subsequenceId.joinToString("-") }.map {
+            messagesType[it.messageType].let { cnt ->
+                if ((cnt ?: 0) > 1) "${it.messageType}-${it.subsequenceId.joinToString("-")}"
+                else it.messageType
+            } to it
+        }.map {
+            it.first to jacksonMapper.readValue(it.second.message, BodyHttpMessage::class.java)
+        }.forEach {
             res.fields?.set(
-                id,
-                BodyHttpSubMessage(
-                    emptyMap<String, Any>().toMutableMap(),
-                    emptyMap<String, Any>().toMutableMap(),
-                    emptyMap<String, Any>().toMutableMap()
+                it.first, BodyHttpSubMessage(
+                    mutableMapOf("fields" to (it.second.fields ?: mutableMapOf()))
                 )
             )
-            (res.fields?.get(id) as BodyHttpSubMessage)
-                .messageValue?.put("fields", singleMessage.fields!!)
         }
         return res
     }

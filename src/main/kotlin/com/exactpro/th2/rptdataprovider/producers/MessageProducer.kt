@@ -178,12 +178,15 @@ class MessageProducer(
         return coroutineScope {
             val parsedRawMessage = batchWrapper.messages.map { parseRawMessage(it) }
             val parsedRawMessageProtocol = parsedRawMessage.firstOrNull()?.let { getProtocolField(it) }
+            val isImage = isImage(parsedRawMessageProtocol)
             val messageBuilders = createMessageBatch(batchWrapper, parsedRawMessage)
+
+            if (isImage) messageBuilders.forEach{it.imageType(parsedRawMessageProtocol)}
 
             return@coroutineScope BuildersBatch(
                 messageBuilders,
                 parsedRawMessage,
-                if (isImage(parsedRawMessageProtocol)) parsedRawMessageProtocol else null,
+                if (isImage) parsedRawMessageProtocol else null,
                 batchWrapper.messageBatch.id,
                 batchWrapper.messageBatch.messageCount
             )
