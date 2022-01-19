@@ -90,7 +90,6 @@ object MessageMapper {
         body.map {
             it.subsequenceId.joinToString("-") to it
         }
-            .sortedBy { it.first }
             .map {
                 "${it.second.messageType}-${it.first}" to jacksonMapper.readValue(
                     it.second.message, BodyHttpMessage::class.java
