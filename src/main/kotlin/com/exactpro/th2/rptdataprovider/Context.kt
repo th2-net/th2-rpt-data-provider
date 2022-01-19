@@ -31,10 +31,12 @@ import com.exactpro.th2.rptdataprovider.entities.filters.events.AttachedMessageF
 import com.exactpro.th2.rptdataprovider.entities.filters.events.EventBodyFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.events.EventNameFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.events.EventStatusFilter
+import com.exactpro.th2.rptdataprovider.entities.filters.events.EventTextFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.events.EventTypeFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.AttachedEventFilters
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyBinaryFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyFilter
+import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageTextFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageTypeFilter
 import com.exactpro.th2.rptdataprovider.entities.internal.FilteredMessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
@@ -103,6 +105,7 @@ class Context(
             AttachedMessageFilter.filterInfo to AttachedMessageFilter.Companion::build,
             EventTypeFilter.filterInfo to EventTypeFilter.Companion::build,
             EventNameFilter.filterInfo to EventNameFilter.Companion::build,
+            EventTextFilter.filterInfo to EventTextFilter.Companion::build,
             EventBodyFilter.filterInfo to EventBodyFilter.Companion::build,
             EventStatusFilter.filterInfo to EventStatusFilter.Companion::build
         ), cradleService
@@ -112,6 +115,7 @@ class Context(
         mapOf(
             AttachedEventFilters.filterInfo to AttachedEventFilters.Companion::build,
             MessageTypeFilter.filterInfo to MessageTypeFilter.Companion::build,
+            MessageTextFilter.filterInfo to MessageTextFilter.Companion::build,
             MessageBodyFilter.filterInfo to MessageBodyFilter.Companion::build,
             MessageBodyBinaryFilter.filterInfo to MessageBodyBinaryFilter.Companion::build
         ), cradleService
