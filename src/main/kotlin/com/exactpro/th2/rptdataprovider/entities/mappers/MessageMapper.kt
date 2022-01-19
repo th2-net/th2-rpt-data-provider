@@ -100,7 +100,7 @@ object MessageMapper {
             .forEach {
                 res.fields?.set(
                     it.first, BodyHttpSubMessage(
-                        mutableMapOf("fields" to it.second.fields!!)
+                        mutableMapOf("fields" to (it.second.fields ?: mutableMapOf()))
                     )
                 )
             }

@@ -67,11 +67,17 @@ Message object example:
 
 ### SSE
 
-##### Filters API
+#### Filters API
 
 Filters are formed as follows:
 - `filters={filter name}` - you must register the filter by specifying its name.  
 - `{filter name}-{parameter}={parameter value}` - each filter parameter
+
+****Types of filter `parameter`****:
+- `value / values` - text, number, boolean, etc. - one / many values to match against a filter.
+- `negative` - boolean. - Negates the result of the filter. To retrieve data that does NOT match the specified filter. Defaults to `false`.
+- `conjunct` - boolean. - Used if the filter takes several values. If `true` then the element must match ALL given `values`. If `false` then element must match ANY of `values`. *Not used in filters with one possible value*. Defaults to `false`.
+
 ```
 As example:
 /search/sse/events/?startTimestamp=1605872487277&filters=name&filters=type&name-values=Checkpoint&type-values=session&type-negative=true
@@ -143,12 +149,12 @@ Event metadata object example (in sse):
 }
 ```
 
-- `FILTERS`:
-- `attachedMessageId` - Filters the events that are linked to the specified message id. Parameters: `values` - text, `negative` - boolean. If `true`, will match events that do not match those specified attached message id. If `false`, will match the events by their attached message id. Defaults to `false`.  
-- `name` - Will match the events which name contains one of the given substrings. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean - If `true`, will match events that do not match those specified `name`. If `false`, will match the events by their `name`. Defaults to `false`. 
-- `type` - Will match the events which type contains one of the given substrings. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean - If `true`, will match events that do not match those specified `type`. If `false`, will match the events by their `type`. Defaults to `false`.
-- `body` - Will match the events which body contains one of the given substrings. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean - If `true`, will match events that do not match those specified `type`. If `false`, will match the events by their `type`. Defaults to `false`.
-- `status` - Will match the events which status equals that specified. Parameters: `values` - boolean. `negative` - boolean - If `true`, will match events that do not match those specified `status`. If `false`, will match the events by their `status`. Defaults to `false`.
+[FILTERS](#filters-api):
+- `attachedMessageId` - Filters the events that are linked to the specified message id. Parameters: `values` - text, `negative` - boolean, `conjunct` - boolean.  
+- `name` - Will match the events which name contains one of the given substrings. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.  
+- `type` - Will match the events which type contains one of the given substrings. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.  
+- `body` - Will match the events which body contains one of the given substrings. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.  
+- `status` - Will match the events which status equals that specified. Parameters: `value` - string, one of `failed` or `passed`. `negative` - boolean.
 
 
 `http://localhost:8080/search/sse/messages` - create a sse channel of messages that matches the filter. Accepts following query parameters:
@@ -164,12 +170,12 @@ Event metadata object example (in sse):
 - `attachedEvents`- boolean - If `true`, additionally load `attachedEventIds`. Default `false`.
 - `lookupLimitDays` - number - The number of days that will be viewed on the first request to get the one closest to the specified timestamp. Default `null` - not limited to the past and up to the present moment to the future.
 
-- `FILTERS`:
+[FILTERS](#filters-api):
 
-- `attachedEventIds` - Filters the messages that are linked to the specified event id. Parameters: `values` - text, accepts multiple values, `negative` - boolean. If `true`, will match messages that do not match those specified attached event id. If `false`, will match the messages by their attached event id. Defaults to `false`. 
-- `type` - Will match the messages by their full type name. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean - If `true`, will match messages that do not match those specified `type`. If `false`, will match the messages by their `type`. Defaults to `false`.
-- `body` - Will match the messages by their parsed body. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean - If `true`, will match messages that do not match those specified `body`. If `false`, will match the messages by their `body`. Defaults to `false`.
-
+- `attachedEventIds` - Filters the messages that are linked to the specified event id. Parameters: `values` - text, accepts multiple values, `negative` - boolean, `conjunct` - boolean. 
+- `type` - Will match the messages by their full type name. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.
+- `body` - Will match the messages by their parsed body. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.
+- `bodyBinary` - Will match the messages by their binary body. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.
 
 Elements in channel match the format sse: 
 ```
