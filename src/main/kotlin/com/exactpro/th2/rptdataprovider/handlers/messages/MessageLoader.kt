@@ -49,7 +49,7 @@ class MessageLoader(
         limit: Int
     ): Iterable<StoredMessageBatch> {
 
-        logger.debug { "pulling more messages (id=$startId limit=$limit direction=${searchDirection})" }
+        //logger.debug { "pulling more messages (id=$startId limit=$limit direction=${searchDirection})" }
 
         return context.cradleService.getMessagesBatchesSuspend(
             StoredMessageFilterBuilder().apply {

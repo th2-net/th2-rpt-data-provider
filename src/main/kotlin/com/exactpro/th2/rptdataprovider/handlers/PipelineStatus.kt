@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider.handlers
 
+import java.util.*
 import java.util.concurrent.atomic.AtomicLong
 
 data class Counters(
@@ -30,6 +31,8 @@ data class Counters(
 )
 
 data class StreamCounters(
+    val startTime: Long,
+    var timeSinceStartProcessing: Long,
     val counters: Counters
 )
 
@@ -39,7 +42,9 @@ data class PipelineStatus(
 ) {
     fun addStream(streamName: String) {
         this.streams[streamName] = StreamCounters(
-            Counters(
+            startTime = Date().time,
+            timeSinceStartProcessing = getMillisecondsDifference(Date().time),
+            counters = Counters(
                 fetched = AtomicLong(0),
                 fetchedBatches = AtomicLong(0),
                 fetchedBytes = AtomicLong(0),
@@ -59,6 +64,7 @@ data class PipelineStatus(
             val alreadyParsedRequested: Long = this.streams[streamName]?.counters?.parseRequested?.get()!!
             this.streams[streamName]?.counters?.parseRequested?.set(alreadyParsedRequested + messageBatchSize.toLong())
         }
+        setTimeValues(streamName)
     }
 
     fun countParseReceived(streamName: String, messageBatchSize: Int = -1) {
@@ -68,6 +74,7 @@ data class PipelineStatus(
             val alreadyParseReceived: Long = this.streams[streamName]?.counters?.parseReceived?.get()!!
             this.streams[streamName]?.counters?.parseReceived?.set(alreadyParseReceived + messageBatchSize.toLong())
         }
+        setTimeValues(streamName)
     }
 
     fun countFetched(streamName: String, messageBatchSize: Int = -1) {
@@ -77,6 +84,7 @@ data class PipelineStatus(
             val alreadyFetched: Long = this.streams[streamName]?.counters?.fetched?.get()!!
             this.streams[streamName]?.counters?.fetched?.set(alreadyFetched + messageBatchSize.toLong())
         }
+        setTimeValues(streamName)
     }
 
     fun countFetchedBytes(streamName: String, messageBatchSize: Long = -1) {
@@ -86,6 +94,7 @@ data class PipelineStatus(
             val alreadyFetched: Long = this.streams[streamName]?.counters?.fetchedBytes?.get()!!
             this.streams[streamName]?.counters?.fetchedBytes?.set(alreadyFetched + messageBatchSize.toLong())
         }
+        setTimeValues(streamName)
     }
 
     fun countFetchedBatches(streamName: String, messageBatchSize: Int = -1) {
@@ -95,6 +104,7 @@ data class PipelineStatus(
             val alreadyFetched: Long = this.streams[streamName]?.counters?.fetchedBatches?.get()!!
             this.streams[streamName]?.counters?.fetchedBatches?.set(alreadyFetched + messageBatchSize.toLong())
         }
+        setTimeValues(streamName)
     }
 
     fun countFilterAccepted(streamName: String, messageBatchSize: Int = -1) {
@@ -104,6 +114,7 @@ data class PipelineStatus(
             val alreadyFilterAccepted: Long = this.streams[streamName]?.counters?.filterAccepted?.get()!!
             this.streams[streamName]?.counters?.filterAccepted?.set(alreadyFilterAccepted + messageBatchSize.toLong())
         }
+        setTimeValues(streamName)
     }
 
     fun countFilterDiscarded(streamName: String, messageBatchSize: Int = -1) {
@@ -113,6 +124,7 @@ data class PipelineStatus(
             val alreadyFilterDiscarded: Long = this.streams[streamName]?.counters?.filterDiscarded?.get()!!
             this.streams[streamName]?.counters?.filterDiscarded?.set(alreadyFilterDiscarded + messageBatchSize.toLong())
         }
+        setTimeValues(streamName)
     }
 
     fun countFilteredTotal(streamName: String, messageBatchSize: Int = -1) {
@@ -122,6 +134,7 @@ data class PipelineStatus(
             val alreadyFiltered: Long = this.streams[streamName]?.counters?.filterTotal?.get()!!
             this.streams[streamName]?.counters?.filterTotal?.set(alreadyFiltered + messageBatchSize.toLong())
         }
+        setTimeValues(streamName)
     }
 
     fun countMerger(messageBatchSize: Int = -1) {
@@ -131,5 +144,22 @@ data class PipelineStatus(
             val alreadyMerged: Long = this.merger.get()
             this.merger.set(alreadyMerged + messageBatchSize.toLong())
         }
+    }
+
+    private fun setTimeValues(streamName: String)
+    {
+        val recentTimeSinceStartProcessing = this.streams[streamName]?.timeSinceStartProcessing
+        val startTime = this.streams[streamName]?.startTime
+        this.streams[streamName]?.timeSinceStartProcessing =
+            getMillisecondsDifference(startTime!!)
+        val diff = this.streams[streamName]?.timeSinceStartProcessing!!/1000 - recentTimeSinceStartProcessing!!/1000
+
+        if(diff == (1).toLong()){
+            println(this)
+        }
+    }
+
+    private fun getMillisecondsDifference(milliseconds: Long) : Long{
+        return Date().time - milliseconds;
     }
 }

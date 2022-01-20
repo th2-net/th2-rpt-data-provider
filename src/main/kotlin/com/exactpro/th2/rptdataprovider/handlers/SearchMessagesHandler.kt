@@ -41,7 +41,7 @@ class SearchMessagesHandler(private val context: Context) {
     suspend fun searchMessagesSse(request: SseMessageSearchRequest, writer: StreamWriter) {
         withContext(coroutineContext) {
             val lastMessageIdCounter = AtomicLong(0)
-            val pipelineStatus = PipelineStatus(streams = mutableMapOf());
+            val pipelineStatus = PipelineStatus(streams = mutableMapOf())
             var streamMerger: StreamMerger? = null
 
             flow {
