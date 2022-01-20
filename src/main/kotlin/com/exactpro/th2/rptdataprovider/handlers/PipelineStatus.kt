@@ -17,7 +17,6 @@
 package com.exactpro.th2.rptdataprovider.handlers
 
 import com.exactpro.th2.rptdataprovider.Context
-import java.util.*
 import java.util.concurrent.atomic.AtomicLong
 
 data class Counters(
@@ -48,8 +47,8 @@ data class PipelineStatus(
     fun addStream(streamName: String) {
         if (sendPipelineStatus) {
             this.streams[streamName] = StreamCounters(
-                startTime = Date().time,
-                timeSinceStartProcessing = getMillisecondsDifference(Date().time),
+                startTime = System.currentTimeMillis(),
+                timeSinceStartProcessing = getMillisecondsDifference(System.currentTimeMillis()),
                 counters = Counters(
                     fetched = AtomicLong(0),
                     fetchedBatches = AtomicLong(0),
@@ -176,6 +175,6 @@ data class PipelineStatus(
     }
 
     private fun getMillisecondsDifference(milliseconds: Long): Long {
-        return Date().time - milliseconds;
+        return System.currentTimeMillis() - milliseconds;
     }
 }
