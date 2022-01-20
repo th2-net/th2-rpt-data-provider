@@ -51,10 +51,9 @@ class RabbitMqService(
     private val mqDispatcher = Executors.newFixedThreadPool(mqDispatcherPoolSize).asCoroutineDispatcher()
 
     private val rabbitBatchMergeBuffer = configuration.rabbitBatchMergeBuffer.value.toInt()
-    private val rabbitMergedBatchSize = configuration.rabbitMergedBatchSize.value.toInt()
     private val decodeMessageConsumerCount = configuration.decodeMessageConsumerCount.value.toInt()
 
-    private val messageBatchBuffer = Channel<List<BatchRequest>>(rabbitBatchMergeBuffer * rabbitMergedBatchSize)
+    private val messageBatchBuffer = Channel<List<BatchRequest>>(rabbitBatchMergeBuffer)
 
     private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
 
