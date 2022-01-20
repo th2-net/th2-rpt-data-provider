@@ -60,6 +60,8 @@ class RabbitMqService(
 
     private val decodeRequests = ConcurrentHashMap<MessageID, ConcurrentSkipListSet<MessageRequest>>()
 
+    private val ignorePinAttribute = configuration.ignorePinAttribute.value.toBoolean()
+
     private val receiveChannel = messageRouterParsedBatch.subscribeAll(
         MessageListener { _, decodedBatch ->
             decodedBatch.messagesList.groupBy { it.metadata.id.sequence }.forEach { (_, messages) ->
@@ -195,7 +197,11 @@ class RabbitMqService(
 
             if (!alreadyRequested) {
                 try {
-                    messageRouterRawBatch.sendAll(batch, firstId?.connectionId?.sessionAlias)
+                    if (ignorePinAttribute) {
+                        messageRouterRawBatch.sendAll(batch)
+                    } else {
+                        messageRouterRawBatch.sendAll(batch, firstId?.connectionId?.sessionAlias)
+                    }
                     logger.trace { "codec request published $requestDebugInfo" }
                 } catch (e: IOException) {
                     logger.error(e) { "cannot send message $requestDebugInfo" }

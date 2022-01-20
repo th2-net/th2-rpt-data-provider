@@ -245,6 +245,8 @@ spec:
 
     eventSearchChunkSize: 64 // the size of event chunks during sse search and the maximum size of the batch of messages upon request getEvents
 
+    ignorePinAttribute: false // if true disables the use of pins when sending messages
+
     serverType: HTTP // provider server type. Allows 'HTTP' and 'GRPC' (case sensetive). 
 
   pins: // pins are used to communicate with codec components to parse message data

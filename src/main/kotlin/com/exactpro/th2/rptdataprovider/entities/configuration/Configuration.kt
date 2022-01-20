@@ -56,12 +56,14 @@ class CustomConfigurationClass {
     val messageStreamMergerBuffer = 500
     val sendEmptyDelay = 100
 
+    val ignorePinAttribute = false
+
     val eventSearchChunkSize: Int = 64
 
     val serverType: ServerType = ServerType.HTTP
 
     override fun toString(): String {
-        return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, clientCacheTimeout=$clientCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, codecResponseTimeout=$codecResponseTimeout, codecCacheSize=$codecCacheSize, codecBatchesCacheSize=$codecBatchesCacheSize, checkRequestsAliveDelay=$checkRequestsAliveDelay, enableCaching=$enableCaching, notModifiedObjectsLifetime=$notModifiedObjectsLifetime, rarelyModifiedObjects=$rarelyModifiedObjects, maxMessagesLimit=$maxMessagesLimit, messageSearchPipelineBuffer=$messageSearchPipelineBuffer, sseEventSearchStep=$sseEventSearchStep, keepAliveTimeout=$keepAliveTimeout, dbRetryDelay=$dbRetryDelay, cradleDispatcherPoolSize=$cradleDispatcherPoolSize, sseSearchDelay=$sseSearchDelay, rabbitBatchMergeFrequency=$rabbitBatchMergeFrequency, rabbitBatchMergeBuffer=$rabbitBatchMergeBuffer, rabbitMergedBatchSize=$rabbitMergedBatchSize, decodeMessageConsumerCount=$decodeMessageConsumerCount, messageContinuousStreamBuffer=$messageContinuousStreamBuffer, messageDecoderBuffer=$messageDecoderBuffer, messageFilterBuffer=$messageFilterBuffer, messageStreamMergerBuffer=$messageStreamMergerBuffer, sendEmptyDelay=$sendEmptyDelay, eventSearchChunkSize=$eventSearchChunkSize, serverType=$serverType)"
+        return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, clientCacheTimeout=$clientCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, codecResponseTimeout=$codecResponseTimeout, codecCacheSize=$codecCacheSize, codecBatchesCacheSize=$codecBatchesCacheSize, checkRequestsAliveDelay=$checkRequestsAliveDelay, enableCaching=$enableCaching, notModifiedObjectsLifetime=$notModifiedObjectsLifetime, rarelyModifiedObjects=$rarelyModifiedObjects, maxMessagesLimit=$maxMessagesLimit, messageSearchPipelineBuffer=$messageSearchPipelineBuffer, sseEventSearchStep=$sseEventSearchStep, keepAliveTimeout=$keepAliveTimeout, dbRetryDelay=$dbRetryDelay, cradleDispatcherPoolSize=$cradleDispatcherPoolSize, sseSearchDelay=$sseSearchDelay, rabbitBatchMergeFrequency=$rabbitBatchMergeFrequency, rabbitBatchMergeBuffer=$rabbitBatchMergeBuffer, rabbitMergedBatchSize=$rabbitMergedBatchSize, decodeMessageConsumerCount=$decodeMessageConsumerCount, messageContinuousStreamBuffer=$messageContinuousStreamBuffer, messageDecoderBuffer=$messageDecoderBuffer, messageFilterBuffer=$messageFilterBuffer, messageStreamMergerBuffer=$messageStreamMergerBuffer, sendEmptyDelay=$sendEmptyDelay, ignorePinAttribute=$ignorePinAttribute, eventSearchChunkSize=$eventSearchChunkSize, serverType=$serverType)"
     }
 }
 
@@ -172,4 +174,7 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
 
     val sendEmptyDelay: Variable =
         Variable("sendEmptyDelay", customConfiguration.sendEmptyDelay.toString(), "100")
+
+    val ignorePinAttribute: Variable =
+        Variable("ignorePinAttribute", customConfiguration.ignorePinAttribute.toString(), "false")
 }
