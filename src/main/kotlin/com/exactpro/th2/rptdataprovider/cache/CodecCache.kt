@@ -17,6 +17,7 @@
 package com.exactpro.th2.rptdataprovider.cache
 
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
+import com.exactpro.th2.rptdataprovider.entities.internal.NonCachedMessageTypes
 import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import mu.KotlinLogging
 import org.ehcache.Cache
@@ -28,6 +29,10 @@ class CodecCache(configuration: Configuration) {
     private val manager = CacheManagerBuilder.newCacheManagerBuilder().build(true)
     private val logger = KotlinLogging.logger { }
 
+    companion object {
+        private val nonCachedTypes = NonCachedMessageTypes.values().map { it.value }
+    }
+
     private val cache: Cache<String, Message> = manager.createCache(
         "codec",
         CacheConfigurationBuilder.newCacheConfigurationBuilder(
@@ -38,7 +43,9 @@ class CodecCache(configuration: Configuration) {
     )
 
     fun put(id: String, message: Message) {
-        if (!cache.containsKey(id)) {
+        val type = message.messageBody?.get(0)?.messageType
+
+        if (!cache.containsKey(id) && !nonCachedTypes.contains(type)) {
             cache.put(id, message)
         }
     }

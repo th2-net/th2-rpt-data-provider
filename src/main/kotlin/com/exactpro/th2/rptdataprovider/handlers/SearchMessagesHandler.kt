@@ -29,10 +29,25 @@ import mu.KotlinLogging
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 
-class SearchMessagesHandler(private val context: Context) {
+class SearchMessagesHandler(private val applicationContext: Context) {
 
     companion object {
         private val logger = KotlinLogging.logger { }
+    }
+
+    private val pipelineInfoSendDelay = applicationContext.configuration.pipelineInfoSendDelay.value.toLong()
+    private val sendPipelineStatus = applicationContext.configuration.sendPipelineStatus.value.toBoolean()
+
+    private suspend fun sendPipelineStatus(
+        pipelineStatus: PipelineStatus,
+        writer: StreamWriter,
+        coroutineScope: CoroutineScope,
+        lastMessageIdCounter: AtomicLong
+    ) {
+        while (coroutineScope.isActive) {
+            writer.write(pipelineStatus, lastMessageIdCounter)
+            delay(pipelineInfoSendDelay)
+        }
     }
 
     @InternalCoroutinesApi
@@ -41,11 +56,17 @@ class SearchMessagesHandler(private val context: Context) {
     suspend fun searchMessagesSse(request: SseMessageSearchRequest, writer: StreamWriter) {
         withContext(coroutineContext) {
             val lastMessageIdCounter = AtomicLong(0)
-            val pipelineStatus = PipelineStatus(streams = mutableMapOf())
+            val pipelineStatus = PipelineStatus(context = applicationContext);
             var streamMerger: StreamMerger? = null
 
             flow {
-                streamMerger = ChainBuilder(context, request, this@withContext, pipelineStatus).buildChain()
+                streamMerger = ChainBuilder(applicationContext, request, this@withContext, pipelineStatus).buildChain()
+
+                if (sendPipelineStatus) {
+                    launch {
+                        sendPipelineStatus(pipelineStatus, writer, this@withContext, lastMessageIdCounter)
+                    }
+                }
 
                 do {
                     val message = streamMerger?.pollMessage()
@@ -63,14 +84,12 @@ class SearchMessagesHandler(private val context: Context) {
                     coroutineContext.ensureActive()
 
                     logger.trace { it.lastProcessedId }
+
                     if (it is PipelineFilteredMessage) {
-                        logger.trace { it.lastProcessedId }
                         writer.write(it.payload, lastMessageIdCounter)
                     } else if (it is PipelineKeepAlive) {
-                        logger.trace { it.lastProcessedId }
                         writer.write(LastScannedMessageInfo(it), lastMessageIdCounter)
                     }
-                    writer.write(pipelineStatus, lastMessageIdCounter)
                 }
         }
     }

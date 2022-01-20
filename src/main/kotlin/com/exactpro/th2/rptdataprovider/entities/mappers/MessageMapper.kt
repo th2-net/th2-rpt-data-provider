@@ -85,27 +85,23 @@ object MessageMapper {
     }
 
     private fun mergeFieldsHttp(body: List<HttpBodyWrapper>): BodyHttpMessage {
-        val messagesType = emptyMap<String, Int>().toMutableMap()
-        body.forEach {
-            messagesType.compute(it.messageType) { _, cnt -> cnt?.inc() ?: 1 }
-        }
-
         val res = jacksonMapper.readValue(body[0].message, BodyHttpMessage::class.java)
         res.fields = emptyMap<String, Any>().toMutableMap()
-        body.sortedBy { it.subsequenceId.joinToString("-") }.map {
-            messagesType[it.messageType].let { cnt ->
-                if ((cnt ?: 0) > 1) "${it.messageType}-${it.subsequenceId.joinToString("-")}"
-                else it.messageType
-            } to it
-        }.map {
-            it.first to jacksonMapper.readValue(it.second.message, BodyHttpMessage::class.java)
-        }.forEach {
-            res.fields?.set(
-                it.first, BodyHttpSubMessage(
-                    mutableMapOf("fields" to it.second.fields!!)
-                )
-            )
+        body.map {
+            it.subsequenceId.joinToString("-") to it
         }
+            .map {
+                "${it.second.messageType}-${it.first}" to jacksonMapper.readValue(
+                    it.second.message, BodyHttpMessage::class.java
+                )
+            }
+            .forEach {
+                res.fields?.set(
+                    it.first, BodyHttpSubMessage(
+                        mutableMapOf("fields" to (it.second.fields ?: mutableMapOf()))
+                    )
+                )
+            }
         return res
     }
 }

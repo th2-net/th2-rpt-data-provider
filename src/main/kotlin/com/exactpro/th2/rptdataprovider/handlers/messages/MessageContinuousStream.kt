@@ -37,7 +37,7 @@ class MessageContinuousStream(
     private val startTimestamp: Instant,
     externalScope: CoroutineScope,
     messageFlowCapacity: Int,
-    val pipelineStatus: PipelineStatus
+    private val pipelineStatus: PipelineStatus
 ) : PipelineComponent(
     startMessageId,
     initializer.context,

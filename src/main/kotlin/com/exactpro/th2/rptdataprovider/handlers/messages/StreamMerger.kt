@@ -37,7 +37,7 @@ class StreamMerger(
     externalScope: CoroutineScope,
     pipelineStreams: List<PipelineComponent>,
     messageFlowCapacity: Int,
-    val pipelineStatus: PipelineStatus
+    private val pipelineStatus: PipelineStatus
 ) : PipelineComponent(null, context, searchRequest, externalScope, messageFlowCapacity = messageFlowCapacity) {
 
     companion object {

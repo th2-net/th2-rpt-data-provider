@@ -162,40 +162,7 @@ class MessageProducer(
     ): List<List<MessageRequest?>> {
 
         val messageRequests =
-            batchBuilders.map {
-                it.rawMessages.map { message ->
-                    message?.let {
-                        MessageRequest.build(message);
-                    }
-                }
-            }
-
-        val batchRequest = batchBuilders.mapIndexed { index, value ->
-            BatchRequest(value, messageRequests[index], coroutineScope)
-        }
-
-        rabbitMqService.decodeBatch(batchRequest)
-
-        return messageRequests
-    }
-
-    @InternalCoroutinesApi
-    suspend fun parseMessages(
-        batchBuilders: List<BuildersBatch>,
-        coroutineScope: CoroutineScope,
-        stream: String,
-        pipelineStatus: PipelineStatus
-    ): List<List<MessageRequest?>> {
-
-        val messageRequests =
-            batchBuilders.map {
-                it.rawMessages.map { message ->
-                    message?.let {
-                        pipelineStatus.countParseReceived(stream)
-                        MessageRequest.build(message)
-                    }
-                }
-            }
+            batchBuilders.map { it.rawMessages.map { message -> message?.let { MessageRequest.build(message) } } }
 
         val batchRequest = batchBuilders.mapIndexed { index, value ->
             BatchRequest(value, messageRequests[index], coroutineScope)
@@ -213,7 +180,7 @@ class MessageProducer(
             val isImage = isImage(parsedRawMessageProtocol)
             val messageBuilders = createMessageBatch(batchWrapper, parsedRawMessage)
 
-            if (isImage) messageBuilders.forEach{it.imageType(parsedRawMessageProtocol)}
+            if (isImage) messageBuilders.forEach { it.imageType(parsedRawMessageProtocol) }
 
             return@coroutineScope BuildersBatch(
                 messageBuilders,
