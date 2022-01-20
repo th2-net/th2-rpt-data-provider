@@ -35,6 +35,20 @@ class SearchMessagesHandler(private val context: Context) {
         private val logger = KotlinLogging.logger { }
     }
 
+    private val pipelineInfoSendDelay = context.configuration.pipelineInfoSendDelay.value.toLong()
+
+    private suspend fun sendPipelineStatus(
+        pipelineStatus: PipelineStatus,
+        writer: StreamWriter,
+        coroutineScope: CoroutineScope,
+        lastMessageIdCounter: AtomicLong
+    ) {
+        while (coroutineScope.isActive) {
+            writer.write(pipelineStatus, lastMessageIdCounter)
+            delay(pipelineInfoSendDelay)
+        }
+    }
+
     @InternalCoroutinesApi
     @FlowPreview
     @ExperimentalCoroutinesApi
@@ -46,6 +60,10 @@ class SearchMessagesHandler(private val context: Context) {
 
             flow {
                 streamMerger = ChainBuilder(context, request, this@withContext, pipelineStatus).buildChain()
+
+                launch {
+                    sendPipelineStatus(pipelineStatus, writer, this@withContext, lastMessageIdCounter)
+                }
 
                 do {
                     val message = streamMerger?.pollMessage()
@@ -63,14 +81,12 @@ class SearchMessagesHandler(private val context: Context) {
                     coroutineContext.ensureActive()
 
                     logger.trace { it.lastProcessedId }
+
                     if (it is PipelineFilteredMessage) {
-                        logger.trace { it.lastProcessedId }
                         writer.write(it.payload, lastMessageIdCounter)
                     } else if (it is PipelineKeepAlive) {
-                        logger.trace { it.lastProcessedId }
                         writer.write(LastScannedMessageInfo(it), lastMessageIdCounter)
                     }
-                    writer.write(pipelineStatus, lastMessageIdCounter)
                 }
         }
     }

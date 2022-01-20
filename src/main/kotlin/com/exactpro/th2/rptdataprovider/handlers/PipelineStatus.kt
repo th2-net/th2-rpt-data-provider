@@ -38,18 +38,7 @@ data class PipelineStatus(
     var merger: AtomicLong = AtomicLong(0)
 ) {
     fun addStream(streamName: String) {
-        this.streams[streamName] = StreamCounters(
-            Counters(
-                fetched = AtomicLong(0),
-                fetchedBatches = AtomicLong(0),
-                fetchedBytes = AtomicLong(0),
-                parseReceived = AtomicLong(0),
-                parseRequested = AtomicLong(0),
-                filterTotal = AtomicLong(0),
-                filterDiscarded = AtomicLong(0),
-                filterAccepted = AtomicLong(0)
-            )
-        )
+        this.streams[streamName] = StreamCounters(Counters())
     }
 
     fun countParseRequested(streamName: String, messageBatchSize: Int = -1) {

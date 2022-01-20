@@ -38,7 +38,7 @@ class MessageDecoder(
     externalScope: CoroutineScope,
     previousComponent: PipelineComponent?,
     messageFlowCapacity: Int,
-    val pipelineStatus: PipelineStatus
+    private val pipelineStatus: PipelineStatus
 ) : PipelineComponent(
     previousComponent?.startId,
     context,
@@ -119,6 +119,9 @@ class MessageDecoder(
                 val messageRequest = inRangeMessageRequests[i]
                 builder.parsedMessage(messageRequest?.get())
                 val message = builder.build()
+
+                pipelineStatus.countParseReceived(streamName.toString(), 1)
+
                 sendToChannel(PipelineParsedMessage(rawBatch, message))
             }
         }
@@ -127,11 +130,9 @@ class MessageDecoder(
     @InternalCoroutinesApi
     private suspend fun getMessageRequests(
         rawBatch: List<BuildersBatch>,
-        coroutineScope: CoroutineScope,
-        pipelineStatus: PipelineStatus,
-        streamName: String
+        coroutineScope: CoroutineScope
     ): List<List<MessageRequest?>> {
-        return context.messageProducer.parseMessages(rawBatch, coroutineScope, streamName, pipelineStatus)
+        return context.messageProducer.parseMessages(rawBatch, coroutineScope)
     }
 
 
@@ -145,9 +146,11 @@ class MessageDecoder(
                 val rawBatch = previousComponent!!.pollMessage()
 
                 if (messagesInBuffer >= batchMergeSize || rawBatch is EmptyPipelineObject) {
-                    pipelineStatus.countParseRequested(streamName.toString(), buffer.map { it.first }.size)
-                    getMessageRequests(buffer.map { it.first }, this, pipelineStatus, streamName.toString()).let {
-                        sendParsedMessages(buffer, it)
+                    getMessageRequests(buffer.map { it.first }, this).let { requests ->
+
+                        pipelineStatus.countParseRequested(streamName.toString(), buffer.sumBy { it.first.messageCount })
+
+                        sendParsedMessages(buffer, requests)
                         messagesInBuffer = 0L
                         buffer.clear()
                     }
