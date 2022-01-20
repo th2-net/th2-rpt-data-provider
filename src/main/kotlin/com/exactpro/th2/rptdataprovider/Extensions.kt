@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider
 
+import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageFilter
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
@@ -23,6 +24,7 @@ import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.common.grpc.ConnectionID
 import com.exactpro.th2.common.grpc.MessageID
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepObject
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.BatchRequest
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -168,6 +170,15 @@ fun Instant.isAfterOrEqual(other: Instant): Boolean {
     return this.isAfter(other) || this == other
 }
 
+fun PipelineStepObject?.isGreaterOnDirection(other: PipelineStepObject?, timeRelation: TimeRelation): Boolean {
+    if (this?.lastProcessedId?.index == null || other?.lastProcessedId?.index == null)
+        return true
+    return if (timeRelation == TimeRelation.AFTER) {
+        this.lastProcessedId?.index!! > other.lastProcessedId?.index!!
+    } else {
+        this.lastProcessedId?.index!! < other.lastProcessedId?.index!!
+    }
+}
 
 fun StoredTestEventMetadata.tryToGetTestEvents(parentEventId: StoredTestEventId? = null): Collection<BatchedStoredTestEventMetadata>? {
     return try {

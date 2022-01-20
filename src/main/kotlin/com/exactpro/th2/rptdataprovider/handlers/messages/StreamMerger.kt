@@ -25,10 +25,10 @@ import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
+import com.exactpro.th2.rptdataprovider.isGreaterOnDirection
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.time.Instant
-import kotlin.coroutines.coroutineContext
 
 
 class StreamMerger(
@@ -49,6 +49,7 @@ class StreamMerger(
             private val logger = KotlinLogging.logger { }
         }
 
+        val searchDirection = messageStream.searchRequest.searchDirection
         val startId = messageStream.startId
 
         var currentElement: PipelineStepObject? = null
@@ -56,11 +57,15 @@ class StreamMerger(
         var previousElement: PipelineStepObject? = null
             private set
 
+        var previousScanned: PipelineStepObject? = null
+            private set
 
         private fun changePreviousElement(currentElement: PipelineStepObject?) {
-            if (previousElement == null
-                || currentElement is PipelineFilteredMessage
-            ) {
+            if (currentElement.isGreaterOnDirection(previousScanned, searchDirection)) {
+                previousScanned = currentElement
+            }
+
+            if (previousElement == null || currentElement is PipelineFilteredMessage) {
                 previousElement = currentElement
             }
         }
@@ -139,12 +144,12 @@ class StreamMerger(
     private fun getLastScannedObject(): PipelineStepObject? {
         return if (searchRequest.searchDirection == TimeRelation.AFTER) {
             messageStreams
-                .minBy { it.currentElement?.lastScannedTime ?: Instant.MAX }
-                ?.previousElement
+                .minBy { it.previousScanned?.lastScannedTime ?: Instant.MAX }
+                ?.previousScanned
         } else {
             messageStreams
-                .maxBy { it.currentElement?.lastScannedTime ?: Instant.MIN }
-                ?.previousElement
+                .maxBy { it.previousScanned?.lastScannedTime ?: Instant.MIN }
+                ?.previousScanned
         }
     }
 
