@@ -73,7 +73,7 @@ suspend fun <T> logTime(methodName: String, lambda: suspend () -> T): T? {
         var result: T? = null
 
         measureTimeMillis { result = lambda.invoke() }
-           // .also { logger.debug { "cradle: $methodName took ${it}ms" } }
+            .also { logger.debug { "cradle: $methodName took ${it}ms" } }
 
         result
     }

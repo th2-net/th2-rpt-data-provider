@@ -72,12 +72,6 @@ Message object example:
 Filters are formed as follows:
 - `filters={filter name}` - you must register the filter by specifying its name.  
 - `{filter name}-{parameter}={parameter value}` - each filter parameter
-
-****Types of filter `parameter`****:
-- `value / values` - text, number, boolean, etc. - one / many values to match against a filter.
-- `negative` - boolean. - Negates the result of the filter. To retrieve data that does NOT match the specified filter. Defaults to `false`.
-- `conjunct` - boolean. - Used if the filter takes several values. If `true` then the element must match ALL given `values`. If `false` then element must match ANY of `values`. *Not used in filters with one possible value*. Defaults to `false`.
-
 ```
 As example:
 /search/sse/events/?startTimestamp=1605872487277&filters=name&filters=type&name-values=Checkpoint&type-values=session&type-negative=true

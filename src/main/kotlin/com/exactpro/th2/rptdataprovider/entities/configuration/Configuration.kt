@@ -39,7 +39,7 @@ class CustomConfigurationClass {
     val maxMessagesLimit: Int = 500
     val messageSearchPipelineBuffer: Int = 25
     val sseEventSearchStep: Long = 200
-    val keepAliveTimeout: Long = 500
+    val keepAliveTimeout: Long = 5000
     val dbRetryDelay: Long = 5000
 
     val cradleDispatcherPoolSize: Long = 1
