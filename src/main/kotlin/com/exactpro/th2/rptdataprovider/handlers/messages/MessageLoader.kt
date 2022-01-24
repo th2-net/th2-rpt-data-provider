@@ -26,6 +26,7 @@ import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
+import kotlinx.coroutines.delay
 import mu.KotlinLogging
 import java.time.Instant
 
@@ -41,19 +42,13 @@ class MessageLoader(
 
     private val dbRetryDelay = context.configuration.dbRetryDelay.value.toLong()
 
-    private suspend fun pullMore(
-        startId: StoredMessageId,
-        include: Boolean,
-        limit: Int
-    ): Iterable<StoredMessageBatch> {
-
-        logger.debug { "pulling more messages (id=$startId limit=$limit direction=${searchDirection})" }
+    private suspend fun pullMore(startId: StoredMessageId, include: Boolean): Iterable<StoredMessageBatch> {
+        logger.debug { "pulling more messages (id=$startId direction=${searchDirection})" }
 
         return context.cradleService.getMessagesBatchesSuspend(
             StoredMessageFilterBuilder().apply {
                 streamName().isEqualTo(startId.streamName)
                 direction().isEqualTo(startId.direction)
-                limit(limit)
 
                 if (searchDirection == AFTER) {
                     index().let {
@@ -113,13 +108,15 @@ class MessageLoader(
     }
 
 
-    suspend fun pullMoreMessage(startId: StoredMessageId, include: Boolean, limit: Int): List<MessageBatchWrapper> {
+    suspend fun pullMoreMessage(startId: StoredMessageId, include: Boolean): Sequence<MessageBatchWrapper> {
         return databaseRequestRetry(dbRetryDelay) {
-            pullMore(startId, include, limit)
-        }.mapNotNull { batch ->
-            getFirstIdInRange(startId, include, batch)?.let {
-                MessageBatchWrapper(batch, it, searchDirection)
-            }
+            pullMore(startId, include)
         }
+            .asSequence()
+            .mapNotNull { batch ->
+                getFirstIdInRange(startId, include, batch)?.let {
+                    MessageBatchWrapper(batch, it, searchDirection)
+                }
+            }
     }
 }

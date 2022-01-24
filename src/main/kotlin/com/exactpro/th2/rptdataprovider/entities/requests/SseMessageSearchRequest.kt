@@ -33,7 +33,6 @@ data class SseMessageSearchRequest(
     val endTimestamp: Instant?,
     val resumeFromId: String?,
     val resultCountLimit: Int?,
-    val keepOpen: Boolean,
     val attachedEvents: Boolean,
     val lookupLimitDays: Int?,
     val resumeFromIdsList: List<StoredMessageId>
@@ -61,7 +60,6 @@ data class SseMessageSearchRequest(
         resumeFromId = parameters["resumeFromId"]?.firstOrNull(),
         resumeFromIdsList = parameters["messageId"]?.map { StoredMessageId.fromString(it) } ?: emptyList(),
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt(),
-        keepOpen = parameters["keepOpen"]?.firstOrNull()?.toBoolean() ?: false,
         attachedEvents = parameters["attachedEvents"]?.firstOrNull()?.toBoolean() ?: false,
         lookupLimitDays = parameters["lookupLimitDays"]?.firstOrNull()?.toInt()
     )
@@ -92,10 +90,6 @@ data class SseMessageSearchRequest(
         resultCountLimit = if (request.hasResultCountLimit()) {
             request.resultCountLimit.value
         } else null,
-
-        keepOpen = if (request.hasKeepOpen()) {
-            request.keepOpen.value
-        } else false,
 
         resumeFromIdsList = if (request.messageIdList.isNotEmpty()) {
             request.messageIdList.map {

@@ -121,9 +121,8 @@ class StreamMerger(
 
 
     private fun keepSearch(): Boolean {
-        val isKeepOpen = searchRequest.keepOpen && searchRequest.searchDirection == TimeRelation.AFTER
         val haveNotReachedLimit = resultCountLimit?.let { it > 0 } ?: true
-        return (!allStreamIsEmpty || isKeepOpen) && haveNotReachedLimit
+        return !allStreamIsEmpty && haveNotReachedLimit
     }
 
 
@@ -139,11 +138,11 @@ class StreamMerger(
     private fun getLastScannedObject(): PipelineStepObject? {
         return if (searchRequest.searchDirection == TimeRelation.AFTER) {
             messageStreams
-                .minBy { it.currentElement?.lastScannedTime ?: Instant.MAX }
+                .maxBy { it.currentElement?.lastScannedTime ?: Instant.MIN }
                 ?.previousElement
         } else {
             messageStreams
-                .maxBy { it.currentElement?.lastScannedTime ?: Instant.MIN }
+                .minBy { it.currentElement?.lastScannedTime ?: Instant.MIN }
                 ?.previousElement
         }
     }
