@@ -24,6 +24,7 @@ import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
 import com.exactpro.th2.rptdataprovider.eventWrite
+import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.grpc.stub.StreamObserver
 import java.io.Writer
@@ -42,10 +43,16 @@ interface StreamWriter {
 
     suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong)
 
+    suspend fun write(status: PipelineStatus, counter: AtomicLong)
+
     suspend fun closeWriter()
 }
 
 class SseWriter(private val writer: Writer, private val jacksonMapper: ObjectMapper) : StreamWriter {
+
+    override suspend fun write(status: PipelineStatus, counter: AtomicLong) {
+        writer.eventWrite(SseEvent.build(jacksonMapper, status, counter))
+    }
 
     override suspend fun write(event: EventTreeNode, counter: AtomicLong) {
         writer.eventWrite(SseEvent.build(jacksonMapper, event, counter))
@@ -99,6 +106,10 @@ class GrpcWriter(private val writer: StreamObserver<StreamResponse>) : StreamWri
                 .build()
         )
         counter.incrementAndGet()
+    }
+
+    override suspend fun write(status: PipelineStatus, counter: AtomicLong) {
+        TODO("Not yet implemented")
     }
 
     override suspend fun write(event: Event, lastEventId: AtomicLong) {

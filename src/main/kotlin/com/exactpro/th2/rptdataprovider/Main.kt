@@ -62,6 +62,7 @@ class Main {
         val configuration =
             Configuration(configurationFactory.getCustomConfiguration(CustomConfigurationClass::class.java))
 
+
         context = Context(
             configuration,
 

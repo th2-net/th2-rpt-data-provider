@@ -24,6 +24,7 @@ import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.rptdataprovider.cache.CodecCache
 import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
+import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.BatchRequest
@@ -95,8 +96,7 @@ class MessageProducer(
         }
     }
 
-
-    @InternalCoroutinesApi
+    @OptIn(InternalCoroutinesApi::class)
     private suspend fun parseSingleMessage(messageBatch: MessageBatchWrapper, id: StoredMessageId): Message {
 
         return coroutineScope {
@@ -173,7 +173,6 @@ class MessageProducer(
         return messageRequests
     }
 
-
     suspend fun messageBatchToBuilders(batchWrapper: MessageBatchWrapper): BuildersBatch {
         return coroutineScope {
             val parsedRawMessage = batchWrapper.messages.map { parseRawMessage(it) }
@@ -181,7 +180,7 @@ class MessageProducer(
             val isImage = isImage(parsedRawMessageProtocol)
             val messageBuilders = createMessageBatch(batchWrapper, parsedRawMessage)
 
-            if (isImage) messageBuilders.forEach{it.imageType(parsedRawMessageProtocol)}
+            if (isImage) messageBuilders.forEach { it.imageType(parsedRawMessageProtocol) }
 
             return@coroutineScope BuildersBatch(
                 messageBuilders,
@@ -193,10 +192,8 @@ class MessageProducer(
         }
     }
 
-
     @InternalCoroutinesApi
     suspend fun fromId(id: StoredMessageId): Message {
-
         codecCache.get(id.toString())?.let { return it }
 
         val rawBatchNullable = cradle.getMessagesBatchesSuspend(

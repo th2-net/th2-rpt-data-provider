@@ -20,6 +20,7 @@ import com.exactpro.cradle.Direction
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
+import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.InternalCoroutinesApi
@@ -28,7 +29,8 @@ import java.time.Instant
 class ChainBuilder(
     private val context: Context,
     private val request: SseMessageSearchRequest,
-    private val externalScope: CoroutineScope
+    private val externalScope: CoroutineScope,
+    private val pipelineStatus: PipelineStatus
 ) {
 
     private val messageContinuousStreamBuffer = context.configuration.messageContinuousStreamBuffer.value.toInt()
@@ -56,7 +58,6 @@ class ChainBuilder(
         val resumeFromId = request.resumeFromId?.let {
             listOf(StoredMessageId.fromString(it))
         } ?: emptyList()
-
         val idsList = request.resumeFromIdsList + resumeFromId
 
         return idsList.associateBy { StreamName(it.streamName, it.direction) }
@@ -65,28 +66,28 @@ class ChainBuilder(
 
     @InternalCoroutinesApi
     suspend fun buildChain(): StreamMerger {
-
         val streamNames = getRequestStreamNames(request)
         val resumeFromIds = getRequestResumeId(request)
         val startTimestamp = chooseStartTimestamp(request)
 
 
         val dataStreams = streamNames.map { streamName ->
-            val streamInitializer = StreamInitializer(context, request, streamName)
-
+            val streamInitializer = StreamInitializer(context, request, streamName, pipelineStatus)
+            pipelineStatus.addStream(streamName.toString())
             val messageStream = MessageContinuousStream(
                 resumeFromIds[streamName],
                 streamInitializer,
                 startTimestamp,
                 externalScope,
-                messageContinuousStreamBuffer
+                messageContinuousStreamBuffer,
+                pipelineStatus
             )
 
-            val messageDecoder = MessageDecoder(messageStream, messageDecoderBuffer)
+            val messageDecoder = MessageDecoder(messageStream, messageDecoderBuffer, pipelineStatus)
 
-            MessageFilter(messageDecoder, messageFilterBuffer)
+            MessageFilter(messageDecoder, messageFilterBuffer, pipelineStatus)
         }
 
-        return StreamMerger(context, request, externalScope, dataStreams, messageStreamMergerBuffer)
+        return StreamMerger(context, request, externalScope, dataStreams, messageStreamMergerBuffer, pipelineStatus)
     }
 }

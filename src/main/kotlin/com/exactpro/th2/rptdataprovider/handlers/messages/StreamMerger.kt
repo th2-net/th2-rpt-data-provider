@@ -23,12 +23,12 @@ import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
+import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.time.Instant
-import kotlin.coroutines.coroutineContext
 
 
 class StreamMerger(
@@ -36,7 +36,8 @@ class StreamMerger(
     searchRequest: SseMessageSearchRequest,
     externalScope: CoroutineScope,
     pipelineStreams: List<PipelineComponent>,
-    messageFlowCapacity: Int
+    messageFlowCapacity: Int,
+    private val pipelineStatus: PipelineStatus
 ) : PipelineComponent(null, context, searchRequest, externalScope, messageFlowCapacity = messageFlowCapacity) {
 
     companion object {
@@ -188,6 +189,7 @@ class StreamMerger(
                     logger.trace { nextMessage.lastProcessedId }
                     sendToChannel(nextMessage)
                     resultCountLimit = resultCountLimit?.dec()
+                    pipelineStatus.countMerger()
                 }
 
             } while (keepSearch() && inTimeRange)

@@ -21,6 +21,7 @@ import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
+import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
@@ -33,7 +34,8 @@ import java.time.ZoneOffset
 class StreamInitializer(
     val context: Context,
     val request: SseMessageSearchRequest,
-    val stream: StreamName
+    val stream: StreamName,
+    val pipelineStatus: PipelineStatus
 ) {
 
     companion object {

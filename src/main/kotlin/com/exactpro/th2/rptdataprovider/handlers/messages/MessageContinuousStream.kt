@@ -23,6 +23,7 @@ import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatchData
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
+import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.time.Instant
@@ -33,7 +34,8 @@ class MessageContinuousStream(
     private val initializer: StreamInitializer,
     private val startTimestamp: Instant,
     externalScope: CoroutineScope,
-    messageFlowCapacity: Int
+    messageFlowCapacity: Int,
+    private val pipelineStatus: PipelineStatus
 ) : PipelineComponent(
     startMessageId,
     initializer.context,
@@ -78,7 +80,7 @@ class MessageContinuousStream(
                 firstPull = false
             }
         }
-        messageLoader = MessageLoader(context, startTimestamp, searchRequest.searchDirection)
+        messageLoader = MessageLoader(context, startTimestamp, searchRequest.searchDirection, pipelineStatus)
     }
 
     private fun markStreamEmpty() {

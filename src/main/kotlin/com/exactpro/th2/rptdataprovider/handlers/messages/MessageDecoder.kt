@@ -24,6 +24,7 @@ import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatchData
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
+import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.producers.BuildersBatch
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.MessageRequest
@@ -36,7 +37,8 @@ class MessageDecoder(
     streamName: StreamName?,
     externalScope: CoroutineScope,
     previousComponent: PipelineComponent?,
-    messageFlowCapacity: Int
+    messageFlowCapacity: Int,
+    private val pipelineStatus: PipelineStatus
 ) : PipelineComponent(
     previousComponent?.startId,
     context,
@@ -55,13 +57,18 @@ class MessageDecoder(
         }
     }
 
-    constructor(pipelineComponent: MessageContinuousStream, messageFlowCapacity: Int) : this(
+    constructor(
+        pipelineComponent: MessageContinuousStream,
+        messageFlowCapacity: Int,
+        pipelineStatus: PipelineStatus
+    ) : this(
         pipelineComponent.context,
         pipelineComponent.searchRequest,
         pipelineComponent.streamName,
         pipelineComponent.externalScope,
         pipelineComponent,
-        messageFlowCapacity
+        messageFlowCapacity,
+        pipelineStatus
     )
 
     private suspend fun createMessageBuilders(rawBatch: MessageBatchWrapper): BuildersBatch {
@@ -112,11 +119,13 @@ class MessageDecoder(
                 val messageRequest = inRangeMessageRequests[i]
                 builder.parsedMessage(messageRequest?.get())
                 val message = builder.build()
+
+                pipelineStatus.countParseReceived(streamName.toString(), 1)
+
                 sendToChannel(PipelineParsedMessage(rawBatch, message))
             }
         }
     }
-
 
     @InternalCoroutinesApi
     private suspend fun getMessageRequests(
@@ -137,8 +146,11 @@ class MessageDecoder(
                 val rawBatch = previousComponent!!.pollMessage()
 
                 if (messagesInBuffer >= batchMergeSize || rawBatch is EmptyPipelineObject) {
-                    getMessageRequests(buffer.map { it.first }, this).let {
-                        sendParsedMessages(buffer, it)
+                    getMessageRequests(buffer.map { it.first }, this).let { requests ->
+
+                        pipelineStatus.countParseRequested(streamName.toString(), buffer.sumBy { it.first.messageCount })
+
+                        sendParsedMessages(buffer, requests)
                         messagesInBuffer = 0L
                         buffer.clear()
                     }
