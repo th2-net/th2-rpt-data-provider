@@ -74,7 +74,8 @@ class ChainBuilder(
         val dataStreams = streamNames.map { streamName ->
             val streamInitializer = StreamInitializer(context, request, streamName)
             pipelineStatus.addStream(streamName.toString())
-            val messageStream = MessageContinuousStream(
+
+            val messageExtractor = MessageExtractor(
                 resumeFromIds[streamName],
                 streamInitializer,
                 startTimestamp,
@@ -83,9 +84,11 @@ class ChainBuilder(
                 pipelineStatus
             )
 
-            val messageDecoder = MessageDecoder(messageStream, messageDecoderBuffer, pipelineStatus)
+            val messageBatchConverter = MessageBatchConverter(messageExtractor, 1000, pipelineStatus)
+            val messageBatchDecoder = MessageBatchDecoder(messageBatchConverter, 1000, pipelineStatus)
+            val messageBatchUnpacker = MessageBatchUnpacker(messageBatchDecoder, 1000, pipelineStatus)
 
-            MessageFilter(messageDecoder, messageFilterBuffer, pipelineStatus)
+            MessageFilter(messageBatchUnpacker, messageFilterBuffer, pipelineStatus)
         }
 
         return StreamMerger(context, request, externalScope, dataStreams, messageStreamMergerBuffer, pipelineStatus)

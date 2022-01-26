@@ -19,7 +19,7 @@ package com.exactpro.th2.rptdataprovider.handlers
 import com.exactpro.th2.rptdataprovider.Context
 import java.util.concurrent.atomic.AtomicLong
 
-data class PipelineStatusSnapshot (
+data class PipelineStatusSnapshot(
     val startTime: Long,
     val processingTime: Long,
     val returned: Long,
@@ -30,8 +30,10 @@ data class PipelineStreamCounters(
     val fetched: AtomicLong = AtomicLong(0),
     val fetchedBytes: AtomicLong = AtomicLong(0),
     val fetchedBatches: AtomicLong = AtomicLong(0),
+    val parsePrepared: AtomicLong = AtomicLong(0),
     val parseRequested: AtomicLong = AtomicLong(0),
-    val parseReceived: AtomicLong = AtomicLong(0),
+    val parseReceivedTotal: AtomicLong = AtomicLong(0),
+    val parseReceivedFailed: AtomicLong = AtomicLong(0),
     val filterTotal: AtomicLong = AtomicLong(0),
     val filterDiscarded: AtomicLong = AtomicLong(0),
     val filterAccepted: AtomicLong = AtomicLong(0)
@@ -47,57 +49,59 @@ class PipelineStatus(context: Context) {
 
     fun addStream(streamName: String) {
         if (sendPipelineStatus) {
-            this.streams[streamName] = PipelineStreamCounters(
-                fetched = AtomicLong(0),
-                fetchedBatches = AtomicLong(0),
-                fetchedBytes = AtomicLong(0),
-                parseReceived = AtomicLong(0),
-                parseRequested = AtomicLong(0),
-                filterTotal = AtomicLong(0),
-                filterDiscarded = AtomicLong(0),
-                filterAccepted = AtomicLong(0)
-            )
+            this.streams[streamName] = PipelineStreamCounters()
         }
     }
 
-    fun countParseRequested(streamName: String) {
+    fun countParsePrepared(streamName: String, count: Long = 1) {
         if (!sendPipelineStatus) return
-        this.streams[streamName]?.parseRequested?.incrementAndGet()
+        this.streams[streamName]?.parsePrepared?.addAndGet(count)
     }
 
-    fun countParseReceived(streamName: String) {
+    fun countParseRequested(streamName: String, count: Long = 1) {
         if (!sendPipelineStatus) return
-        this.streams[streamName]?.parseReceived?.incrementAndGet()
+        this.streams[streamName]?.parseRequested?.addAndGet(count)
     }
 
-    fun countFetchedMessages(streamName: String, count: Long) {
+    fun countParseReceivedTotal(streamName: String, count: Long = 1) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.parseReceivedTotal?.addAndGet(count)
+    }
+
+
+    fun countParseReceivedFailed(streamName: String, count: Long = 1) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.parseReceivedFailed?.addAndGet(count)
+    }
+
+    fun countFetchedMessages(streamName: String, count: Long = 1) {
         if (!sendPipelineStatus) return
         this.streams[streamName]?.fetched?.addAndGet(count)
     }
 
-    fun countFetchedBytes(streamName: String, count: Long) {
+    fun countFetchedBytes(streamName: String, count: Long = 1) {
         if (!sendPipelineStatus) return
         this.streams[streamName]?.fetchedBytes?.addAndGet(count)
     }
 
-    fun countFetchedBatches(streamName: String) {
+    fun countFetchedBatches(streamName: String, count: Long = 1) {
         if (!sendPipelineStatus) return
-        this.streams[streamName]?.fetchedBatches?.incrementAndGet()
+        this.streams[streamName]?.fetchedBatches?.addAndGet(count)
     }
 
-    fun countFilterAccepted(streamName: String) {
+    fun countFilterAccepted(streamName: String, count: Long = 1) {
         if (!sendPipelineStatus) return
-        this.streams[streamName]?.filterAccepted?.incrementAndGet()
+        this.streams[streamName]?.filterAccepted?.addAndGet(count)
     }
 
-    fun countFilterDiscarded(streamName: String) {
+    fun countFilterDiscarded(streamName: String, count: Long = 1) {
         if (!sendPipelineStatus) return
-        this.streams[streamName]?.filterDiscarded?.incrementAndGet()
+        this.streams[streamName]?.filterDiscarded?.addAndGet(count)
     }
 
-    fun countFilteredTotal(streamName: String) {
+    fun countFilteredTotal(streamName: String, count: Long = 1) {
         if (!sendPipelineStatus) return
-        this.streams[streamName]?.filterTotal?.incrementAndGet()
+        this.streams[streamName]?.filterTotal?.addAndGet(count)
     }
 
     fun countMerged() {

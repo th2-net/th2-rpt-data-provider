@@ -54,7 +54,7 @@ class MessageFilter(
     }
 
 
-    constructor(pipelineComponent: MessageDecoder, messageFlowCapacity: Int, pipelineStatus: PipelineStatus) : this(
+    constructor(pipelineComponent: MessageBatchUnpacker, messageFlowCapacity: Int, pipelineStatus: PipelineStatus) : this(
         pipelineComponent.context,
         pipelineComponent.searchRequest,
         pipelineComponent.streamName,

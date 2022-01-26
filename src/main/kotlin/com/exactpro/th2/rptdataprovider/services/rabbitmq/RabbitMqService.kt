@@ -17,20 +17,13 @@
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
 import com.exactpro.th2.common.grpc.MessageBatch
-import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.schema.message.MessageListener
 import com.exactpro.th2.common.schema.message.MessageRouter
-import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
-import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
-import com.exactpro.th2.rptdataprovider.logMetrics
 import kotlinx.coroutines.*
 import mu.KotlinLogging
-import org.apache.commons.lang3.exception.ExceptionUtils
-import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ConcurrentSkipListSet
 import java.util.concurrent.Executors
 
 class RabbitMqService(
@@ -41,140 +34,80 @@ class RabbitMqService(
 
     companion object {
         val logger = KotlinLogging.logger { }
-
-        private val rabbitMqBatchParseMetrics: Metrics = Metrics("rabbit_mq_batch_parse", "rabbitMqBatchParse")
-
     }
 
-    private val mqDispatcherPoolSize = configuration.cradleDispatcherPoolSize.value.toInt()
-    private val mqDispatcher = Executors.newFixedThreadPool(mqDispatcherPoolSize).asCoroutineDispatcher()
-
     private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
+    private val pendingRequests = ConcurrentHashMap<Int, PendingCodecBatchRequest>()
+    private val usePinAttributes = true
+    private val maximumPendingRequests = 200
 
-    private val decodeRequests = ConcurrentHashMap<MessageID, ConcurrentSkipListSet<MessageRequest>>()
+    private val mqCallbackScope = CoroutineScope(
+        Executors.newFixedThreadPool(configuration.decodeMessageConsumerCount.value.toInt()).asCoroutineDispatcher()
+    )
+
+    private val mqRequestSenderScope = CoroutineScope(
+        Executors.newFixedThreadPool(configuration.decodeMessageConsumerCount.value.toInt()).asCoroutineDispatcher()
+    )
 
     @Suppress("unused")
     private val receiveChannel = messageRouterParsedBatch.subscribeAll(
         MessageListener { _, decodedBatch ->
-            decodedBatch.messagesList.groupBy { it.metadata.id.sequence }.forEach { (_, messages) ->
+            mqCallbackScope.launch {
+                val requestHash = CodecBatchRequest.calculateHash(decodedBatch.messagesList)
 
-                val messageId = messages.first().metadata.id.run {
-                    when (subsequenceCount) {
-                        0 -> this
-                        else -> toBuilder().clearSubsequence().build()
-                    }
-                }
+                logger.trace { "codec response with hash $requestHash has been received" }
 
-                decodeRequests.remove(messageId)?.let { match ->
-                    match.forEach {
-                        CoroutineScope(mqDispatcher).launch {
-                            it.sendMessage(messages.map { BodyWrapper(it) })
-                        }
-                    }
-                }
+                pendingRequests.remove(requestHash)?.completableDeferred?.complete(decodedBatch)
+                    ?: logger.trace { "codec response with hash $requestHash has no matching requests" }
             }
-            logger.trace { "${decodeRequests.size} decode requests remaining" }
         },
+
         "from_codec"
     )
 
-    private fun getRequestDebugInfo(batches: List<MessageRequest>): String {
+    suspend fun sendToCodec(request: CodecBatchRequest): CodecBatchResponse {
 
-        val session = batches.first().id.connectionId.sessionAlias
-        val firstSeqNum = batches.first().id.sequence
-        val lastSeqNum = batches.last().id.sequence
-        val count = batches.size
-
-        return "(session=$session firstSeqNum=$firstSeqNum lastSeqNum=$lastSeqNum count=$count)"
-    }
-
-
-    @ExperimentalCoroutinesApi
-    @InternalCoroutinesApi
-    suspend fun requestBatchDecoding(batchRequest: BatchRequest) {
-
-        val requests = batchRequest.requests.filterNotNull()
-
-        if (!batchRequest.context.isActive || requests.isEmpty()) return
-
-        val requestDebugInfo = getRequestDebugInfo(requests)
-
-        val requestsMaps = requests.groupBy { it.id }
-
-        try {
-            logMetrics(rabbitMqBatchParseMetrics) {
-
-                val batch = RawMessageBatch.newBuilder().addAllMessages(
-                    requests.map { it.rawMessage }
-                ).build()
-
-                sendMessageBatchToRabbit(batch, requestsMaps)
-
-                withTimeout(responseTimeout) {
-                    requests
-                        .map { async { it.get() } }
-                        .awaitAll()
-                        .also { logger.trace { "codec response received $requestDebugInfo" } }
-                }
+        return withContext(mqRequestSenderScope.coroutineContext) {
+            while (pendingRequests.keys.size > maximumPendingRequests) {
+                delay(100)
             }
-        } catch (e: Exception) {
-            withContext(NonCancellable) {
-                when (e) {
-                    is TimeoutCancellationException ->
-                        logger.error { "unable to parse messages $requestDebugInfo - timed out after $responseTimeout milliseconds" }
-                    else -> {
-                        logger.error(e) { "exception when send message $requestDebugInfo" }
-                        val rootCause = ExceptionUtils.getRootCause(e)
-                        requests.forEach { request -> request.exception = rootCause }
+
+            pendingRequests.computeIfAbsent(request.requestHash) {
+                val pendingRequest = request.toPending()
+
+                mqCallbackScope.launch {
+                    delay(responseTimeout)
+
+                    pendingRequest.completableDeferred.let {
+                        if (it.isActive) {
+
+                            it.complete(null)
+                            logger.warn { "Codec request timed out after $responseTimeout ms" }
+                        }
                     }
                 }
 
-                requests.onEach { request ->
-                    request.let { decodeRequests.remove(it.id) }
-                }.forEach {
-                    try {
-                        it.sendMessage(null)
-                    } catch (e: CancellationException) {
-                        logger.error { "cancelled channel from message: '${it.rawMessage.metadata?.id}'" }
-                    }
-                }
-            }
-        }
-    }
-
-    private suspend fun sendMessageBatchToRabbit(
-        batch: RawMessageBatch,
-        requests: Map<MessageID, List<MessageRequest>>
-    ) {
-        withContext(mqDispatcher) {
-
-            var alreadyRequested = true
-
-            requests.forEach {
-                decodeRequests.computeIfAbsent(it.key) {
-                    ConcurrentSkipListSet<MessageRequest>().also { alreadyRequested = false }
-                }.addAll(it.value)
-            }
-
-            val firstId = batch.messagesList?.first()?.metadata?.id
-            val requestDebugInfo = let {
-                val session = firstId?.connectionId?.sessionAlias
-                val direction = firstId?.direction?.name
-                val firstSeqNum = firstId?.sequence
-                val lastSeqNum = batch.messagesList?.last()?.metadata?.id?.sequence
-                val count = batch.messagesCount
-
-                "(session=$session direction=$direction firstSeqNum=$firstSeqNum lastSeqNum=$lastSeqNum count=$count)"
-            }
-
-            if (!alreadyRequested) {
                 try {
-                    messageRouterRawBatch.sendAll(batch, firstId?.connectionId?.sessionAlias)
-                    logger.trace { "codec request published $requestDebugInfo" }
-                } catch (e: IOException) {
-                    logger.error(e) { "cannot send message $requestDebugInfo" }
+                    if (usePinAttributes) {
+                        val sessionAlias =
+                            request.protobufRawMessageBatch.messagesList.first().metadata.id.connectionId.sessionAlias
+
+                        messageRouterRawBatch.sendAll(request.protobufRawMessageBatch, sessionAlias)
+                    } else {
+                        messageRouterRawBatch.sendAll(request.protobufRawMessageBatch)
+                    }
+
+                    logger.trace { "codec request with hash ${request.requestHash} has been sent" }
+
+
+                } catch (e: Exception) {
+                    pendingRequest.completableDeferred.cancel(
+                        "Unexpected exception while trying to send a codec request", e
+                    )
                 }
-            }
+
+                pendingRequest
+            }.toResponse()
         }
     }
 }

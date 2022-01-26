@@ -87,8 +87,7 @@ class Context(
 
     val messageProducer: MessageProducer = MessageProducer(
         cradleService,
-        rabbitMqService,
-        codecCache
+        rabbitMqService
     ),
 
     val messageCache: MessageCache = MessageCache(configuration, messageProducer),

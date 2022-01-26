@@ -16,90 +16,40 @@
 
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
-import com.exactpro.cradle.messages.StoredMessageBatchId
-import com.exactpro.th2.common.grpc.MessageID
-import com.exactpro.th2.common.grpc.RawMessage
-import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
-import com.exactpro.th2.rptdataprovider.producers.BuildersBatch
-import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
-import java.util.*
+import com.exactpro.th2.common.grpc.Message
+import com.exactpro.th2.common.grpc.MessageBatch
+import com.exactpro.th2.common.grpc.RawMessageBatch
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 
-data class MessageRequest(
-    val id: MessageID,
-    val rawMessage: RawMessage,
-    private val channel: Channel<List<BodyWrapper>?>,
-    private val result: Deferred<List<BodyWrapper>?>,
-    private val requestId: UUID = UUID.randomUUID(),
-    var exception: Throwable? = null
-) : Comparable<MessageRequest> {
 
-    var messageIsSend: Boolean = false
-        private set
+class CodecBatchRequest(
+    val protobufRawMessageBatch: RawMessageBatch
+) {
+    val requestHash = protobufRawMessageBatch.messagesList.map {
+        it.metadata.id.connectionId.hashCode().xor(it.metadata.id.sequence.hashCode())
+    }.hashCode()
+
+    fun toPending(): PendingCodecBatchRequest {
+        return PendingCodecBatchRequest(CompletableDeferred())
+    }
 
     companion object {
-        suspend fun build(
-            rawMessage: RawMessage,
-            callback: (parsedMessageGroup: List<BodyWrapper>) -> Unit
-        ): MessageRequest {
-            val messageChannel = Channel<List<BodyWrapper>?>(0)
-            return MessageRequest(
-                id = rawMessage.metadata.id,
-                rawMessage = rawMessage,
-                channel = messageChannel,
-                result = CoroutineScope(Dispatchers.Default).async {
-                    messageChannel.receive()
-                        .also { if (it != null) callback.invoke(it) }
-                })
+        fun calculateHash(list: List<Message>): Int {
+            return list.map { it.metadata.id.connectionId.hashCode().xor(it.metadata.id.sequence.hashCode()) }
+                .hashCode()
         }
-    }
-
-    suspend fun sendMessage(message: List<BodyWrapper>?) {
-        if (result.isActive && !messageIsSend) {
-            CoroutineScope(Dispatchers.Default).launch {
-                channel.send(message)
-            }
-        }
-        messageIsSend = true
-    }
-
-    suspend fun get(): List<BodyWrapper>? {
-        val message = result.await()
-        exception?.let { throw it }
-        return message
-    }
-
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (javaClass != other?.javaClass) return false
-
-        other as MessageRequest
-
-        if (requestId != other.requestId) return false
-
-        return true
-    }
-
-    override fun hashCode(): Int {
-        return requestId.hashCode()
-    }
-
-    override fun compareTo(other: MessageRequest): Int {
-        return requestId.compareTo(other.requestId)
     }
 }
 
-
-data class BatchRequest(
-    val batchId: StoredMessageBatchId,
-    val messagesCount: Int,
-    val requests: List<MessageRequest?>,
-    val context: CoroutineScope
+class PendingCodecBatchRequest(
+    val completableDeferred: CompletableDeferred<MessageBatch?>
 ) {
-    constructor(batch: BuildersBatch, requests: List<MessageRequest?>, context: CoroutineScope) : this(
-        batchId = batch.batchId,
-        messagesCount = batch.messageCount,
-        requests = requests,
-        context = context
-    )
+    fun toResponse(): CodecBatchResponse {
+        return CodecBatchResponse(completableDeferred)
+    }
 }
+
+class CodecBatchResponse(
+    val protobufParsedMessageBatch: Deferred<MessageBatch?>
+)

@@ -61,7 +61,7 @@ object MessageMapper {
             MessageData.newBuilder()
                 .setMessageId(message.id.convertToProto())
                 .setTimestamp(message.timestamp.toTimestamp())
-                .setBodyBase64(message.rawMessageBody?.let { Base64.getEncoder().encodeToString(it.toByteArray()) })
+                .setBodyBase64(message.rawMessageBody?.let { Base64.getEncoder().encodeToString(it) })
                 .setBody(jacksonMapper.writeValueAsString(getBodyMessage(messageWithMetadata)))
                 .build()
         }
@@ -72,13 +72,13 @@ object MessageMapper {
             val httpMessage = HttpMessage(
                 timestamp = message.timestamp,
                 messageType = messageWithMetadata.message.parsedMessageGroup
-                    ?.joinToString("/") { it.messageType } ?: messageWithMetadata.message.imageType ?: "",
+                    ?.joinToString("/") { it.messageType } ?: "",
                 direction = message.direction,
                 sessionId = message.sessionId,
                 attachedEventIds = message.attachedEventIds,
                 messageId = message.id.toString(),
                 body = getBodyMessage(messageWithMetadata),
-                bodyBase64 = message.rawMessageBody?.let { Base64.getEncoder().encodeToString(it.toByteArray()) }
+                bodyBase64 = message.rawMessageBody?.let { Base64.getEncoder().encodeToString(it) }
             )
             httpMessage
         }

@@ -16,184 +16,43 @@
 
 package com.exactpro.th2.rptdataprovider.producers
 
-import com.exactpro.cradle.messages.StoredMessage
-import com.exactpro.cradle.messages.StoredMessageBatchId
-import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.RawMessage
-import com.exactpro.th2.rptdataprovider.cache.CodecCache
+import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.Message
-import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
-import com.exactpro.th2.rptdataprovider.services.rabbitmq.BatchRequest
-import com.exactpro.th2.rptdataprovider.services.rabbitmq.MessageRequest
+import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchRequest
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
-import com.google.protobuf.InvalidProtocolBufferException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.InternalCoroutinesApi
-import kotlinx.coroutines.coroutineScope
-import mu.KotlinLogging
-
-
-data class BuildersBatch(
-    val builders: List<Message.Builder>,
-    val rawMessages: List<RawMessage?>,
-    val imagesType: String?,
-    val batchId: StoredMessageBatchId,
-    val messageCount: Int
-) {
-    val isImages get() = imagesType != null
-}
-
 
 class MessageProducer(
     private val cradle: CradleService,
-    private val rabbitMqService: RabbitMqService,
-    private val codecCache: CodecCache
+    private val rabbitMqService: RabbitMqService
 ) {
 
-    companion object {
-        private val logger = KotlinLogging.logger { }
-
-        private val messageProtocolDescriptor =
-            RawMessage.getDescriptor().findFieldByName("metadata").messageType.findFieldByName("protocol")
-
-        private const val imageType = "image"
-    }
-
-
-    private fun parseRawMessage(rawMessage: StoredMessage): RawMessage? {
-        return try {
-            RawMessage.parseFrom(rawMessage.content)
-        } catch (e: InvalidProtocolBufferException) {
-            logger.error {
-                "unable to unpack raw message '${rawMessage.id}' - invalid data '${String(rawMessage.content)}'"
-            }
-            null
-        }
-    }
-
-
-    private fun getProtocolField(parsedRawMessage: RawMessage?): String? {
-        return try {
-            parsedRawMessage?.metadata?.getField(messageProtocolDescriptor).toString()
-        } catch (e: Exception) {
-            logger.error(e) { "Field: '${messageProtocolDescriptor.name}' does not exist in message: $parsedRawMessage " }
-            null
-        }
-    }
-
-
-    private fun isImage(protocolName: String?): Boolean {
-        return protocolName?.contains(imageType) ?: false
-    }
-
-
-    private fun createMessageBatch(
-        messageBatch: MessageBatchWrapper,
-        parsedRawMessage: List<RawMessage?>
-    ): List<Message.Builder> {
-        return messageBatch.messages.mapIndexed { i, rawMessage ->
-            Message.Builder(rawMessage, parsedRawMessage[i])
-        }
-    }
-
-    @OptIn(InternalCoroutinesApi::class)
-    private suspend fun parseSingleMessage(messageBatch: MessageBatchWrapper, id: StoredMessageId): Message {
-
-        return coroutineScope {
-            let {
-                val storedMessage = messageBatch.messages.first { it.id.equals(id) }
-                val protobufMessage = parseRawMessage(storedMessage)
-                val protocol = getProtocolField(protobufMessage)
-
-                val builder = Message.Builder(storedMessage, protobufMessage)
-
-                val buildersBatch = BuildersBatch(
-                    listOf(builder),
-                    listOf(protobufMessage),
-                    if (isImage(protocol)) protocol else null,
-                    messageBatch.messageBatch.id,
-                    1
-                )
-
-                val messageRequest = if (!buildersBatch.isImages) {
-                    parseMessages(buildersBatch, this)
-                } else {
-                    null
-                }
-
-                builder.parsedMessageGroup(messageRequest?.get(0)?.get())
-                builder.imageType(buildersBatch.imagesType)
-                builder.build().also {
-                    if (it.parsedMessageGroup != null && it.rawMessageBody != null) {
-                        codecCache.put(it.messageId, it)
-                    }
-                }
-            }
-        }
-    }
-
-    @InternalCoroutinesApi
-    suspend fun parseMessages(
-        batchBuilders: BuildersBatch,
-        coroutineScope: CoroutineScope,
-        callback: (parsedMessageGroup: List<BodyWrapper>) -> Unit = {}
-    ): List<MessageRequest?> {
-
-        val messageRequests = batchBuilders.rawMessages.map { message ->
-            message?.let {
-                MessageRequest.build(message, callback)
-            }
-        }
-
-        val batchRequest = BatchRequest(batchBuilders, messageRequests, coroutineScope)
-
-        rabbitMqService.requestBatchDecoding(batchRequest)
-
-        return messageRequests
-    }
-
-    suspend fun messageBatchToBuilders(batchWrapper: MessageBatchWrapper): BuildersBatch {
-        return coroutineScope {
-            val parsedRawMessage = batchWrapper.messages.map { parseRawMessage(it) }
-            val parsedRawMessageProtocol = parsedRawMessage.firstOrNull()?.let { getProtocolField(it) }
-            val isImage = isImage(parsedRawMessageProtocol)
-            val messageBuilders = createMessageBatch(batchWrapper, parsedRawMessage)
-
-            if (isImage) messageBuilders.forEach { it.imageType(parsedRawMessageProtocol) }
-
-            return@coroutineScope BuildersBatch(
-                messageBuilders,
-                parsedRawMessage,
-                if (isImage) parsedRawMessageProtocol else null,
-                batchWrapper.messageBatch.id,
-                batchWrapper.messageBatch.messageCount
-            )
-        }
-    }
-
-    @InternalCoroutinesApi
     suspend fun fromId(id: StoredMessageId): Message {
-        codecCache.get(id.toString())?.let { return it }
 
-        val rawBatchNullable = cradle.getMessagesBatchesSuspend(
-            StoredMessageFilterBuilder()
-                .streamName().isEqualTo(id.streamName)
-                .direction().isEqualTo(id.direction)
-                .index().isEqualTo(id.index)
-                .build()
-        ).firstOrNull()?.takeIf { !it.isEmpty }
+        return cradle.getMessageSuspend(id)?.let { stored ->
 
-        return rawBatchNullable?.let { rawBatch ->
+            val decoded = rabbitMqService.sendToCodec(
+                CodecBatchRequest(
+                    RawMessageBatch
+                        .newBuilder()
+                        .addMessages(RawMessage.parseFrom(stored.content))
+                        .build()
+                )
+            )
+                .protobufParsedMessageBatch
+                .await()
+                ?.messagesList
+                ?.filter { it.metadata.id.sequence == id.index }
+                ?.map { BodyWrapper(it) }
 
-            val wrappedBatch = MessageBatchWrapper(rawBatch)
+            Message(stored, decoded, stored.content, setOf())
+        }
 
-            parseSingleMessage(wrappedBatch, id)
-
-        } ?: throw CradleMessageNotFoundException("message '${id}' does not exist in cradle")
+            ?: throw CradleMessageNotFoundException("message '${id}' does not exist in cradle")
     }
 }
 

@@ -59,9 +59,9 @@ class MessageBodyBinaryFilter private constructor(
 
     override fun match(element: MessageWithMetadata): Boolean {
         val predicate: (String) -> Boolean = { item ->
-            element.message.rawMessageBody?.let {
-                String(it.toByteArray()).toLowerCase().contains(item.toLowerCase())
-            } ?: false
+            element.message.rawMessageBody.let {
+                String(it).toLowerCase().contains(item.toLowerCase())
+            }
         }
         return try {
             negative.xor(if (conjunct) bodyBinary.all(predicate) else bodyBinary.any(predicate))

@@ -20,7 +20,7 @@ import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
-import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatchData
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
@@ -29,7 +29,7 @@ import mu.KotlinLogging
 import java.time.Instant
 
 
-class MessageContinuousStream(
+class MessageExtractor(
     private val startMessageId: StoredMessageId?,
     private val initializer: StreamInitializer,
     private val startTimestamp: Instant,
@@ -135,7 +135,7 @@ class MessageContinuousStream(
                     lastTimestamp = it.timestamp
                 }
 
-                sendToChannel(PipelineRawBatchData(isStreamEmpty, lastElement, lastTimestamp, parsedMessage))
+                sendToChannel(PipelineRawBatch(isStreamEmpty, lastElement, lastTimestamp, parsedMessage))
             }
 
             markStreamEmpty()

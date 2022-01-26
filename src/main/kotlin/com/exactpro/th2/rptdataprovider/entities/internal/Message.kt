@@ -18,20 +18,20 @@ package com.exactpro.th2.rptdataprovider.entities.internal
 
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.common.grpc.RawMessage
-import com.google.protobuf.ByteString
 import java.time.Instant
 
 
 data class Message(
     val type: String = "message",
     val timestamp: Instant,
-    val direction: Direction?,
+    val direction: Direction,
     val sessionId: String,
     val attachedEventIds: Set<String>,
     val parsedMessageGroup: List<BodyWrapper>?,
-    val rawMessageBody: ByteString?,
-    val imageType: String?,
+
+    @Suppress("ArrayInDataClass")
+    val rawMessageBody: ByteArray,
+
     val id: StoredMessageId
 ) {
 
@@ -42,46 +42,16 @@ data class Message(
     constructor(
         rawStoredMessage: StoredMessage,
         parsedMessageGroup: List<BodyWrapper>?,
-        rawBody: ByteString?,
-        events: Set<String>?,
-        imageType: String?
+        rawBody: ByteArray,
+        events: Set<String>
     ) : this(
         id = rawStoredMessage.id,
         direction = Direction.fromStored(rawStoredMessage.direction ?: com.exactpro.cradle.Direction.FIRST),
         timestamp = rawStoredMessage.timestamp ?: Instant.ofEpochMilli(0),
         sessionId = rawStoredMessage.streamName ?: "",
-        attachedEventIds = events ?: emptySet(),
+        attachedEventIds = events,
         rawMessageBody = rawBody,
-        parsedMessageGroup = parsedMessageGroup,
-        imageType = imageType
+        parsedMessageGroup = parsedMessageGroup
     )
-
-    private constructor(builder: Builder) : this(
-        builder.storedMessage,
-        builder.parsedMessageGroup,
-        builder.protobufMessage?.body,
-        builder.events,
-        builder.imageType
-    )
-
-    class Builder(val storedMessage: StoredMessage, val protobufMessage: RawMessage?) {
-        var parsedMessageGroup: List<BodyWrapper>? = null
-            private set
-
-        var events: Set<String>? = null
-            private set
-
-        var imageType: String? = null
-            private set
-
-        fun parsedMessageGroup(parsedMessageGroup: List<BodyWrapper>?) = apply { this.parsedMessageGroup = parsedMessageGroup }
-
-        fun attachedEvents(events: Set<String>?) = apply { this.events = events }
-
-        fun imageType(imageType: String?) = apply { this.imageType = imageType }
-
-        fun build() = Message(this)
-    }
-
 }
 

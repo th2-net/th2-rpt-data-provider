@@ -20,10 +20,10 @@ enum class Direction {
     IN, OUT;
 
     companion object {
-        fun fromStored(stored: com.exactpro.cradle.Direction): Direction? {
+        fun fromStored(stored: com.exactpro.cradle.Direction): Direction {
             if (stored == com.exactpro.cradle.Direction.FIRST) return IN
             if (stored == com.exactpro.cradle.Direction.SECOND) return OUT
-            return null
+            throw IllegalArgumentException("unknown message direction '${stored.label}'")
         }
     }
 }
