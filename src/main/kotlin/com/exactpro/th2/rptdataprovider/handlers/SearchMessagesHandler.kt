@@ -45,7 +45,7 @@ class SearchMessagesHandler(private val applicationContext: Context) {
         lastMessageIdCounter: AtomicLong
     ) {
         while (coroutineScope.isActive) {
-            writer.write(pipelineStatus, lastMessageIdCounter)
+            writer.write(pipelineStatus.getSnapshot(), lastMessageIdCounter)
             delay(pipelineInfoSendDelay)
         }
     }
@@ -56,7 +56,7 @@ class SearchMessagesHandler(private val applicationContext: Context) {
     suspend fun searchMessagesSse(request: SseMessageSearchRequest, writer: StreamWriter) {
         withContext(coroutineContext) {
             val lastMessageIdCounter = AtomicLong(0)
-            val pipelineStatus = PipelineStatus(context = applicationContext);
+            val pipelineStatus = PipelineStatus(context = applicationContext)
             var streamMerger: StreamMerger? = null
 
             flow {

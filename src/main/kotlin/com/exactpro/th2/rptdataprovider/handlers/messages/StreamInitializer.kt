@@ -21,11 +21,9 @@ import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
-import mu.KotlinLogging
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneOffset
@@ -34,13 +32,8 @@ import java.time.ZoneOffset
 class StreamInitializer(
     val context: Context,
     val request: SseMessageSearchRequest,
-    val stream: StreamName,
-    val pipelineStatus: PipelineStatus
+    val stream: StreamName
 ) {
-
-    companion object {
-        private val logger = KotlinLogging.logger { }
-    }
 
 
     private fun nextDay(timestamp: Instant, timelineDirection: TimeRelation): Instant {
@@ -161,14 +154,5 @@ class StreamInitializer(
 
     suspend fun initStream(startTimestamp: Instant): StoredMessage? {
         return getStartMessageFromTime(stream, startTimestamp)
-    }
-
-
-    suspend fun tryToGetStartId(startTimestamp: Instant): StoredMessageId? {
-        return context.cradleService.getFirstMessageIdSuspend(
-            startTimestamp,
-            stream,
-            request.searchDirection
-        )
     }
 }

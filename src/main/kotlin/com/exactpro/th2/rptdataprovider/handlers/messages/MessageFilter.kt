@@ -70,7 +70,7 @@ class MessageFilter(
     }
 
 
-    private suspend fun applyFilter(parsedMessage: Message): MessageWithMetadata {
+    private fun applyFilter(parsedMessage: Message): MessageWithMetadata {
         return MessageWithMetadata(parsedMessage).apply {
             finalFiltered = searchRequest.filterPredicate.apply(this)
         }

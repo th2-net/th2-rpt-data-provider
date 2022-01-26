@@ -92,7 +92,6 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     private val eventCache = this.context.eventCache
     private val messageCache = this.context.messageCache
     private val checkRequestAliveDelay = context.configuration.checkRequestsAliveDelay.value.toLong()
-    private val getEventsLimit = this.context.configuration.eventSearchChunkSize.value.toInt()
 
     private val searchEventsHandler = this.context.searchEventsHandler
     private val searchMessagesHandler = this.context.searchMessagesHandler
@@ -101,9 +100,9 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     private val messageFiltersPredicateFactory = this.context.messageFiltersPredicateFactory
 
 
-    private suspend fun checkContext(context: io.grpc.Context) {
+    private suspend fun checkContext(grpcContext: io.grpc.Context) {
         while (coroutineContext.isActive) {
-            if (context.isCancelled)
+            if (grpcContext.isCancelled)
                 throw ChannelClosedException("Channel is closed")
 
             delay(checkRequestAliveDelay)
@@ -179,13 +178,13 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
 
     private suspend fun <T> handleRestApiRequest(
         responseObserver: StreamObserver<T>,
-        context: io.grpc.Context,
+        grpcContext: io.grpc.Context,
         calledFun: suspend () -> T
     ) {
         coroutineScope {
             try {
                 launch {
-                    checkContext(context)
+                    checkContext(grpcContext)
                 }
                 responseObserver.onNext(calledFun.invoke())
             } finally {
@@ -200,15 +199,15 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     @InternalAPI
     private suspend fun handleSseRequest(
         responseObserver: StreamObserver<StreamResponse>,
-        context: io.grpc.Context,
+        grpcContext: io.grpc.Context,
         calledFun: Streaming
     ) {
         coroutineScope {
             try {
                 launch {
-                    checkContext(context)
+                    checkContext(grpcContext)
                 }
-                calledFun.invoke(GrpcWriter(responseObserver))
+                calledFun.invoke(GrpcWriter(responseObserver, context.jacksonMapper))
             } finally {
                 coroutineContext.cancelChildren()
             }

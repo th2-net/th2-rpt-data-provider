@@ -72,7 +72,7 @@ class ChainBuilder(
 
 
         val dataStreams = streamNames.map { streamName ->
-            val streamInitializer = StreamInitializer(context, request, streamName, pipelineStatus)
+            val streamInitializer = StreamInitializer(context, request, streamName)
             pipelineStatus.addStream(streamName.toString())
             val messageStream = MessageContinuousStream(
                 resumeFromIds[streamName],

@@ -16,22 +16,18 @@
 
 package com.exactpro.th2.rptdataprovider.server
 
-import com.exactpro.cradle.Order
-import com.exactpro.cradle.TimeRelation
-import com.exactpro.cradle.messages.StoredMessageFilterBuilder
-import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.utils.CradleIdException
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
-import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
-import com.exactpro.th2.rptdataprovider.entities.sse.*
-import com.exactpro.th2.rptdataprovider.handlers.messages.MessageLoader
+import com.exactpro.th2.rptdataprovider.entities.sse.EventType
+import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
+import com.exactpro.th2.rptdataprovider.entities.sse.SseWriter
+import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import io.ktor.application.*
 import io.ktor.features.*
@@ -46,8 +42,6 @@ import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.nio.channels.ClosedChannelException
-import java.time.Instant
-import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -86,7 +80,6 @@ class HttpServer(private val applicationContext: Context) {
 
     private val jacksonMapper = applicationContext.jacksonMapper
     private val checkRequestAliveDelay = applicationContext.configuration.checkRequestsAliveDelay.value.toLong()
-    private val keepAliveTimeout = applicationContext.configuration.keepAliveTimeout.value.toLong()
     private val configuration = applicationContext.configuration
 
     private class Timeouts {
@@ -215,7 +208,7 @@ class HttpServer(private val applicationContext: Context) {
                 launch {
                     checkContext(context)
                 }
-                call.response.headers.append(HttpHeaders.CacheControl, "no-cache, no-store")
+                call.response.headers.append(HttpHeaders.CacheControl, "no-cache, no-store, no-transform")
                 call.respondTextWriter(contentType = ContentType.Text.EventStream) {
                     try {
                         calledFun.invoke(SseWriter(this, jacksonMapper))

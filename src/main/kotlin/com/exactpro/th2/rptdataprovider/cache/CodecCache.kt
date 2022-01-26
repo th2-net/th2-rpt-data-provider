@@ -43,7 +43,7 @@ class CodecCache(configuration: Configuration) {
     )
 
     fun put(id: String, message: Message) {
-        val type = message.messageBody?.get(0)?.messageType
+        val type = message.parsedMessageGroup?.get(0)?.messageType
 
         if (!cache.containsKey(id) && !nonCachedTypes.contains(type)) {
             cache.put(id, message)

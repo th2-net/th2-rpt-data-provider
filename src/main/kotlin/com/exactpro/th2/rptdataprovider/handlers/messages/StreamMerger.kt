@@ -189,7 +189,7 @@ class StreamMerger(
                     logger.trace { nextMessage.lastProcessedId }
                     sendToChannel(nextMessage)
                     resultCountLimit = resultCountLimit?.dec()
-                    pipelineStatus.countMerger()
+                    pipelineStatus.countMerged()
                 }
 
             } while (keepSearch() && inTimeRange)

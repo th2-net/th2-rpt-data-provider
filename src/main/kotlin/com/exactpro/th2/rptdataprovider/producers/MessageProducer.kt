@@ -22,16 +22,18 @@ import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.rptdataprovider.cache.CodecCache
+import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
-import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.BatchRequest
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.MessageRequest
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import com.google.protobuf.InvalidProtocolBufferException
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.InternalCoroutinesApi
+import kotlinx.coroutines.coroutineScope
 import mu.KotlinLogging
 
 
@@ -54,9 +56,11 @@ class MessageProducer(
 
     companion object {
         private val logger = KotlinLogging.logger { }
+
         private val messageProtocolDescriptor =
             RawMessage.getDescriptor().findFieldByName("metadata").messageType.findFieldByName("protocol")
-        private val TYPE_IMAGE = "image"
+
+        private const val imageType = "image"
     }
 
 
@@ -83,7 +87,7 @@ class MessageProducer(
 
 
     private fun isImage(protocolName: String?): Boolean {
-        return protocolName?.contains(TYPE_IMAGE) ?: false
+        return protocolName?.contains(imageType) ?: false
     }
 
 
@@ -116,17 +120,15 @@ class MessageProducer(
                 )
 
                 val messageRequest = if (!buildersBatch.isImages) {
-                    parseMessages(listOf(buildersBatch), this).first()
+                    parseMessages(buildersBatch, this)
                 } else {
                     null
                 }
 
-                attachEvents(listOf(builder))
-
-                builder.parsedMessage(messageRequest?.get(0)?.get())
+                builder.parsedMessageGroup(messageRequest?.get(0)?.get())
                 builder.imageType(buildersBatch.imagesType)
                 builder.build().also {
-                    if (it.messageBody != null && it.rawMessageBody != null) {
+                    if (it.parsedMessageGroup != null && it.rawMessageBody != null) {
                         codecCache.put(it.messageId, it)
                     }
                 }
@@ -134,41 +136,22 @@ class MessageProducer(
         }
     }
 
-
-    suspend fun attachEvents(builders: List<Message.Builder>) {
-        coroutineScope {
-            builders.map { builder ->
-                async {
-                    val eventsId = builder.storedMessage.id.let {
-                        try {
-                            cradle.getEventIdsSuspend(it).map(Any::toString).toSet()
-                        } catch (e: Exception) {
-                            logger.error(e) { "unable to get events attached to message (id=$it)" }
-
-                            emptySet<String>()
-                        }
-                    }
-                    builder.attachedEvents(eventsId)
-                }
-            }.awaitAll()
-        }
-    }
-
-
     @InternalCoroutinesApi
     suspend fun parseMessages(
-        batchBuilders: List<BuildersBatch>,
-        coroutineScope: CoroutineScope
-    ): List<List<MessageRequest?>> {
+        batchBuilders: BuildersBatch,
+        coroutineScope: CoroutineScope,
+        callback: (parsedMessageGroup: List<BodyWrapper>) -> Unit = {}
+    ): List<MessageRequest?> {
 
-        val messageRequests =
-            batchBuilders.map { it.rawMessages.map { message -> message?.let { MessageRequest.build(message) } } }
-
-        val batchRequest = batchBuilders.mapIndexed { index, value ->
-            BatchRequest(value, messageRequests[index], coroutineScope)
+        val messageRequests = batchBuilders.rawMessages.map { message ->
+            message?.let {
+                MessageRequest.build(message, callback)
+            }
         }
 
-        rabbitMqService.decodeBatch(batchRequest)
+        val batchRequest = BatchRequest(batchBuilders, messageRequests, coroutineScope)
+
+        rabbitMqService.requestBatchDecoding(batchRequest)
 
         return messageRequests
     }

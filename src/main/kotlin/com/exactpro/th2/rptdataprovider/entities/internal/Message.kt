@@ -29,7 +29,7 @@ data class Message(
     val direction: Direction?,
     val sessionId: String,
     val attachedEventIds: Set<String>,
-    val messageBody: List<BodyWrapper>?,
+    val parsedMessageGroup: List<BodyWrapper>?,
     val rawMessageBody: ByteString?,
     val imageType: String?,
     val id: StoredMessageId
@@ -41,7 +41,7 @@ data class Message(
 
     constructor(
         rawStoredMessage: StoredMessage,
-        messageBody: List<BodyWrapper>?,
+        parsedMessageGroup: List<BodyWrapper>?,
         rawBody: ByteString?,
         events: Set<String>?,
         imageType: String?
@@ -52,20 +52,20 @@ data class Message(
         sessionId = rawStoredMessage.streamName ?: "",
         attachedEventIds = events ?: emptySet(),
         rawMessageBody = rawBody,
-        messageBody = messageBody,
+        parsedMessageGroup = parsedMessageGroup,
         imageType = imageType
     )
 
     private constructor(builder: Builder) : this(
         builder.storedMessage,
-        builder.messageBody,
+        builder.parsedMessageGroup,
         builder.protobufMessage?.body,
         builder.events,
         builder.imageType
     )
 
     class Builder(val storedMessage: StoredMessage, val protobufMessage: RawMessage?) {
-        var messageBody: List<BodyWrapper>? = null
+        var parsedMessageGroup: List<BodyWrapper>? = null
             private set
 
         var events: Set<String>? = null
@@ -74,7 +74,7 @@ data class Message(
         var imageType: String? = null
             private set
 
-        fun parsedMessage(messageBody: List<BodyWrapper>?) = apply { this.messageBody = messageBody }
+        fun parsedMessageGroup(parsedMessageGroup: List<BodyWrapper>?) = apply { this.parsedMessageGroup = parsedMessageGroup }
 
         fun attachedEvents(events: Set<String>?) = apply { this.events = events }
 

@@ -19,7 +19,14 @@ package com.exactpro.th2.rptdataprovider.handlers
 import com.exactpro.th2.rptdataprovider.Context
 import java.util.concurrent.atomic.AtomicLong
 
-data class Counters(
+data class PipelineStatusSnapshot (
+    val startTime: Long,
+    val processingTime: Long,
+    val returned: Long,
+    val counters: Map<String, PipelineStreamCounters>
+)
+
+data class PipelineStreamCounters(
     val fetched: AtomicLong = AtomicLong(0),
     val fetchedBytes: AtomicLong = AtomicLong(0),
     val fetchedBatches: AtomicLong = AtomicLong(0),
@@ -30,151 +37,80 @@ data class Counters(
     val filterAccepted: AtomicLong = AtomicLong(0)
 )
 
-data class StreamCounters(
-    val startTime: Long,
-    var timeSinceStartProcessing: Long,
-    val counters: Counters
-)
+class PipelineStatus(context: Context) {
 
-data class PipelineStatus(
-    val streams: MutableMap<String, StreamCounters> = mutableMapOf(),
-    var merger: AtomicLong = AtomicLong(0),
-    private val context: Context
-) {
+    val streams: MutableMap<String, PipelineStreamCounters> = mutableMapOf()
+    var merged: AtomicLong = AtomicLong(0)
 
+    private val processingStartTimestamp: Long = System.currentTimeMillis()
     private val sendPipelineStatus = context.configuration.sendPipelineStatus.value.toBoolean()
 
     fun addStream(streamName: String) {
         if (sendPipelineStatus) {
-            this.streams[streamName] = StreamCounters(
-                startTime = System.currentTimeMillis(),
-                timeSinceStartProcessing = getMillisecondsDifference(System.currentTimeMillis()),
-                counters = Counters(
-                    fetched = AtomicLong(0),
-                    fetchedBatches = AtomicLong(0),
-                    fetchedBytes = AtomicLong(0),
-                    parseReceived = AtomicLong(0),
-                    parseRequested = AtomicLong(0),
-                    filterTotal = AtomicLong(0),
-                    filterDiscarded = AtomicLong(0),
-                    filterAccepted = AtomicLong(0)
-                )
+            this.streams[streamName] = PipelineStreamCounters(
+                fetched = AtomicLong(0),
+                fetchedBatches = AtomicLong(0),
+                fetchedBytes = AtomicLong(0),
+                parseReceived = AtomicLong(0),
+                parseRequested = AtomicLong(0),
+                filterTotal = AtomicLong(0),
+                filterDiscarded = AtomicLong(0),
+                filterAccepted = AtomicLong(0)
             )
         }
     }
 
-    fun countParseRequested(streamName: String, messageBatchSize: Int = -1) {
-        if (sendPipelineStatus) {
-            if (messageBatchSize < 0) {
-                this.streams[streamName]?.counters?.parseRequested?.incrementAndGet()
-            } else {
-                val alreadyParsedRequested: Long = this.streams[streamName]?.counters?.parseRequested?.get()!!
-                this.streams[streamName]?.counters?.parseRequested?.set(alreadyParsedRequested + messageBatchSize.toLong())
-            }
-            setTimeValues(streamName)
-        }
+    fun countParseRequested(streamName: String) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.parseRequested?.incrementAndGet()
     }
 
-    fun countParseReceived(streamName: String, messageBatchSize: Int = -1) {
-        if (sendPipelineStatus) {
-            if (messageBatchSize < 0) {
-                this.streams[streamName]?.counters?.parseReceived?.incrementAndGet()
-            } else {
-                val alreadyParseReceived: Long = this.streams[streamName]?.counters?.parseReceived?.get()!!
-                this.streams[streamName]?.counters?.parseReceived?.set(alreadyParseReceived + messageBatchSize.toLong())
-            }
-            setTimeValues(streamName)
-        }
+    fun countParseReceived(streamName: String) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.parseReceived?.incrementAndGet()
     }
 
-    fun countFetched(streamName: String, messageBatchSize: Int = -1) {
-        if (sendPipelineStatus) {
-            if (messageBatchSize < 0) {
-                this.streams[streamName]?.counters?.fetched?.incrementAndGet()
-            } else {
-                val alreadyFetched: Long = this.streams[streamName]?.counters?.fetched?.get()!!
-                this.streams[streamName]?.counters?.fetched?.set(alreadyFetched + messageBatchSize.toLong())
-            }
-            setTimeValues(streamName)
-        }
+    fun countFetchedMessages(streamName: String, count: Long) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.fetched?.addAndGet(count)
     }
 
-    fun countFetchedBytes(streamName: String, messageBatchSize: Long = -1) {
-        if (sendPipelineStatus) {
-            if (messageBatchSize < 0) {
-                this.streams[streamName]?.counters?.fetchedBytes?.incrementAndGet()
-            } else {
-                val alreadyFetched: Long = this.streams[streamName]?.counters?.fetchedBytes?.get()!!
-                this.streams[streamName]?.counters?.fetchedBytes?.set(alreadyFetched + messageBatchSize.toLong())
-            }
-        }
+    fun countFetchedBytes(streamName: String, count: Long) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.fetchedBytes?.addAndGet(count)
     }
 
-    fun countFetchedBatches(streamName: String, messageBatchSize: Int = -1) {
-        if (sendPipelineStatus) {
-            if (messageBatchSize < 0) {
-                this.streams[streamName]?.counters?.fetchedBatches?.incrementAndGet()
-            } else {
-                val alreadyFetched: Long = this.streams[streamName]?.counters?.fetchedBatches?.get()!!
-                this.streams[streamName]?.counters?.fetchedBatches?.set(alreadyFetched + messageBatchSize.toLong())
-            }
-        }
+    fun countFetchedBatches(streamName: String) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.fetchedBatches?.incrementAndGet()
     }
 
-    fun countFilterAccepted(streamName: String, messageBatchSize: Int = -1) {
-        if (sendPipelineStatus) {
-            if (messageBatchSize < 0) {
-                this.streams[streamName]?.counters?.filterAccepted?.incrementAndGet()
-            } else {
-                val alreadyFilterAccepted: Long = this.streams[streamName]?.counters?.filterAccepted?.get()!!
-                this.streams[streamName]?.counters?.filterAccepted?.set(alreadyFilterAccepted + messageBatchSize.toLong())
-            }
-            setTimeValues(streamName)
-        }
+    fun countFilterAccepted(streamName: String) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.filterAccepted?.incrementAndGet()
     }
 
-    fun countFilterDiscarded(streamName: String, messageBatchSize: Int = -1) {
-        if (sendPipelineStatus) {
-            if (messageBatchSize < 0) {
-                this.streams[streamName]?.counters?.filterDiscarded?.incrementAndGet()
-            } else {
-                val alreadyFilterDiscarded: Long = this.streams[streamName]?.counters?.filterDiscarded?.get()!!
-                this.streams[streamName]?.counters?.filterDiscarded?.set(alreadyFilterDiscarded + messageBatchSize.toLong())
-            }
-            setTimeValues(streamName)
-        }
+    fun countFilterDiscarded(streamName: String) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.filterDiscarded?.incrementAndGet()
     }
 
-    fun countFilteredTotal(streamName: String, messageBatchSize: Int = -1) {
-        if (sendPipelineStatus) {
-            if (messageBatchSize < 0) {
-                this.streams[streamName]?.counters?.filterTotal?.incrementAndGet()
-            } else {
-                val alreadyFiltered: Long = this.streams[streamName]?.counters?.filterTotal?.get()!!
-                this.streams[streamName]?.counters?.filterTotal?.set(alreadyFiltered + messageBatchSize.toLong())
-            }
-            setTimeValues(streamName)
-        }
+    fun countFilteredTotal(streamName: String) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.filterTotal?.incrementAndGet()
     }
 
-    fun countMerger(messageBatchSize: Int = -1) {
-        if (sendPipelineStatus) {
-            if (messageBatchSize < 0) {
-                this.merger.incrementAndGet()
-            } else {
-                val alreadyMerged: Long = this.merger.get()
-                this.merger.set(alreadyMerged + messageBatchSize.toLong())
-            }
-        }
+    fun countMerged() {
+        if (!sendPipelineStatus) return
+        this.merged.incrementAndGet()
     }
 
-    private fun setTimeValues(streamName: String) {
-        val startTime = this.streams[streamName]?.startTime
-        this.streams[streamName]?.timeSinceStartProcessing =
-            getMillisecondsDifference(startTime!!)
-    }
-
-    private fun getMillisecondsDifference(milliseconds: Long): Long {
-        return System.currentTimeMillis() - milliseconds;
+    fun getSnapshot(): PipelineStatusSnapshot {
+        return PipelineStatusSnapshot(
+            processingStartTimestamp,
+            System.currentTimeMillis() - processingStartTimestamp,
+            merged.get(),
+            streams
+        )
     }
 }

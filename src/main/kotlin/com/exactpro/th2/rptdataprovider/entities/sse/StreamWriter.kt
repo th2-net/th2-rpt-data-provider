@@ -24,9 +24,10 @@ import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
 import com.exactpro.th2.rptdataprovider.eventWrite
-import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
+import com.exactpro.th2.rptdataprovider.handlers.PipelineStatusSnapshot
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.grpc.stub.StreamObserver
+import mu.KotlinLogging
 import java.io.Writer
 import java.util.concurrent.atomic.AtomicLong
 
@@ -43,14 +44,14 @@ interface StreamWriter {
 
     suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong)
 
-    suspend fun write(status: PipelineStatus, counter: AtomicLong)
+    suspend fun write(status: PipelineStatusSnapshot, counter: AtomicLong)
 
     suspend fun closeWriter()
 }
 
 class SseWriter(private val writer: Writer, private val jacksonMapper: ObjectMapper) : StreamWriter {
 
-    override suspend fun write(status: PipelineStatus, counter: AtomicLong) {
+    override suspend fun write(status: PipelineStatusSnapshot, counter: AtomicLong) {
         writer.eventWrite(SseEvent.build(jacksonMapper, status, counter))
     }
 
@@ -79,7 +80,11 @@ class SseWriter(private val writer: Writer, private val jacksonMapper: ObjectMap
     }
 }
 
-class GrpcWriter(private val writer: StreamObserver<StreamResponse>) : StreamWriter {
+class GrpcWriter(private val writer: StreamObserver<StreamResponse>, private val jacksonMapper: ObjectMapper) :
+    StreamWriter {
+    val logger = KotlinLogging.logger { }
+
+
     override suspend fun write(event: EventTreeNode, counter: AtomicLong) {
         writer.onNext(
             StreamResponse.newBuilder()
@@ -108,8 +113,8 @@ class GrpcWriter(private val writer: StreamObserver<StreamResponse>) : StreamWri
         counter.incrementAndGet()
     }
 
-    override suspend fun write(status: PipelineStatus, counter: AtomicLong) {
-        TODO("Not yet implemented")
+    override suspend fun write(status: PipelineStatusSnapshot, counter: AtomicLong) {
+        logger.debug { jacksonMapper.writeValueAsString(status) }
     }
 
     override suspend fun write(event: Event, lastEventId: AtomicLong) {

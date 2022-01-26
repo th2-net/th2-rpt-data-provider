@@ -38,7 +38,10 @@ data class MessageRequest(
         private set
 
     companion object {
-        suspend fun build(rawMessage: RawMessage): MessageRequest {
+        suspend fun build(
+            rawMessage: RawMessage,
+            callback: (parsedMessageGroup: List<BodyWrapper>) -> Unit
+        ): MessageRequest {
             val messageChannel = Channel<List<BodyWrapper>?>(0)
             return MessageRequest(
                 id = rawMessage.metadata.id,
@@ -46,6 +49,7 @@ data class MessageRequest(
                 channel = messageChannel,
                 result = CoroutineScope(Dispatchers.Default).async {
                     messageChannel.receive()
+                        .also { if (it != null) callback.invoke(it) }
                 })
         }
     }

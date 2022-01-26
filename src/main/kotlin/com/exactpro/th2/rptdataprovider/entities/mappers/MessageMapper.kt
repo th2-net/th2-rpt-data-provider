@@ -40,7 +40,7 @@ object MessageMapper {
 
     private suspend fun getBodyMessage(messageWithMetadata: MessageWithMetadata): BodyHttpMessage? {
         return with(messageWithMetadata) {
-            val body = message.messageBody?.let {
+            val body = message.parsedMessageGroup?.let {
                 it.zip(filteredBody).map { (msg, filtered) ->
                     HttpBodyWrapper.from(msg, filtered)
                 }
@@ -71,7 +71,7 @@ object MessageMapper {
         return with(messageWithMetadata) {
             val httpMessage = HttpMessage(
                 timestamp = message.timestamp,
-                messageType = messageWithMetadata.message.messageBody
+                messageType = messageWithMetadata.message.parsedMessageGroup
                     ?.joinToString("/") { it.messageType } ?: messageWithMetadata.message.imageType ?: "",
                 direction = message.direction,
                 sessionId = message.sessionId,

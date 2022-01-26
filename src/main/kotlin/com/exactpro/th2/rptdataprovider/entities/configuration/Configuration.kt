@@ -24,20 +24,16 @@ class CustomConfigurationClass {
     var port: Int = 8080
     var responseTimeout: Int = 60000
     var serverCacheTimeout: Int = 60000
-    var clientCacheTimeout: Int = 60
     var eventCacheSize: Int = 100000
     var messageCacheSize: Int = 100000
     var ioDispatcherThreadPoolSize: Int = 10
     var codecResponseTimeout: Int = 6000
     var codecCacheSize: Int = 100
-    var codecBatchesCacheSize: Int = 100
 
     var checkRequestsAliveDelay: Long = 2000
     val enableCaching: Boolean = true
     val notModifiedObjectsLifetime: Int = 3600
     val rarelyModifiedObjects: Int = 500
-    val maxMessagesLimit: Int = 500
-    val messageSearchPipelineBuffer: Int = 25
     val sseEventSearchStep: Long = 200
     val keepAliveTimeout: Long = 5000
     val dbRetryDelay: Long = 5000
@@ -45,9 +41,6 @@ class CustomConfigurationClass {
     val cradleDispatcherPoolSize: Long = 1
 
     val sseSearchDelay: Long = 6000
-    val rabbitBatchMergeFrequency: Long = 200
-    val rabbitBatchMergeBuffer: Long = 500
-    val rabbitMergedBatchSize: Long = 50
     val decodeMessageConsumerCount: Int = 64
 
     val messageContinuousStreamBuffer = 100
@@ -63,10 +56,6 @@ class CustomConfigurationClass {
     val sendPipelineStatus = false
 
     val serverType: ServerType = ServerType.HTTP
-
-    override fun toString(): String {
-        return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, clientCacheTimeout=$clientCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, codecResponseTimeout=$codecResponseTimeout, codecCacheSize=$codecCacheSize, codecBatchesCacheSize=$codecBatchesCacheSize, checkRequestsAliveDelay=$checkRequestsAliveDelay, enableCaching=$enableCaching, notModifiedObjectsLifetime=$notModifiedObjectsLifetime, rarelyModifiedObjects=$rarelyModifiedObjects, maxMessagesLimit=$maxMessagesLimit, messageSearchPipelineBuffer=$messageSearchPipelineBuffer, sseEventSearchStep=$sseEventSearchStep, keepAliveTimeout=$keepAliveTimeout, dbRetryDelay=$dbRetryDelay, cradleDispatcherPoolSize=$cradleDispatcherPoolSize, sseSearchDelay=$sseSearchDelay, rabbitBatchMergeFrequency=$rabbitBatchMergeFrequency, rabbitBatchMergeBuffer=$rabbitBatchMergeBuffer, rabbitMergedBatchSize=$rabbitMergedBatchSize, decodeMessageConsumerCount=$decodeMessageConsumerCount, messageContinuousStreamBuffer=$messageContinuousStreamBuffer, messageDecoderBuffer=$messageDecoderBuffer, messageFilterBuffer=$messageFilterBuffer, messageStreamMergerBuffer=$messageStreamMergerBuffer, sendEmptyDelay=$sendEmptyDelay, eventSearchChunkSize=$eventSearchChunkSize, pipelineInfoSendDelay=$pipelineInfoSendDelay, sendPipelineStatus=$sendPipelineStatus, serverType=$serverType)"
-    }
 }
 
 class Configuration(customConfiguration: CustomConfigurationClass) {
@@ -103,11 +92,6 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
         "100"
     )
 
-    val codecBatchesCacheSize: Variable = Variable(
-        "codecBatchesCacheSize", customConfiguration.codecBatchesCacheSize.toString(),
-        "100"
-    )
-
     val ioDispatcherThreadPoolSize: Variable =
         Variable("ioDispatcherThreadPoolSize", customConfiguration.ioDispatcherThreadPoolSize.let {
             if (it < 10) logger.warn { "The optimal value of the ioDispatcherThreadPoolSize is 10. Current: $it" }
@@ -124,12 +108,6 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
     val checkRequestsAliveDelay: Variable =
         Variable("checkRequestsAliveDelay", customConfiguration.checkRequestsAliveDelay.toString(), "2000")
 
-    val maxMessagesLimit: Variable =
-        Variable("maxMessagesLimit", customConfiguration.maxMessagesLimit.toString(), "150")
-
-    val messageSearchPipelineBuffer: Variable =
-        Variable("messageSearchPipelineBuffer", customConfiguration.messageSearchPipelineBuffer.toString(), "25")
-
     val sseEventSearchStep: Variable =
         Variable("sseEventSearchStep", customConfiguration.sseEventSearchStep.toString(), "200")
 
@@ -144,18 +122,8 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
 
     val sseSearchDelay: Variable = Variable("sseSearchDelay", customConfiguration.sseSearchDelay.toString(), "6000")
 
-    val rabbitBatchMergeFrequency: Variable =
-        Variable("rabbitBatchMergeFrequency", customConfiguration.rabbitBatchMergeFrequency.toString(), "200")
-
-    val rabbitBatchMergeBuffer: Variable =
-        Variable("rabbitBatchMergeBuffer", customConfiguration.rabbitBatchMergeBuffer.toString(), "20")
-
     val eventSearchChunkSize: Variable =
         Variable("eventSearchChunkSize", customConfiguration.eventSearchChunkSize.toString(), "64")
-
-    val rabbitMergedBatchSize: Variable =
-        Variable("rabbitMergedBatchSize", customConfiguration.rabbitMergedBatchSize.toString(), "64")
-
     val decodeMessageConsumerCount: Variable =
         Variable("decodeMessageConsumerCount", customConfiguration.decodeMessageConsumerCount.toString(), "64")
 

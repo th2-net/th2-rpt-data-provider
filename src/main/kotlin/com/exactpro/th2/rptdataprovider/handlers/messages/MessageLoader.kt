@@ -119,7 +119,7 @@ class MessageLoader(
                     val streamName = startId.streamName + ":" + startId.direction.toString()
                     pipelineStatus.countFetchedBytes(streamName, batch.batchSize)
                     pipelineStatus.countFetchedBatches(streamName)
-                    pipelineStatus.countFetched(streamName, batch.messageCount)
+                    pipelineStatus.countFetchedMessages(streamName, batch.messageCount.toLong())
                     MessageBatchWrapper(batch, it, searchDirection)
                 }
             }
