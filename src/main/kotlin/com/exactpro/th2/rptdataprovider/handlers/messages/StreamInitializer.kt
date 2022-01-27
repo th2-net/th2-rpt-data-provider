@@ -24,10 +24,10 @@ import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchReques
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
+import mu.KotlinLogging
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneOffset
-
 
 class StreamInitializer(
     val context: Context,
@@ -145,6 +145,8 @@ class StreamInitializer(
     private suspend fun getStartMessageFromTime(stream: StreamName, timestamp: Instant): StoredMessage? {
         val storedMessageId = getFirstMessageIdDifferentDays(timestamp, stream)
 
+        logger.debug { "The $storedMessageId message id for stream = $stream timestamp = $timestamp" }
+
         return storedMessageId?.let {
             val messageBatch = context.cradleService.getMessageBatchSuspend(storedMessageId)
             getNearestMessage(messageBatch, request.searchDirection, timestamp)
@@ -154,5 +156,9 @@ class StreamInitializer(
 
     suspend fun initStream(startTimestamp: Instant): StoredMessage? {
         return getStartMessageFromTime(stream, startTimestamp)
+    }
+
+    companion object {
+        private val logger = KotlinLogging.logger { }
     }
 }

@@ -26,7 +26,7 @@ import kotlinx.coroutines.channels.Channel
 import mu.KotlinLogging
 
 data class StreamName(val name: String, val direction: Direction) {
-    val fullName = "$name:$direction"
+    private val fullName = "$name:$direction"
 
     override fun toString(): String {
         return fullName

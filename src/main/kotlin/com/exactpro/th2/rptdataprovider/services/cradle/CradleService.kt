@@ -174,9 +174,13 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
         return withContext(cradleDispatcher) {
             logMetrics(getNearestMessageIdMetric) {
                 logTime(("getFirstMessageId (timestamp=$timestamp stream=$stream direction=${direction.label} )")) {
-                    storage.getNearestMessageId(stream, direction, timestamp, timelineDirection)
+                    storage.getNearestMessageId(stream, direction, timestamp, timelineDirection).also {
+                        logger.debug { "The $it message id for stream = $stream timestamp = $timestamp (from storage)" }
+                    }
                 }
             }
+        }.also {
+            logger.debug { "The $it message id for stream = $stream timestamp = $timestamp (in IO thread)" }
         }
     }
 
