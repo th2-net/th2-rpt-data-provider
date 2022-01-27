@@ -171,6 +171,7 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
         direction: Direction,
         timelineDirection: TimeRelation
     ): StoredMessageId? {
+        logger.debug { "The get first message id by stream = $stream timestamp = $timestamp" }
         return withContext(cradleDispatcher) {
             logMetrics(getNearestMessageIdMetric) {
                 logTime(("getFirstMessageId (timestamp=$timestamp stream=$stream direction=${direction.label} )")) {
