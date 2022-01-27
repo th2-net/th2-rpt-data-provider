@@ -25,6 +25,7 @@ import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import kotlinx.coroutines.*
 import kotlinx.coroutines.debug.DebugProbes
 import mu.KotlinLogging
+import java.util.concurrent.atomic.AtomicLong
 
 @InternalCoroutinesApi
 class MessageFilter(
@@ -47,6 +48,7 @@ class MessageFilter(
 
     private val sendEmptyDelay: Long = context.configuration.sendEmptyDelay.value.toLong()
     private var lastScannedObject: PipelineStepObject? = null
+    private val id = COUNTER.incrementAndGet()
 
 
     init {
@@ -82,13 +84,13 @@ class MessageFilter(
     private suspend fun emptySender(parentScope: CoroutineScope) {
         var count = 0
         while (parentScope.isActive) {
-            logger.debug { "emptySender ${count++}" }
+            logger.debug { "emptySender $id ${count++}" }
             lastScannedObject?.let {
-                delay(sendEmptyDelay)
                 sendToChannel(EmptyPipelineObject(it))
                 // FIXME: REMOVE THIS DEPENENCY FOR PRUDUCTION
-                DebugProbes.dumpCoroutines()
             }
+            delay(sendEmptyDelay)
+            DebugProbes.dumpCoroutines()
         }
     }
 
@@ -118,5 +120,6 @@ class MessageFilter(
 
     companion object {
         val logger = KotlinLogging.logger {}
+        private val COUNTER = AtomicLong()
     }
 }
