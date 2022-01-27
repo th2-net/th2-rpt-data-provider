@@ -23,6 +23,8 @@ import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import kotlinx.coroutines.*
+import kotlinx.coroutines.debug.DebugProbes
+import mu.KotlinLogging
 
 @InternalCoroutinesApi
 class MessageFilter(
@@ -78,10 +80,14 @@ class MessageFilter(
 
 
     private suspend fun emptySender(parentScope: CoroutineScope) {
+        var count = 0
         while (parentScope.isActive) {
+            logger.debug { "emptySender ${count++}" }
             lastScannedObject?.let {
-                sendToChannel(EmptyPipelineObject(it))
                 delay(sendEmptyDelay)
+                sendToChannel(EmptyPipelineObject(it))
+                // FIXME: REMOVE THIS DEPENENCY FOR PRUDUCTION
+                DebugProbes.dumpCoroutines()
             }
         }
     }
@@ -89,7 +95,7 @@ class MessageFilter(
 
     override suspend fun processMessage() {
         coroutineScope {
-            launch { emptySender(this) }
+            launch { emptySender(this@coroutineScope) }
             while (isActive) {
                 val parsedMessage = previousComponent!!.pollMessage()
                 if (parsedMessage is PipelineParsedMessage) {
@@ -108,5 +114,9 @@ class MessageFilter(
                 }
             }
         }
+    }
+
+    companion object {
+        val logger = KotlinLogging.logger {}
     }
 }
