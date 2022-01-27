@@ -73,7 +73,7 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
     private val storage = cradleManager.storage
     private val linker = cradleManager.storage.testEventsMessagesLinker
 
-
+    // FIXME: thread name
     private val cradleDispatcher = Executors.newFixedThreadPool(cradleDispatcherPoolSize).asCoroutineDispatcher()
 
     suspend fun getMessagesSuspend(filter: StoredMessageFilter): Iterable<StoredMessage> {

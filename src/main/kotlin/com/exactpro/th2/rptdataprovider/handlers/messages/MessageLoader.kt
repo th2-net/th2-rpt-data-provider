@@ -41,6 +41,10 @@ class MessageLoader(
         private val logger = KotlinLogging.logger { }
     }
 
+    init {
+        logger.debug { "Created ${javaClass.name} startTimestamp=$startTimestamp, searchDirection=$searchDirection" }
+    }
+
     private val dbRetryDelay = context.configuration.dbRetryDelay.value.toLong()
 
     private suspend fun pullMore(startId: StoredMessageId, include: Boolean): Iterable<StoredMessageBatch> {

@@ -62,7 +62,12 @@ class MessageExtractor(
 
     init {
         externalScope.launch {
-            processMessage()
+            try {
+                processMessage()
+            } catch (e: Exception) {
+                logger.error(e) { }
+                throw e
+            }
         }
     }
 
