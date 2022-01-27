@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider.entities.filters.messages
 
-import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.Filter
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterRequest
@@ -25,7 +24,9 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterTyp
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
+import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
+import mu.KotlinLogging
 
 class AttachedEventFilters private constructor(
     private var messagesFromAttachedId: Set<String>,
@@ -34,18 +35,25 @@ class AttachedEventFilters private constructor(
 ) : Filter<MessageWithMetadata> {
 
     companion object {
+        private val logger = KotlinLogging.logger { }
 
         suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<MessageWithMetadata> {
             return AttachedEventFilters(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
                 messagesFromAttachedId = filterRequest.getValues()
-                    ?.map {
-                        cradleService.getMessageIdsSuspend(
-                            StoredTestEventId(it)
-                        )
-                            .map { id -> id.toString() }
-                            .toSet()
+                    ?.map { filterValue ->
+                        val id = ProviderEventId(filterValue)
+                        val batch = id.batchId?.let { cradleService.getEventSuspend(it)?.asBatch() }
+
+                        if (id.batchId != null && batch == null) {
+                            logger.error { "unable to find batch with id '${id.batchId}' referenced in event '${id.eventId}'- this is a bug" }
+                        }
+
+                        (batch?.getTestEvent(id.eventId) ?: cradleService.getEventSuspend(id.eventId)
+                            ?.asSingle())?.messageIds?.map(Any::toString)
+                            ?.toSet()
+                            ?: emptySet<String>()
                     }
                     ?.reduce { set, element ->
                         if (filterRequest.isConjunct()) {
