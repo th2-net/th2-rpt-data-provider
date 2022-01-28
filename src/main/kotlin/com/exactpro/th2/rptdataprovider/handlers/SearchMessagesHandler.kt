@@ -79,6 +79,7 @@ class SearchMessagesHandler(private val applicationContext: Context) {
                     streamMerger?.let { merger -> writer.write(merger.getStreamsInfo()) }
                     coroutineContext.cancelChildren()
                     it?.let { throwable -> throw throwable }
+                    writer.closeWriter()
                 }
                 .collect {
                     coroutineContext.ensureActive()
