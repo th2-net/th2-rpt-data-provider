@@ -73,9 +73,6 @@ dependencies {
 
     implementation 'io.grpc:grpc-protobuf'
     implementation 'com.google.protobuf:protobuf-java-util'
-
-    // FIXME: REMOVE THIS DEPENENCY FOR PRUDUCTION
-    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-debug:1.4.0'
 }
 
 jar {

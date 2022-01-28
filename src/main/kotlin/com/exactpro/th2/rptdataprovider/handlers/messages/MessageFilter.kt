@@ -23,7 +23,6 @@ import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import kotlinx.coroutines.*
-import kotlinx.coroutines.debug.DebugProbes
 import mu.KotlinLogging
 import java.util.concurrent.atomic.AtomicLong
 
@@ -87,10 +86,8 @@ class MessageFilter(
             logger.debug { "emptySender $id ${count++}" }
             lastScannedObject?.let {
                 sendToChannel(EmptyPipelineObject(it))
-                // FIXME: REMOVE THIS DEPENENCY FOR PRUDUCTION
             }
             delay(sendEmptyDelay)
-            DebugProbes.dumpCoroutines()
         }
     }
 
