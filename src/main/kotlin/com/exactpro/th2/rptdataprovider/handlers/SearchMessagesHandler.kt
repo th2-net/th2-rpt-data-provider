@@ -80,6 +80,7 @@ class SearchMessagesHandler(private val applicationContext: Context) {
                     coroutineContext.cancelChildren()
                     it?.let { throwable -> throw throwable }
                     writer.closeWriter()
+                    logger.debug { "message pipeline flow has been completed" }
                 }
                 .collect {
                     coroutineContext.ensureActive()

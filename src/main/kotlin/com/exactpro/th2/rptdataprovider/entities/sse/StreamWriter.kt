@@ -50,6 +50,7 @@ interface StreamWriter {
 }
 
 class SseWriter(private val writer: Writer, private val jacksonMapper: ObjectMapper) : StreamWriter {
+    val logger = KotlinLogging.logger { }
 
     override suspend fun write(status: PipelineStatusSnapshot, counter: AtomicLong) {
         writer.eventWrite(SseEvent.build(jacksonMapper, status, counter))
@@ -77,6 +78,7 @@ class SseWriter(private val writer: Writer, private val jacksonMapper: ObjectMap
 
     override suspend fun closeWriter() {
         writer.close()
+        logger.debug { "http sse writer has been closed" }
     }
 }
 
@@ -138,5 +140,6 @@ class GrpcWriter(private val writer: StreamObserver<StreamResponse>, private val
 
     override suspend fun closeWriter() {
         writer.onCompleted()
+        logger.debug { "grpc writer has been closed" }
     }
 }
