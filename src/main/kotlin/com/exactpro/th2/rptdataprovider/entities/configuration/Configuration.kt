@@ -54,7 +54,7 @@ class CustomConfigurationClass {
     val codecPendingBatchLimit: Int = 200
     val codecCallbackThreadPool: Int = 1
     val codecRequestThreadPool: Int = 1
-    val codecUsePinAttributes: Boolean = false
+    val codecUsePinAttributes: Boolean = true
 
     val cradleDispatcherPoolSize: Long = 1
 
