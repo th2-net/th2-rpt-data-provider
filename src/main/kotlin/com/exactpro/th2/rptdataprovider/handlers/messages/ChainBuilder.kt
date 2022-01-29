@@ -29,13 +29,6 @@ class ChainBuilder(
     private val externalScope: CoroutineScope,
     private val pipelineStatus: PipelineStatus
 ) {
-
-    private val messageContinuousStreamBuffer = context.configuration.messageContinuousStreamBuffer.value.toInt()
-    private val messageDecoderBuffer = context.configuration.messageDecoderBuffer.value.toInt()
-    private val messageFilterBuffer = context.configuration.messageFilterBuffer.value.toInt()
-    private val messageStreamMergerBuffer = context.configuration.messageStreamMergerBuffer.value.toInt()
-
-
     fun buildChain(): StreamMerger {
         val streamNames = request.stream.flatMap { stream -> Direction.values().map { StreamName(stream, it) } }
 
@@ -47,17 +40,42 @@ class ChainBuilder(
                 request,
                 streamName,
                 externalScope,
-                messageContinuousStreamBuffer,
+                context.configuration.messageExtractorOutputBatchBuffer.value.toInt(),
                 pipelineStatus
             )
 
-            val messageBatchConverter = MessageBatchConverter(messageExtractor, 10, pipelineStatus)
-            val messageBatchDecoder = MessageBatchDecoder(messageBatchConverter, 100, pipelineStatus)
-            val messageBatchUnpacker = MessageBatchUnpacker(messageBatchDecoder, 100, pipelineStatus)
+            val messageBatchConverter = MessageBatchConverter(
+                messageExtractor,
+                context.configuration.messageConverterOutputBatchBuffer.value.toInt(),
+                pipelineStatus
+            )
 
-            MessageFilter(messageBatchUnpacker, messageFilterBuffer, pipelineStatus)
+            val messageBatchDecoder = MessageBatchDecoder(
+                messageBatchConverter,
+                context.configuration.messageDecoderOutputBatchBuffer.value.toInt(),
+                pipelineStatus
+            )
+
+            val messageBatchUnpacker = MessageBatchUnpacker(
+                messageBatchDecoder,
+                context.configuration.messageUnpackerOutputMessageBuffer.value.toInt(),
+                pipelineStatus
+            )
+
+            MessageFilter(
+                messageBatchUnpacker,
+                context.configuration.messageFilterOutputMessageBuffer.value.toInt(),
+                pipelineStatus
+            )
         }
 
-        return StreamMerger(context, request, externalScope, dataStreams, messageStreamMergerBuffer, pipelineStatus)
+        return StreamMerger(
+            context,
+            request,
+            externalScope,
+            dataStreams,
+            context.configuration.messageMergerOutputMessageBuffer.value.toInt(),
+            pipelineStatus
+        )
     }
 }

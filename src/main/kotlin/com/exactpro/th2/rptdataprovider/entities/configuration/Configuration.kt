@@ -20,40 +20,53 @@ import com.exactpro.th2.rptdataprovider.server.ServerType
 import mu.KotlinLogging
 
 class CustomConfigurationClass {
-    var hostname: String = "localhost"
-    var port: Int = 8080
-    var responseTimeout: Int = 60000
-    var serverCacheTimeout: Int = 60000
-    var eventCacheSize: Int = 100000
-    var messageCacheSize: Int = 100000
-    var ioDispatcherThreadPoolSize: Int = 10
-    var codecResponseTimeout: Int = 6000
-    var codecCacheSize: Int = 100
+    val hostname: String = "localhost"
+    val port: Int = 8080
 
-    var checkRequestsAliveDelay: Long = 2000
+    val responseTimeout: Int = 60000
+    val serverCacheTimeout: Int = 60000
+
+    val eventCacheSize: Int = 1
+    val messageCacheSize: Int = 1
+
+    val ioDispatcherThreadPoolSize: Int = 10
+
+    val checkRequestsAliveDelay: Long = 2000
+
     val enableCaching: Boolean = true
     val notModifiedObjectsLifetime: Int = 3600
     val rarelyModifiedObjects: Int = 500
+
     val sseEventSearchStep: Long = 200
+
     val keepAliveTimeout: Long = 5000
+
     val dbRetryDelay: Long = 5000
+
+    val messageExtractorOutputBatchBuffer: Int = 10
+    val messageConverterOutputBatchBuffer: Int = 10
+    val messageDecoderOutputBatchBuffer: Int = 10
+    val messageUnpackerOutputMessageBuffer: Int = 1000
+    val messageFilterOutputMessageBuffer: Int = 1000
+    val messageMergerOutputMessageBuffer: Int = 10
+
+    val codecResponseTimeout: Int = 6000
+    val codecPendingBatchLimit: Int = 200
+    val codecCallbackThreadPool: Int = 1
+    val codecRequestThreadPool: Int = 1
+    val codecUsePinAttributes: Boolean = false
 
     val cradleDispatcherPoolSize: Long = 1
 
     val sseSearchDelay: Long = 6000
-    val decodeMessageConsumerCount: Int = 64
 
-    val messageContinuousStreamBuffer = 100
-    val messageDecoderBuffer = 100
-    val messageFilterBuffer = 100
-    val messageStreamMergerBuffer = 200
     val sendEmptyDelay = 100
 
     val eventSearchChunkSize: Int = 64
 
-    val pipelineInfoSendDelay = 2000
-
     val sendPipelineStatus = false
+
+    val pipelineInfoSendDelay = 2000
 
     val serverType: ServerType = ServerType.HTTP
 }
@@ -73,24 +86,14 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
     val responseTimeout: Variable =
         Variable("responseTimeout", customConfiguration.responseTimeout.toString(), "60000")
 
-    val codecResponseTimeout: Variable = Variable(
-        "codecResponseTimeout",
-        customConfiguration.codecResponseTimeout.toString(), "6000"
-    )
-
     val serverCacheTimeout: Variable =
         Variable("serverCacheTimeout", customConfiguration.serverCacheTimeout.toString(), "60000")
 
     val eventCacheSize: Variable =
-        Variable("eventCacheSize", customConfiguration.eventCacheSize.toString(), "100000")
+        Variable("eventCacheSize", customConfiguration.eventCacheSize.toString(), "1")
 
     val messageCacheSize: Variable =
-        Variable("messageCacheSize", customConfiguration.messageCacheSize.toString(), "100000")
-
-    val codecCacheSize: Variable = Variable(
-        "codecCacheSize", customConfiguration.codecCacheSize.toString(),
-        "100"
-    )
+        Variable("messageCacheSize", customConfiguration.messageCacheSize.toString(), "1")
 
     val ioDispatcherThreadPoolSize: Variable =
         Variable("ioDispatcherThreadPoolSize", customConfiguration.ioDispatcherThreadPoolSize.let {
@@ -99,14 +102,16 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
             it.toString()
         }, "10")
 
-    val enableCaching: Variable = Variable("enableCaching", customConfiguration.enableCaching.toString(), "true")
-    val notModifiedObjectsLifetime: Variable =
-        Variable("notModifiedObjectsLifetime", customConfiguration.notModifiedObjectsLifetime.toString(), "3600")
-    val rarelyModifiedObjects: Variable =
-        Variable("rarelyModifiedObjects", customConfiguration.rarelyModifiedObjects.toString(), "500")
-
     val checkRequestsAliveDelay: Variable =
         Variable("checkRequestsAliveDelay", customConfiguration.checkRequestsAliveDelay.toString(), "2000")
+
+    val enableCaching: Variable = Variable("enableCaching", customConfiguration.enableCaching.toString(), "true")
+
+    val notModifiedObjectsLifetime: Variable =
+        Variable("notModifiedObjectsLifetime", customConfiguration.notModifiedObjectsLifetime.toString(), "3600")
+
+    val rarelyModifiedObjects: Variable =
+        Variable("rarelyModifiedObjects", customConfiguration.rarelyModifiedObjects.toString(), "500")
 
     val sseEventSearchStep: Variable =
         Variable("sseEventSearchStep", customConfiguration.sseEventSearchStep.toString(), "200")
@@ -116,38 +121,82 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
 
     val dbRetryDelay: Variable = Variable("dbRetryDelay", customConfiguration.dbRetryDelay.toString(), "5000")
 
-    val cradleDispatcherPoolSize: Variable =
-        Variable("cradleDispatcherPoolSize", customConfiguration.cradleDispatcherPoolSize.toString(), "2")
+    val messageExtractorOutputBatchBuffer: Variable =
+        Variable(
+            "messageExtractorOutputBatchBuffer",
+            customConfiguration.messageExtractorOutputBatchBuffer.toString(),
+            "10"
+        )
 
+    val messageConverterOutputBatchBuffer: Variable =
+        Variable(
+            "messageConverterOutputBatchBuffer",
+            customConfiguration.messageConverterOutputBatchBuffer.toString(),
+            "10"
+        )
+
+    val messageDecoderOutputBatchBuffer: Variable =
+        Variable(
+            "messageDecoderOutputBatchBuffer",
+            customConfiguration.messageDecoderOutputBatchBuffer.toString(),
+            "10"
+        )
+
+    val messageUnpackerOutputMessageBuffer: Variable =
+        Variable(
+            "messageUnpackerOutputMessageBuffer",
+            customConfiguration.messageUnpackerOutputMessageBuffer.toString(),
+            "1000"
+        )
+
+    val messageFilterOutputMessageBuffer: Variable =
+        Variable(
+            "messageFilterOutputMessageBuffer",
+            customConfiguration.messageFilterOutputMessageBuffer.toString(),
+            "1000"
+        )
+
+    val messageMergerOutputMessageBuffer: Variable =
+        Variable(
+            "messageMergerOutputMessageBuffer",
+            customConfiguration.messageMergerOutputMessageBuffer.toString(),
+            "10"
+        )
+
+    val codecResponseTimeout: Variable = Variable(
+        "codecResponseTimeout",
+        customConfiguration.codecResponseTimeout.toString(), "6000"
+    )
+
+    val codecPendingBatchLimit: Variable =
+        Variable("codecPendingBatchLimit", customConfiguration.codecPendingBatchLimit.toString(), "200")
+
+    val codecCallbackThreadPool: Variable =
+        Variable("codecCallbackThreadPool", customConfiguration.codecCallbackThreadPool.toString(), "1")
+
+    val codecRequestThreadPool: Variable =
+        Variable("codecRequestThreadPool", customConfiguration.codecRequestThreadPool.toString(), "1")
+
+    val codecUsePinAttributes: Variable =
+        Variable("codecUsePinAttributes", customConfiguration.codecUsePinAttributes.toString(), "true")
+
+    val cradleDispatcherPoolSize: Variable =
+        Variable("cradleDispatcherPoolSize", customConfiguration.cradleDispatcherPoolSize.toString(), "1")
 
     val sseSearchDelay: Variable = Variable("sseSearchDelay", customConfiguration.sseSearchDelay.toString(), "6000")
-
-    val eventSearchChunkSize: Variable =
-        Variable("eventSearchChunkSize", customConfiguration.eventSearchChunkSize.toString(), "64")
-    val decodeMessageConsumerCount: Variable =
-        Variable("decodeMessageConsumerCount", customConfiguration.decodeMessageConsumerCount.toString(), "64")
-
-    val serverType: Variable =
-        Variable("serverType", customConfiguration.serverType.toString(), "HTTP")
-
-    val messageContinuousStreamBuffer: Variable =
-        Variable("messageContinuousStreamBuffer", customConfiguration.messageContinuousStreamBuffer.toString(), "50")
-
-    val messageDecoderBuffer: Variable =
-        Variable("messageDecoderBuffer", customConfiguration.messageDecoderBuffer.toString(), "500")
-
-    val messageFilterBuffer: Variable =
-        Variable("messageFilterBuffer", customConfiguration.messageFilterBuffer.toString(), "500")
-
-    val messageStreamMergerBuffer: Variable =
-        Variable("messageStreamMergerBuffer", customConfiguration.messageStreamMergerBuffer.toString(), "500")
 
     val sendEmptyDelay: Variable =
         Variable("sendEmptyDelay", customConfiguration.sendEmptyDelay.toString(), "100")
 
-    val pipelineInfoSendDelay: Variable =
-        Variable("pipelineInfoSendDelay", customConfiguration.pipelineInfoSendDelay.toString(), "200")
+    val eventSearchChunkSize: Variable =
+        Variable("eventSearchChunkSize", customConfiguration.eventSearchChunkSize.toString(), "64")
 
     val sendPipelineStatus: Variable =
         Variable("sendPipelineStatus", customConfiguration.sendPipelineStatus.toString(), "false")
+
+    val pipelineInfoSendDelay: Variable =
+        Variable("pipelineInfoSendDelay", customConfiguration.pipelineInfoSendDelay.toString(), "2000")
+
+    val serverType: Variable =
+        Variable("serverType", customConfiguration.serverType.toString(), "HTTP")
 }

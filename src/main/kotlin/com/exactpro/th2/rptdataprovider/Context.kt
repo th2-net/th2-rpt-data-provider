@@ -22,7 +22,6 @@ import com.exactpro.th2.common.grpc.MessageBatch
 import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.schema.grpc.configuration.GrpcConfiguration
 import com.exactpro.th2.common.schema.message.MessageRouter
-import com.exactpro.th2.rptdataprovider.cache.CodecCache
 import com.exactpro.th2.rptdataprovider.cache.EventCache
 import com.exactpro.th2.rptdataprovider.cache.MessageCache
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
@@ -82,8 +81,6 @@ class Context(
     val eventProducer: EventProducer = EventProducer(cradleService, jacksonMapper),
 
     val eventCache: EventCache = EventCache(cacheTimeout, configuration.eventCacheSize.value.toLong(), eventProducer),
-
-    val codecCache: CodecCache = CodecCache(configuration),
 
     val messageProducer: MessageProducer = MessageProducer(
         cradleService,

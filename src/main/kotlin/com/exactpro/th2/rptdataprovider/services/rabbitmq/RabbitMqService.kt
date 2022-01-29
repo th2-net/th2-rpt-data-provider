@@ -38,15 +38,15 @@ class RabbitMqService(
 
     private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
     private val pendingRequests = ConcurrentHashMap<Int, PendingCodecBatchRequest>()
-    private val usePinAttributes = true
-    private val maximumPendingRequests = 200
-
-    private val mqCallbackScope = CoroutineScope(
-        Executors.newFixedThreadPool(configuration.decodeMessageConsumerCount.value.toInt()).asCoroutineDispatcher()
-    )
+    private val usePinAttributes = configuration.codecUsePinAttributes.value.toBoolean()
+    private val maximumPendingRequests = configuration.codecPendingBatchLimit.value.toInt()
 
     private val mqRequestSenderScope = CoroutineScope(
-        Executors.newFixedThreadPool(configuration.decodeMessageConsumerCount.value.toInt()).asCoroutineDispatcher()
+        Executors.newFixedThreadPool(configuration.codecRequestThreadPool.value.toInt()).asCoroutineDispatcher()
+    )
+
+    private val mqCallbackScope = CoroutineScope(
+        Executors.newFixedThreadPool(configuration.codecCallbackThreadPool.value.toInt()).asCoroutineDispatcher()
     )
 
     @Suppress("unused")
