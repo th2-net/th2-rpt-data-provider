@@ -34,7 +34,6 @@ data class StreamName(val name: String, val direction: Direction) {
 }
 
 abstract class PipelineComponent(
-    val startId: StoredMessageId?,
     val context: Context,
     val searchRequest: SseMessageSearchRequest,
     val externalScope: CoroutineScope,

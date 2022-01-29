@@ -26,7 +26,6 @@ import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.util.concurrent.atomic.AtomicLong
 
-@InternalCoroutinesApi
 class MessageFilter(
     context: Context,
     searchRequest: SseMessageSearchRequest,
@@ -34,9 +33,8 @@ class MessageFilter(
     externalScope: CoroutineScope,
     previousComponent: PipelineComponent?,
     messageFlowCapacity: Int,
-    val pipelineStatus: PipelineStatus
+    private val pipelineStatus: PipelineStatus
 ) : PipelineComponent(
-    previousComponent?.startId,
     context,
     searchRequest,
     externalScope,
@@ -81,9 +79,7 @@ class MessageFilter(
 
 
     private suspend fun emptySender(parentScope: CoroutineScope) {
-        var count = 0
         while (parentScope.isActive) {
-            logger.debug { "emptySender $id ${count++}" }
             lastScannedObject?.let {
                 sendToChannel(EmptyPipelineObject(it))
             }

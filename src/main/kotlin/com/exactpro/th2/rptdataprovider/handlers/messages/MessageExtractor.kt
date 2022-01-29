@@ -16,136 +16,178 @@
 
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
+import com.exactpro.cradle.Order
 import com.exactpro.cradle.TimeRelation
-import com.exactpro.cradle.messages.StoredMessage
+import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
+import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
+import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.time.Instant
 
 
 class MessageExtractor(
-    private val startMessageId: StoredMessageId?,
-    private val initializer: StreamInitializer,
-    private val startTimestamp: Instant,
+    context: Context,
+    val request: SseMessageSearchRequest,
+    stream: StreamName,
     externalScope: CoroutineScope,
     messageFlowCapacity: Int,
     private val pipelineStatus: PipelineStatus
 ) : PipelineComponent(
-    startMessageId,
-    initializer.context,
-    initializer.request,
-    externalScope,
-    initializer.stream,
-    messageFlowCapacity = messageFlowCapacity
+    context, request, externalScope, stream, messageFlowCapacity = messageFlowCapacity
 ) {
 
     companion object {
         private val logger = KotlinLogging.logger { }
     }
 
-    private var messageLoader: MessageLoader? = null
-
     private val sendEmptyDelay = context.configuration.sendEmptyDelay.value.toLong()
 
-    private var firstPull: Boolean = true
     private var isStreamEmpty: Boolean = false
 
     private var lastElement: StoredMessageId? = null
-    private var lastTimestamp: Instant = startTimestamp
+    private var lastTimestamp: Instant? = null
 
 
     init {
         externalScope.launch {
             try {
                 processMessage()
+            } catch (e: CancellationException) {
+                logger.debug { "message extractor for stream $streamName has been stopped" }
             } catch (e: Exception) {
-                logger.error(e) { }
+                logger.error(e) { "unexpected exception" }
                 throw e
             }
         }
     }
 
 
-    private suspend fun initialize() {
-        if (startMessageId == null) {
-            initializer.initStream(startTimestamp)?.let {
-                lastElement = it.id
-                lastTimestamp = it.timestamp
-            }
-        } else {
-            context.cradleService.getMessageSuspend(startMessageId)?.let {
-                lastElement = it.id
-                lastTimestamp = it.timestamp
-                firstPull = false
-            }
-        }
-        messageLoader = MessageLoader(context, startTimestamp, searchRequest.searchDirection, pipelineStatus)
-    }
-
-    private fun markStreamEmpty() {
-        isStreamEmpty = true
-        lastTimestamp = if (searchRequest.searchDirection == TimeRelation.AFTER) {
-            Instant.MAX
-        } else {
-            Instant.MIN
-        }
-    }
-
-    private fun getLastElementInBatch(batchWrapper: MessageBatchWrapper): StoredMessage {
-        return if (searchRequest.searchDirection == TimeRelation.AFTER) {
-            batchWrapper.messageBatch.lastMessage
-        } else {
-            batchWrapper.messageBatch.firstMessage
-        }
-    }
-
-
-    private suspend fun getMessagesSequence(): Sequence<MessageBatchWrapper> {
-        if (lastElement == null || messageLoader == null) {
-            return emptySequence()
-        }
-        return messageLoader!!.pullMoreMessage(lastElement!!, firstPull)
-    }
-
-
-    private suspend fun emptySender(parentScope: CoroutineScope) {
-        while (parentScope.isActive) {
-            sendToChannel(
-                EmptyPipelineObject(isStreamEmpty, lastElement ?: startMessageId, lastTimestamp)
-            )
-            delay(sendEmptyDelay)
-        }
-    }
-
-
     override suspend fun processMessage() {
         coroutineScope {
-            launch { emptySender(this) }
-
-            initialize()
-
-            val messageBatches = getMessagesSequence()
-
-            for (parsedMessage in messageBatches) {
-                logger.trace { parsedMessage.messageBatch.id }
-
-                getLastElementInBatch(parsedMessage).also {
-                    lastElement = it.id
-                    lastTimestamp = it.timestamp
+            launch {
+                while (this@coroutineScope.isActive) {
+                    sendToChannel(
+                        EmptyPipelineObject(isStreamEmpty, lastElement, lastTimestamp)
+                    )
+                    delay(sendEmptyDelay)
                 }
-
-                sendToChannel(PipelineRawBatch(isStreamEmpty, lastElement, lastTimestamp, parsedMessage))
             }
 
-            markStreamEmpty()
+            streamName!!
+
+            val resumeFromId = request.resumeFromIdsList.firstOrNull {
+                it.streamName.equals(streamName.name) && it.direction.equals(streamName.direction)
+            }
+
+            val order = if (request.searchDirection == TimeRelation.AFTER) {
+                Order.DIRECT
+            } else {
+                Order.REVERSE
+            }
+
+            logger.debug { "acquiring cradle iterator for stream $streamName" }
+
+            val cradleMessageIterable = context.cradleService.getMessagesBatchesSuspend(
+                StoredMessageFilterBuilder().streamName().isEqualTo(streamName.name).direction()
+                    .isEqualTo(streamName.direction).order(order)
+
+                    // timestamps will be ignored if resumeFromId is present
+                    .also { builder ->
+                        if (resumeFromId != null) {
+                            builder.index().let {
+                                if (order == Order.DIRECT) {
+                                    it.isGreaterThan(resumeFromId.index)
+                                } else {
+                                    it.isLessThan(resumeFromId.index)
+                                }
+                            }
+                        } else {
+                            request.startTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
+                            request.endTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
+                        }
+                    }.build()
+            )
+
+            logger.debug { "cradle iterator has been built for stream $streamName" }
+
+
+            for (batch in cradleMessageIterable) {
+                if (externalScope.isActive) {
+                    logger.trace { "batch ${batch.id.index} of stream $streamName with ${batch.messageCount} messages (${batch.batchSize} bytes) has been extracted" }
+
+                    val trimmedMessages = let {
+                        if (order == Order.DIRECT) {
+                            batch.messages
+                        } else {
+                            batch.messagesReverse
+                        }
+                    }
+                        // trim messages if resumeFromId is present
+                        .dropWhile {
+                            resumeFromId?.index?.let { start ->
+                                if (order == Order.DIRECT) {
+                                    it.index <= start
+                                } else {
+                                    it.index >= start
+                                }
+                            } ?: false
+                        }
+
+                        //trim messages that do not strictly match time filter
+                        .dropWhile {
+                            request.startTimestamp?.let { startTimestamp ->
+                                if (order == Order.DIRECT) {
+                                    it.timestamp.isBefore(startTimestamp)
+                                } else {
+                                    it.timestamp.isAfter(startTimestamp)
+                                }
+                            } ?: false
+                        }
+
+                    resumeFromId?.also {
+                        logger.trace { "batch ${batch.id.index} of stream $streamName has been trimmed - ${trimmedMessages.size} messages left" }
+                    }
+
+                    try {
+                        trimmedMessages.last().let {
+                            sendToChannel(
+                                PipelineRawBatch(
+                                    false, it.id, it.timestamp, MessageBatchWrapper(batch, trimmedMessages)
+                                )
+                            )
+
+                            lastElement = it.id
+                            lastTimestamp = it.timestamp
+
+                            logger.trace { "batch ${batch.id.index} of stream $streamName has been sent downstream" }
+
+                        }
+                    } catch (e: NoSuchElementException) {
+                        logger.debug { "skipping batch ${batch.id.index} of stream $streamName - no messages left after trimming" }
+                    }
+
+                    pipelineStatus.countFetchedBytes(streamName.toString(), batch.batchSize)
+                    pipelineStatus.countFetchedBatches(streamName.toString())
+                    pipelineStatus.countFetchedMessages(streamName.toString(), trimmedMessages.size.toLong())
+                }
+            }
+
+            isStreamEmpty = true
+            lastTimestamp = if (order == Order.DIRECT) {
+                Instant.MAX
+            } else {
+                Instant.MIN
+            }
+
+            logger.debug { "no more data for stream $streamName (lastId=${lastElement.toString()} lastTimestamp=${lastTimestamp})" }
         }
     }
 }
-
-

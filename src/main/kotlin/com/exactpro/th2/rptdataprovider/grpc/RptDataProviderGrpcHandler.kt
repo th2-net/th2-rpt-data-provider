@@ -154,7 +154,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
             logger.error(exception) { "Coroutine context exception from the handleRequest method with $requestName" }
         }
 
-        CoroutineScope(Dispatchers.IO.plus(handler)).launch {
+        CoroutineScope(Dispatchers.IO + handler).launch {
             logMetrics(if (useStream) grpcStreamRequestsProcessedInParallelQuantity else grpcSingleRequestsProcessedInParallelQuantity) {
                 measureTimeMillis {
                     logger.debug { "handling '$requestName' request with parameters '${stringParameters.value}'" }
@@ -171,8 +171,6 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
                             } else {
                                 handleRestApiRequest(responseObserver, context, calledFun as suspend () -> T)
                             }
-
-                            responseObserver.onCompleted()
                         } catch (e: Exception) {
                             throw ExceptionUtils.getRootCause(e) ?: e
                         } finally {

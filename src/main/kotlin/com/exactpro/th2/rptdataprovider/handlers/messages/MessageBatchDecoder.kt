@@ -20,7 +20,6 @@ class MessageBatchDecoder(
     messageFlowCapacity: Int,
     private val pipelineStatus: PipelineStatus
 ) : PipelineComponent(
-    previousComponent?.startId,
     context,
     searchRequest,
     externalScope,

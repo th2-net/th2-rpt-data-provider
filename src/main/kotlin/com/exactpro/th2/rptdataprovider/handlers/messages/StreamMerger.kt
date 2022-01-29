@@ -30,7 +30,7 @@ import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.time.Instant
 
-
+//FIXME: Check stream stop condition and streaminfo object
 class StreamMerger(
     context: Context,
     searchRequest: SseMessageSearchRequest,
@@ -38,7 +38,7 @@ class StreamMerger(
     pipelineStreams: List<PipelineComponent>,
     messageFlowCapacity: Int,
     private val pipelineStatus: PipelineStatus
-) : PipelineComponent(null, context, searchRequest, externalScope, messageFlowCapacity = messageFlowCapacity) {
+) : PipelineComponent(context, searchRequest, externalScope, messageFlowCapacity = messageFlowCapacity) {
 
     companion object {
         private val logger = KotlinLogging.logger { }
@@ -49,8 +49,6 @@ class StreamMerger(
         companion object {
             private val logger = KotlinLogging.logger { }
         }
-
-        val startId = messageStream.startId
 
         var currentElement: PipelineStepObject? = null
             private set
@@ -105,25 +103,14 @@ class StreamMerger(
         }
     }
 
-    private suspend fun messageStreamsInit() {
-        messageStreams.forEach { it.init() }
-    }
-
-
     private fun timestampInRange(pipelineStepObject: PipelineStepObject): Boolean {
         return pipelineStepObject.lastScannedTime.let { timestamp ->
             if (searchRequest.searchDirection == TimeRelation.AFTER) {
-                searchRequest.endTimestamp == null || timestamp.isBeforeOrEqual(searchRequest.endTimestamp)
+                searchRequest.endTimestamp == null || (timestamp?.isBeforeOrEqual(searchRequest.endTimestamp) ?: false)
             } else {
-                searchRequest.endTimestamp == null || timestamp.isAfterOrEqual(searchRequest.endTimestamp)
+                searchRequest.endTimestamp == null || (timestamp?.isAfterOrEqual(searchRequest.endTimestamp) ?: false)
             }
         }
-    }
-
-
-    private fun keepSearch(): Boolean {
-        val haveNotReachedLimit = resultCountLimit?.let { it > 0 } ?: true
-        return !allStreamIsEmpty && haveNotReachedLimit
     }
 
 
@@ -176,23 +163,22 @@ class StreamMerger(
 
             launch { keepAliveGenerator(this@coroutineScope) }
 
-            messageStreamsInit()
+            messageStreams.forEach { it.init() }
+
             do {
 
                 val nextMessage = getNextMessage()
 
                 val inTimeRange = inTimeRange(nextMessage)
 
-                logger.trace { nextMessage.lastProcessedId }
 
                 if (nextMessage !is EmptyPipelineObject && inTimeRange) {
-                    logger.trace { nextMessage.lastProcessedId }
                     sendToChannel(nextMessage)
                     resultCountLimit = resultCountLimit?.dec()
                     pipelineStatus.countMerged()
                 }
 
-            } while (keepSearch() && inTimeRange)
+            } while (!allStreamIsEmpty && (resultCountLimit?.let { it > 0 } ?: true) && inTimeRange)
 
             sendToChannel(StreamEndObject(false, null, Instant.ofEpochMilli(0)))
         }
@@ -219,12 +205,12 @@ class StreamMerger(
 
 
     private fun isLess(firstMessage: PipelineStepObject, secondMessage: PipelineStepObject): Boolean {
-        return firstMessage.lastScannedTime.isBefore(secondMessage.lastScannedTime)
+        return firstMessage.lastScannedTime?.isBefore(secondMessage.lastScannedTime) ?: false
     }
 
 
     private fun isGreater(firstMessage: PipelineStepObject, secondMessage: PipelineStepObject): Boolean {
-        return firstMessage.lastScannedTime.isAfter(secondMessage.lastScannedTime)
+        return firstMessage.lastScannedTime?.isAfter(secondMessage.lastScannedTime) ?: false
     }
 
 
@@ -244,10 +230,7 @@ class StreamMerger(
 
     fun getStreamsInfo(): List<StreamInfo> {
         return messageStreams.map {
-            StreamInfo(
-                it.messageStream.streamName!!,
-                it.previousElement?.lastProcessedId ?: it.startId
-            )
+            StreamInfo(it.messageStream.streamName!!, it.previousElement?.lastProcessedId)
         }
     }
 }

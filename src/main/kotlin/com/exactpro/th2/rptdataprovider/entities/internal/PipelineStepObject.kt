@@ -25,21 +25,21 @@ import java.time.Instant
 interface PipelineStepObject {
     val streamEmpty: Boolean
     val lastProcessedId: StoredMessageId?
-    val lastScannedTime: Instant
+    val lastScannedTime: Instant?
 }
 
 
 data class StreamEndObject(
     override val streamEmpty: Boolean,
     override val lastProcessedId: StoredMessageId?,
-    override val lastScannedTime: Instant
+    override val lastScannedTime: Instant?
 ) : PipelineStepObject
 
 
 data class EmptyPipelineObject(
     override val streamEmpty: Boolean,
     override val lastProcessedId: StoredMessageId?,
-    override val lastScannedTime: Instant
+    override val lastScannedTime: Instant?
 ) : PipelineStepObject {
     constructor(pipelineStepObject: PipelineStepObject) : this(
         pipelineStepObject.streamEmpty, pipelineStepObject.lastProcessedId, pipelineStepObject.lastScannedTime
@@ -50,7 +50,7 @@ data class EmptyPipelineObject(
 data class PipelineKeepAlive(
     override val streamEmpty: Boolean,
     override val lastProcessedId: StoredMessageId?,
-    override val lastScannedTime: Instant,
+    override val lastScannedTime: Instant?,
     val scannedObjectsCount: Long
 ) : PipelineStepObject {
 
@@ -66,7 +66,7 @@ data class PipelineKeepAlive(
 data class PipelineRawBatch(
     override val streamEmpty: Boolean,
     override val lastProcessedId: StoredMessageId?,
-    override val lastScannedTime: Instant,
+    override val lastScannedTime: Instant?,
     val storedBatchWrapper: MessageBatchWrapper
 ) : PipelineStepObject
 
@@ -74,7 +74,7 @@ data class PipelineRawBatch(
 data class PipelineCodecRequest(
     override val streamEmpty: Boolean,
     override val lastProcessedId: StoredMessageId?,
-    override val lastScannedTime: Instant,
+    override val lastScannedTime: Instant?,
     val storedBatchWrapper: MessageBatchWrapper,
     val codecRequest: CodecBatchRequest
 ): PipelineStepObject
@@ -83,7 +83,7 @@ data class PipelineCodecRequest(
 data class PipelineDecodedBatch(
     override val streamEmpty: Boolean,
     override val lastProcessedId: StoredMessageId?,
-    override val lastScannedTime: Instant,
+    override val lastScannedTime: Instant?,
     val storedBatchWrapper: MessageBatchWrapper,
     val codecResponse: CodecBatchResponse
 ): PipelineStepObject
@@ -92,7 +92,7 @@ data class PipelineDecodedBatch(
 data class PipelineParsedMessage(
     override val streamEmpty: Boolean,
     override val lastProcessedId: StoredMessageId?,
-    override val lastScannedTime: Instant,
+    override val lastScannedTime: Instant?,
     val payload: Message
 ) : PipelineStepObject {
     constructor(pipelineStepObject: PipelineStepObject, payload: Message) : this(
@@ -104,7 +104,7 @@ data class PipelineParsedMessage(
 data class PipelineFilteredMessage(
     override val streamEmpty: Boolean,
     override val lastProcessedId: StoredMessageId?,
-    override val lastScannedTime: Instant,
+    override val lastScannedTime: Instant?,
     val payload: MessageWithMetadata
 ) : PipelineStepObject {
     constructor(pipelineStepObject: PipelineStepObject, payload: MessageWithMetadata) : this(

@@ -16,26 +16,10 @@
 
 package com.exactpro.th2.rptdataprovider.entities.responses
 
-import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageBatch
 
 data class MessageBatchWrapper(
-    val messageBatch: StoredMessageBatch,
-    val firstIndexInRange: Int? = null,
-    val timeRelation: TimeRelation = TimeRelation.AFTER
-) {
-    private var messages: MutableCollection<StoredMessage>? = null
-
-    val trimmedMessages: MutableCollection<StoredMessage>
-        get() {
-            if (messages == null) {
-                messages =
-                    if (timeRelation == TimeRelation.AFTER)
-                        messageBatch.messages
-                    else
-                        messageBatch.messagesReverse
-            }
-            return messages!!
-        }
-}
+    val fullBatch: StoredMessageBatch,
+    val trimmedMessages: Collection<StoredMessage>
+)

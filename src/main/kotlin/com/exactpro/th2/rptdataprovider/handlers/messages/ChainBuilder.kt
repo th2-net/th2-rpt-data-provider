@@ -17,14 +17,11 @@
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.cradle.Direction
-import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.InternalCoroutinesApi
-import java.time.Instant
 
 class ChainBuilder(
     private val context: Context,
@@ -39,54 +36,24 @@ class ChainBuilder(
     private val messageStreamMergerBuffer = context.configuration.messageStreamMergerBuffer.value.toInt()
 
 
-    private suspend fun chooseStartTimestamp(request: SseMessageSearchRequest): Instant {
-        val messageId = request.resumeFromId?.let { StoredMessageId.fromString(it) }
-
-        return messageId?.let { context.cradleService.getMessageSuspend(it)?.timestamp }
-            ?: request.startTimestamp
-            ?: Instant.now()
-    }
-
-
-    private fun getRequestStreamNames(request: SseMessageSearchRequest): List<StreamName> {
-        return request.stream
-            .flatMap { stream -> Direction.values().map { StreamName(stream, it) } }
-    }
-
-
-    private fun getRequestResumeId(request: SseMessageSearchRequest): Map<StreamName, StoredMessageId?> {
-        val resumeFromId = request.resumeFromId?.let {
-            listOf(StoredMessageId.fromString(it))
-        } ?: emptyList()
-        val idsList = request.resumeFromIdsList + resumeFromId
-
-        return idsList.associateBy { StreamName(it.streamName, it.direction) }
-    }
-
-
-    @InternalCoroutinesApi
-    suspend fun buildChain(): StreamMerger {
-        val streamNames = getRequestStreamNames(request)
-        val resumeFromIds = getRequestResumeId(request)
-        val startTimestamp = chooseStartTimestamp(request)
-
+    fun buildChain(): StreamMerger {
+        val streamNames = request.stream.flatMap { stream -> Direction.values().map { StreamName(stream, it) } }
 
         val dataStreams = streamNames.map { streamName ->
-            val streamInitializer = StreamInitializer(context, request, streamName)
             pipelineStatus.addStream(streamName.toString())
 
             val messageExtractor = MessageExtractor(
-                resumeFromIds[streamName],
-                streamInitializer,
-                startTimestamp,
+                context,
+                request,
+                streamName,
                 externalScope,
                 messageContinuousStreamBuffer,
                 pipelineStatus
             )
 
-            val messageBatchConverter = MessageBatchConverter(messageExtractor, 1000, pipelineStatus)
-            val messageBatchDecoder = MessageBatchDecoder(messageBatchConverter, 1000, pipelineStatus)
-            val messageBatchUnpacker = MessageBatchUnpacker(messageBatchDecoder, 1000, pipelineStatus)
+            val messageBatchConverter = MessageBatchConverter(messageExtractor, 10, pipelineStatus)
+            val messageBatchDecoder = MessageBatchDecoder(messageBatchConverter, 100, pipelineStatus)
+            val messageBatchUnpacker = MessageBatchUnpacker(messageBatchDecoder, 100, pipelineStatus)
 
             MessageFilter(messageBatchUnpacker, messageFilterBuffer, pipelineStatus)
         }
