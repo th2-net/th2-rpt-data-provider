@@ -107,7 +107,7 @@ class MessageBatchUnpacker(
 
             val messages = pipelineMessage.storedBatchWrapper.trimmedMessages
 
-            logger.debug { "codec response unpacking took ${result.duration.inMilliseconds}ms (stream=${streamName.toString()} firstId=${messages.first().id.index} lastId=${messages.last().id.index})" }
+            logger.debug { "codec response unpacking took ${result.duration.inMilliseconds}ms (stream=${streamName.toString()} firstId=${messages.first().id.index} lastId=${messages.last().id.index} messages=${messages.size})" }
 
             result.value.forEach { (sendToChannel(it)) }
 
