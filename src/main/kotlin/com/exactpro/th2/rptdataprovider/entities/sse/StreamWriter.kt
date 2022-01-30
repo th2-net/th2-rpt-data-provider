@@ -30,6 +30,9 @@ import io.grpc.stub.StreamObserver
 import mu.KotlinLogging
 import java.io.Writer
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.system.measureTimeMillis
+import kotlin.time.ExperimentalTime
+import kotlin.time.measureTimedValue
 
 
 interface StreamWriter {
@@ -97,12 +100,20 @@ class GrpcWriter(private val writer: StreamObserver<StreamResponse>, private val
     }
 
 
+    @OptIn(ExperimentalTime::class)
     override suspend fun write(message: MessageWithMetadata, counter: AtomicLong) {
-        writer.onNext(
+        val message = measureTimedValue {
             StreamResponse.newBuilder()
                 .setMessage(MessageMapper.convertToGrpcMessageData(message))
                 .build()
-        )
+        }
+
+        measureTimeMillis {
+            writer.onNext(message.value)
+        }.also {
+            logger.trace { "grpc object was built in ${message.duration.inMilliseconds.toInt()}ms and sent in ${it}ms" }
+        }
+
         counter.incrementAndGet()
     }
 
