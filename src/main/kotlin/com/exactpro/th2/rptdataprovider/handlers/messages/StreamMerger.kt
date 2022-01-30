@@ -223,6 +223,12 @@ class StreamMerger(
                     isGreater(new, old)
                 }
             }
+        }.also {
+            logger.debug {
+                "selected ${it.lastProcessedId} - ${it.lastScannedTime} out of [${
+                    messageStreams.joinToString(", ") { "${it.top().lastProcessedId} - ${it.top().lastScannedTime}" }
+                }]"
+            }
         }
     }
 
