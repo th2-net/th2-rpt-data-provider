@@ -216,7 +216,7 @@ class StreamMerger(
         return coroutineScope {
 
             val streams =
-                if (logger.isDebugEnabled)
+                if (logger.isTraceEnabled)
                     messageStreams.joinToString(", ") {
                         "${it.top().lastProcessedId} - ${it.top().lastScannedTime}"
                     }
@@ -233,7 +233,7 @@ class StreamMerger(
                     }
                 }
             }.also {
-                logger.debug {
+                logger.trace {
                     "selected ${it.lastProcessedId} - ${it.lastScannedTime} out of [${streams}]"
                 }
             }

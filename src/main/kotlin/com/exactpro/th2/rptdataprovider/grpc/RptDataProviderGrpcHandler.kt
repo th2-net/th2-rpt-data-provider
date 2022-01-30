@@ -20,18 +20,7 @@ import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.utils.CradleIdException
 import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.grpc.MessageID
-import com.exactpro.th2.dataprovider.grpc.DataProviderGrpc
-import com.exactpro.th2.dataprovider.grpc.EventData
-import com.exactpro.th2.dataprovider.grpc.EventSearchRequest
-import com.exactpro.th2.dataprovider.grpc.FilterInfo
-import com.exactpro.th2.dataprovider.grpc.FilterName
-import com.exactpro.th2.dataprovider.grpc.IsMatched
-import com.exactpro.th2.dataprovider.grpc.ListFilterName
-import com.exactpro.th2.dataprovider.grpc.MatchRequest
-import com.exactpro.th2.dataprovider.grpc.MessageData
-import com.exactpro.th2.dataprovider.grpc.MessageSearchRequest
-import com.exactpro.th2.dataprovider.grpc.StreamResponse
-import com.exactpro.th2.dataprovider.grpc.StringList
+import com.exactpro.th2.dataprovider.grpc.*
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
@@ -49,20 +38,10 @@ import com.google.protobuf.MessageOrBuilder
 import com.google.protobuf.TextFormat
 import io.grpc.Status
 import io.grpc.stub.StreamObserver
-import io.ktor.server.engine.EngineAPI
-import io.ktor.util.InternalAPI
+import io.ktor.server.engine.*
+import io.ktor.util.*
 import io.prometheus.client.Counter
-import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.InternalCoroutinesApi
-import kotlinx.coroutines.cancelChildren
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import mu.KotlinLogging
 import org.apache.commons.lang3.exception.ExceptionUtils
 import kotlin.coroutines.coroutineContext
@@ -230,7 +209,14 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
                 launch {
                     checkContext(grpcContext)
                 }
-                calledFun.invoke(GrpcWriter(responseObserver, context.jacksonMapper))
+                calledFun.invoke(
+                    GrpcWriter(
+                        context.configuration.grpcWriterMessageBuffer.value.toInt(),
+                        responseObserver,
+                        context.jacksonMapper,
+                        this@coroutineScope
+                    )
+                )
             } finally {
                 coroutineContext.cancelChildren()
             }
@@ -308,7 +294,10 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     }
 
 
-    override fun getMessagesFilters(request: com.google.protobuf.Empty, responseObserver: StreamObserver<ListFilterName>) {
+    override fun getMessagesFilters(
+        request: com.google.protobuf.Empty,
+        responseObserver: StreamObserver<ListFilterName>
+    ) {
         handleRequest(responseObserver, "get message filters names", useStream = false, request = request) {
             ListFilterName.newBuilder()
                 .addAllFilterNames(
@@ -320,7 +309,10 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     }
 
 
-    override fun getEventsFilters(request: com.google.protobuf.Empty, responseObserver: StreamObserver<ListFilterName>) {
+    override fun getEventsFilters(
+        request: com.google.protobuf.Empty,
+        responseObserver: StreamObserver<ListFilterName>
+    ) {
         handleRequest(responseObserver, "get event filters names", useStream = false, request = request) {
             ListFilterName.newBuilder()
                 .addAllFilterNames(

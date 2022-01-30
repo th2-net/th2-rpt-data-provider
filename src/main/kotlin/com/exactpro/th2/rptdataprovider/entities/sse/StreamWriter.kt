@@ -27,9 +27,12 @@ import com.exactpro.th2.rptdataprovider.eventWrite
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatusSnapshot
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.grpc.stub.StreamObserver
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import mu.KotlinLogging
 import java.io.Writer
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.math.roundToInt
 import kotlin.system.measureTimeMillis
 import kotlin.time.ExperimentalTime
 import kotlin.time.measureTimedValue
@@ -52,7 +55,7 @@ interface StreamWriter {
     suspend fun closeWriter()
 }
 
-class SseWriter(private val writer: Writer, private val jacksonMapper: ObjectMapper) : StreamWriter {
+class HttpWriter(private val writer: Writer, private val jacksonMapper: ObjectMapper) : StreamWriter {
     val logger = KotlinLogging.logger { }
 
     override suspend fun write(status: PipelineStatusSnapshot, counter: AtomicLong) {
@@ -79,74 +82,124 @@ class SseWriter(private val writer: Writer, private val jacksonMapper: ObjectMap
         writer.eventWrite(SseEvent.build(jacksonMapper, event, lastEventId))
     }
 
+    @Suppress("BlockingMethodInNonBlockingContext")
     override suspend fun closeWriter() {
         writer.close()
         logger.debug { "http sse writer has been closed" }
     }
 }
 
-class GrpcWriter(private val writer: StreamObserver<StreamResponse>, private val jacksonMapper: ObjectMapper) :
+@OptIn(ExperimentalTime::class)
+class GrpcWriter(
+    responseBufferCapacity: Int,
+    private val writer: StreamObserver<StreamResponse>,
+    private val jacksonMapper: ObjectMapper,
+    private val scope: CoroutineScope
+) :
     StreamWriter {
+
     val logger = KotlinLogging.logger { }
 
+    // yes, channel of deferred responses is required, since the order is critical
+    val responses = Channel<Deferred<StreamResponse>>(responseBufferCapacity)
+
+    init {
+        scope.launch {
+            while (this.isActive) {
+
+                val response = measureTimedValue {
+                    responses.receive().await()
+                }
+
+                val sendDuration = measureTimeMillis {
+                    writer.onNext(response.value)
+                }
+
+                logger.trace { "awaited response for ${response.duration.inMilliseconds.roundToInt()}ms, sent in ${sendDuration}ms" }
+            }
+        }
+    }
 
     override suspend fun write(event: EventTreeNode, counter: AtomicLong) {
-        writer.onNext(
-            StreamResponse.newBuilder()
-                .setEventMetadata(event.convertToGrpcEventMetadata())
-                .build()
-        )
-        counter.incrementAndGet()
+        val result = CompletableDeferred<StreamResponse>()
+        responses.send(result)
+
+        scope.launch {
+            result.complete(
+                StreamResponse.newBuilder()
+                    .setEventMetadata(event.convertToGrpcEventMetadata())
+                    .build()
+            )
+
+            counter.incrementAndGet()
+        }
     }
 
 
-    @OptIn(ExperimentalTime::class)
     override suspend fun write(message: MessageWithMetadata, counter: AtomicLong) {
-        val message = measureTimedValue {
-            StreamResponse.newBuilder()
-                .setMessage(MessageMapper.convertToGrpcMessageData(message))
-                .build()
-        }
+        val result = CompletableDeferred<StreamResponse>()
+        responses.send(result)
 
-        measureTimeMillis {
-            writer.onNext(message.value)
-        }.also {
-            logger.trace { "grpc object was built in ${message.duration.inMilliseconds.toInt()}ms and sent in ${it}ms" }
-        }
+        scope.launch {
+            result.complete(
+                StreamResponse.newBuilder()
+                    .setMessage(MessageMapper.convertToGrpcMessageData(message))
+                    .build()
+            )
 
-        counter.incrementAndGet()
+            counter.incrementAndGet()
+        }
     }
 
     override suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong) {
-        writer.onNext(
-            StreamResponse.newBuilder()
-                .setLastScannedObject(lastScannedObjectInfo.convertToGrpc())
-                .build()
-        )
-        counter.incrementAndGet()
+        val result = CompletableDeferred<StreamResponse>()
+        responses.send(result)
+
+        scope.launch {
+            result.complete(
+                StreamResponse.newBuilder()
+                    .setLastScannedObject(lastScannedObjectInfo.convertToGrpc())
+                    .build()
+            )
+
+            counter.incrementAndGet()
+        }
     }
 
     override suspend fun write(status: PipelineStatusSnapshot, counter: AtomicLong) {
-        logger.debug { jacksonMapper.writeValueAsString(status) }
+        logger.info {
+            jacksonMapper.writeValueAsString(status)
+        }
     }
 
     override suspend fun write(event: Event, lastEventId: AtomicLong) {
-        writer.onNext(
-            StreamResponse.newBuilder()
-                .setEvent(event.convertToGrpcEventData())
-                .build()
-        )
-        lastEventId.incrementAndGet()
+        val result = CompletableDeferred<StreamResponse>()
+        responses.send(result)
+
+        scope.launch {
+            result.complete(
+                StreamResponse.newBuilder()
+                    .setEvent(event.convertToGrpcEventData())
+                    .build()
+            )
+
+            lastEventId.incrementAndGet()
+        }
     }
 
     override suspend fun write(streamInfo: List<StreamInfo>) {
-        writer.onNext(
-            StreamResponse.newBuilder().setStreamInfo(
-                StreamsInfo.newBuilder().addAllStreams(
-                    streamInfo.map { it.convertToProto() }
+        val result = CompletableDeferred<StreamResponse>()
+        responses.send(result)
+
+        scope.launch {
+            result.complete(
+                StreamResponse.newBuilder().setStreamInfo(
+                    StreamsInfo.newBuilder().addAllStreams(
+                        streamInfo.map { it.convertToProto() }
+                    ).build()
                 ).build()
-            ).build()
-        )
+            )
+        }
     }
 
     override suspend fun closeWriter() {

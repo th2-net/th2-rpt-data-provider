@@ -26,7 +26,7 @@ import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.sse.EventType
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
-import com.exactpro.th2.rptdataprovider.entities.sse.SseWriter
+import com.exactpro.th2.rptdataprovider.entities.sse.HttpWriter
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import io.ktor.application.*
@@ -211,7 +211,7 @@ class HttpServer(private val applicationContext: Context) {
                 call.response.headers.append(HttpHeaders.CacheControl, "no-cache, no-store, no-transform")
                 call.respondTextWriter(contentType = ContentType.Text.EventStream) {
                     try {
-                        calledFun.invoke(SseWriter(this, jacksonMapper))
+                        calledFun.invoke(HttpWriter(this, jacksonMapper))
                     } catch (e: Exception) {
                         eventWrite(SseEvent.build(jacksonMapper, e))
                         throw e
