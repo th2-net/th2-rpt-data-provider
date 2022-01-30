@@ -63,8 +63,6 @@ abstract class PipelineComponent(
 
 
     suspend fun pollMessage(): PipelineStepObject {
-        val res = messageFlow.receive()
-        logger.trace { res.lastProcessedId }
-        return res
+        return messageFlow.receive()
     }
 }
