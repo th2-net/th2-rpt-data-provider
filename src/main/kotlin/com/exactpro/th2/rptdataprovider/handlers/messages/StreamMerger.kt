@@ -71,7 +71,6 @@ class StreamMerger(
         suspend fun init() {
             messageStream.pollMessage().let {
                 if (previousElement == null && currentElement == null) {
-                    logger.trace { it.lastProcessedId }
                     currentElement = it
                 } else {
                     throw InvalidInitializationException("StreamHolder ${messageStream.streamName} already initialized")
@@ -84,7 +83,6 @@ class StreamMerger(
                 val currentElementTemporary = currentElement
 
                 currentElementTemporary?.also {
-                    logger.trace { newElement.lastProcessedId }
                     changePreviousElement(currentElement)
                     currentElement = newElement
                 }
