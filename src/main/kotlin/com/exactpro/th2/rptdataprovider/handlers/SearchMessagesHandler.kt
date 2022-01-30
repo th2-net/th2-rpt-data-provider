@@ -17,17 +17,25 @@
 package com.exactpro.th2.rptdataprovider.handlers
 
 import com.exactpro.th2.rptdataprovider.Context
-import com.exactpro.th2.rptdataprovider.entities.internal.*
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineFilteredMessage
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineKeepAlive
+import com.exactpro.th2.rptdataprovider.entities.internal.StreamEndObject
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedMessageInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.messages.ChainBuilder
 import com.exactpro.th2.rptdataprovider.handlers.messages.StreamMerger
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.takeWhile
 import mu.KotlinLogging
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
+import kotlin.system.measureTimeMillis
+import kotlin.time.ExperimentalTime
+import kotlin.time.measureTimedValue
 
 class SearchMessagesHandler(private val applicationContext: Context) {
 
@@ -50,9 +58,7 @@ class SearchMessagesHandler(private val applicationContext: Context) {
         }
     }
 
-    @InternalCoroutinesApi
-    @FlowPreview
-    @ExperimentalCoroutinesApi
+    @OptIn(ExperimentalTime::class, ExperimentalCoroutinesApi::class)
     suspend fun searchMessagesSse(request: SseMessageSearchRequest, writer: StreamWriter) {
         withContext(coroutineContext) {
             val lastMessageIdCounter = AtomicLong(0)
@@ -69,8 +75,16 @@ class SearchMessagesHandler(private val applicationContext: Context) {
                 }
 
                 do {
-                    val message = streamMerger?.pollMessage()
-                    message?.let { emit(it) }
+                    val message = measureTimedValue {
+                        streamMerger?.pollMessage()
+                    }
+
+                    measureTimeMillis {
+                        message.value?.let { emit(it) }
+                    }.also {
+                        logger.trace { "message was produced in ${message.duration.inMilliseconds} and consumed in ${it}ms" }
+                    }
+
                 } while (true)
             }
                 .takeWhile { it !is StreamEndObject }
