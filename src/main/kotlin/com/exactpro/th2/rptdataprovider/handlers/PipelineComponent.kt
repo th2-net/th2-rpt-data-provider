@@ -57,7 +57,6 @@ abstract class PipelineComponent(
 
 
     protected suspend fun sendToChannel(message: PipelineStepObject) {
-        logger.trace { message.lastProcessedId }
         messageFlow.send(message)
     }
 

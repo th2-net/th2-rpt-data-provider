@@ -70,7 +70,6 @@ class SearchMessagesHandler(private val applicationContext: Context) {
 
                 do {
                     val message = streamMerger?.pollMessage()
-                    logger.trace { message?.lastProcessedId }
                     message?.let { emit(it) }
                 } while (true)
             }
@@ -84,8 +83,6 @@ class SearchMessagesHandler(private val applicationContext: Context) {
                 }
                 .collect {
                     coroutineContext.ensureActive()
-
-                    logger.trace { it.lastProcessedId }
 
                     if (it is PipelineFilteredMessage) {
                         writer.write(it.payload, lastMessageIdCounter)
