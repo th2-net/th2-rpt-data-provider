@@ -74,9 +74,13 @@ class MessageExtractor(
         coroutineScope {
             launch {
                 while (this@coroutineScope.isActive) {
-                    sendToChannel(
-                        EmptyPipelineObject(isStreamEmpty, lastElement, lastTimestamp)
-                    )
+
+                    //FIXME: replace delay-based stream updates with synchronous updates from iterator
+                    lastTimestamp?.also {
+                        sendToChannel(
+                            EmptyPipelineObject(isStreamEmpty, lastElement, it)
+                        )
+                    }
                     delay(sendEmptyDelay)
                 }
             }

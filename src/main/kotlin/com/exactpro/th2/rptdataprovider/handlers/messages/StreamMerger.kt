@@ -104,9 +104,9 @@ class StreamMerger(
     private fun timestampInRange(pipelineStepObject: PipelineStepObject): Boolean {
         return pipelineStepObject.lastScannedTime.let { timestamp ->
             if (searchRequest.searchDirection == TimeRelation.AFTER) {
-                searchRequest.endTimestamp == null || (timestamp?.isBeforeOrEqual(searchRequest.endTimestamp) ?: false)
+                searchRequest.endTimestamp == null || (timestamp.isBeforeOrEqual(searchRequest.endTimestamp))
             } else {
-                searchRequest.endTimestamp == null || (timestamp?.isAfterOrEqual(searchRequest.endTimestamp) ?: false)
+                searchRequest.endTimestamp == null || (timestamp.isAfterOrEqual(searchRequest.endTimestamp))
             }
         }
     }
@@ -176,7 +176,7 @@ class StreamMerger(
                     pipelineStatus.countMerged()
                 }
 
-            } while (!allStreamIsEmpty && (resultCountLimit?.let { it > 0 } ?: true) && inTimeRange)
+            } while (!allStreamIsEmpty && (resultCountLimit?.let { it > 0 } != false) && inTimeRange)
 
             sendToChannel(StreamEndObject(false, null, Instant.ofEpochMilli(0)))
         }
@@ -203,20 +203,25 @@ class StreamMerger(
 
 
     private fun isLess(firstMessage: PipelineStepObject, secondMessage: PipelineStepObject): Boolean {
-        return firstMessage.lastScannedTime?.isBefore(secondMessage.lastScannedTime) ?: false
+        return firstMessage.lastScannedTime.isBefore(secondMessage.lastScannedTime)
     }
 
 
     private fun isGreater(firstMessage: PipelineStepObject, secondMessage: PipelineStepObject): Boolean {
-        return firstMessage.lastScannedTime?.isAfter(secondMessage.lastScannedTime) ?: false
+        return firstMessage.lastScannedTime.isAfter(secondMessage.lastScannedTime)
     }
 
 
     private suspend fun getNextMessage(): PipelineStepObject {
         return coroutineScope {
 
-            //FIXME: this is for debugging only
-            val streams = messageStreams.joinToString(", ") { "${it.top().lastProcessedId} - ${it.top().lastScannedTime}" }
+            val streams =
+                if (logger.isDebugEnabled)
+                    messageStreams.joinToString(", ") {
+                        "${it.top().lastProcessedId} - ${it.top().lastScannedTime}"
+                    }
+                else null
+
             let {
                 if (searchRequest.searchDirection == TimeRelation.AFTER) {
                     selectMessage { new, old ->
