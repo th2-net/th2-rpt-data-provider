@@ -17,6 +17,7 @@
 package com.exactpro.th2.rptdataprovider.handlers
 
 import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineFilteredMessage
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineKeepAlive
 import com.exactpro.th2.rptdataprovider.entities.internal.StreamEndObject
@@ -33,6 +34,7 @@ import kotlinx.coroutines.flow.takeWhile
 import mu.KotlinLogging
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
+import kotlin.math.roundToInt
 import kotlin.system.measureTimeMillis
 import kotlin.time.ExperimentalTime
 import kotlin.time.measureTimedValue
@@ -82,7 +84,9 @@ class SearchMessagesHandler(private val applicationContext: Context) {
                     measureTimeMillis {
                         message.value?.let { emit(it) }
                     }.also {
-                        logger.trace { "message was produced in ${message.duration.inMilliseconds} and consumed in ${it}ms" }
+                        if (message.value !is EmptyPipelineObject) {
+                            logger.trace { "message was produced in ${message.duration.inMilliseconds.roundToInt()} and consumed in ${it}ms" }
+                        }
                     }
 
                 } while (true)
