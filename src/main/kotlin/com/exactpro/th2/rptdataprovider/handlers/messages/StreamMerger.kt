@@ -214,20 +214,23 @@ class StreamMerger(
 
     private suspend fun getNextMessage(): PipelineStepObject {
         return coroutineScope {
-            if (searchRequest.searchDirection == TimeRelation.AFTER) {
-                selectMessage { new, old ->
-                    isLess(new, old)
+
+            //FIXME: this is for debugging only
+            val streams = messageStreams.joinToString(", ") { "${it.top().lastProcessedId} - ${it.top().lastScannedTime}" }
+            let {
+                if (searchRequest.searchDirection == TimeRelation.AFTER) {
+                    selectMessage { new, old ->
+                        isLess(new, old)
+                    }
+                } else {
+                    selectMessage { new, old ->
+                        isGreater(new, old)
+                    }
                 }
-            } else {
-                selectMessage { new, old ->
-                    isGreater(new, old)
+            }.also {
+                logger.debug {
+                    "selected ${it.lastProcessedId} - ${it.lastScannedTime} out of [${streams}]"
                 }
-            }
-        }.also {
-            logger.debug {
-                "selected ${it.lastProcessedId} - ${it.lastScannedTime} out of [${
-                    messageStreams.joinToString(", ") { "${it.top().lastProcessedId} - ${it.top().lastScannedTime}" }
-                }]"
             }
         }
     }
