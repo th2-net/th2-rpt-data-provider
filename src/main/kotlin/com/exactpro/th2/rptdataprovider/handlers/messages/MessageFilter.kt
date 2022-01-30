@@ -25,6 +25,8 @@ import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.time.ExperimentalTime
+import kotlin.time.measureTimedValue
 
 class MessageFilter(
     context: Context,
@@ -55,7 +57,11 @@ class MessageFilter(
     }
 
 
-    constructor(pipelineComponent: MessageBatchUnpacker, messageFlowCapacity: Int, pipelineStatus: PipelineStatus) : this(
+    constructor(
+        pipelineComponent: MessageBatchUnpacker,
+        messageFlowCapacity: Int,
+        pipelineStatus: PipelineStatus
+    ) : this(
         pipelineComponent.context,
         pipelineComponent.searchRequest,
         pipelineComponent.streamName,
@@ -88,16 +94,24 @@ class MessageFilter(
     }
 
 
+    @OptIn(ExperimentalTime::class)
     override suspend fun processMessage() {
         coroutineScope {
             launch { emptySender(this@coroutineScope) }
             while (isActive) {
                 val parsedMessage = previousComponent!!.pollMessage()
-                if (parsedMessage is PipelineParsedMessage) {
-                    pipelineStatus.countFilteredTotal(streamName.toString())
-                    updateState(parsedMessage)
 
-                    val filtered = applyFilter(parsedMessage.payload)
+                if (parsedMessage is PipelineParsedMessage) {
+
+                    val filtered = measureTimedValue {
+                        pipelineStatus.countFilteredTotal(streamName.toString())
+                        updateState(parsedMessage)
+
+                        applyFilter(parsedMessage.payload)
+                    }.also {
+                        logger.trace { "message filtering took ${it.duration.inMilliseconds}ms (stream=$streamName sequence=${parsedMessage.payload.id.index})" }
+                    }.value
+
                     if (filtered.finalFiltered) {
                         sendToChannel(PipelineFilteredMessage(parsedMessage, filtered))
                         pipelineStatus.countFilterAccepted(streamName.toString())
