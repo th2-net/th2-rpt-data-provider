@@ -16,8 +16,8 @@
 
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
-import com.exactpro.th2.common.grpc.Message
-import com.exactpro.th2.common.grpc.MessageBatch
+import com.exactpro.th2.common.grpc.MessageGroup
+import com.exactpro.th2.common.grpc.MessageGroupBatch
 import com.exactpro.th2.common.grpc.RawMessageBatch
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
@@ -26,24 +26,22 @@ import kotlinx.coroutines.Deferred
 class CodecBatchRequest(
     val protobufRawMessageBatch: RawMessageBatch
 ) {
-    val requestHash = protobufRawMessageBatch.messagesList.map {
-        it.metadata.id.connectionId.hashCode().xor(it.metadata.id.sequence.hashCode())
-    }.hashCode()
+    val requestHash = protobufRawMessageBatch.messagesList.map { it.metadata.id.hashCode() }.hashCode()
 
     fun toPending(): PendingCodecBatchRequest {
         return PendingCodecBatchRequest(CompletableDeferred())
     }
 
+    //FIXME: find a better way to identify individual requests
     companion object {
-        fun calculateHash(list: List<Message>): Int {
-            return list.map { it.metadata.id.connectionId.hashCode().xor(it.metadata.id.sequence.hashCode()) }
-                .hashCode()
+        fun calculateHash(list: List<MessageGroup>): Int {
+            return list.map { it.messagesList.first().message.metadata.id.hashCode() }.hashCode()
         }
     }
 }
 
 class PendingCodecBatchRequest(
-    val completableDeferred: CompletableDeferred<MessageBatch?>
+    val completableDeferred: CompletableDeferred<MessageGroupBatch?>
 ) {
     fun toResponse(): CodecBatchResponse {
         return CodecBatchResponse(completableDeferred)
@@ -51,5 +49,5 @@ class PendingCodecBatchRequest(
 }
 
 class CodecBatchResponse(
-    val protobufParsedMessageBatch: Deferred<MessageBatch?>
+    val protobufParsedMessageBatch: Deferred<MessageGroupBatch?>
 )

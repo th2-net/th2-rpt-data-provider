@@ -74,7 +74,7 @@ class Main {
             messageRouterRawBatch = configurationFactory.messageRouterRawBatch.also {
                 resources += it
             },
-            messageRouterParsedBatch = configurationFactory.messageRouterParsedBatch.also {
+            messageRouterParsedBatch = configurationFactory.messageRouterMessageGroupBatch.also {
                 resources += it
             },
             grpcConfig = configurationFactory.grpcConfiguration

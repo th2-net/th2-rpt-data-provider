@@ -17,6 +17,7 @@
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
 import com.exactpro.th2.common.grpc.MessageBatch
+import com.exactpro.th2.common.grpc.MessageGroupBatch
 import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.schema.message.MessageListener
 import com.exactpro.th2.common.schema.message.MessageRouter
@@ -28,7 +29,7 @@ import java.util.concurrent.Executors
 
 class RabbitMqService(
     configuration: Configuration,
-    messageRouterParsedBatch: MessageRouter<MessageBatch>,
+    messageRouterParsedBatch: MessageRouter<MessageGroupBatch>,
     private val messageRouterRawBatch: MessageRouter<RawMessageBatch>
 ) {
 
@@ -53,7 +54,7 @@ class RabbitMqService(
     private val receiveChannel = messageRouterParsedBatch.subscribeAll(
         MessageListener { _, decodedBatch ->
             mqCallbackScope.launch {
-                val requestHash = CodecBatchRequest.calculateHash(decodedBatch.messagesList)
+                val requestHash = CodecBatchRequest.calculateHash(decodedBatch.groupsList)
 
                 logger.trace { "codec response with hash $requestHash has been received" }
 

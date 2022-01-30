@@ -12,6 +12,9 @@ import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import mu.KotlinLogging
+import kotlin.time.ExperimentalTime
+import kotlin.time.measureTimedValue
 
 class MessageBatchUnpacker(
     context: Context,
@@ -51,39 +54,64 @@ class MessageBatchUnpacker(
         }
     }
 
+    companion object {
+        val logger = KotlinLogging.logger { }
+    }
+
+    @OptIn(ExperimentalTime::class)
     override suspend fun processMessage() {
         val pipelineMessage = previousComponent!!.pollMessage()
 
         if (pipelineMessage is PipelineDecodedBatch) {
 
-            val responsesBySequence = pipelineMessage.codecResponse.protobufParsedMessageBatch.await()?.messagesList
-                ?.groupBy { it.metadata.id.sequence }
+            val result = measureTimedValue {
 
-            pipelineMessage.storedBatchWrapper.trimmedMessages.forEach { storedMessage ->
-                sendToChannel(
+                val requests = pipelineMessage.storedBatchWrapper.trimmedMessages
+                val responses = pipelineMessage.codecResponse.protobufParsedMessageBatch.await()?.groupsList ?: listOf()
+
+                val requestsAndResponses =
+                    if (requests.size == responses.size) {
+                        requests.zip(responses)
+                    } else {
+                        //TODO: match by id to recover from this
+                        val messages = pipelineMessage.storedBatchWrapper.trimmedMessages
+                        logger.warn { "codec response batch size differs from request size (stream=${streamName} firstRequestId=${messages.first().id.index} lastRequestId=${messages.last().id.index} requestSize=${messages.size} responseSize=${responses.size})" }
+                        requests.map { Pair(it, null) }
+                    }
+
+                requestsAndResponses.map { pair ->
+                    val rawMessage = pair.first
+                    val response = pair.second
+
                     PipelineParsedMessage(
                         pipelineMessage,
                         Message(
-                            storedMessage,
+                            rawMessage,
 
                             let {
-                                val response = responsesBySequence?.get(storedMessage.id.index)
-
                                 if (response == null) {
                                     pipelineStatus.countParseReceivedFailed(streamName.toString())
                                 }
 
                                 pipelineStatus.countParseReceivedTotal(streamName.toString())
 
-                                response?.map { BodyWrapper(it) }
+                                response?.messagesList?.map { BodyWrapper(it.message) }
                             },
 
-                            storedMessage.content,
+                            rawMessage.content,
                             emptySet()
                         )
                     )
-                )
+                }
             }
+
+            val messages = pipelineMessage.storedBatchWrapper.trimmedMessages
+
+            logger.debug { "codec response unpacking took ${result.duration.inMilliseconds}ms (stream=${streamName.toString()} firstId=${messages.first().id.index} lastId=${messages.last().id.index})" }
+
+            result.value.forEach { (sendToChannel(it)) }
+
+            logger.debug { "unpacked responses are sent (stream=${streamName.toString()} firstId=${messages.first().id.index} lastId=${messages.last().id.index} messages=${result.value.size})" }
 
         } else {
             sendToChannel(pipelineMessage)

@@ -45,9 +45,10 @@ class MessageProducer(
             )
                 .protobufParsedMessageBatch
                 .await()
+                ?.groupsList
+                ?.find { it.messagesList.first().message.metadata.id.sequence == id.index }
                 ?.messagesList
-                ?.filter { it.metadata.id.sequence == id.index }
-                ?.map { BodyWrapper(it) }
+                ?.map { BodyWrapper(it.message) }
 
             Message(stored, decoded, stored.content, setOf())
         }
