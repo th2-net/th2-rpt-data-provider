@@ -155,13 +155,11 @@ class MessageExtractor(
                             } ?: false
                         }
 
-                    resumeFromId?.also {
-                        val firstMessage = if (order == Order.DIRECT) batch.messages.first() else batch.messages.last()
-                        val lastMessage = if (order == Order.DIRECT) batch.messages.last() else batch.messages.first()
+                    val firstMessage = if (order == Order.DIRECT) batch.messages.first() else batch.messages.last()
+                    val lastMessage = if (order == Order.DIRECT) batch.messages.last() else batch.messages.first()
 
-                        logger.trace {
-                            "batch ${batch.id.index} of stream $streamName has been trimmed - ${trimmedMessages.size} of ${batch.messages.size} messages left (firstId=${firstMessage.id.index} firstTimestamp=${firstMessage.timestamp} lastId=${lastMessage.id.index} lastTimestamp=${lastMessage.timestamp})"
-                        }
+                    logger.trace {
+                        "batch ${batch.id.index} of stream $streamName has been trimmed - ${trimmedMessages.size} of ${batch.messages.size} messages left (firstId=${firstMessage.id.index} firstTimestamp=${firstMessage.timestamp} lastId=${lastMessage.id.index} lastTimestamp=${lastMessage.timestamp})"
                     }
 
                     try {
