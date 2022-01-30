@@ -95,6 +95,9 @@ class MessageExtractor(
 
             logger.debug { "acquiring cradle iterator for stream $streamName" }
 
+            resumeFromId?.let { "resume sequence for stream $streamName is set to ${it.index}" }
+            request.startTimestamp?.let { "start timestamp for stream $streamName is set to $it" }
+
             val cradleMessageIterable = context.cradleService.getMessagesBatchesSuspend(
                 StoredMessageFilterBuilder().streamName().isEqualTo(streamName.name).direction()
                     .isEqualTo(streamName.direction).order(order)
