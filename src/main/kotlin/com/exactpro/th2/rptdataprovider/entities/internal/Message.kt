@@ -32,6 +32,8 @@ data class Message(
     @Suppress("ArrayInDataClass")
     val rawMessageBody: ByteArray,
 
+    var imageType: String?,
+
     val id: StoredMessageId
 ) {
 
@@ -43,7 +45,8 @@ data class Message(
         rawStoredMessage: StoredMessage,
         parsedMessageGroup: List<BodyWrapper>?,
         rawBody: ByteArray,
-        events: Set<String>
+        events: Set<String>,
+        imageType: String? = null
     ) : this(
         id = rawStoredMessage.id,
         direction = Direction.fromStored(rawStoredMessage.direction ?: com.exactpro.cradle.Direction.FIRST),
@@ -51,7 +54,8 @@ data class Message(
         sessionId = rawStoredMessage.streamName ?: "",
         attachedEventIds = events,
         rawMessageBody = rawBody,
-        parsedMessageGroup = parsedMessageGroup
+        parsedMessageGroup = parsedMessageGroup,
+        imageType = imageType
     )
 }
 

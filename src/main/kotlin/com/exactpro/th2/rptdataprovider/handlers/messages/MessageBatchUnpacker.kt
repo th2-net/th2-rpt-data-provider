@@ -105,7 +105,8 @@ class MessageBatchUnpacker(
                             },
 
                             rawMessage.content,
-                            emptySet()
+                            emptySet(),
+                            pipelineMessage.imageType
                         )
                     )
                 }
