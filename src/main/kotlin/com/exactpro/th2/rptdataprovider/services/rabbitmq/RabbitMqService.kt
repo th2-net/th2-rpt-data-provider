@@ -80,7 +80,7 @@ class RabbitMqService(
                     delay(responseTimeout)
 
                     pendingRequest.completableDeferred.let {
-                        if (!it.isCompleted) {
+                        if (it.isActive) {
 
                             it.complete(null)
                             logger.warn { "Codec request timed out after $responseTimeout ms" }
