@@ -188,6 +188,7 @@ class MessageExtractor(
                     pipelineStatus.countFetchedBatches(streamName.toString())
                     pipelineStatus.countFetchedMessages(streamName.toString(), trimmedMessages.size.toLong())
                 } else {
+                    logger.trace { "exiting $streamName loop" }
                     break
                 }
             }
