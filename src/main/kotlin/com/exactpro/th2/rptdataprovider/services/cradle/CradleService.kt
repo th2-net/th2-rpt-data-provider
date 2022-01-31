@@ -72,13 +72,13 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
     //FIXME: change cradle api or wrap every blocking iterator the same way
     suspend fun getMessagesBatchesSuspend(filter: StoredMessageFilter): Channel<StoredMessageBatch> {
         return withContext(cradleDispatcher) {
-            (logMetrics(getMessagesBatches) {
+            val result = (logMetrics(getMessagesBatches) {
                 logTime("getMessagesBatches (filter=${filter.convertToString()})") {
                     storage.getMessagesBatchesAsync(filter).await()
                 }
             } ?: listOf())
                 .let { iterable ->
-                    Channel<StoredMessageBatch>(1)
+                    val channel = Channel<StoredMessageBatch>(1)
                         .also { channel ->
                             launch(cradleDispatcher) {
                                 iterable.forEach {
@@ -89,8 +89,15 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
                                 channel.close()
                                 logger.debug { "message batch channel for stream ${filter.streamName}:${filter.direction} has been closed" }
                             }
+                            logger.trace { "also block ${filter.streamName}:${filter.direction}" }
                         }
+                    logger.trace { "let block ${filter.streamName}:${filter.direction}" }
+                    channel
                 }
+            logger.trace { "withContext block ${filter.streamName}:${filter.direction}" }
+            result
+        }.also {
+            logger.trace { "fun block ${filter.streamName}:${filter.direction}" }
         }
     }
 
