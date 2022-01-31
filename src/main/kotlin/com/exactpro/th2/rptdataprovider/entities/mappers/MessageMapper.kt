@@ -57,14 +57,15 @@ object MessageMapper {
     }
 
     //FIXME: migrate to grpc interface 1.0.0+
+    //FIXME: return raw message body
     fun convertToGrpcMessageData(messageWithMetadata: MessageWithMetadata): List<MessageData> {
         return messageWithMetadata.message.parsedMessageGroup?.map { groupElement ->
             MessageData.newBuilder()
                 .setMessageId(groupElement.id)
                 .setTimestamp(groupElement.message.metadata.timestamp)
-                .setBodyBase64(messageWithMetadata.message.rawMessageBody.let {
-                    Base64.getEncoder().encodeToString(it)
-                })
+//                .setBodyBase64(messageWithMetadata.message.rawMessageBody.let {
+//                    Base64.getEncoder().encodeToString(it)
+//                })
                 .setMessageType(groupElement.messageType)
                 .setMessage(groupElement.message)
                 .build()
@@ -72,7 +73,7 @@ object MessageMapper {
             MessageData.newBuilder()
                 .setMessageId(message.id.convertToProto())
                 .setTimestamp(message.timestamp.toTimestamp())
-                .setBodyBase64(message.rawMessageBody.let { Base64.getEncoder().encodeToString(it) })
+//                .setBodyBase64(message.rawMessageBody.let { Base64.getEncoder().encodeToString(it) })
                 .build()
         })
     }
