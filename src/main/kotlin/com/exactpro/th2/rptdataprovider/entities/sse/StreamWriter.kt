@@ -27,8 +27,11 @@ import com.exactpro.th2.rptdataprovider.eventWrite
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatusSnapshot
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.grpc.stub.StreamObserver
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
 import mu.KotlinLogging
 import java.io.Writer
 import java.util.concurrent.atomic.AtomicLong
@@ -98,25 +101,25 @@ class GrpcWriter(
 ) :
     StreamWriter {
 
-    val logger = KotlinLogging.logger { }
+    private val logger = KotlinLogging.logger { }
 
     // yes, channel of deferred responses is required, since the order is critical
-    val responses = Channel<Deferred<StreamResponse>>(responseBufferCapacity)
+    private val responses = Channel<Deferred<StreamResponse>>(responseBufferCapacity)
 
     init {
         scope.launch {
-            while (this.isActive) {
-
-                val response = measureTimedValue {
-                    responses.receive().await()
+            for (response in responses) {
+                val awaited = measureTimedValue {
+                    response.await()
                 }
 
                 val sendDuration = measureTimeMillis {
-                    writer.onNext(response.value)
+                    writer.onNext(awaited.value)
                 }
 
-                logger.trace { "awaited response for ${response.duration.inMilliseconds.roundToInt()}ms, sent in ${sendDuration}ms" }
+                logger.trace { "awaited response for ${awaited.duration.inMilliseconds.roundToInt()}ms, sent in ${sendDuration}ms" }
             }
+            writer.onCompleted()
         }
     }
 
@@ -203,7 +206,7 @@ class GrpcWriter(
     }
 
     override suspend fun closeWriter() {
-        writer.onCompleted()
+        responses.close()
         logger.debug { "grpc writer has been closed" }
     }
 }
