@@ -155,7 +155,10 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
                         } finally {
                             if (useStream) streamRequestProcessed.inc() else singleRequestProcessed.inc()
                         }
-                    } catch (e: InvalidRequestException) {
+                    } catch (e: CancellationException) {
+                        logger.debug { "request processing was cancelled with CancellationException" }
+                    }
+                    catch (e: InvalidRequestException) {
                         errorLogging(e, requestName, stringParameters.value, "invalid request")
                         sendErrorCode(responseObserver, e, Status.INVALID_ARGUMENT)
                     } catch (e: CradleObjectNotFoundException) {
