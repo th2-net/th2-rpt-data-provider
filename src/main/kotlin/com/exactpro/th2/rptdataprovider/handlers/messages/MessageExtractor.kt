@@ -187,6 +187,8 @@ class MessageExtractor(
                     pipelineStatus.countFetchedBytes(streamName.toString(), batch.batchSize)
                     pipelineStatus.countFetchedBatches(streamName.toString())
                     pipelineStatus.countFetchedMessages(streamName.toString(), trimmedMessages.size.toLong())
+                } else {
+                    break
                 }
             }
 
