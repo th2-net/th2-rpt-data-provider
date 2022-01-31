@@ -81,8 +81,13 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
                     Channel<StoredMessageBatch>(1)
                         .also { channel ->
                             launch(cradleDispatcher) {
-                                iterable.forEach { channel.send(it) }
+                                iterable.forEach {
+                                    logger.trace { "message batch ${it.id} has been received from the iterator" }
+                                    channel.send(it)
+                                    logger.trace { "message batch ${it.id} has been sent to the channel" }
+                                }
                                 channel.close()
+                                logger.debug { "message batch channel for stream ${filter.streamName}:${filter.direction} has been closed" }
                             }
                         }
                 }
