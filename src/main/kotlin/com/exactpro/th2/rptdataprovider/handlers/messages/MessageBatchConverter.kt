@@ -1,7 +1,6 @@
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
-import com.exactpro.th2.common.grpc.RawMessage
-import com.exactpro.th2.common.grpc.RawMessageBatch
+import com.exactpro.th2.common.grpc.*
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineCodecRequest
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
@@ -62,11 +61,17 @@ class MessageBatchConverter(
                 pipelineMessage.storedBatchWrapper,
 
                 CodecBatchRequest(
-                    RawMessageBatch
+                    MessageGroupBatch
                         .newBuilder()
-                        .addAllMessages(
+                        .addAllGroups(
+
                             pipelineMessage.storedBatchWrapper.trimmedMessages
-                                .map { RawMessage.parseFrom(it.content) }
+                                .map {
+                                    MessageGroup.newBuilder().addMessages(
+                                        AnyMessage.newBuilder().setRawMessage(RawMessage.parseFrom(it.content)).build()
+                                    ).build()
+                                }
+
                         )
                         .build()
                 )
