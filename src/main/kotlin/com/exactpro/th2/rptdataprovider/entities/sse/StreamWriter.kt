@@ -103,8 +103,10 @@ class GrpcWriter(
 
     private val logger = KotlinLogging.logger { }
 
+    //FIXME: List<StreamResponse> is a temporary solution to send messages group without merging the content
+
     // yes, channel of deferred responses is required, since the order is critical
-    private val responses = Channel<Deferred<StreamResponse>>(responseBufferCapacity)
+    private val responses = Channel<Deferred<List<StreamResponse>>>(responseBufferCapacity)
 
     init {
         scope.launch {
@@ -114,7 +116,7 @@ class GrpcWriter(
                 }
 
                 val sendDuration = measureTimeMillis {
-                    writer.onNext(awaited.value)
+                    awaited.value.forEach { writer.onNext(it) }
                 }
 
                 logger.trace { "awaited response for ${awaited.duration.inMilliseconds.roundToInt()}ms, sent in ${sendDuration}ms" }
@@ -125,14 +127,16 @@ class GrpcWriter(
     }
 
     override suspend fun write(event: EventTreeNode, counter: AtomicLong) {
-        val result = CompletableDeferred<StreamResponse>()
+        val result = CompletableDeferred<List<StreamResponse>>()
         responses.send(result)
 
         scope.launch {
             result.complete(
-                StreamResponse.newBuilder()
-                    .setEventMetadata(event.convertToGrpcEventMetadata())
-                    .build()
+                listOf(
+                    StreamResponse.newBuilder()
+                        .setEventMetadata(event.convertToGrpcEventMetadata())
+                        .build()
+                )
             )
 
             counter.incrementAndGet()
@@ -141,29 +145,30 @@ class GrpcWriter(
 
 
     override suspend fun write(message: MessageWithMetadata, counter: AtomicLong) {
-        val result = CompletableDeferred<StreamResponse>()
+        val result = CompletableDeferred<List<StreamResponse>>()
         responses.send(result)
 
         scope.launch {
             result.complete(
-                StreamResponse.newBuilder()
-                    .setMessage(MessageMapper.convertToGrpcMessageData(message))
-                    .build()
+                MessageMapper.convertToGrpcMessageData(message)
+                    .map { StreamResponse.newBuilder().setMessage(it).build() }
             )
-
-            counter.incrementAndGet()
         }
+
+        counter.incrementAndGet()
     }
 
     override suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong) {
-        val result = CompletableDeferred<StreamResponse>()
+        val result = CompletableDeferred<List<StreamResponse>>()
         responses.send(result)
 
         scope.launch {
             result.complete(
-                StreamResponse.newBuilder()
-                    .setLastScannedObject(lastScannedObjectInfo.convertToGrpc())
-                    .build()
+                listOf(
+                    StreamResponse.newBuilder()
+                        .setLastScannedObject(lastScannedObjectInfo.convertToGrpc())
+                        .build()
+                )
             )
 
             counter.incrementAndGet()
@@ -177,14 +182,16 @@ class GrpcWriter(
     }
 
     override suspend fun write(event: Event, lastEventId: AtomicLong) {
-        val result = CompletableDeferred<StreamResponse>()
+        val result = CompletableDeferred<List<StreamResponse>>()
         responses.send(result)
 
         scope.launch {
             result.complete(
-                StreamResponse.newBuilder()
-                    .setEvent(event.convertToGrpcEventData())
-                    .build()
+                listOf(
+                    StreamResponse.newBuilder()
+                        .setEvent(event.convertToGrpcEventData())
+                        .build()
+                )
             )
 
             lastEventId.incrementAndGet()
@@ -192,16 +199,18 @@ class GrpcWriter(
     }
 
     override suspend fun write(streamInfo: List<StreamInfo>) {
-        val result = CompletableDeferred<StreamResponse>()
+        val result = CompletableDeferred<List<StreamResponse>>()
         responses.send(result)
 
         scope.launch {
             result.complete(
-                StreamResponse.newBuilder().setStreamInfo(
-                    StreamsInfo.newBuilder().addAllStreams(
-                        streamInfo.map { it.convertToProto() }
+                listOf(
+                    StreamResponse.newBuilder().setStreamInfo(
+                        StreamsInfo.newBuilder().addAllStreams(
+                            streamInfo.map { it.convertToProto() }
+                        ).build()
                     ).build()
-                ).build()
+                )
             )
         }
     }

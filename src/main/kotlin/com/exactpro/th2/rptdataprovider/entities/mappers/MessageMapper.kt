@@ -56,15 +56,26 @@ object MessageMapper {
         }
     }
 
-    suspend fun convertToGrpcMessageData(messageWithMetadata: MessageWithMetadata): MessageData {
-        return with(messageWithMetadata) {
+    //FIXME: migrate to grpc interface 1.0.0+
+    //FIXME: return raw message body
+    fun convertToGrpcMessageData(messageWithMetadata: MessageWithMetadata): List<MessageData> {
+        return messageWithMetadata.message.parsedMessageGroup?.map { groupElement ->
+            MessageData.newBuilder()
+                .setMessageId(groupElement.id)
+                .setTimestamp(groupElement.message.metadata.timestamp)
+//                .setBodyBase64(messageWithMetadata.message.rawMessageBody.let {
+//                    Base64.getEncoder().encodeToString(it)
+//                })
+                .setMessageType(groupElement.messageType)
+                .setMessage(groupElement.message)
+                .build()
+        } ?: listOf(messageWithMetadata.message.let { message ->
             MessageData.newBuilder()
                 .setMessageId(message.id.convertToProto())
                 .setTimestamp(message.timestamp.toTimestamp())
-                .setBodyBase64(message.rawMessageBody?.let { Base64.getEncoder().encodeToString(it) })
-                .setBody(jacksonMapper.writeValueAsString(getBodyMessage(messageWithMetadata)))
+//                .setBodyBase64(message.rawMessageBody.let { Base64.getEncoder().encodeToString(it) })
                 .build()
-        }
+        })
     }
 
     suspend fun convertToHttpMessage(messageWithMetadata: MessageWithMetadata): HttpMessage {
@@ -78,7 +89,7 @@ object MessageMapper {
                 attachedEventIds = message.attachedEventIds,
                 messageId = message.id.toString(),
                 body = getBodyMessage(messageWithMetadata),
-                bodyBase64 = message.rawMessageBody?.let { Base64.getEncoder().encodeToString(it) }
+                bodyBase64 = message.rawMessageBody.let { Base64.getEncoder().encodeToString(it) }
             )
             httpMessage
         }
