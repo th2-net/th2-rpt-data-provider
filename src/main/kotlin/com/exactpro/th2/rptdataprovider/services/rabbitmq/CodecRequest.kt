@@ -18,30 +18,73 @@ package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
 import com.exactpro.th2.common.grpc.MessageGroup
 import com.exactpro.th2.common.grpc.MessageGroupBatch
+import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.grpc.RawMessageBatch
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
+import java.time.Instant
+
+
+data class CodecId(private val ids: Set<String>) {
+
+    companion object {
+        fun fromRawBatch(groupBatch: MessageGroupBatch): CodecId {
+            return CodecId(
+                groupBatch.groupsList
+                    .flatMap { group -> group.messagesList.map { it.rawMessage.metadata.id } }
+            )
+        }
+
+        fun fromParsedBatch(groupBatch: MessageGroupBatch): CodecId {
+            return CodecId(
+                groupBatch.groupsList
+                    .flatMap { group -> group.messagesList.map { it.message.metadata.id } }
+            )
+        }
+    }
+
+    constructor(ids: List<MessageID>) : this(
+        ids
+            .map { "${it.connectionId.sessionAlias}:${it.direction}:${it.sequence}" }
+            .toSet()
+    )
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as CodecId
+
+        if (ids != other.ids) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        return ids.hashCode()
+    }
+}
 
 
 class CodecBatchRequest(
-    val protobufRawMessageBatch: RawMessageBatch
+    val protobufRawMessageBatch: MessageGroupBatch
 ) {
-    val requestHash = protobufRawMessageBatch.messagesList.map { it.metadata.id.hashCode() }.hashCode()
+
+    val id = CodecId.fromRawBatch(protobufRawMessageBatch)
 
     fun toPending(): PendingCodecBatchRequest {
         return PendingCodecBatchRequest(CompletableDeferred())
     }
+}
 
-    //FIXME: find a better way to identify individual requests
-    companion object {
-        fun calculateHash(list: List<MessageGroup>): Int {
-            return list.map { it.messagesList.first().message.metadata.id.hashCode() }.hashCode()
-        }
-    }
+class MessageGroupBatchWrapper(
+    val messageGroupBatch: MessageGroupBatch
+) {
+    val id = CodecId.fromParsedBatch(messageGroupBatch)
 }
 
 class PendingCodecBatchRequest(
-    val completableDeferred: CompletableDeferred<MessageGroupBatch?>
+    val completableDeferred: CompletableDeferred<MessageGroupBatchWrapper?>
 ) {
     fun toResponse(): CodecBatchResponse {
         return CodecBatchResponse(completableDeferred)
@@ -49,5 +92,7 @@ class PendingCodecBatchRequest(
 }
 
 class CodecBatchResponse(
-    val protobufParsedMessageBatch: Deferred<MessageGroupBatch?>
+    val protobufParsedMessageBatch: CompletableDeferred<MessageGroupBatchWrapper?>
 )
+
+

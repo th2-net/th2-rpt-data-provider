@@ -30,7 +30,7 @@ import java.util.concurrent.Executors
 class RabbitMqService(
     configuration: Configuration,
     messageRouterParsedBatch: MessageRouter<MessageGroupBatch>,
-    private val messageRouterRawBatch: MessageRouter<RawMessageBatch>
+    private val messageRouterRawBatch: MessageRouter<MessageGroupBatch>
 ) {
 
     companion object {
@@ -38,7 +38,7 @@ class RabbitMqService(
     }
 
     private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
-    private val pendingRequests = ConcurrentHashMap<Int, PendingCodecBatchRequest>()
+    private val pendingRequests = ConcurrentHashMap<CodecId, PendingCodecBatchRequest>()
     private val usePinAttributes = configuration.codecUsePinAttributes.value.toBoolean()
     private val maximumPendingRequests = configuration.codecPendingBatchLimit.value.toInt()
 
@@ -54,12 +54,12 @@ class RabbitMqService(
     private val receiveChannel = messageRouterParsedBatch.subscribeAll(
         MessageListener { _, decodedBatch ->
             mqCallbackScope.launch {
-                val requestHash = CodecBatchRequest.calculateHash(decodedBatch.groupsList)
+                val response = MessageGroupBatchWrapper(decodedBatch)
 
-                logger.trace { "codec response with hash $requestHash has been received" }
+                logger.trace { "codec response with hash ${response.id.hashCode()} has been received" }
 
-                pendingRequests.remove(requestHash)?.completableDeferred?.complete(decodedBatch)
-                    ?: logger.trace { "codec response with hash $requestHash has no matching requests" }
+                pendingRequests.remove(response.id)?.completableDeferred?.complete(response)
+                    ?: logger.debug { "codec response with hash ${response.id.hashCode()} has no matching requests" }
             }
         },
 
@@ -73,14 +73,14 @@ class RabbitMqService(
                 delay(100)
             }
 
-            pendingRequests.computeIfAbsent(request.requestHash) {
+            pendingRequests.computeIfAbsent(request.id) {
                 val pendingRequest = request.toPending()
 
                 mqCallbackScope.launch {
                     delay(responseTimeout)
 
                     pendingRequest.completableDeferred.let {
-                        if (it.isActive) {
+                        if (!it.isCompleted) {
 
                             it.complete(null)
                             logger.warn { "Codec request timed out after $responseTimeout ms" }
@@ -91,14 +91,14 @@ class RabbitMqService(
                 try {
                     if (usePinAttributes) {
                         val sessionAlias =
-                            request.protobufRawMessageBatch.messagesList.first().metadata.id.connectionId.sessionAlias
+                            request.protobufRawMessageBatch.groupsList.first().messagesList.first().message.metadata.id.connectionId.sessionAlias
 
                         messageRouterRawBatch.sendAll(request.protobufRawMessageBatch, sessionAlias)
                     } else {
                         messageRouterRawBatch.sendAll(request.protobufRawMessageBatch)
                     }
 
-                    logger.trace { "codec request with hash ${request.requestHash} has been sent" }
+                    logger.debug { "codec request with hash ${request.id.hashCode()} has been sent" }
 
 
                 } catch (e: Exception) {

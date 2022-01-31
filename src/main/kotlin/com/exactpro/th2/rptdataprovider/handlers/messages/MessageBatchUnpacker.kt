@@ -70,9 +70,9 @@ class MessageBatchUnpacker(
                 pipelineMessage.codecResponse.protobufParsedMessageBatch.await()
             }.also {
                 logger.debug {
-                    "awaited codec response for ${it.duration.inMilliseconds}ms (stream=${streamName} firstRequestId=${requests.first().id.index} lastRequestId=${requests.last().id.index} requestSize=${requests.size} responseSize=${it.value?.groupsList?.size})"
+                    "awaited codec response for ${it.duration.inMilliseconds}ms (stream=${streamName} firstRequestId=${requests.first().id.index} lastRequestId=${requests.last().id.index} requestSize=${requests.size} responseSize=${it.value?.messageGroupBatch?.groupsList?.size})"
                 }
-            }.value?.groupsList ?: listOf()
+            }.value?.messageGroupBatch?.groupsList ?: listOf()
 
             val result = measureTimedValue {
                 val requestsAndResponses =

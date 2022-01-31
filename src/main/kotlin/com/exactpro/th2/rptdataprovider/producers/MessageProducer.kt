@@ -17,6 +17,8 @@
 package com.exactpro.th2.rptdataprovider.producers
 
 import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.th2.common.grpc.MessageGroup
+import com.exactpro.th2.common.grpc.MessageGroupBatch
 import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
@@ -37,14 +39,15 @@ class MessageProducer(
 
             val decoded = rabbitMqService.sendToCodec(
                 CodecBatchRequest(
-                    RawMessageBatch
+                    MessageGroupBatch
                         .newBuilder()
-                        .addMessages(RawMessage.parseFrom(stored.content))
+                        .addGroups(MessageGroup.parseFrom(stored.content))
                         .build()
                 )
             )
                 .protobufParsedMessageBatch
                 .await()
+                ?.messageGroupBatch
                 ?.groupsList
                 ?.find { it.messagesList.first().message.metadata.id.sequence == id.index }
                 ?.messagesList
