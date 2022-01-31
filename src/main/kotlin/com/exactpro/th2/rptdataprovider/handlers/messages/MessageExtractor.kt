@@ -18,6 +18,7 @@ package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.cradle.Order
 import com.exactpro.cradle.TimeRelation
+import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
@@ -125,7 +126,6 @@ class MessageExtractor(
 
             logger.debug { "cradle iterator has been built for stream $streamName" }
 
-
             for (batch in cradleMessageIterable) {
                 if (externalScope.isActive) {
                     logger.trace { "batch ${batch.id.index} of stream $streamName with ${batch.messageCount} messages (${batch.batchSize} bytes) has been extracted" }
@@ -187,6 +187,8 @@ class MessageExtractor(
                     pipelineStatus.countFetchedBytes(streamName.toString(), batch.batchSize)
                     pipelineStatus.countFetchedBatches(streamName.toString())
                     pipelineStatus.countFetchedMessages(streamName.toString(), trimmedMessages.size.toLong())
+                } else {
+                    break
                 }
             }
 

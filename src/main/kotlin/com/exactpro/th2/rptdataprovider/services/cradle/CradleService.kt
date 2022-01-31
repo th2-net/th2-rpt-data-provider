@@ -32,7 +32,9 @@ import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.logTime
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.future.await
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import mu.KotlinLogging
 import java.time.Instant
@@ -50,7 +52,6 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
         private val getTestEventAsyncMetric: Metrics = Metrics("get_test_event_async", "getTestEventAsync")
         private val getTestCompletedEventAsyncMetric: Metrics =
             Metrics("get_completed_test_event_async", "getCompleteTestEventsAsync")
-        private val getMessageBatchAsyncMetric: Metrics = Metrics("get_message_batch_async", "getMessageBatchAsync")
         private val getTestEventIdsByMessageIdAsyncMetric: Metrics =
             Metrics("get_test_event_ids_by_message_id_async", "getTestEventIdsByMessageIdAsync")
         private val getMessageIdsByTestEventIdAsyncMetric: Metrics =
@@ -65,16 +66,26 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
     private val storage = cradleManager.storage
     private val linker = cradleManager.storage.testEventsMessagesLinker
 
-    // FIXME: thread name
+    // FIXME: Change thread name patter to something easily identifiable in the logs
     private val cradleDispatcher = Executors.newFixedThreadPool(cradleDispatcherPoolSize).asCoroutineDispatcher()
 
-    suspend fun getMessagesBatchesSuspend(filter: StoredMessageFilter): Iterable<StoredMessageBatch> {
+    //FIXME: change cradle api or wrap every blocking iterator the same way
+    suspend fun getMessagesBatchesSuspend(filter: StoredMessageFilter): Channel<StoredMessageBatch> {
         return withContext(cradleDispatcher) {
-            logMetrics(getMessagesBatches) {
+            (logMetrics(getMessagesBatches) {
                 logTime("getMessagesBatches (filter=${filter.convertToString()})") {
                     storage.getMessagesBatchesAsync(filter).await()
                 }
-            } ?: listOf()
+            } ?: listOf())
+                .let { iterable ->
+                    Channel<StoredMessageBatch>(1)
+                        .also { channel ->
+                            launch(cradleDispatcher) {
+                                iterable.forEach { channel.send(it) }
+                                channel.close()
+                            }
+                        }
+                }
         }
     }
 
@@ -132,16 +143,6 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
             logMetrics(getTestCompletedEventAsyncMetric) {
                 logTime("getCompleteTestEvents (id=$ids)") {
                     storage.getCompleteTestEventsAsync(ids).await()
-                }
-            } ?: emptyList()
-        }
-    }
-
-    suspend fun getMessageBatchSuspend(id: StoredMessageId): Collection<StoredMessage> {
-        return withContext(cradleDispatcher) {
-            logMetrics(getMessageBatchAsyncMetric) {
-                logTime("getMessageBatchByMessageId (id=$id)") {
-                    storage.getMessageBatchAsync(id).await()
                 }
             } ?: emptyList()
         }

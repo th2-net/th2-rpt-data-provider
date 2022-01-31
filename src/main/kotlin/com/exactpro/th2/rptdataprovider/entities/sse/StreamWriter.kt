@@ -120,6 +120,7 @@ class GrpcWriter(
                 logger.trace { "awaited response for ${awaited.duration.inMilliseconds.roundToInt()}ms, sent in ${sendDuration}ms" }
             }
             writer.onCompleted()
+            logger.debug { "grpc stream onCompleted() has been called" }
         }
     }
 
