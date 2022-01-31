@@ -1,7 +1,7 @@
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
+import com.exactpro.th2.common.grpc.MessageGroupBatch
 import com.exactpro.th2.common.grpc.RawMessage
-import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineCodecRequest
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineDecodedBatch
@@ -67,10 +67,10 @@ class MessageBatchDecoder(
         }
     }
 
-    private fun getProtocolField(rawMessageBatch: RawMessageBatch?): String? {
-        val parsedRawMessage = rawMessageBatch?.messagesList?.first()
+    private fun getProtocolField(rawMessageBatch: MessageGroupBatch): String? {
+        val parsedRawMessage = rawMessageBatch.groupsList.first().messagesList.first()
         return try {
-            parsedRawMessage?.metadata?.getField(messageProtocolDescriptor).toString()
+            parsedRawMessage.rawMessage.metadata.getField(messageProtocolDescriptor).toString()
         } catch (e: Exception) {
             logger.error(e) { "Field: '${messageProtocolDescriptor.name}' does not exist in message: $parsedRawMessage " }
             null
