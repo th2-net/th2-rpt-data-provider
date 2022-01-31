@@ -205,20 +205,21 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
         calledFun: Streaming
     ) {
         coroutineScope {
+            var writer: GrpcWriter? = null
             try {
                 launch {
                     checkContext(grpcContext)
                 }
-                calledFun.invoke(
-                    GrpcWriter(
-                        context.configuration.grpcWriterMessageBuffer.value.toInt(),
-                        responseObserver,
-                        context.jacksonMapper,
-                        this@coroutineScope
-                    )
+                writer = GrpcWriter(
+                    context.configuration.grpcWriterMessageBuffer.value.toInt(),
+                    responseObserver,
+                    context.jacksonMapper,
+                    this@coroutineScope
                 )
+                calledFun.invoke(writer)
             } finally {
                 coroutineContext.cancelChildren()
+                writer?.closeWriter()
             }
         }
     }

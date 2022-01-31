@@ -97,7 +97,6 @@ class SearchMessagesHandler(private val applicationContext: Context) {
                     streamMerger?.let { merger -> writer.write(merger.getStreamsInfo()) }
                     chainScope.cancel()
                     it?.let { throwable -> throw throwable }
-                    writer.closeWriter()
                     logger.debug { "message pipeline flow has been completed" }
                 }
                 .collect {
