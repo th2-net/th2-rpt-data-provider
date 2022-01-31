@@ -104,6 +104,16 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
         }
     }
 
+    suspend fun getMessagesBatches(filter: StoredMessageFilter): Iterable<StoredMessageBatch> {
+        return withContext(cradleDispatcher) {
+            logMetrics(getMessagesBatches) {
+                logTime("getMessagesBatches (filter=${filter.convertToString()})") {
+                    storage.getMessagesBatchesAsync(filter).await()
+                }
+            } ?: listOf()
+        }
+    }
+
     suspend fun getMessageSuspend(id: StoredMessageId): StoredMessage? {
         return withContext(cradleDispatcher) {
             logMetrics(getMessageAsyncMetric) {

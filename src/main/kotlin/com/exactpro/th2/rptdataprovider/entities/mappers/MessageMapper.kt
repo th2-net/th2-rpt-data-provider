@@ -72,7 +72,7 @@ object MessageMapper {
             val httpMessage = HttpMessage(
                 timestamp = message.timestamp,
                 messageType = messageWithMetadata.message.parsedMessageGroup
-                    ?.joinToString("/") { it.messageType } ?: "",
+                    ?.joinToString("/") { it.messageType } ?: messageWithMetadata.message.imageType ?: "",
                 direction = message.direction,
                 sessionId = message.sessionId,
                 attachedEventIds = message.attachedEventIds,

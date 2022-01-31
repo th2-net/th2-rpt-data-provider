@@ -49,5 +49,5 @@ class PendingCodecBatchRequest(
 }
 
 class CodecBatchResponse(
-    val protobufParsedMessageBatch: Deferred<MessageGroupBatch?>
+    val protobufParsedMessageBatch: CompletableDeferred<MessageGroupBatch?>
 )
