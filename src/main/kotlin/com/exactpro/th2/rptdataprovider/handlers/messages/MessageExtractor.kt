@@ -194,9 +194,9 @@ class MessageExtractor(
 
             isStreamEmpty = true
             lastTimestamp = if (order == Order.DIRECT) {
-                Instant.MAX
+                Instant.ofEpochMilli(Long.MAX_VALUE)
             } else {
-                Instant.MIN
+                Instant.ofEpochMilli(Long.MIN_VALUE)
             }
 
             logger.debug { "no more data for stream $streamName (lastId=${lastElement.toString()} lastTimestamp=${lastTimestamp})" }
