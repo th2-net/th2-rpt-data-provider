@@ -77,7 +77,7 @@ data class PipelineCodecRequest(
     override val lastScannedTime: Instant,
     val storedBatchWrapper: MessageBatchWrapper,
     val codecRequest: CodecBatchRequest
-): PipelineStepObject
+) : PipelineStepObject
 
 
 data class PipelineDecodedBatch(
@@ -85,8 +85,22 @@ data class PipelineDecodedBatch(
     override val lastProcessedId: StoredMessageId?,
     override val lastScannedTime: Instant,
     val storedBatchWrapper: MessageBatchWrapper,
-    val codecResponse: CodecBatchResponse
-): PipelineStepObject
+    val codecResponse: CodecBatchResponse,
+    val imageType: String?
+) : PipelineStepObject {
+    constructor(
+        pipelineMessage: PipelineCodecRequest,
+        codecBatchResponse: CodecBatchResponse,
+        imageType: String? = null
+    ) : this(
+        pipelineMessage.streamEmpty,
+        pipelineMessage.lastProcessedId,
+        pipelineMessage.lastScannedTime,
+        pipelineMessage.storedBatchWrapper,
+        codecBatchResponse,
+        imageType
+    )
+}
 
 
 data class PipelineParsedMessage(
