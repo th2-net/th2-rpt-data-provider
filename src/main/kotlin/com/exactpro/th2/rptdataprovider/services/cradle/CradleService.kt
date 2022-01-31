@@ -31,6 +31,7 @@ import com.exactpro.th2.rptdataprovider.convertToString
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.logTime
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.future.await
@@ -71,6 +72,8 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
 
     //FIXME: change cradle api or wrap every blocking iterator the same way
     suspend fun getMessagesBatchesSuspend(filter: StoredMessageFilter): Channel<StoredMessageBatch> {
+        val iteratorScope = CoroutineScope(cradleDispatcher)
+
         return withContext(cradleDispatcher) {
             val result = (logMetrics(getMessagesBatches) {
                 logTime("getMessagesBatches (filter=${filter.convertToString()})") {
@@ -80,7 +83,7 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
                 .let { iterable ->
                     val channel = Channel<StoredMessageBatch>(1)
                         .also { channel ->
-                            launch(cradleDispatcher) {
+                            iteratorScope.launch {
                                 iterable.forEach {
                                     logger.trace { "message batch ${it.id} has been received from the iterator" }
                                     channel.send(it)
