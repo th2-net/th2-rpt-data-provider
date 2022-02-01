@@ -66,7 +66,7 @@ class SearchMessagesHandler(private val applicationContext: Context) {
             val lastMessageIdCounter = AtomicLong(0)
             val pipelineStatus = PipelineStatus(context = applicationContext)
             var streamMerger: StreamMerger? = null
-            val chainScope = CoroutineScope(coroutineContext)
+            val chainScope = CoroutineScope(coroutineContext + Job(coroutineContext[Job]))
 
             flow {
                 streamMerger = ChainBuilder(applicationContext, request, chainScope, pipelineStatus).buildChain()
@@ -97,7 +97,6 @@ class SearchMessagesHandler(private val applicationContext: Context) {
                     streamMerger?.let { merger -> writer.write(merger.getStreamsInfo()) }
                     chainScope.cancel()
                     it?.let { throwable -> throw throwable }
-                    writer.closeWriter()
                     logger.debug { "message pipeline flow has been completed" }
                 }
                 .collect {

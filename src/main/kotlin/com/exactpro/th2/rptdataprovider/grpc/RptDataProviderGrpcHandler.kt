@@ -156,9 +156,8 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
                             if (useStream) streamRequestProcessed.inc() else singleRequestProcessed.inc()
                         }
                     } catch (e: CancellationException) {
-                        logger.debug { "request processing was cancelled with CancellationException" }
-                    }
-                    catch (e: InvalidRequestException) {
+                        logger.debug(e) { "request processing was cancelled with CancellationException" }
+                    } catch (e: InvalidRequestException) {
                         errorLogging(e, requestName, stringParameters.value, "invalid request")
                         sendErrorCode(responseObserver, e, Status.INVALID_ARGUMENT)
                     } catch (e: CradleObjectNotFoundException) {
@@ -208,20 +207,26 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
         calledFun: Streaming
     ) {
         coroutineScope {
+            val job = launch {
+                checkContext(grpcContext)
+            }
+
+            val grpcWriter = GrpcWriter(
+                context.configuration.grpcWriterMessageBuffer.value.toInt(),
+                responseObserver,
+                context.jacksonMapper,
+                this@coroutineScope
+            )
+
             try {
-                launch {
-                    checkContext(grpcContext)
-                }
-                calledFun.invoke(
-                    GrpcWriter(
-                        context.configuration.grpcWriterMessageBuffer.value.toInt(),
-                        responseObserver,
-                        context.jacksonMapper,
-                        this@coroutineScope
-                    )
-                )
+                calledFun.invoke(grpcWriter)
             } finally {
-                coroutineContext.cancelChildren()
+                kotlin.runCatching {
+                    grpcWriter.closeWriter()
+                    job.cancel()
+                }.onFailure { e ->
+                    logger.error(e) { "unexpected exception while closing grpc writer" }
+                }
             }
         }
     }
