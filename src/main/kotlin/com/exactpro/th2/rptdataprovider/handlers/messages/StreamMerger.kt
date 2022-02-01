@@ -176,14 +176,14 @@ class StreamMerger(
                     pipelineStatus.countMerged()
 
                     logger.trace {
-                        (nextMessage as PipelineFilteredMessage).payload.let {
-                            "message ${it.message.id} with timestamp ${it.message.timestamp} has been sent downstream"
+                        nextMessage.let {
+                            "message ${it.lastProcessedId} (streamEmpty=${it.streamEmpty}) with timestamp ${it.lastScannedTime} has been sent downstream"
                         }
                     }
                 } else {
                     logger.trace {
-                        (nextMessage as PipelineFilteredMessage).payload.let {
-                            "skipped message ${it.message.id} with timestamp ${it.message.timestamp}"
+                        nextMessage.let {
+                            "skipped message ${it.lastProcessedId} (streamEmpty=${it.streamEmpty}) with timestamp ${it.lastScannedTime}"
                         }
                     }
                 }
@@ -247,7 +247,7 @@ class StreamMerger(
                 }
             }.also {
                 logger.trace {
-                    "selected ${it.lastProcessedId} - ${it.lastScannedTime} out of [${streams}]"
+                    "selected ${it.lastProcessedId} - ${it.javaClass.kotlin}- ${it.lastScannedTime} out of [${streams}]"
                 }
             }
         }
