@@ -10,6 +10,7 @@ import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import mu.KotlinLogging
 
 class MessageBatchDecoder(
     context: Context,
@@ -49,24 +50,33 @@ class MessageBatchDecoder(
         }
     }
 
+    companion object {
+        val logger = KotlinLogging.logger { }
+    }
+
     override suspend fun processMessage() {
         val pipelineMessage = previousComponent!!.pollMessage()
 
         if (pipelineMessage is PipelineCodecRequest) {
-            sendToChannel(
-                PipelineDecodedBatch(
-                    pipelineMessage.streamEmpty,
-                    pipelineMessage.lastProcessedId,
-                    pipelineMessage.lastScannedTime,
-                    pipelineMessage.storedBatchWrapper,
-                    context.rabbitMqService.sendToCodec(pipelineMessage.codecRequest)
-                )
+
+            logger.trace { "received converted batch (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.fullBatch.id} requestHash=${pipelineMessage.codecRequest.requestHash})" }
+
+            val result = PipelineDecodedBatch(
+                pipelineMessage.streamEmpty,
+                pipelineMessage.lastProcessedId,
+                pipelineMessage.lastScannedTime,
+                pipelineMessage.storedBatchWrapper,
+                context.rabbitMqService.sendToCodec(pipelineMessage.codecRequest)
             )
+
+            sendToChannel(result)
 
             pipelineStatus.countParseRequested(
                 streamName.toString(),
                 pipelineMessage.storedBatchWrapper.trimmedMessages.count().toLong()
             )
+
+            logger.trace { "decoded batch is sent downstream (stream=${streamName.toString()} id=${result.storedBatchWrapper.fullBatch.id} requestHash=${pipelineMessage.codecRequest.requestHash})" }
 
         } else {
             sendToChannel(pipelineMessage)
