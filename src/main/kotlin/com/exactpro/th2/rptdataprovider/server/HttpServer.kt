@@ -17,7 +17,9 @@
 package com.exactpro.th2.rptdataprovider.server
 
 import com.exactpro.cradle.utils.CradleIdException
-import com.exactpro.th2.rptdataprovider.*
+import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.rptdataprovider.Metrics
+import com.exactpro.th2.rptdataprovider.asStringSuspend
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
@@ -25,9 +27,10 @@ import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.sse.EventType
-import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.entities.sse.HttpWriter
+import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
+import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import io.ktor.application.*
 import io.ktor.features.*
@@ -205,22 +208,30 @@ class HttpServer(private val applicationContext: Context) {
     ) {
         coroutineScope {
             launch {
-                launch {
+                val job = launch {
                     checkContext(context)
                 }
                 call.response.headers.append(HttpHeaders.CacheControl, "no-cache, no-store, no-transform")
                 call.respondTextWriter(contentType = ContentType.Text.EventStream) {
+                    val httpWriter = HttpWriter(this, jacksonMapper)
+
                     try {
-                        calledFun.invoke(HttpWriter(this, jacksonMapper))
+                        calledFun.invoke(httpWriter)
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
-                        eventWrite(SseEvent.build(jacksonMapper, e))
+                        httpWriter.eventWrite(SseEvent.build(jacksonMapper, e))
                         throw e
                     } finally {
-                        eventWrite(SseEvent(event = EventType.CLOSE))
-                        closeWriter()
+                        kotlin.runCatching {
+                            httpWriter.eventWrite(SseEvent(event = EventType.CLOSE))
+                            httpWriter.closeWriter()
+                            job.cancel()
+                        }.onFailure { e ->
+                            logger.error(e) { "unexpected exception while trying to close http writer" }
+                        }
                     }
                 }
-                coroutineContext.cancelChildren()
             }.join()
         }
     }

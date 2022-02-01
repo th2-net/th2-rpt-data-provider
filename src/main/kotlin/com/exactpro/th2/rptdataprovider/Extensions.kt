@@ -110,33 +110,6 @@ suspend fun <T> logMetrics(metrics: Metrics, lambda: suspend () -> T): T? {
     }
 }
 
-private val writerDispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
-
-suspend fun Writer.eventWrite(event: SseEvent) {
-    withContext(writerDispatcher) {
-        if (event.event != null) {
-            write("event: ${event.event}\n")
-        }
-
-        for (dataLine in event.data.lines()) {
-            write("data: $dataLine\n")
-        }
-
-        if (event.metadata != null) {
-            write("id: ${event.metadata}\n")
-        }
-
-        write("\n")
-        flush()
-    }
-}
-
-suspend fun Writer.closeWriter() {
-    withContext(writerDispatcher) {
-        close()
-    }
-}
-
 fun minInstant(first: Instant, second: Instant): Instant {
     return if (first.isBefore(second)) {
         first

@@ -23,7 +23,6 @@ import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
-import com.exactpro.th2.rptdataprovider.eventWrite
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatusSnapshot
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.grpc.stub.StreamObserver
@@ -61,28 +60,44 @@ interface StreamWriter {
 class HttpWriter(private val writer: Writer, private val jacksonMapper: ObjectMapper) : StreamWriter {
     val logger = KotlinLogging.logger { }
 
+    fun eventWrite(event: SseEvent) {
+        if (event.event != null) {
+            writer.write("event: ${event.event}\n")
+        }
+
+        for (dataLine in event.data.lines()) {
+            writer.write("data: $dataLine\n")
+        }
+
+        if (event.metadata != null) {
+            writer.write("id: ${event.metadata}\n")
+        }
+
+        writer.write("\n")
+    }
+
     override suspend fun write(status: PipelineStatusSnapshot, counter: AtomicLong) {
-        writer.eventWrite(SseEvent.build(jacksonMapper, status, counter))
+        eventWrite(SseEvent.build(jacksonMapper, status, counter))
     }
 
     override suspend fun write(event: EventTreeNode, counter: AtomicLong) {
-        writer.eventWrite(SseEvent.build(jacksonMapper, event, counter))
+        eventWrite(SseEvent.build(jacksonMapper, event, counter))
     }
 
     override suspend fun write(message: MessageWithMetadata, counter: AtomicLong) {
-        writer.eventWrite(SseEvent.build(jacksonMapper, MessageMapper.convertToHttpMessage(message), counter))
+        eventWrite(SseEvent.build(jacksonMapper, MessageMapper.convertToHttpMessage(message), counter))
     }
 
     override suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong) {
-        writer.eventWrite(SseEvent.build(jacksonMapper, lastScannedObjectInfo, counter))
+        eventWrite(SseEvent.build(jacksonMapper, lastScannedObjectInfo, counter))
     }
 
     override suspend fun write(streamInfo: List<StreamInfo>) {
-        writer.eventWrite(SseEvent.build(jacksonMapper, streamInfo))
+        eventWrite(SseEvent.build(jacksonMapper, streamInfo))
     }
 
     override suspend fun write(event: Event, lastEventId: AtomicLong) {
-        writer.eventWrite(SseEvent.build(jacksonMapper, event, lastEventId))
+        eventWrite(SseEvent.build(jacksonMapper, event, lastEventId))
     }
 
     @Suppress("BlockingMethodInNonBlockingContext")
