@@ -22,18 +22,18 @@ import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchRequest
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchResponse
 import java.time.Instant
 
-interface PipelineStepObject {
-    val streamEmpty: Boolean
-    val lastProcessedId: StoredMessageId?
-    val lastScannedTime: Instant
-}
-
-
 data class StreamEndObject(
     override val streamEmpty: Boolean,
     override val lastProcessedId: StoredMessageId?,
     override val lastScannedTime: Instant
 ) : PipelineStepObject
+
+
+interface PipelineStepObject {
+    val streamEmpty: Boolean
+    val lastProcessedId: StoredMessageId?
+    val lastScannedTime: Instant
+}
 
 
 data class EmptyPipelineObject(

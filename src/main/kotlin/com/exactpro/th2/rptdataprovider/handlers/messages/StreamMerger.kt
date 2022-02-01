@@ -247,7 +247,7 @@ class StreamMerger(
                 }
             }.also {
                 logger.trace {
-                    "selected ${it.lastProcessedId} - ${it.javaClass.kotlin}- ${it.lastScannedTime} out of [${streams}]"
+                    "selected ${it.lastProcessedId} - ${it.javaClass.kotlin}-${it.javaClass.hashCode()} ${it.lastScannedTime} out of [${streams}]"
                 }
             }
         }
