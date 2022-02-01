@@ -32,6 +32,7 @@ import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.time.Instant
+import kotlin.math.log
 
 
 class MessageExtractor(
@@ -79,7 +80,9 @@ class MessageExtractor(
                     //FIXME: replace delay-based stream updates with synchronous updates from iterator
                     lastTimestamp?.also {
                         sendToChannel(
-                            EmptyPipelineObject(isStreamEmpty, lastElement, it)
+                            EmptyPipelineObject(isStreamEmpty, lastElement, it).also { msg ->
+                                logger.trace { "Extractor send empty message upstream: ${msg.lastProcessedId}-${msg.lastProcessedId}-${msg.streamEmpty}" }
+                            }
                         )
                     }
                     delay(sendEmptyDelay)

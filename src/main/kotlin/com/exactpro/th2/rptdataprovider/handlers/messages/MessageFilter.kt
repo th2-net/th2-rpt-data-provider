@@ -87,7 +87,11 @@ class MessageFilter(
     private suspend fun emptySender(parentScope: CoroutineScope) {
         while (parentScope.isActive) {
             lastScannedObject?.let {
-                sendToChannel(EmptyPipelineObject(it))
+                sendToChannel(
+                    EmptyPipelineObject(it).also { msg ->
+                        logger.trace { "Filter send empty message upstream: ${msg.lastProcessedId}-${msg.lastProcessedId}-${msg.streamEmpty}" }
+                    }
+                )
             }
             delay(sendEmptyDelay)
         }
