@@ -89,7 +89,7 @@ class MessageFilter(
             lastScannedObject?.let {
                 sendToChannel(
                     EmptyPipelineObject(it).also { msg ->
-                        logger.trace { "Filter send empty message upstream: ${msg.lastProcessedId}-${msg.lastProcessedId}-${msg.streamEmpty}" }
+                        logger.trace { "Filter send empty message downstream: ${msg.lastProcessedId}-${msg.lastProcessedId}-${msg.streamEmpty} hash=${msg.hashCode()}" }
                     }
                 )
             }

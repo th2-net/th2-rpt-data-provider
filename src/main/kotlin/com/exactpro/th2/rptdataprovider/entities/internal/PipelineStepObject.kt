@@ -35,8 +35,8 @@ interface PipelineStepObject {
     val lastScannedTime: Instant
 }
 
-
-data class EmptyPipelineObject(
+// FIXME: restore "data class" declaration
+class EmptyPipelineObject(
     override val streamEmpty: Boolean,
     override val lastProcessedId: StoredMessageId?,
     override val lastScannedTime: Instant
