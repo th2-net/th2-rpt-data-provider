@@ -22,7 +22,7 @@ import com.exactpro.th2.common.grpc.MessageID
 import kotlinx.coroutines.CompletableDeferred
 
 
-data class CodecId(private val ids: List<BaseMessageId>) {
+data class CodecId(private val ids: Set<BaseMessageId>) {
 
     data class BaseMessageId(val sessionAlias: String, val direction: Direction, val sequence: Long) {
         constructor(messageId: MessageID) : this(
@@ -37,6 +37,7 @@ data class CodecId(private val ids: List<BaseMessageId>) {
             return CodecId(
                 groupBatch.groupsList
                     .flatMap { group -> group.messagesList.map { BaseMessageId(it.rawMessage.metadata.id) } }
+                    .toSet()
             )
         }
 
@@ -44,23 +45,9 @@ data class CodecId(private val ids: List<BaseMessageId>) {
             return CodecId(
                 groupBatch.groupsList
                     .flatMap { group -> group.messagesList.map { BaseMessageId(it.message.metadata.id) } }
+                    .toSet()
             )
         }
-    }
-
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (javaClass != other?.javaClass) return false
-
-        other as CodecId
-
-        if (ids != other.ids) return false
-
-        return true
-    }
-
-    override fun hashCode(): Int {
-        return ids.hashCode()
     }
 }
 
