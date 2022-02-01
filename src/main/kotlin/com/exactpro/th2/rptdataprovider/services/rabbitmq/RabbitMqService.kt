@@ -16,9 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
-import com.exactpro.th2.common.grpc.MessageBatch
 import com.exactpro.th2.common.grpc.MessageGroupBatch
-import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.schema.message.MessageListener
 import com.exactpro.th2.common.schema.message.MessageRouter
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
@@ -56,10 +54,10 @@ class RabbitMqService(
             mqCallbackScope.launch {
                 val response = MessageGroupBatchWrapper(decodedBatch)
 
-                logger.trace { "codec response with hash ${response.id.hashCode()} has been received" }
+                logger.trace { "codec response with hash ${response.requestHash.hashCode()} has been received" }
 
-                pendingRequests.remove(response.id)?.completableDeferred?.complete(response)
-                    ?: logger.debug { "codec response with hash ${response.id.hashCode()} has no matching requests" }
+                pendingRequests.remove(response.requestHash)?.completableDeferred?.complete(response)
+                    ?: logger.debug { "codec response with hash ${response.requestHash.hashCode()} has no matching requests" }
             }
         },
 
@@ -73,17 +71,18 @@ class RabbitMqService(
                 delay(100)
             }
 
-            pendingRequests.computeIfAbsent(request.id) {
+            pendingRequests.computeIfAbsent(request.requestHash) {
                 val pendingRequest = request.toPending()
 
                 mqCallbackScope.launch {
                     delay(responseTimeout)
 
+                    pendingRequests.remove(request.requestHash)
+
                     pendingRequest.completableDeferred.let {
                         if (it.isActive) {
-
                             it.complete(null)
-                            logger.warn { "Codec request timed out after $responseTimeout ms" }
+                            logger.warn { "codec request timed out after $responseTimeout ms" }
                         }
                     }
                 }
@@ -98,7 +97,7 @@ class RabbitMqService(
                         messageRouterRawBatch.sendAll(request.protobufRawMessageBatch)
                     }
 
-                    logger.debug { "codec request with hash ${request.id.hashCode()} has been sent" }
+                    logger.debug { "codec request with hash ${request.requestHash.hashCode()} has been sent" }
 
 
                 } catch (e: Exception) {

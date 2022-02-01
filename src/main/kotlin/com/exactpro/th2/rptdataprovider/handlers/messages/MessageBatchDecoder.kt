@@ -97,18 +97,25 @@ class MessageBatchDecoder(
                     )
                 )
             } else {
-                sendToChannel(
-                    PipelineDecodedBatch(
-                        pipelineMessage,
-                        context.rabbitMqService.sendToCodec(pipelineMessage.codecRequest)
-                    )
+                logger.trace { "received converted batch (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.fullBatch.id} requestHash=${pipelineMessage.codecRequest.requestHash})" }
+
+                val result = PipelineDecodedBatch(
+                    pipelineMessage.streamEmpty,
+                    pipelineMessage.lastProcessedId,
+                    pipelineMessage.lastScannedTime,
+                    pipelineMessage.storedBatchWrapper,
+                    context.rabbitMqService.sendToCodec(pipelineMessage.codecRequest),
+                    protocol
                 )
+                sendToChannel(result)
+                logger.trace { "decoded batch is sent downstream (stream=${streamName.toString()} id=${result.storedBatchWrapper.fullBatch.id} requestHash=${pipelineMessage.codecRequest.requestHash})" }
             }
 
             pipelineStatus.countParseRequested(
                 streamName.toString(),
                 pipelineMessage.storedBatchWrapper.trimmedMessages.count().toLong()
             )
+
 
         } else {
             sendToChannel(pipelineMessage)

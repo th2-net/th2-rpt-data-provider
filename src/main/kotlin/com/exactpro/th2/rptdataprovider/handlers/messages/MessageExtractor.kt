@@ -79,7 +79,9 @@ class MessageExtractor(
                     //FIXME: replace delay-based stream updates with synchronous updates from iterator
                     lastTimestamp?.also {
                         sendToChannel(
-                            EmptyPipelineObject(isStreamEmpty, lastElement, it)
+                            EmptyPipelineObject(isStreamEmpty, lastElement, it).also { msg ->
+                                logger.trace { "Extractor send empty message downstream: ${msg.lastProcessedId}-${msg.lastProcessedId}-${msg.streamEmpty} hash=${msg.hashCode()}" }
+                            }
                         )
                     }
                     delay(sendEmptyDelay)

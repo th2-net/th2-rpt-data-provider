@@ -12,6 +12,7 @@ import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import mu.KotlinLogging
 
 class MessageBatchConverter(
     context: Context,
@@ -37,6 +38,10 @@ class MessageBatchConverter(
         }
     }
 
+    companion object {
+        val logger = KotlinLogging.logger { }
+    }
+
     constructor(
         pipelineComponent: MessageExtractor, messageFlowCapacity: Int, pipelineStatus: PipelineStatus
     ) : this(
@@ -53,6 +58,8 @@ class MessageBatchConverter(
         val pipelineMessage = previousComponent!!.pollMessage()
 
         if (pipelineMessage is PipelineRawBatch) {
+
+            logger.trace { "received raw batch (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.fullBatch.id})" }
 
             val codecRequest = PipelineCodecRequest(
                 pipelineMessage.streamEmpty,
@@ -78,6 +85,8 @@ class MessageBatchConverter(
             )
 
             sendToChannel(codecRequest)
+
+            logger.trace { "converted batch is sent downstream (stream=${streamName.toString()} id=${codecRequest.storedBatchWrapper.fullBatch.id} requestHash=${codecRequest.codecRequest.requestHash})" }
 
             pipelineStatus.countParsePrepared(
                 streamName.toString(),

@@ -16,38 +16,37 @@
 
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
-import com.exactpro.th2.common.grpc.MessageGroup
+import com.exactpro.th2.common.grpc.Direction
 import com.exactpro.th2.common.grpc.MessageGroupBatch
 import com.exactpro.th2.common.grpc.MessageID
-import com.exactpro.th2.common.grpc.RawMessageBatch
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Deferred
-import java.time.Instant
 
 
-data class CodecId(private val ids: Set<String>) {
+data class CodecId(private val ids: List<BaseMessageId>) {
+
+    data class BaseMessageId(val sessionAlias: String, val direction: Direction, val sequence: Long) {
+        constructor(messageId: MessageID) : this(
+            sessionAlias = messageId.connectionId.sessionAlias,
+            direction = messageId.direction,
+            sequence = messageId.sequence
+        )
+    }
 
     companion object {
         fun fromRawBatch(groupBatch: MessageGroupBatch): CodecId {
             return CodecId(
                 groupBatch.groupsList
-                    .flatMap { group -> group.messagesList.map { it.rawMessage.metadata.id } }
+                    .flatMap { group -> group.messagesList.map { BaseMessageId(it.rawMessage.metadata.id) } }
             )
         }
 
         fun fromParsedBatch(groupBatch: MessageGroupBatch): CodecId {
             return CodecId(
                 groupBatch.groupsList
-                    .flatMap { group -> group.messagesList.map { it.message.metadata.id } }
+                    .flatMap { group -> group.messagesList.map { BaseMessageId(it.message.metadata.id) } }
             )
         }
     }
-
-    constructor(ids: List<MessageID>) : this(
-        ids
-            .map { "${it.connectionId.sessionAlias}:${it.direction}:${it.sequence}" }
-            .toSet()
-    )
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -70,7 +69,7 @@ class CodecBatchRequest(
     val protobufRawMessageBatch: MessageGroupBatch
 ) {
 
-    val id = CodecId.fromRawBatch(protobufRawMessageBatch)
+    val requestHash = CodecId.fromRawBatch(protobufRawMessageBatch)
 
     fun toPending(): PendingCodecBatchRequest {
         return PendingCodecBatchRequest(CompletableDeferred())
@@ -80,7 +79,7 @@ class CodecBatchRequest(
 class MessageGroupBatchWrapper(
     val messageGroupBatch: MessageGroupBatch
 ) {
-    val id = CodecId.fromParsedBatch(messageGroupBatch)
+    val requestHash = CodecId.fromParsedBatch(messageGroupBatch)
 }
 
 class PendingCodecBatchRequest(
@@ -94,5 +93,4 @@ class PendingCodecBatchRequest(
 class CodecBatchResponse(
     val protobufParsedMessageBatch: CompletableDeferred<MessageGroupBatchWrapper?>
 )
-
 

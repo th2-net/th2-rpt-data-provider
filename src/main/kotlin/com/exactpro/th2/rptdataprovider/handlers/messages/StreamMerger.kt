@@ -174,11 +174,24 @@ class StreamMerger(
                     sendToChannel(nextMessage)
                     resultCountLimit = resultCountLimit?.dec()
                     pipelineStatus.countMerged()
+
+                    logger.trace {
+                        nextMessage.let {
+                            "message ${it.lastProcessedId} (streamEmpty=${it.streamEmpty}) with timestamp ${it.lastScannedTime} has been sent downstream"
+                        }
+                    }
+                } else {
+                    logger.trace {
+                        nextMessage.let {
+                            "skipped message ${it.lastProcessedId} (streamEmpty=${it.streamEmpty}) with timestamp ${it.lastScannedTime}"
+                        }
+                    }
                 }
 
             } while (!allStreamIsEmpty && (resultCountLimit?.let { it > 0 } != false) && inTimeRange)
 
             sendToChannel(StreamEndObject(false, null, Instant.ofEpochMilli(0)))
+            logger.debug { "StreamEndObject has been sent" }
         }
     }
 
@@ -234,7 +247,7 @@ class StreamMerger(
                 }
             }.also {
                 logger.trace {
-                    "selected ${it.lastProcessedId} - ${it.lastScannedTime} out of [${streams}]"
+                    "selected ${it.lastProcessedId} - ${it.javaClass.kotlin}-${it.javaClass.hashCode()} ${it.lastScannedTime} out of [${streams}]"
                 }
             }
         }

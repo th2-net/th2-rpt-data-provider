@@ -75,13 +75,13 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
         val iteratorScope = CoroutineScope(cradleDispatcher)
 
         return withContext(cradleDispatcher) {
-            val result = (logMetrics(getMessagesBatches) {
+            (logMetrics(getMessagesBatches) {
                 logTime("getMessagesBatches (filter=${filter.convertToString()})") {
                     storage.getMessagesBatchesAsync(filter).await()
                 }
             } ?: listOf())
                 .let { iterable ->
-                    val channel = Channel<StoredMessageBatch>(1)
+                    Channel<StoredMessageBatch>(1)
                         .also { channel ->
                             iteratorScope.launch {
                                 iterable.forEach {
@@ -92,15 +92,8 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
                                 channel.close()
                                 logger.debug { "message batch channel for stream ${filter.streamName}:${filter.direction} has been closed" }
                             }
-                            logger.trace { "also block ${filter.streamName}:${filter.direction}" }
                         }
-                    logger.trace { "let block ${filter.streamName}:${filter.direction}" }
-                    channel
                 }
-            logger.trace { "withContext block ${filter.streamName}:${filter.direction}" }
-            result
-        }.also {
-            logger.trace { "fun block ${filter.streamName}:${filter.direction}" }
         }
     }
 
