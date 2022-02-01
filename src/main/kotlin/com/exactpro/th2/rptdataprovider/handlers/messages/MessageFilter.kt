@@ -84,24 +84,9 @@ class MessageFilter(
     }
 
 
-    private suspend fun emptySender(parentScope: CoroutineScope) {
-        while (parentScope.isActive) {
-            lastScannedObject?.let {
-                sendToChannel(
-                    EmptyPipelineObject(it).also { msg ->
-                        logger.trace { "Filter send empty message downstream: ${msg.lastProcessedId}-${msg.lastProcessedId}-${msg.streamEmpty} hash=${msg.hashCode()}" }
-                    }
-                )
-            }
-            delay(sendEmptyDelay)
-        }
-    }
-
-
     @OptIn(ExperimentalTime::class)
     override suspend fun processMessage() {
         coroutineScope {
-            launch { emptySender(this@coroutineScope) }
             while (isActive) {
                 val parsedMessage = previousComponent!!.pollMessage()
 
