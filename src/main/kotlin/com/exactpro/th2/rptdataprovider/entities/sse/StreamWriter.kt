@@ -74,6 +74,7 @@ class HttpWriter(private val writer: Writer, private val jacksonMapper: ObjectMa
         }
 
         writer.write("\n")
+        writer.flush()
     }
 
     override suspend fun write(status: PipelineStatusSnapshot, counter: AtomicLong) {
