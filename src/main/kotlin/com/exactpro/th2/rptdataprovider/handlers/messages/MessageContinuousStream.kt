@@ -93,7 +93,6 @@ class MessageContinuousStream(
 
     private fun tryToLoadStreamBefore() {
         if (lastElement == null || isStreamEmpty) {
-            Instant.MAX
             lastTimestamp = Instant.ofEpochMilli(Long.MIN_VALUE)
             needLoadMessage = false
         }
