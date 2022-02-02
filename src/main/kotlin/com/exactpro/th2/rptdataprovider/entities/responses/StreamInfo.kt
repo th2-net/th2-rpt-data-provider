@@ -23,25 +23,35 @@ import com.exactpro.th2.dataprovider.grpc.Stream
 import com.exactpro.th2.rptdataprovider.convertToProto
 import com.exactpro.th2.rptdataprovider.cradleDirectionToGrpc
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
+import mu.KotlinLogging
 
 data class StreamInfo(val stream: StreamName, val lastElement: StoredMessageId? = null) {
+    companion object {
+        val logger = KotlinLogging.logger { }
+    }
+
     fun convertToProto(): Stream {
         return Stream.newBuilder()
             .setDirection(cradleDirectionToGrpc(stream.direction))
             .setSession(stream.name)
-            .also { builder ->
+            .setLastId(
                 lastElement?.let {
-                    builder.setLastId(it.convertToProto())
+                    logger.trace { "stream $stream - lastElement is ${it.index}" }
+                    it.convertToProto()
 
+                } ?: let {
                     // set sequence to a negative value if stream has not started to avoid mistaking it for the default value
                     // FIXME change interface to make that case explicit
-                        ?: MessageID
-                            .newBuilder()
-                            .setSequence(-1)
-                            .setDirection(cradleDirectionToGrpc(stream.direction))
-                            .setConnectionId(ConnectionID.newBuilder().setSessionAlias(stream.name).build())
-                            .build()
+                    logger.trace { "lastElement is null - StreamInfo should be build as if the stream $stream has no messages" }
+
+                    MessageID
+                        .newBuilder()
+                        .setSequence(-1)
+                        .setDirection(cradleDirectionToGrpc(stream.direction))
+                        .setConnectionId(ConnectionID.newBuilder().setSessionAlias(stream.name).build())
+                        .build()
                 }
-            }.build()
+            )
+            .build()
     }
 }
