@@ -30,6 +30,11 @@ data class CodecId(private val ids: Set<BaseMessageId>) {
             direction = messageId.direction,
             sequence = messageId.sequence
         )
+
+        override fun toString(): String {
+            return "$sessionAlias:$direction:$sequence"
+        }
+
     }
 
     companion object {

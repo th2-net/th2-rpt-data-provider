@@ -57,7 +57,7 @@ class RabbitMqService(
                 logger.trace { "codec response with hash ${response.requestHash.hashCode()} has been received" }
 
                 pendingRequests.remove(response.requestHash)?.completableDeferred?.complete(response)
-                    ?: logger.debug { "codec response with hash ${response.requestHash.hashCode()} has no matching requests" }
+                    ?: logger.debug { "codec response ${response.requestHash} has no matching requests" }
             }
         },
 
@@ -90,7 +90,9 @@ class RabbitMqService(
                 try {
                     if (usePinAttributes) {
                         val sessionAlias =
-                            request.protobufRawMessageBatch.groupsList.first().messagesList.first().message.metadata.id.connectionId.sessionAlias
+                            request.protobufRawMessageBatch.groupsList
+                                .first().messagesList
+                                .first().rawMessage.metadata.id.connectionId.sessionAlias
 
                         messageRouterRawBatch.sendAll(request.protobufRawMessageBatch, sessionAlias)
                     } else {
