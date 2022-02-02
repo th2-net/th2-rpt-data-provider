@@ -17,6 +17,8 @@
 package com.exactpro.th2.rptdataprovider.entities.responses
 
 import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.th2.common.grpc.ConnectionID
+import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.dataprovider.grpc.Stream
 import com.exactpro.th2.rptdataprovider.convertToProto
 import com.exactpro.th2.rptdataprovider.cradleDirectionToGrpc
@@ -26,8 +28,20 @@ data class StreamInfo(val stream: StreamName, val lastElement: StoredMessageId? 
     fun convertToProto(): Stream {
         return Stream.newBuilder()
             .setDirection(cradleDirectionToGrpc(stream.direction))
-            .setSession(stream.name).also { builder ->
-                lastElement?.let { builder.setLastId(it.convertToProto()) }
+            .setSession(stream.name)
+            .also { builder ->
+                lastElement?.let {
+                    builder.setLastId(it.convertToProto())
+
+                    // set sequence to a negative value if stream has not started to avoid mistaking it for the default value
+                    // FIXME change interface to make that case explicit
+                        ?: MessageID
+                            .newBuilder()
+                            .setSequence(-1)
+                            .setDirection(cradleDirectionToGrpc(stream.direction))
+                            .setConnectionId(ConnectionID.newBuilder().setSessionAlias(stream.name).build())
+                            .build()
+                }
             }.build()
     }
 }

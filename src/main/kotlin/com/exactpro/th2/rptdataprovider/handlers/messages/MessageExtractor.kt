@@ -91,7 +91,7 @@ class MessageExtractor(
             streamName!!
 
             val resumeFromId = request.resumeFromIdsList.firstOrNull {
-                it.streamName.equals(streamName.name) && it.direction.equals(streamName.direction)
+                it.streamName == streamName.name && it.direction == streamName.direction
             }
 
             val order = if (request.searchDirection == TimeRelation.AFTER) {
@@ -102,7 +102,7 @@ class MessageExtractor(
 
             logger.debug { "acquiring cradle iterator for stream $streamName" }
 
-            resumeFromId?.let { logger.debug { "resume sequence for stream $streamName is set to ${it.index}" } }
+            resumeFromId?.let { logger.debug { "resume sequence for stream $streamName is set to ${it.sequence}" } }
             request.startTimestamp?.let { logger.debug { "start timestamp for stream $streamName is set to $it" } }
 
             val cradleMessageIterable = context.cradleService.getMessagesBatchesSuspend(
@@ -111,12 +111,12 @@ class MessageExtractor(
 
                     // timestamps will be ignored if resumeFromId is present
                     .also { builder ->
-                        if (resumeFromId != null) {
+                        if (resumeFromId != null && resumeFromId.hasStarted) {
                             builder.index().let {
                                 if (order == Order.DIRECT) {
-                                    it.isGreaterThan(resumeFromId.index)
+                                    it.isGreaterThan(resumeFromId.sequence)
                                 } else {
-                                    it.isLessThan(resumeFromId.index)
+                                    it.isLessThan(resumeFromId.sequence)
                                 }
                             }
                         } else {
@@ -141,7 +141,7 @@ class MessageExtractor(
                     }
                         // trim messages if resumeFromId is present
                         .dropWhile {
-                            resumeFromId?.index?.let { start ->
+                            resumeFromId?.sequence?.let { start ->
                                 if (order == Order.DIRECT) {
                                     it.index <= start
                                 } else {
