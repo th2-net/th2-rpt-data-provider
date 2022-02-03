@@ -41,10 +41,7 @@ class CustomConfigurationClass {
 
     val keepAliveTimeout: Long = 5000
 
-    val dbRetryDelay: Long = 5000
-
     val messageExtractorOutputBatchBuffer: Int = 10
-    val messagePreFilterOutputBatchBuffer: Int = 10
     val messageConverterOutputBatchBuffer: Int = 10
     val messageDecoderOutputBatchBuffer: Int = 10
     val messageUnpackerOutputMessageBuffer: Int = 1000
@@ -122,19 +119,10 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
     val keepAliveTimeout: Variable =
         Variable("keepAliveTimeout", customConfiguration.keepAliveTimeout.toString(), "5000")
 
-    val dbRetryDelay: Variable = Variable("dbRetryDelay", customConfiguration.dbRetryDelay.toString(), "5000")
-
     val messageExtractorOutputBatchBuffer: Variable =
         Variable(
             "messageExtractorOutputBatchBuffer",
             customConfiguration.messageExtractorOutputBatchBuffer.toString(),
-            "10"
-        )
-
-    val messagePreFilterOutputBatchBuffer: Variable =
-        Variable(
-            "messagePreFilterOutputBatchBuffer",
-            customConfiguration.messagePreFilterOutputBatchBuffer.toString(),
             "10"
         )
 

@@ -44,14 +44,8 @@ class ChainBuilder(
                 pipelineStatus
             )
 
-            val messagePreFilter = MessageBatchPreFilter(
-                messageExtractor,
-                context.configuration.messagePreFilterOutputBatchBuffer.value.toInt(),
-                pipelineStatus
-            )
-
             val messageBatchConverter = MessageBatchConverter(
-                messagePreFilter,
+                messageExtractor,
                 context.configuration.messageConverterOutputBatchBuffer.value.toInt(),
                 pipelineStatus
             )
