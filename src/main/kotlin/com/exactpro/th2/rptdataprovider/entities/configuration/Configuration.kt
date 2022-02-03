@@ -179,9 +179,6 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
     val codecRequestThreadPool: Variable =
         Variable("codecRequestThreadPool", customConfiguration.codecRequestThreadPool.toString(), "1")
 
-    val codecUsePinAttributes: Variable =
-        Variable("codecUsePinAttributes", customConfiguration.codecUsePinAttributes.toString(), "true")
-
     val grpcWriterMessageBuffer: Variable =
         Variable("grpcWriterMessageBuffer", customConfiguration.grpcWriterMessageBuffer.toString(), "100")
 

@@ -37,7 +37,6 @@ class RabbitMqService(
 
     private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
     private val pendingRequests = ConcurrentHashMap<CodecId, PendingCodecBatchRequest>()
-    private val usePinAttributes = configuration.codecUsePinAttributes.value.toBoolean()
     private val maximumPendingRequests = configuration.codecPendingBatchLimit.value.toInt()
 
     private val mqRequestSenderScope = CoroutineScope(
@@ -88,19 +87,9 @@ class RabbitMqService(
                 }
 
                 try {
-                    if (usePinAttributes) {
-                        val sessionAlias =
-                            request.protobufRawMessageBatch.groupsList
-                                .first().messagesList
-                                .first().rawMessage.metadata.id.connectionId.sessionAlias
-
-                        messageRouterRawBatch.sendAll(request.protobufRawMessageBatch, sessionAlias)
-                    } else {
-                        messageRouterRawBatch.sendAll(request.protobufRawMessageBatch)
-                    }
+                    messageRouterRawBatch.sendAll(request.protobufRawMessageBatch)
 
                     logger.debug { "codec request with hash ${request.requestHash.hashCode()} has been sent" }
-
 
                 } catch (e: Exception) {
                     pendingRequest.completableDeferred.cancel(
