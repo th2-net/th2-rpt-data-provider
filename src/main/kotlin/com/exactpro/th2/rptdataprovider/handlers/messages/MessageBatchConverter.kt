@@ -44,7 +44,7 @@ class MessageBatchConverter(
     }
 
     constructor(
-        pipelineComponent: MessageExtractor, messageFlowCapacity: Int, pipelineStatus: PipelineStatus
+        pipelineComponent: MessageBatchPreFilter, messageFlowCapacity: Int, pipelineStatus: PipelineStatus
     ) : this(
         pipelineComponent.context,
         pipelineComponent.searchRequest,

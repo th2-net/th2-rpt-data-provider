@@ -42,7 +42,9 @@ data class SseMessageSearchRequest(
     val resultCountLimit: Int?,
     val attachedEvents: Boolean,
     val lookupLimitDays: Int?,
-    val resumeFromIdsList: List<StreamPointer>
+    val resumeFromIdsList: List<StreamPointer>,
+    val includeProtocols: List<String>?,
+    val excludeProtocols: List<String>?
 ) {
 
     companion object {
@@ -78,7 +80,10 @@ data class SseMessageSearchRequest(
 
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt(),
         attachedEvents = parameters["attachedEvents"]?.firstOrNull()?.toBoolean() ?: false,
-        lookupLimitDays = parameters["lookupLimitDays"]?.firstOrNull()?.toInt()
+        lookupLimitDays = parameters["lookupLimitDays"]?.firstOrNull()?.toInt(),
+
+        includeProtocols = parameters["includeProtocols"],
+        excludeProtocols = parameters["excludeProtocols"]
     )
 
     constructor(request: MessageSearchRequest, filterPredicate: FilterPredicate<MessageWithMetadata>) : this(
@@ -120,7 +125,11 @@ data class SseMessageSearchRequest(
 
         attachedEvents = false,
 
-        lookupLimitDays = null
+        lookupLimitDays = null,
+
+        includeProtocols = null,
+
+        excludeProtocols = null
     )
 
     private fun checkEndTimestamp() {
