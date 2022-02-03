@@ -66,8 +66,12 @@ class MessageBatchPreFilter(
                 val filteredMessages = pipelineMessage.storedBatchWrapper.trimmedMessages.filter { message ->
                     val protocol = message.metadata?.get("protocol")
 
-                    (included.isNullOrEmpty() || included.contains(protocol))
-                            && (excluded.isNullOrEmpty() || !excluded.contains(protocol))
+
+                    ((included.isNullOrEmpty() || included.contains(protocol))
+                            && (excluded.isNullOrEmpty() || !excluded.contains(protocol)))
+                        .also {
+                            logger.trace { "message ${message.id.index} has protocol $protocol matchesProtocolFilter=${it} (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.fullBatch.id})" }
+                        }
                 }
 
                 logger.trace { "raw batch (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.fullBatch.id}) has ${filteredMessages.size} out of $originalMessageCount messages that match protocol filter (included=${included} excluded=${excluded})" }

@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
-import com.exactpro.th2.common.grpc.MessageBatch
 import com.exactpro.th2.common.grpc.MessageGroupBatch
 import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.message.direction
@@ -88,11 +87,14 @@ class RabbitMqService(
                         if (it.isActive) {
                             it.complete(null)
 
-                            val firstSequence = request.protobufRawMessageBatch.messagesList.first()?.sequence
-                            val lastSequence = request.protobufRawMessageBatch.messagesList.last()?.sequence
-                            val stream = "${request.protobufRawMessageBatch.messagesList.first()?.sessionAlias}:${request.protobufRawMessageBatch.messagesList.first()?.direction.toString()}"
+                            logger.warn {
+                                val firstSequence = request.protobufRawMessageBatch.messagesList.first()?.sequence
+                                val lastSequence = request.protobufRawMessageBatch.messagesList.last()?.sequence
+                                val stream =
+                                    "${request.protobufRawMessageBatch.messagesList.first()?.sessionAlias}:${request.protobufRawMessageBatch.messagesList.first()?.direction.toString()}"
 
-                            logger.warn { "codec request timed out after $responseTimeout ms (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} hash=${request.requestHash})" }
+                                "codec request timed out after $responseTimeout ms (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} hash=${request.requestHash})"
+                            }
                         }
                     }
                 }
@@ -107,7 +109,14 @@ class RabbitMqService(
                         messageRouterRawBatch.sendAll(request.protobufRawMessageBatch)
                     }
 
-                    logger.trace { "codec request with hash ${request.requestHash} has been sent" }
+                    logger.trace {
+                        val firstSequence = request.protobufRawMessageBatch.messagesList.first()?.sequence
+                        val lastSequence = request.protobufRawMessageBatch.messagesList.last()?.sequence
+                        val stream =
+                            "${request.protobufRawMessageBatch.messagesList.first()?.sessionAlias}:${request.protobufRawMessageBatch.messagesList.first()?.direction.toString()}"
+
+                        "codec request with hash ${request.requestHash} has been sent (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} hash=${request.requestHash})"
+                    }
 
 
                 } catch (e: Exception) {
