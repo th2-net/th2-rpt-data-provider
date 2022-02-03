@@ -19,6 +19,9 @@ package com.exactpro.th2.rptdataprovider.services.rabbitmq
 import com.exactpro.th2.common.grpc.MessageBatch
 import com.exactpro.th2.common.grpc.MessageGroupBatch
 import com.exactpro.th2.common.grpc.RawMessageBatch
+import com.exactpro.th2.common.message.direction
+import com.exactpro.th2.common.message.sequence
+import com.exactpro.th2.common.message.sessionAlias
 import com.exactpro.th2.common.schema.message.MessageListener
 import com.exactpro.th2.common.schema.message.MessageRouter
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
@@ -84,7 +87,12 @@ class RabbitMqService(
                     pendingRequest.completableDeferred.let {
                         if (it.isActive) {
                             it.complete(null)
-                            logger.warn { "codec request timed out after $responseTimeout ms" }
+
+                            val firstSequence = request.protobufRawMessageBatch.messagesList.first()?.sequence
+                            val lastSequence = request.protobufRawMessageBatch.messagesList.last()?.sequence
+                            val stream = "${request.protobufRawMessageBatch.messagesList.first()?.sessionAlias}:${request.protobufRawMessageBatch.messagesList.first()?.direction.toString()}"
+
+                            logger.warn { "codec request timed out after $responseTimeout ms (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} hash=${request.requestHash})" }
                         }
                     }
                 }

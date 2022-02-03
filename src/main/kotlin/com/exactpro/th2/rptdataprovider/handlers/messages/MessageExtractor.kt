@@ -80,7 +80,7 @@ class MessageExtractor(
                     lastTimestamp?.also {
                         sendToChannel(
                             EmptyPipelineObject(isStreamEmpty, lastElement, it).also { msg ->
-                                logger.trace { "Extractor send empty message downstream: ${msg.lastProcessedId}-${msg.lastProcessedId}-${msg.streamEmpty} hash=${msg.hashCode()}" }
+                                logger.trace { "Extractor has sent EmptyPipelineObject downstream: (lastProcessedId${msg.lastProcessedId} lastScannedTime=${msg.lastScannedTime} streamEmpty=${msg.streamEmpty} hash=${msg.hashCode()})" }
                             }
                         )
                     }
