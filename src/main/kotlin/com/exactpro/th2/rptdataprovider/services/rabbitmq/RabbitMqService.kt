@@ -87,7 +87,12 @@ class RabbitMqService(
                 }
 
                 try {
-                    messageRouterRawBatch.sendAll(request.protobufRawMessageBatch)
+                    val sessionAlias =
+                        request.protobufRawMessageBatch.groupsList
+                            .first().messagesList
+                            .first().rawMessage.metadata.id.connectionId.sessionAlias
+
+                    messageRouterRawBatch.sendAll(request.protobufRawMessageBatch, sessionAlias)
 
                     logger.debug { "codec request with hash ${request.requestHash.hashCode()} has been sent" }
 
