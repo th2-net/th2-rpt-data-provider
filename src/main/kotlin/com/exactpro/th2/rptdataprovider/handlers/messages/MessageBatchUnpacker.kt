@@ -72,10 +72,25 @@ class MessageBatchUnpacker(
                 logger.debug {
                     "awaited codec response for ${it.duration.inMilliseconds}ms (stream=${streamName} firstRequestId=${requests.first().id.index} lastRequestId=${requests.last().id.index} requestSize=${requests.size} responseSize=${it.value?.groupsList?.size})"
                 }
-            }.value?.groupsList ?: listOf()
+            }.value?.groupsList
+
+            val requestsAndResponses =
+                if (responses != null) {
+                    requests.zip(responses).map { (rawMessage, response) ->
+                        if (response.messagesList.firstOrNull()?.hasMessage() == true) {
+                            rawMessage to response
+                        } else {
+                            rawMessage to null
+                        }
+                    }
+                } else {
+                    val messages = pipelineMessage.storedBatchWrapper.trimmedMessages
+                    logger.warn { "codec response is null (stream=${streamName} firstRequestId=${messages.first().id.index} lastRequestId=${messages.last().id.index} requestSize=${messages.size} responseSize=${responses?.size ?: 0})" }
+                    requests.map { Pair(it, null) }
+                }
 
             val result = measureTimedValue {
-                (requests zip responses).map { (rawMessage, response) ->
+                requestsAndResponses.map { (rawMessage, response) ->
                     PipelineParsedMessage(
                         pipelineMessage,
                         Message(
@@ -88,11 +103,7 @@ class MessageBatchUnpacker(
 
                                 pipelineStatus.countParseReceivedTotal(streamName.toString())
 
-                                if (response.messagesList.firstOrNull()?.hasMessage() == true) {
-                                    response.messagesList.map { BodyWrapper(it.message) }
-                                } else {
-                                    null
-                                }
+                                response?.messagesList?.map { BodyWrapper(it.message) }
                             },
 
                             rawMessage.content,
