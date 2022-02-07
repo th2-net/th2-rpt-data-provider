@@ -40,7 +40,7 @@ class RabbitMqService(
     }
 
     private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
-    private val pendingRequests = ConcurrentHashMap<Int, PendingCodecBatchRequest>()
+    private val pendingRequests = ConcurrentHashMap<CodecId, PendingCodecBatchRequest>()
     private val usePinAttributes = configuration.codecUsePinAttributes.value.toBoolean()
     private val maximumPendingRequests = configuration.codecPendingBatchLimit.value.toInt()
 
@@ -56,7 +56,7 @@ class RabbitMqService(
     private val receiveChannel = messageRouterParsedBatch.subscribeAll(
         MessageListener { _, decodedBatch ->
             mqCallbackScope.launch {
-                val requestHash = CodecBatchRequest.calculateHash(decodedBatch.groupsList)
+                val requestHash = CodecId.fromParsedBatch(decodedBatch)
 
                 logger.trace { "codec response with hash $requestHash has been received" }
 

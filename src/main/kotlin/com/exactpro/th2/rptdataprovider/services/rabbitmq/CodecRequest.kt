@@ -16,27 +16,55 @@
 
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
-import com.exactpro.th2.common.grpc.MessageGroup
-import com.exactpro.th2.common.grpc.MessageGroupBatch
-import com.exactpro.th2.common.grpc.RawMessageBatch
+import com.exactpro.th2.common.grpc.*
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
+
+
+data class CodecId(private val ids: Set<BaseMessageId>) {
+
+    data class BaseMessageId(val sessionAlias: String, val direction: Direction, val sequence: Long) {
+        constructor(messageId: MessageID) : this(
+            sessionAlias = messageId.connectionId.sessionAlias,
+            direction = messageId.direction,
+            sequence = messageId.sequence
+        )
+
+        override fun toString(): String {
+            return "$sessionAlias:$direction:$sequence"
+        }
+
+    }
+
+    companion object {
+        fun fromRawBatch(groupBatch: RawMessageBatch): CodecId {
+            return CodecId(
+                groupBatch.messagesList
+                    .map { BaseMessageId(it.metadata.id) }
+                    .toSet()
+            )
+        }
+
+        fun fromParsedBatch(groupBatch: MessageGroupBatch): CodecId {
+            return CodecId(
+                groupBatch.groupsList
+                    .flatMap { group -> group.messagesList.map { BaseMessageId(it.message.metadata.id) } }
+                    .toSet()
+            )
+        }
+    }
+}
+
 
 
 class CodecBatchRequest(
     val protobufRawMessageBatch: RawMessageBatch
 ) {
-    val requestHash = protobufRawMessageBatch.messagesList.map { it.metadata.id.hashCode() }.hashCode()
+    val requestHash = CodecId.fromRawBatch(protobufRawMessageBatch)
+
 
     fun toPending(): PendingCodecBatchRequest {
         return PendingCodecBatchRequest(CompletableDeferred())
-    }
-
-    //FIXME: find a better way to identify individual requests
-    companion object {
-        fun calculateHash(list: List<MessageGroup>): Int {
-            return list.map { it.messagesList.first().message.metadata.id.hashCode() }.hashCode()
-        }
     }
 }
 
