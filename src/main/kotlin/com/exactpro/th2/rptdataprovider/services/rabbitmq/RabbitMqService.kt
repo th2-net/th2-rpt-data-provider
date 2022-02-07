@@ -61,7 +61,13 @@ class RabbitMqService(
                 logger.trace { "codec response with hash $requestHash has been received" }
 
                 pendingRequests.remove(requestHash)?.completableDeferred?.complete(decodedBatch)
-                    ?: logger.trace { "codec response with hash $requestHash has no matching requests" }
+                    ?: logger.trace {
+                        val firstSequence = decodedBatch.groupsList.firstOrNull()?.messagesList?.firstOrNull()
+                        val lastSequence = decodedBatch.groupsList?.lastOrNull()?.messagesList?.lastOrNull()?.sequence
+                        val stream =
+                            "${decodedBatch.groupsList.firstOrNull()?.messagesList?.firstOrNull()?.message?.sessionAlias}:${decodedBatch.groupsList.firstOrNull()?.messagesList?.firstOrNull()?.message?.direction.toString()}"
+                        "codec response with hash $requestHash has no matching requests (stream=${stream} firstId=${firstSequence} lastId=${lastSequence})"
+                    }
             }
         },
 
