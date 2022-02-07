@@ -75,20 +75,7 @@ class MessageBatchUnpacker(
             }.value?.groupsList ?: listOf()
 
             val result = measureTimedValue {
-                val requestsAndResponses =
-                    if (requests.size == responses.size) {
-                        requests.zip(responses)
-                    } else {
-                        //TODO: match by id to recover from this
-                        val messages = pipelineMessage.storedBatchWrapper.trimmedMessages
-                        logger.warn { "codec response batch size differs from request size (stream=${streamName} firstRequestId=${messages.first().id.index} lastRequestId=${messages.last().id.index} requestSize=${messages.size} responseSize=${responses.size})" }
-                        requests.map { Pair(it, null) }
-                    }
-
-                requestsAndResponses.map { pair ->
-                    val rawMessage = pair.first
-                    val response = pair.second
-
+                (requests zip responses).map { (rawMessage, response) ->
                     PipelineParsedMessage(
                         pipelineMessage,
                         Message(
@@ -101,7 +88,11 @@ class MessageBatchUnpacker(
 
                                 pipelineStatus.countParseReceivedTotal(streamName.toString())
 
-                                response?.messagesList?.map { BodyWrapper(it.message) }
+                                if (response.messagesList.firstOrNull()?.hasMessage() == true) {
+                                    response.messagesList.map { BodyWrapper(it.message) }
+                                } else {
+                                    null
+                                }
                             },
 
                             rawMessage.content,
