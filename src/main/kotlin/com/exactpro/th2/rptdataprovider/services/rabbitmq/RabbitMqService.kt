@@ -62,7 +62,7 @@ class RabbitMqService(
 
                 pendingRequests.remove(requestHash)?.completableDeferred?.complete(decodedBatch)
                     ?: logger.trace {
-                        val firstSequence = decodedBatch.groupsList.firstOrNull()?.messagesList?.firstOrNull()
+                        val firstSequence = decodedBatch.groupsList.firstOrNull()?.messagesList?.firstOrNull()?.sequence
                         val lastSequence = decodedBatch.groupsList?.lastOrNull()?.messagesList?.lastOrNull()?.sequence
                         val stream =
                             "${decodedBatch.groupsList.firstOrNull()?.messagesList?.firstOrNull()?.message?.sessionAlias}:${decodedBatch.groupsList.firstOrNull()?.messagesList?.firstOrNull()?.message?.direction.toString()}"
