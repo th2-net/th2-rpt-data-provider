@@ -7,6 +7,7 @@ import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineCodecRequest
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
@@ -66,28 +67,28 @@ class MessageBatchConverter(
 
             logger.trace { "received raw batch (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.fullBatch.id})" }
 
+            val filteredMessages = pipelineMessage.storedBatchWrapper.trimmedMessages
+                .map { RawMessage.parseFrom(it.content) to it }
+                .filter { (message, _) ->
+                    val protocol = message.metadata?.protocol
+
+                    ((included.isNullOrEmpty() || included.contains(protocol))
+                            && (excluded.isNullOrEmpty() || !excluded.contains(protocol)))
+                        .also {
+                            logger.trace { "message ${message.sequence} has protocol $protocol (matchesProtocolFilter=${it}) (stream=${streamName.toString()} batchId=${pipelineMessage.storedBatchWrapper.fullBatch.id})" }
+                        }
+                }
+
             val codecRequest = PipelineCodecRequest(
                 pipelineMessage.streamEmpty,
                 pipelineMessage.lastProcessedId,
                 pipelineMessage.lastScannedTime,
-                pipelineMessage.storedBatchWrapper,
+                pipelineMessage.storedBatchWrapper.copy(trimmedMessages = filteredMessages.map { it.second }),
 
                 CodecBatchRequest(
                     RawMessageBatch
                         .newBuilder()
-                        .addAllMessages(
-                            pipelineMessage.storedBatchWrapper.trimmedMessages
-                                .map { RawMessage.parseFrom(it.content) }
-                                .filter { message ->
-                                    val protocol = message.metadata?.protocol
-
-                                    ((included.isNullOrEmpty() || included.contains(protocol))
-                                            && (excluded.isNullOrEmpty() || !excluded.contains(protocol)))
-                                        .also {
-                                            logger.trace { "message ${message.sequence} has protocol $protocol (matchesProtocolFilter=${it}) (stream=${streamName.toString()} batchId=${pipelineMessage.storedBatchWrapper.fullBatch.id})" }
-                                        }
-                                }
-                        )
+                        .addAllMessages(filteredMessages.map { it.first })
                         .build()
                 )
             )
