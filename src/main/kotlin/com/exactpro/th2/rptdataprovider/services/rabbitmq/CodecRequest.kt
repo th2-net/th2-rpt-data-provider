@@ -48,7 +48,15 @@ data class CodecId(private val ids: Set<BaseMessageId>) {
         fun fromParsedBatch(groupBatch: MessageGroupBatch): CodecId {
             return CodecId(
                 groupBatch.groupsList
-                    .flatMap { group -> group.messagesList.map { BaseMessageId(it.message.metadata.id) } }
+                    .flatMap { group ->
+                        group.messagesList.map {
+                            if (it.hasMessage()) {
+                                BaseMessageId(it.message.metadata.id)
+                            } else {
+                                BaseMessageId(it.rawMessage.metadata.id)
+                            }
+                        }
+                    }
                     .toSet()
             )
         }
@@ -56,11 +64,11 @@ data class CodecId(private val ids: Set<BaseMessageId>) {
 }
 
 
-
 class CodecBatchRequest(
     val protobufRawMessageBatch: RawMessageBatch
 ) {
-    val requestHash = CodecId.fromRawBatch(protobufRawMessageBatch)
+    val requestId = CodecId.fromRawBatch(protobufRawMessageBatch)
+    val requestHash = requestId.hashCode()
 
 
     fun toPending(): PendingCodecBatchRequest {

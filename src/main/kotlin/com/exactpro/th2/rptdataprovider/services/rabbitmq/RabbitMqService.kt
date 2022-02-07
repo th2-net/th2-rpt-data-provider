@@ -56,17 +56,17 @@ class RabbitMqService(
     private val receiveChannel = messageRouterParsedBatch.subscribeAll(
         MessageListener { _, decodedBatch ->
             mqCallbackScope.launch {
-                val requestHash = CodecId.fromParsedBatch(decodedBatch)
+                val requestId = CodecId.fromParsedBatch(decodedBatch)
 
-                logger.trace { "codec response with hash $requestHash has been received" }
+                logger.trace { "codec response with hash $requestId has been received" }
 
-                pendingRequests.remove(requestHash)?.completableDeferred?.complete(decodedBatch)
+                pendingRequests.remove(requestId)?.completableDeferred?.complete(decodedBatch)
                     ?: logger.trace {
                         val firstSequence = decodedBatch.groupsList.firstOrNull()?.messagesList?.firstOrNull()?.sequence
                         val lastSequence = decodedBatch.groupsList?.lastOrNull()?.messagesList?.lastOrNull()?.sequence
                         val stream =
                             "${decodedBatch.groupsList.firstOrNull()?.messagesList?.firstOrNull()?.message?.sessionAlias}:${decodedBatch.groupsList.firstOrNull()?.messagesList?.firstOrNull()?.message?.direction.toString()}"
-                        "codec response with hash $requestHash has no matching requests (stream=${stream} firstId=${firstSequence} lastId=${lastSequence})"
+                        "codec response with hash ${requestId.hashCode()} has no matching requests (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} requestId=${requestId})"
                     }
             }
         },
@@ -81,13 +81,13 @@ class RabbitMqService(
                 delay(100)
             }
 
-            pendingRequests.computeIfAbsent(request.requestHash) {
+            pendingRequests.computeIfAbsent(request.requestId) {
                 val pendingRequest = request.toPending()
 
                 mqCallbackScope.launch {
                     delay(responseTimeout)
 
-                    pendingRequests.remove(request.requestHash)
+                    pendingRequests.remove(request.requestId)
 
                     pendingRequest.completableDeferred.let {
                         if (it.isActive) {
@@ -99,7 +99,7 @@ class RabbitMqService(
                                 val stream =
                                     "${request.protobufRawMessageBatch.messagesList.first()?.sessionAlias}:${request.protobufRawMessageBatch.messagesList.first()?.direction.toString()}"
 
-                                "codec request timed out after $responseTimeout ms (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} hash=${request.requestHash})"
+                                "codec request timed out after $responseTimeout ms (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} hash=${request.requestHash}) requestId=${request.requestId}"
                             }
                         }
                     }
