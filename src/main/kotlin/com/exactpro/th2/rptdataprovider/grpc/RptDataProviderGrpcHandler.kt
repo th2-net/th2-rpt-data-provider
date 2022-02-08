@@ -24,6 +24,7 @@ import com.exactpro.th2.dataprovider.grpc.*
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
+import com.exactpro.th2.rptdataprovider.entities.exceptions.CodecResponseException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
@@ -33,6 +34,7 @@ import com.exactpro.th2.rptdataprovider.entities.sse.GrpcWriter
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.grpcDirectionToCradle
 import com.exactpro.th2.rptdataprovider.logMetrics
+import com.exactpro.th2.rptdataprovider.server.HttpServer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import com.google.protobuf.MessageOrBuilder
 import com.google.protobuf.TextFormat
@@ -166,6 +168,9 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
                     } catch (e: ChannelClosedException) {
                         errorLogging(e, requestName, stringParameters.value, "channel closed")
                         sendErrorCode(responseObserver, e, Status.DEADLINE_EXCEEDED)
+                    } catch (e: CodecResponseException) {
+                        errorLogging(e, requestName, stringParameters.value, "codec parses messages incorrectly")
+                        sendErrorCode(responseObserver, e, Status.INTERNAL)
                     } catch (e: CradleIdException) {
                         errorLogging(e, requestName, stringParameters.value, "unexpected cradle id exception")
                         sendErrorCode(responseObserver, e, Status.INTERNAL)

@@ -1,6 +1,10 @@
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
+import com.exactpro.cradle.messages.StoredMessage
+import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.th2.common.grpc.MessageGroup
 import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.rptdataprovider.entities.exceptions.CodecResponseException
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineDecodedBatch
@@ -58,6 +62,79 @@ class MessageBatchUnpacker(
         val logger = KotlinLogging.logger { }
     }
 
+
+    private val useStrictMode = context.configuration.useStrictMode.value.toBoolean()
+
+
+    private fun badResponse(
+        requests: Collection<StoredMessage>,
+        responses: List<MessageGroup>?,
+        pipelineMessage: PipelineDecodedBatch
+    ): List<Pair<StoredMessage, MessageGroup?>> {
+
+        val messages = pipelineMessage.storedBatchWrapper.trimmedMessages
+
+        val errorMessage = """"codec response is null 
+                    | (stream=${streamName} 
+                    | firstRequestId=${messages.first().id.index}
+                    | lastRequestId=${messages.last().id.index} 
+                    | requestSize=${messages.size})
+                    | responseSize=${responses?.size ?: 0})"""
+            .trimMargin().replace("\n", " ")
+
+        return if (!useStrictMode) {
+            logger.warn { errorMessage }
+            requests.map { Pair(it, null) }
+        } else {
+            throw CodecResponseException(errorMessage)
+        }
+    }
+
+    private fun goodResponse(
+        requests: Collection<StoredMessage>,
+        responses: List<MessageGroup>,
+        pipelineMessage: PipelineDecodedBatch
+    ): List<Pair<StoredMessage, MessageGroup?>> {
+
+        val requestsToResponse = requests.zip(responses)
+
+        return if (!useStrictMode) {
+            requestsToResponse.map { (rawMessage, response) ->
+                if (response.messagesList.firstOrNull()?.hasMessage() == true) {
+                    rawMessage to response
+                } else {
+                    rawMessage to null
+                }
+            }
+        } else {
+            val notParsed = mutableListOf<StoredMessageId>()
+            val requestsToMessage = requestsToResponse.mapNotNull { (rawMessage, response) ->
+                val message = response.messagesList.firstOrNull()
+                if (message?.hasMessage() == true) {
+                    rawMessage to response
+                } else {
+                    message?.let { notParsed.add(rawMessage.id) }
+                    null
+                }
+            }
+
+            if (notParsed.isNotEmpty()) {
+                val messages = pipelineMessage.storedBatchWrapper.trimmedMessages
+
+                throw CodecResponseException(
+                    """codec dont parsed all messages
+                    | (stream=${streamName} 
+                    | firstRequestId=${messages.first().id.index}
+                    | lastRequestId=${messages.last().id.index}
+                    | notParsedMessagesId=$notParsed
+                """.trimMargin().replace("\n", " ")
+                )
+            }
+
+            requestsToMessage
+        }
+    }
+
     @OptIn(ExperimentalTime::class)
     override suspend fun processMessage() {
         val pipelineMessage = previousComponent!!.pollMessage()
@@ -75,18 +152,10 @@ class MessageBatchUnpacker(
             }.value?.groupsList
 
             val requestsAndResponses =
-                if (responses != null) {
-                    requests.zip(responses).map { (rawMessage, response) ->
-                        if (response.messagesList.firstOrNull()?.hasMessage() == true) {
-                            rawMessage to response
-                        } else {
-                            rawMessage to null
-                        }
-                    }
+                if (responses != null && requests.size == responses.size) {
+                    goodResponse(requests, responses, pipelineMessage)
                 } else {
-                    val messages = pipelineMessage.storedBatchWrapper.trimmedMessages
-                    logger.warn { "codec response is null (stream=${streamName} firstRequestId=${messages.first().id.index} lastRequestId=${messages.last().id.index} requestSize=${messages.size} responseSize=${responses?.size ?: 0})" }
-                    requests.map { Pair(it, null) }
+                    badResponse(requests, responses, pipelineMessage)
                 }
 
             val result = measureTimedValue {

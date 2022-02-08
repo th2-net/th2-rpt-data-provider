@@ -247,6 +247,8 @@ spec:
 
     sendPipelineStatus: false // enable profiling
 
+    useStrictMode: false // if true throw an exception when bad messages are received from the codec otherwise return messages with null body and type
+
     serverType: HTTP // provider server type. Allows 'HTTP' and 'GRPC' (case sensetive). 
 
   pins: // pins are used to communicate with codec components to parse message data
