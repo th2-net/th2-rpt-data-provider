@@ -60,8 +60,8 @@ data class CodecId(private val ids: Set<BaseMessageId>) {
 class CodecBatchRequest(
     val protobufRawMessageBatch: MessageGroupBatch
 ) {
-
-    val requestHash = CodecId.fromRawBatch(protobufRawMessageBatch)
+    val requestId = CodecId.fromRawBatch(protobufRawMessageBatch)
+    val requestHash = requestId.hashCode()
 
     fun toPending(): PendingCodecBatchRequest {
         return PendingCodecBatchRequest(CompletableDeferred())
@@ -71,7 +71,8 @@ class CodecBatchRequest(
 class MessageGroupBatchWrapper(
     val messageGroupBatch: MessageGroupBatch
 ) {
-    val requestHash = CodecId.fromParsedBatch(messageGroupBatch)
+    val requestId = CodecId.fromParsedBatch(messageGroupBatch)
+    val requestHash = requestId.hashCode()
 }
 
 class PendingCodecBatchRequest(

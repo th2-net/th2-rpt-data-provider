@@ -72,23 +72,26 @@ class MessageBatchUnpacker(
                 logger.debug {
                     "awaited codec response for ${it.duration.inMilliseconds}ms (stream=${streamName} firstRequestId=${requests.first().id.index} lastRequestId=${requests.last().id.index} requestSize=${requests.size} responseSize=${it.value?.messageGroupBatch?.groupsList?.size})"
                 }
-            }.value?.messageGroupBatch?.groupsList ?: listOf()
+
+            }.value?.messageGroupBatch?.groupsList
+
+            val requestsAndResponses =
+                if (responses != null) {
+                    requests.zip(responses).map { (rawMessage, response) ->
+                        if (response.messagesList.firstOrNull()?.hasMessage() == true) {
+                            rawMessage to response
+                        } else {
+                            rawMessage to null
+                        }
+                    }
+                } else {
+                    val messages = pipelineMessage.storedBatchWrapper.trimmedMessages
+                    logger.warn { "codec response is null (stream=${streamName} firstRequestId=${messages.first().id.index} lastRequestId=${messages.last().id.index} requestSize=${messages.size} responseSize=${responses?.size ?: 0})" }
+                    requests.map { Pair(it, null) }
+                }
 
             val result = measureTimedValue {
-                val requestsAndResponses =
-                    if (requests.size == responses.size) {
-                        requests.zip(responses)
-                    } else {
-                        //TODO: match by id to recover from this
-                        val messages = pipelineMessage.storedBatchWrapper.trimmedMessages
-                        logger.warn { "codec response batch size differs from request size (stream=${streamName} firstRequestId=${messages.first().id.index} lastRequestId=${messages.last().id.index} requestSize=${messages.size} responseSize=${responses.size})" }
-                        requests.map { Pair(it, null) }
-                    }
-
-                requestsAndResponses.map { pair ->
-                    val rawMessage = pair.first
-                    val response = pair.second
-
+                requestsAndResponses.map { (rawMessage, response) ->
                     PipelineParsedMessage(
                         pipelineMessage,
                         Message(
