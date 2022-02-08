@@ -268,6 +268,8 @@ class HttpServer(private val applicationContext: Context) {
                     )
                     coroutineContext.cancelChildren()
                 }.join()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 when (val exception = e.rootCause ?: e) {
                     is InvalidRequestException -> sendErrorCode(call, exception, HttpStatusCode.BadRequest)
