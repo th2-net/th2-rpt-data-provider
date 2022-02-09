@@ -164,12 +164,10 @@ class StreamMerger(
             messageStreams.forEach { it.init() }
 
             do {
-                pipelineStatus.mergeStart(streamName.toString())
                 val nextMessage = getNextMessage()
 
                 val inTimeRange = inTimeRange(nextMessage)
 
-                pipelineStatus.mergeEnd(streamName.toString())
                 if (nextMessage !is EmptyPipelineObject && inTimeRange) {
                     sendToChannel(nextMessage)
                     resultCountLimit = resultCountLimit?.dec()
@@ -187,7 +185,6 @@ class StreamMerger(
                         }
                     }
                 }
-                pipelineStatus.mergeSendDownstream(streamName.toString())
             } while (!allStreamIsEmpty && (resultCountLimit?.let { it > 0 } != false) && inTimeRange)
 
             sendToChannel(StreamEndObject(false, null, Instant.ofEpochMilli(0)))

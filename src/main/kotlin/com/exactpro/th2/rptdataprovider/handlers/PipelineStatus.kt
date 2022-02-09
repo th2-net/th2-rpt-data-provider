@@ -56,11 +56,7 @@ data class PipelineStreamCounters(
 
     val filterStart: AtomicLong = AtomicLong(0),
     val filterEnd: AtomicLong = AtomicLong(0),
-    val filterSendDownstream: AtomicLong = AtomicLong(0),
-
-    val mergeStart: AtomicLong = AtomicLong(0),
-    val mergeEnd: AtomicLong = AtomicLong(0),
-    val mergeSendDownstream: AtomicLong = AtomicLong(0)
+    val filterSendDownstream: AtomicLong = AtomicLong(0)
 )
 
 class PipelineStatus(context: Context) {
@@ -152,22 +148,6 @@ class PipelineStatus(context: Context) {
     fun filterSendDownstream(streamName: String, count: Long = 1) {
         if (!sendPipelineStatus) return
         this.streams[streamName]?.filterSendDownstream?.addAndGet(count)
-    }
-
-    fun mergeStart(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
-        this.streams[streamName]?.mergeStart?.addAndGet(count)
-    }
-
-
-    fun mergeEnd(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
-        this.streams[streamName]?.mergeEnd?.addAndGet(count)
-    }
-
-    fun mergeSendDownstream(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
-        this.streams[streamName]?.mergeSendDownstream?.addAndGet(count)
     }
 
     fun countParsePrepared(streamName: String, count: Long = 1) {
