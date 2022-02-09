@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicLong
 data class PipelineStatusSnapshot(
     val startTime: Long,
     val processingTime: Long,
+    val merged: Long,
     val returned: Long,
     val counters: Map<String, PipelineStreamCounters>
 )
@@ -63,6 +64,7 @@ class PipelineStatus(context: Context) {
 
     val streams: MutableMap<String, PipelineStreamCounters> = mutableMapOf()
     var merged: AtomicLong = AtomicLong(0)
+    var sended: AtomicLong = AtomicLong(0)
 
     private val processingStartTimestamp: Long = System.currentTimeMillis()
     private val sendPipelineStatus = context.configuration.sendPipelineStatus.value.toBoolean()
@@ -206,11 +208,17 @@ class PipelineStatus(context: Context) {
         this.merged.incrementAndGet()
     }
 
+    fun countSend() {
+        if (!sendPipelineStatus) return
+        this.sended.incrementAndGet()
+    }
+
     fun getSnapshot(): PipelineStatusSnapshot {
         return PipelineStatusSnapshot(
             processingStartTimestamp,
             System.currentTimeMillis() - processingStartTimestamp,
             merged.get(),
+            sended.get(),
             streams
         )
     }
