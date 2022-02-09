@@ -65,6 +65,8 @@ class MessageBatchConverter(
 
         if (pipelineMessage is PipelineRawBatch) {
 
+            pipelineStatus.convertStart(streamName.toString(), pipelineMessage.storedBatchWrapper.trimmedMessages.size.toLong())
+
             logger.trace { "received raw batch (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.fullBatch.id})" }
 
             val filteredMessages = pipelineMessage.storedBatchWrapper.trimmedMessages
@@ -93,6 +95,7 @@ class MessageBatchConverter(
                 )
             )
 
+            pipelineStatus.convertEnd(streamName.toString(), pipelineMessage.storedBatchWrapper.trimmedMessages.size.toLong())
             if (codecRequest.codecRequest.protobufRawMessageBatch.messagesCount > 0) {
                 sendToChannel(codecRequest)
                 logger.trace { "converted batch is sent downstream (stream=${streamName.toString()} id=${codecRequest.storedBatchWrapper.fullBatch.id} requestHash=${codecRequest.codecRequest.requestHash})" }
@@ -100,10 +103,11 @@ class MessageBatchConverter(
             } else {
                 logger.trace { "converted batch is discarded because it has no messages (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.fullBatch.id})" }
             }
+            pipelineStatus.convertSendDownstream(streamName.toString(), pipelineMessage.storedBatchWrapper.trimmedMessages.size.toLong())
 
             pipelineStatus.countParsePrepared(
                 streamName.toString(),
-                pipelineMessage.storedBatchWrapper.trimmedMessages.count().toLong()
+                filteredMessages.size.toLong()
             )
 
         } else {

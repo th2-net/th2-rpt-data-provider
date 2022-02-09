@@ -36,7 +36,31 @@ data class PipelineStreamCounters(
     val parseReceivedFailed: AtomicLong = AtomicLong(0),
     val filterTotal: AtomicLong = AtomicLong(0),
     val filterDiscarded: AtomicLong = AtomicLong(0),
-    val filterAccepted: AtomicLong = AtomicLong(0)
+    val filterAccepted: AtomicLong = AtomicLong(0),
+
+    val fetchedStart: AtomicLong = AtomicLong(0),
+    val fetchedEnd: AtomicLong = AtomicLong(0),
+    val fetchedSendDownstream: AtomicLong = AtomicLong(0),
+
+    val convertStart: AtomicLong = AtomicLong(0),
+    val convertEnd: AtomicLong = AtomicLong(0),
+    val convertSendDownstream: AtomicLong = AtomicLong(0),
+
+    val decodeStart: AtomicLong = AtomicLong(0),
+    val decodeEnd: AtomicLong = AtomicLong(0),
+    val decodeSendDownstream: AtomicLong = AtomicLong(0),
+
+    val unpackStart: AtomicLong = AtomicLong(0),
+    val unpackEnd: AtomicLong = AtomicLong(0),
+    val unpackSendDownstream: AtomicLong = AtomicLong(0),
+
+    val filterStart: AtomicLong = AtomicLong(0),
+    val filterEnd: AtomicLong = AtomicLong(0),
+    val filterSendDownstream: AtomicLong = AtomicLong(0),
+
+    val mergeStart: AtomicLong = AtomicLong(0),
+    val mergeEnd: AtomicLong = AtomicLong(0),
+    val mergeSendDownstream: AtomicLong = AtomicLong(0)
 )
 
 class PipelineStatus(context: Context) {
@@ -51,6 +75,99 @@ class PipelineStatus(context: Context) {
         if (sendPipelineStatus) {
             this.streams[streamName] = PipelineStreamCounters()
         }
+    }
+
+    fun fetchedStart(streamName: String, count: Long = 1) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.fetchedStart?.addAndGet(count)
+    }
+
+    fun fetchedEnd(streamName: String, count: Long = 1) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.fetchedEnd?.addAndGet(count)
+    }
+
+    fun fetchedSendDownstream(streamName: String, count: Long = 1) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.fetchedSendDownstream?.addAndGet(count)
+    }
+
+    fun convertStart(streamName: String, count: Long = 1) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.convertStart?.addAndGet(count)
+    }
+
+    fun convertEnd(streamName: String, count: Long = 1) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.convertEnd?.addAndGet(count)
+    }
+
+    fun convertSendDownstream(streamName: String, count: Long = 1) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.convertSendDownstream?.addAndGet(count)
+    }
+
+    fun decodeStart(streamName: String, count: Long = 1) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.decodeStart?.addAndGet(count)
+    }
+
+
+    fun decodeEnd(streamName: String, count: Long = 1) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.decodeEnd?.addAndGet(count)
+    }
+
+    fun decodeSendDownstream(streamName: String, count: Long = 1) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.decodeSendDownstream?.addAndGet(count)
+    }
+
+    fun unpackStart(streamName: String, count: Long = 1) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.unpackStart?.addAndGet(count)
+    }
+
+
+    fun unpackEnd(streamName: String, count: Long = 1) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.unpackEnd?.addAndGet(count)
+    }
+
+    fun unpackSendDownstream(streamName: String, count: Long = 1) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.unpackSendDownstream?.addAndGet(count)
+    }
+
+    fun filterStart(streamName: String, count: Long = 1) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.filterStart?.addAndGet(count)
+    }
+
+    fun filterEnd(streamName: String, count: Long = 1) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.filterEnd?.addAndGet(count)
+    }
+
+    fun filterSendDownstream(streamName: String, count: Long = 1) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.filterSendDownstream?.addAndGet(count)
+    }
+
+    fun mergeStart(streamName: String, count: Long = 1) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.mergeStart?.addAndGet(count)
+    }
+
+
+    fun mergeEnd(streamName: String, count: Long = 1) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.mergeEnd?.addAndGet(count)
+    }
+
+    fun mergeSendDownstream(streamName: String, count: Long = 1) {
+        if (!sendPipelineStatus) return
+        this.streams[streamName]?.mergeSendDownstream?.addAndGet(count)
     }
 
     fun countParsePrepared(streamName: String, count: Long = 1) {

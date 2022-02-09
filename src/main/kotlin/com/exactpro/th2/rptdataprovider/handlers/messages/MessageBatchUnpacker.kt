@@ -141,6 +141,8 @@ class MessageBatchUnpacker(
 
         if (pipelineMessage is PipelineDecodedBatch) {
 
+            pipelineStatus.unpackStart(streamName.toString(), pipelineMessage.storedBatchWrapper.trimmedMessages.size.toLong())
+
             val requests = pipelineMessage.storedBatchWrapper.trimmedMessages
 
             val responses = measureTimedValue {
@@ -186,7 +188,11 @@ class MessageBatchUnpacker(
 
             logger.debug { "codec response unpacking took ${result.duration.inMilliseconds}ms (stream=${streamName.toString()} firstId=${messages.first().id.index} lastId=${messages.last().id.index} messages=${messages.size})" }
 
+            pipelineStatus.unpackEnd(streamName.toString(), pipelineMessage.storedBatchWrapper.trimmedMessages.size.toLong())
+
             result.value.forEach { (sendToChannel(it)) }
+
+            pipelineStatus.unpackSendDownstream(streamName.toString(), pipelineMessage.storedBatchWrapper.trimmedMessages.size.toLong())
 
             logger.debug { "unpacked responses are sent (stream=${streamName.toString()} firstId=${messages.first().id.index} lastId=${messages.last().id.index} messages=${result.value.size})" }
 

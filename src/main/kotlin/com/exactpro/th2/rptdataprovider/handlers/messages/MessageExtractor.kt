@@ -130,6 +130,7 @@ class MessageExtractor(
 
             for (batch in cradleMessageIterable) {
                 if (externalScope.isActive) {
+                    pipelineStatus.fetchedStart(streamName.toString())
                     logger.trace { "batch ${batch.id.index} of stream $streamName with ${batch.messageCount} messages (${batch.batchSize} bytes) has been extracted" }
 
                     val trimmedMessages = let {
@@ -168,6 +169,7 @@ class MessageExtractor(
                         "batch ${batch.id.index} of stream $streamName has been trimmed (targetTimestamp=${request.startTimestamp} targetId=${resumeFromId?.sequence}) - ${trimmedMessages.size} of ${batch.messages.size} messages left (firstId=${firstMessage.id.index} firstTimestamp=${firstMessage.timestamp} lastId=${lastMessage.id.index} lastTimestamp=${lastMessage.timestamp})"
                     }
 
+                    pipelineStatus.fetchedEnd(streamName.toString())
                     try {
                         trimmedMessages.last().let {
                             sendToChannel(
@@ -175,7 +177,6 @@ class MessageExtractor(
                                     false, it.id, it.timestamp, MessageBatchWrapper(batch, trimmedMessages)
                                 )
                             )
-
                             lastElement = it.id
                             lastTimestamp = it.timestamp
 
@@ -185,6 +186,7 @@ class MessageExtractor(
                     } catch (e: NoSuchElementException) {
                         logger.debug { "skipping batch ${batch.id.index} of stream $streamName - no messages left after trimming" }
                     }
+                    pipelineStatus.fetchedSendDownstream(streamName.toString())
 
                     pipelineStatus.countFetchedBytes(streamName.toString(), batch.batchSize)
                     pipelineStatus.countFetchedBatches(streamName.toString())

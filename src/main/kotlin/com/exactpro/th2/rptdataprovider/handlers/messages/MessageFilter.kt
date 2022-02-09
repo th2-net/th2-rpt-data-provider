@@ -92,6 +92,8 @@ class MessageFilter(
 
                 if (parsedMessage is PipelineParsedMessage) {
 
+                    pipelineStatus.filterStart(streamName.toString())
+
                     val filtered = measureTimedValue {
                         pipelineStatus.countFilteredTotal(streamName.toString())
                         updateState(parsedMessage)
@@ -101,12 +103,14 @@ class MessageFilter(
                         logger.trace { "message filtering took ${it.duration.inMilliseconds}ms (stream=$streamName sequence=${parsedMessage.payload.id.index})" }
                     }.value
 
+                    pipelineStatus.filterEnd(streamName.toString())
                     if (filtered.finalFiltered) {
                         sendToChannel(PipelineFilteredMessage(parsedMessage, filtered))
                         pipelineStatus.countFilterAccepted(streamName.toString())
                     } else {
                         pipelineStatus.countFilterDiscarded(streamName.toString())
                     }
+                    pipelineStatus.filterSendDownstream(streamName.toString())
                 } else {
                     sendToChannel(parsedMessage)
                 }
