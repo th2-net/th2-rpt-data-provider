@@ -26,6 +26,7 @@ import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatusSnapshot
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.grpc.stub.StreamObserver
+import io.ktor.util.*
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -57,10 +58,50 @@ interface StreamWriter {
     suspend fun closeWriter()
 }
 
-class HttpWriter(private val writer: Writer, private val jacksonMapper: ObjectMapper) : StreamWriter {
+
+@OptIn(ExperimentalTime::class)
+class HttpWriter(
+    private val responseBufferCapacity: Int,
+    private val writer: Writer,
+    private val jacksonMapper: ObjectMapper,
+    private val scope: CoroutineScope
+) : StreamWriter {
+
     val logger = KotlinLogging.logger { }
 
-    fun eventWrite(event: SseEvent) {
+    private val responses = Channel<Deferred<SseEvent>>(responseBufferCapacity)
+    private val error = CompletableDeferred<SseEvent>()
+
+    init {
+        scope.launch {
+            for (response in responses) {
+                send(response)
+            }
+
+            if (error.isCompleted) {
+                send(error)
+            }
+
+            eventWrite(SseEvent(event = EventType.CLOSE))
+
+            writer.close()
+            logger.debug { "sse stream close() has been called" }
+        }
+    }
+
+    private suspend fun send(response: Deferred<SseEvent>) {
+        val awaited = measureTimedValue {
+            response.await()
+        }
+
+        val sendDuration = measureTimeMillis {
+            eventWrite(awaited.value)
+        }
+
+        logger.trace { "awaited response for ${awaited.duration.inMilliseconds.roundToInt()}ms, sent in ${sendDuration}ms" }
+    }
+
+    private fun eventWrite(event: SseEvent) {
         if (event.event != null) {
             writer.write("event: ${event.event}\n")
         }
@@ -78,35 +119,79 @@ class HttpWriter(private val writer: Writer, private val jacksonMapper: ObjectMa
     }
 
     override suspend fun write(status: PipelineStatusSnapshot, counter: AtomicLong) {
-        eventWrite(SseEvent.build(jacksonMapper, status, counter))
-        logger.debug {
-            jacksonMapper.writeValueAsString(status)
+        val result = CompletableDeferred<SseEvent>()
+        responses.send(result)
+
+        scope.launch {
+            result.complete(SseEvent.build(jacksonMapper, status, counter))
+            logger.debug {
+                jacksonMapper.writeValueAsString(status)
+            }
         }
     }
 
+    @InternalAPI
+    suspend fun write(exception: Exception) {
+        error.complete(SseEvent.build(jacksonMapper, exception))
+    }
+
     override suspend fun write(event: EventTreeNode, counter: AtomicLong) {
-        eventWrite(SseEvent.build(jacksonMapper, event, counter))
+        val result = CompletableDeferred<SseEvent>()
+        responses.send(result)
+
+        scope.launch {
+            result.complete(SseEvent.build(jacksonMapper, event, counter))
+        }
     }
 
     override suspend fun write(message: MessageWithMetadata, counter: AtomicLong) {
-        eventWrite(SseEvent.build(jacksonMapper, MessageMapper.convertToHttpMessage(message), counter))
+        val result = CompletableDeferred<SseEvent>()
+        responses.send(result)
+
+        scope.launch {
+            result.complete(SseEvent.build(jacksonMapper, MessageMapper.convertToHttpMessage(message), counter))
+        }
     }
 
     override suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong) {
-        eventWrite(SseEvent.build(jacksonMapper, lastScannedObjectInfo, counter))
+        val result = CompletableDeferred<SseEvent>()
+        responses.send(result)
+
+        scope.launch {
+            result.complete(SseEvent.build(jacksonMapper, lastScannedObjectInfo, counter))
+        }
     }
 
     override suspend fun write(streamInfo: List<StreamInfo>) {
-        eventWrite(SseEvent.build(jacksonMapper, streamInfo))
+        val result = CompletableDeferred<SseEvent>()
+        responses.send(result)
+
+        scope.launch {
+            result.complete(SseEvent.build(jacksonMapper, streamInfo))
+        }
     }
 
     override suspend fun write(event: Event, lastEventId: AtomicLong) {
-        eventWrite(SseEvent.build(jacksonMapper, event, lastEventId))
+        val result = CompletableDeferred<SseEvent>()
+        responses.send(result)
+
+        scope.launch {
+            result.complete(SseEvent.build(jacksonMapper, event, lastEventId))
+        }
+    }
+
+    suspend fun write(sseEvent: SseEvent) {
+        val result = CompletableDeferred<SseEvent>()
+        responses.send(result)
+
+        scope.launch {
+            result.complete(sseEvent)
+        }
     }
 
     @Suppress("BlockingMethodInNonBlockingContext")
     override suspend fun closeWriter() {
-        writer.close()
+        responses.close()
         logger.debug { "http sse writer has been closed" }
     }
 }
@@ -117,8 +202,7 @@ class GrpcWriter(
     private val writer: StreamObserver<StreamResponse>,
     private val jacksonMapper: ObjectMapper,
     private val scope: CoroutineScope
-) :
-    StreamWriter {
+) : StreamWriter {
 
     private val logger = KotlinLogging.logger { }
 
@@ -172,9 +256,8 @@ class GrpcWriter(
                 MessageMapper.convertToGrpcMessageData(message)
                     .map { StreamResponse.newBuilder().setMessage(it).build() }
             )
+            counter.incrementAndGet()
         }
-
-        counter.incrementAndGet()
     }
 
     override suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong) {

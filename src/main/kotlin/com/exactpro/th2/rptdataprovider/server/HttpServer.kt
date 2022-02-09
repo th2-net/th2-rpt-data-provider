@@ -222,19 +222,22 @@ class HttpServer(private val applicationContext: Context) {
                 }
                 call.response.headers.append(HttpHeaders.CacheControl, "no-cache, no-store, no-transform")
                 call.respondTextWriter(contentType = ContentType.Text.EventStream) {
-                    val httpWriter = HttpWriter(this, jacksonMapper)
+                    val httpWriter = HttpWriter(100, this, jacksonMapper, this@coroutineScope)
 
                     try {
                         calledFun.invoke(httpWriter)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        httpWriter.eventWrite(SseEvent.build(jacksonMapper, e))
+                        withContext(NonCancellable) {
+                            httpWriter.write(e)
+                        }
                         throw e
                     } finally {
                         kotlin.runCatching {
-                            httpWriter.eventWrite(SseEvent(event = EventType.CLOSE))
-                            httpWriter.closeWriter()
+                            withContext(NonCancellable) {
+                                httpWriter.closeWriter()
+                            }
                             job.cancel()
                         }.onFailure { e ->
                             logger.error(e) { "unexpected exception while trying to close http writer" }
