@@ -58,7 +58,7 @@ class RabbitMqService(
             mqCallbackScope.launch {
                 val requestId = CodecId.fromParsedBatch(decodedBatch)
 
-                logger.trace { "codec response with hash $requestId has been received" }
+                logger.trace { "codec response with hash ${requestId.hashCode()} has been received" }
 
                 pendingRequests.remove(requestId)?.completableDeferred?.complete(decodedBatch)
                     ?: logger.trace {
@@ -121,7 +121,7 @@ class RabbitMqService(
                         val stream =
                             "${request.protobufRawMessageBatch.messagesList.first()?.sessionAlias}:${request.protobufRawMessageBatch.messagesList.first()?.direction.toString()}"
 
-                        "codec request with hash ${request.requestHash} has been sent (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} hash=${request.requestHash})"
+                        "codec request with hash ${request.requestHash} has been sent (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} hash=${request.requestHash}) requestId=${request.requestId})"
                     }
 
 
