@@ -96,10 +96,6 @@ class HttpWriter(
 
         val sendDuration = measureTimeMillis {
             eventWrite(awaited.value)
-
-            if (awaited.value.event != EventType.MESSAGE || awaited.value.event != EventType.EVENT) {
-                writer.flush()
-            }
         }
 
         logger.trace { "awaited response for ${awaited.duration.inMilliseconds.roundToInt()}ms, sent in ${sendDuration}ms" }
@@ -119,7 +115,7 @@ class HttpWriter(
         }
 
         writer.write("\n")
-//        writer.flush()
+        writer.flush()
     }
 
     override suspend fun write(status: PipelineStatusSnapshot, counter: AtomicLong) {
@@ -181,15 +177,6 @@ class HttpWriter(
 
         scope.launch {
             result.complete(SseEvent.build(jacksonMapper, event, lastEventId))
-        }
-    }
-
-    suspend fun write(sseEvent: SseEvent) {
-        val result = CompletableDeferred<SseEvent>()
-        responses.send(result)
-
-        scope.launch {
-            result.complete(sseEvent)
         }
     }
 
