@@ -79,6 +79,9 @@ class HttpWriter(private val writer: Writer, private val jacksonMapper: ObjectMa
 
     override suspend fun write(status: PipelineStatusSnapshot, counter: AtomicLong) {
         eventWrite(SseEvent.build(jacksonMapper, status, counter))
+        logger.debug {
+            jacksonMapper.writeValueAsString(status)
+        }
     }
 
     override suspend fun write(event: EventTreeNode, counter: AtomicLong) {
@@ -192,7 +195,7 @@ class GrpcWriter(
     }
 
     override suspend fun write(status: PipelineStatusSnapshot, counter: AtomicLong) {
-        logger.info {
+        logger.debug {
             jacksonMapper.writeValueAsString(status)
         }
     }
