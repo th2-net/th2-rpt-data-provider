@@ -222,7 +222,7 @@ class HttpServer(private val applicationContext: Context) {
                 }
                 call.response.headers.append(HttpHeaders.CacheControl, "no-cache, no-store, no-transform")
                 call.respondTextWriter(contentType = ContentType.Text.EventStream) {
-                    val httpWriter = HttpWriter(100, this.buffered(), jacksonMapper, this@coroutineScope)
+                    val httpWriter = HttpWriter(100, this, jacksonMapper, this@coroutineScope)
 
                     try {
                         calledFun.invoke(httpWriter)

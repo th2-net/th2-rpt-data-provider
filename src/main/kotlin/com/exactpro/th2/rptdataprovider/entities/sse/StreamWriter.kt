@@ -84,7 +84,6 @@ class HttpWriter(
 
             eventWrite(SseEvent(event = EventType.CLOSE))
 
-            writer.flush()
             writer.close()
             logger.debug { "sse stream close() has been called" }
         }
@@ -98,8 +97,9 @@ class HttpWriter(
         val sendDuration = measureTimeMillis {
             eventWrite(awaited.value)
 
-            if (awaited.value.event == EventType.KEEP_ALIVE)
+            if (awaited.value.event != EventType.MESSAGE || awaited.value.event != EventType.EVENT) {
                 writer.flush()
+            }
         }
 
         logger.trace { "awaited response for ${awaited.duration.inMilliseconds.roundToInt()}ms, sent in ${sendDuration}ms" }
