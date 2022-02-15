@@ -17,6 +17,8 @@
 package com.exactpro.th2.rptdataprovider.handlers
 
 import com.exactpro.th2.rptdataprovider.Context
+import com.fasterxml.jackson.annotation.JsonIgnore
+import com.fasterxml.jackson.annotation.JsonValue
 import java.util.concurrent.atomic.AtomicLong
 
 data class PipelineStatusSnapshot(
@@ -27,51 +29,82 @@ data class PipelineStatusSnapshot(
     val counters: Map<String, PipelineStreamCounters>
 )
 
+data class Counter(@JsonIgnore val streamName: String?, @JsonIgnore val metricName: String) {
+    @JsonIgnore
+    val name = "$metricName${if (streamName != null) "_${streamName}" else ""}"
+        .replace("-", "_")
+
+    @JsonIgnore
+    private val counter: io.prometheus.client.Counter =
+        io.prometheus.client.Counter.build(name, metricName)
+            .register()
+
+    @JsonValue
+    val baseCounter: AtomicLong = AtomicLong(0)
+
+    fun addAndGet(value: Long): Long {
+        counter.inc(value.toDouble())
+        return baseCounter.addAndGet(value)
+    }
+
+    fun incrementAndGet(): Long {
+        counter.inc()
+        return baseCounter.incrementAndGet()
+    }
+
+    fun get(): Long {
+        return baseCounter.get()
+    }
+}
+
 data class PipelineStreamCounters(
-    val fetched: AtomicLong = AtomicLong(0),
-    val fetchedBytes: AtomicLong = AtomicLong(0),
-    val fetchedBatches: AtomicLong = AtomicLong(0),
-    val parsePrepared: AtomicLong = AtomicLong(0),
-    val parseRequested: AtomicLong = AtomicLong(0),
-    val parseReceivedTotal: AtomicLong = AtomicLong(0),
-    val parseReceivedFailed: AtomicLong = AtomicLong(0),
-    val filterTotal: AtomicLong = AtomicLong(0),
-    val filterDiscarded: AtomicLong = AtomicLong(0),
-    val filterAccepted: AtomicLong = AtomicLong(0),
+    @JsonIgnore
+    val streamName: String,
+    val fetched: Counter = Counter(streamName, "fetched"),
+    val fetchedBytes: Counter = Counter(streamName, "fetchedBytes"),
+    val fetchedBatches: Counter = Counter(streamName, "fetchedBatches"),
+    val parsePrepared: Counter = Counter(streamName, "parsePrepared"),
+    val parseRequested: Counter = Counter(streamName, "parseRequested"),
+    val parseReceivedTotal: Counter = Counter(streamName, "parseReceivedTotal"),
+    val parseReceivedFailed: Counter = Counter(streamName, "parseReceivedFailed"),
+    val filterTotal: Counter = Counter(streamName, "filterTotal"),
+    val filterDiscarded: Counter = Counter(streamName, "filterDiscarded"),
+    val filterAccepted: Counter = Counter(streamName, "filterAccepted"),
 
-    val fetchedStart: AtomicLong = AtomicLong(0),
-    val fetchedEnd: AtomicLong = AtomicLong(0),
-    val fetchedSendDownstream: AtomicLong = AtomicLong(0),
+    val fetchedStart: Counter = Counter(streamName, "fetchedStart"),
+    val fetchedEnd: Counter = Counter(streamName, "fetchedEnd"),
+    val fetchedSendDownstream: Counter = Counter(streamName, "fetchedSendDownstream"),
 
-    val convertStart: AtomicLong = AtomicLong(0),
-    val convertEnd: AtomicLong = AtomicLong(0),
-    val convertSendDownstream: AtomicLong = AtomicLong(0),
+    val convertStart: Counter = Counter(streamName, "convertStart"),
+    val convertEnd: Counter = Counter(streamName, "convertEnd"),
+    val convertSendDownstream: Counter = Counter(streamName, "convertSendDownstream"),
 
-    val decodeStart: AtomicLong = AtomicLong(0),
-    val decodeEnd: AtomicLong = AtomicLong(0),
-    val decodeSendDownstream: AtomicLong = AtomicLong(0),
+    val decodeStart: Counter = Counter(streamName, "decodeStart"),
+    val decodeEnd: Counter = Counter(streamName, "decodeEnd"),
+    val decodeSendDownstream: Counter = Counter(streamName, "decodeSendDownstream"),
 
-    val unpackStart: AtomicLong = AtomicLong(0),
-    val unpackEnd: AtomicLong = AtomicLong(0),
-    val unpackSendDownstream: AtomicLong = AtomicLong(0),
+    val unpackStart: Counter = Counter(streamName, "unpackStart"),
+    val unpackEnd: Counter = Counter(streamName, "unpackEnd"),
+    val unpackSendDownstream: Counter = Counter(streamName, "unpackSendDownstream"),
 
-    val filterStart: AtomicLong = AtomicLong(0),
-    val filterEnd: AtomicLong = AtomicLong(0),
-    val filterSendDownstream: AtomicLong = AtomicLong(0)
+    val filterStart: Counter = Counter(streamName, "filterStart"),
+    val filterEnd: Counter = Counter(streamName, "filterEnd"),
+    val filterSendDownstream: Counter = Counter(streamName, "filterSendDownstream")
 )
 
 class PipelineStatus(context: Context) {
 
-    val streams: MutableMap<String, PipelineStreamCounters> = mutableMapOf()
-    var merged: AtomicLong = AtomicLong(0)
-    var sended: AtomicLong = AtomicLong(0)
-
     private val processingStartTimestamp: Long = System.currentTimeMillis()
     private val sendPipelineStatus = context.configuration.sendPipelineStatus.value.toBoolean()
 
+    val streams: MutableMap<String, PipelineStreamCounters> = mutableMapOf()
+
+    var merged: Counter = Counter(null, "merged")
+    var sended: Counter = Counter(null, "sended")
+
     fun addStream(streamName: String) {
         if (sendPipelineStatus) {
-            this.streams[streamName] = PipelineStreamCounters()
+            this.streams[streamName] = PipelineStreamCounters(streamName)
         }
     }
 
