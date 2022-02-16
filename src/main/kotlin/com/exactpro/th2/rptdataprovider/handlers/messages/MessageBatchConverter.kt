@@ -91,7 +91,8 @@ class MessageBatchConverter(
                     RawMessageBatch
                         .newBuilder()
                         .addAllMessages(filteredMessages.map { it.first })
-                        .build()
+                        .build(),
+                    streamName.toString()
                 )
             )
 

@@ -23,7 +23,9 @@ import com.exactpro.th2.common.message.sequence
 import com.exactpro.th2.common.message.sessionAlias
 import com.exactpro.th2.common.schema.message.MessageListener
 import com.exactpro.th2.common.schema.message.MessageRouter
+import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
+import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.util.concurrent.ConcurrentHashMap
@@ -52,6 +54,8 @@ class RabbitMqService(
         Executors.newFixedThreadPool(configuration.codecCallbackThreadPool.value.toInt()).asCoroutineDispatcher()
     )
 
+    private val codecLatency = PipelineStatus.codecLatency
+
     @Suppress("unused")
     private val receiveChannel = messageRouterParsedBatch.subscribeAll(
         MessageListener { _, decodedBatch ->
@@ -60,7 +64,11 @@ class RabbitMqService(
 
                 logger.trace { "codec response with hash ${requestId.hashCode()} has been received" }
 
-                pendingRequests.remove(requestId)?.completableDeferred?.complete(decodedBatch)
+                pendingRequests.remove(requestId)?.let {
+                    codecLatency.gaugeDec(listOf(it.streamName))
+                    codecLatency.setDuration(it.startTimestamp.toDouble(), listOf(it.streamName))
+                    it.completableDeferred.complete(decodedBatch)
+                }
                     ?: logger.trace {
                         val firstSequence = decodedBatch.groupsList.firstOrNull()?.messagesList?.firstOrNull()?.sequence
                         val lastSequence = decodedBatch.groupsList?.lastOrNull()?.messagesList?.lastOrNull()?.sequence
@@ -92,7 +100,8 @@ class RabbitMqService(
                     pendingRequest.completableDeferred.let {
                         if (it.isActive) {
                             it.complete(null)
-
+                            codecLatency.gaugeDec(listOf(request.streamName))
+                            codecLatency.setDuration(pendingRequest.startTimestamp.toDouble(), listOf(request.streamName))
                             logger.warn {
                                 val firstSequence = request.protobufRawMessageBatch.messagesList.first()?.sequence
                                 val lastSequence = request.protobufRawMessageBatch.messagesList.last()?.sequence
@@ -109,7 +118,7 @@ class RabbitMqService(
                     if (usePinAttributes) {
                         val sessionAlias =
                             request.protobufRawMessageBatch.messagesList.first().metadata.id.connectionId.sessionAlias
-
+                        codecLatency.gaugeInc(listOf(request.streamName))
                         messageRouterRawBatch.sendAll(request.protobufRawMessageBatch, sessionAlias)
                     } else {
                         messageRouterRawBatch.sendAll(request.protobufRawMessageBatch)

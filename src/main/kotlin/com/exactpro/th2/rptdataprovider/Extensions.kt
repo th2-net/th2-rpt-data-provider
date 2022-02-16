@@ -24,6 +24,7 @@ import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.common.grpc.ConnectionID
 import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
+import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.prometheus.client.Gauge
 import io.prometheus.client.Histogram
@@ -78,23 +79,48 @@ data class Metrics(
     private val gauge: Gauge
 ) {
 
-    constructor(variableName: String, descriptionName: String) : this(
+    constructor(variableName: String, descriptionName: String, labels: List<String> = listOf()) : this(
         histogramTime = Histogram.build(
             "${variableName}_hist_time", "Time of $descriptionName"
         ).buckets(.005, .01, .025, .05, .075, .1, .25, .5, .75, 1.0, 2.5, 5.0, 7.5, 10.0, 25.0, 50.0, 75.0)
+            .labelNames(*labels.toTypedArray())
             .register(),
-        gauge = Gauge.build(
-            "${variableName}_gauge", "Quantity of $descriptionName using Gauge"
-        ).register()
+        gauge = Gauge.build("${variableName}_gauge", "Quantity of $descriptionName using Gauge")
+            .labelNames(*labels.toTypedArray())
+            .register()
     )
 
-    fun startObserve(): Histogram.Timer {
-        gauge.inc()
-        return histogramTime.startTimer()
+    fun gaugeInc(labels: List<String> = listOf()) {
+        gauge.labels(*labels.toTypedArray()).inc()
     }
 
-    fun stopObserve(timer: Histogram.Timer) {
-        gauge.dec()
+    fun gaugeDec(labels: List<String> = listOf()) {
+        gauge.labels(*labels.toTypedArray()).dec()
+    }
+
+    fun setDuration(amount: Double, labels: List<String> = listOf()) {
+        histogramTime.labels(*labels.toTypedArray()).observe(
+            System.currentTimeMillis() - amount
+        )
+    }
+
+    fun remove(streamName: String) {
+        gauge.remove(streamName)
+        histogramTime.remove(streamName)
+    }
+
+    fun labels(streamName: String) {
+        gauge.labels(streamName)
+        histogramTime.labels(streamName)
+    }
+
+    fun startObserve(labels: List<String> = listOf()): Histogram.Timer {
+        gauge.labels(*labels.toTypedArray()).inc()
+        return histogramTime.labels(*labels.toTypedArray()).startTimer()
+    }
+
+    fun stopObserve(timer: Histogram.Timer, labels: List<String> = listOf()) {
+        gauge.labels(*labels.toTypedArray()).dec()
         timer.observeDuration()
     }
 }

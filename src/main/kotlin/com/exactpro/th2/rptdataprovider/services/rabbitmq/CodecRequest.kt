@@ -17,6 +17,7 @@
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
 import com.exactpro.th2.common.grpc.*
+import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
 
@@ -65,20 +66,24 @@ data class CodecId(private val ids: Set<BaseMessageId>) {
 
 
 class CodecBatchRequest(
-    val protobufRawMessageBatch: RawMessageBatch
+    val protobufRawMessageBatch: RawMessageBatch,
+    val streamName: String
 ) {
     val requestId = CodecId.fromRawBatch(protobufRawMessageBatch)
     val requestHash = requestId.hashCode()
 
 
     fun toPending(): PendingCodecBatchRequest {
-        return PendingCodecBatchRequest(CompletableDeferred())
+        return PendingCodecBatchRequest(CompletableDeferred(), streamName)
     }
 }
 
 class PendingCodecBatchRequest(
-    val completableDeferred: CompletableDeferred<MessageGroupBatch?>
+    val completableDeferred: CompletableDeferred<MessageGroupBatch?>,
+    val streamName: String
 ) {
+    val startTimestamp = System.currentTimeMillis()
+
     fun toResponse(): CodecBatchResponse {
         return CodecBatchResponse(completableDeferred)
     }

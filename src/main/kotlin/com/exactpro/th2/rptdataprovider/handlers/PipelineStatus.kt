@@ -17,6 +17,7 @@
 package com.exactpro.th2.rptdataprovider.handlers
 
 import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.rptdataprovider.Metrics
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.annotation.JsonValue
 import io.prometheus.client.Counter
@@ -113,6 +114,8 @@ class PipelineStatus(context: Context) {
         private val mergedMetric = Counter.build("merged", "Count merged").labelNames("time").register()
         private val sendedMetric = Counter.build("sended", "Count sended").labelNames("time").register()
 
+        val codecLatency: Metrics =
+            Metrics("th2_codec_latency", "Codec requests latency", listOf("stream"))
 
         private val metrics = listOf(
             fetched, fetchedBytes, fetchedBatches, parsePrepared,
@@ -132,6 +135,8 @@ class PipelineStatus(context: Context) {
                     it.remove(streamName)
                     it.labels(streamName)
                 }
+                codecLatency.remove(streamName)
+                codecLatency.labels(streamName)
             }
             mergedMetric.clear()
             sendedMetric.clear()
