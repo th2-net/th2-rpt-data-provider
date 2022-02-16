@@ -95,11 +95,11 @@ class RabbitMqService(
 
                             logger.warn {
                                 val firstSequence =
-                                    request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.message?.sequence
+                                    request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sequence
                                 val lastSequence =
-                                    request.protobufRawMessageBatch.groupsList.last()?.messagesList?.last()?.message?.sequence
+                                    request.protobufRawMessageBatch.groupsList.last()?.messagesList?.last()?.rawMessage?.sequence
                                 val stream =
-                                    "${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.message?.sessionAlias}:${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.message?.direction.toString()}"
+                                    "${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sessionAlias}:${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.direction.toString()}"
 
                                 "codec request timed out after $responseTimeout ms (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} hash=${request.requestHash}) requestId=${request.requestId}"
                             }
@@ -117,11 +117,11 @@ class RabbitMqService(
 
                     logger.trace {
                         val firstSequence =
-                            request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.message?.sequence
+                            request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sequence
                         val lastSequence =
-                            request.protobufRawMessageBatch.groupsList.last()?.messagesList?.last()?.message?.sequence
+                            request.protobufRawMessageBatch.groupsList.last()?.messagesList?.last()?.rawMessage?.sequence
                         val stream =
-                            "${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.message?.sessionAlias}:${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.message?.direction.toString()}"
+                            "${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sessionAlias}:${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.direction.toString()}"
 
 
                         "codec request with hash ${request.requestHash} has been sent (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} hash=${request.requestHash})"
