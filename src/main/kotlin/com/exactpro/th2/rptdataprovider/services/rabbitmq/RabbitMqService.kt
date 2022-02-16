@@ -87,21 +87,23 @@ class RabbitMqService(
                 mqCallbackScope.launch {
                     delay(responseTimeout)
 
-                    pendingRequests.remove(request.requestId)
+                    pendingRequests[request.requestId]?.let { timeoutRequest ->
+                        if (System.currentTimeMillis() - timeoutRequest.time >= responseTimeout) {
+                            pendingRequests.remove(request.requestId)?.completableDeferred?.let {
+                                if (it.isActive) {
+                                    it.complete(null)
 
-                    pendingRequest.completableDeferred.let {
-                        if (it.isActive) {
-                            it.complete(null)
+                                    logger.warn {
+                                        val firstSequence =
+                                            request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sequence
+                                        val lastSequence =
+                                            request.protobufRawMessageBatch.groupsList.last()?.messagesList?.last()?.rawMessage?.sequence
+                                        val stream =
+                                            "${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sessionAlias}:${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.direction.toString()}"
 
-                            logger.warn {
-                                val firstSequence =
-                                    request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sequence
-                                val lastSequence =
-                                    request.protobufRawMessageBatch.groupsList.last()?.messagesList?.last()?.rawMessage?.sequence
-                                val stream =
-                                    "${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sessionAlias}:${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.direction.toString()}"
-
-                                "codec request timed out after $responseTimeout ms (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} hash=${request.requestHash}) requestId=${request.requestId}"
+                                        "codec request timed out after $responseTimeout ms (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} hash=${request.requestHash}) requestId=${request.requestId}"
+                                    }
+                                }
                             }
                         }
                     }

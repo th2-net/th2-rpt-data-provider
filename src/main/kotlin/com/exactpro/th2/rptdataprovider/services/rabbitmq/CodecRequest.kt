@@ -78,6 +78,8 @@ class MessageGroupBatchWrapper(
 class PendingCodecBatchRequest(
     val completableDeferred: CompletableDeferred<MessageGroupBatchWrapper?>
 ) {
+    val time: Long = System.currentTimeMillis()
+
     fun toResponse(): CodecBatchResponse {
         return CodecBatchResponse(completableDeferred)
     }
