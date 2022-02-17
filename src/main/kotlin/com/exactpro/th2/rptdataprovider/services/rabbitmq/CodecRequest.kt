@@ -22,7 +22,7 @@ import com.exactpro.th2.common.grpc.MessageID
 import kotlinx.coroutines.CompletableDeferred
 
 
-data class CodecId(private val ids: Set<BaseMessageId>) {
+data class CodecRequestId(private val ids: Set<BaseMessageId>) {
 
     data class BaseMessageId(val sessionAlias: String, val direction: Direction, val sequence: Long) {
         constructor(messageId: MessageID) : this(
@@ -38,8 +38,8 @@ data class CodecId(private val ids: Set<BaseMessageId>) {
     }
 
     companion object {
-        fun fromMessageGroupBatch(groupBatch: MessageGroupBatch): CodecId {
-            return CodecId(
+        fun fromMessageGroupBatch(groupBatch: MessageGroupBatch): CodecRequestId {
+            return CodecRequestId(
                 groupBatch.groupsList
                     .flatMap { group ->
                         group.messagesList.map {
@@ -60,7 +60,7 @@ data class CodecId(private val ids: Set<BaseMessageId>) {
 class CodecBatchRequest(
     val protobufRawMessageBatch: MessageGroupBatch
 ) {
-    val requestId = CodecId.fromMessageGroupBatch(protobufRawMessageBatch)
+    val requestId = CodecRequestId.fromMessageGroupBatch(protobufRawMessageBatch)
     val requestHash = requestId.hashCode()
 
     fun toPending(): PendingCodecBatchRequest {
@@ -71,15 +71,13 @@ class CodecBatchRequest(
 class MessageGroupBatchWrapper(
     val messageGroupBatch: MessageGroupBatch
 ) {
-    val requestId = CodecId.fromMessageGroupBatch(messageGroupBatch)
+    val requestId = CodecRequestId.fromMessageGroupBatch(messageGroupBatch)
     val requestHash = requestId.hashCode()
 }
 
 class PendingCodecBatchRequest(
     val completableDeferred: CompletableDeferred<MessageGroupBatchWrapper?>
 ) {
-    val time: Long = System.currentTimeMillis()
-
     fun toResponse(): CodecBatchResponse {
         return CodecBatchResponse(completableDeferred)
     }

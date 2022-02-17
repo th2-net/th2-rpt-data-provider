@@ -39,7 +39,7 @@ class RabbitMqService(
     }
 
     private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
-    private val pendingRequests = ConcurrentHashMap<CodecId, PendingCodecBatchRequest>()
+    private val pendingRequests = ConcurrentHashMap<CodecRequestId, PendingCodecBatchRequest>()
 
     private val maximumPendingRequests = configuration.codecPendingBatchLimit.value.toInt()
 
@@ -88,7 +88,7 @@ class RabbitMqService(
                     delay(responseTimeout)
 
                     pendingRequests[request.requestId]?.let { timeoutRequest ->
-                        if (System.currentTimeMillis() - timeoutRequest.time >= responseTimeout) {
+                        if (timeoutRequest.completableDeferred == pendingRequest.completableDeferred) {
                             pendingRequests.remove(request.requestId)?.completableDeferred?.let {
                                 if (it.isActive) {
                                     it.complete(null)
