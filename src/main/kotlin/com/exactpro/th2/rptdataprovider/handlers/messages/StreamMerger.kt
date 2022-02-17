@@ -164,11 +164,9 @@ class StreamMerger(
             messageStreams.forEach { it.init() }
 
             do {
-
                 val nextMessage = getNextMessage()
 
                 val inTimeRange = inTimeRange(nextMessage)
-
 
                 if (nextMessage !is EmptyPipelineObject && inTimeRange) {
                     sendToChannel(nextMessage)
@@ -187,7 +185,6 @@ class StreamMerger(
                         }
                     }
                 }
-
             } while (!allStreamIsEmpty && (resultCountLimit?.let { it > 0 } != false) && inTimeRange)
 
             sendToChannel(StreamEndObject(false, null, Instant.ofEpochMilli(0)))

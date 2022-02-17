@@ -20,6 +20,7 @@ import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.*
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.Message
+import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchRequest
@@ -47,7 +48,8 @@ class MessageProducer(
                                         .setRawMessage(RawMessage.parseFrom(stored.content))
                                         .build()
                                 ).build()
-                        ).build()
+                        ).build(),
+                    "single_request"
                 )
             )
                 .protobufParsedMessageBatch

@@ -79,6 +79,9 @@ class HttpWriter(private val writer: Writer, private val jacksonMapper: ObjectMa
 
     override suspend fun write(status: PipelineStatusSnapshot, counter: AtomicLong) {
         eventWrite(SseEvent.build(jacksonMapper, status, counter))
+        logger.debug {
+            jacksonMapper.writeValueAsString(status)
+        }
     }
 
     override suspend fun write(event: EventTreeNode, counter: AtomicLong) {
@@ -108,14 +111,14 @@ class HttpWriter(private val writer: Writer, private val jacksonMapper: ObjectMa
     }
 }
 
+
 @OptIn(ExperimentalTime::class)
 class GrpcWriter(
     responseBufferCapacity: Int,
     private val writer: StreamObserver<StreamResponse>,
     private val jacksonMapper: ObjectMapper,
     private val scope: CoroutineScope
-) :
-    StreamWriter {
+) : StreamWriter {
 
     private val logger = KotlinLogging.logger { }
 
@@ -169,9 +172,8 @@ class GrpcWriter(
                 MessageMapper.convertToGrpcMessageData(message)
                     .map { StreamResponse.newBuilder().setMessage(it).build() }
             )
+            counter.incrementAndGet()
         }
-
-        counter.incrementAndGet()
     }
 
     override suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong) {
@@ -192,7 +194,7 @@ class GrpcWriter(
     }
 
     override suspend fun write(status: PipelineStatusSnapshot, counter: AtomicLong) {
-        logger.info {
+        logger.debug {
             jacksonMapper.writeValueAsString(status)
         }
     }

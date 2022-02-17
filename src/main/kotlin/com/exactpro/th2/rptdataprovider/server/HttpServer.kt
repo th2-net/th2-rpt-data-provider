@@ -21,6 +21,7 @@ import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.asStringSuspend
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
+import com.exactpro.th2.rptdataprovider.entities.exceptions.CodecResponseException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
@@ -30,8 +31,10 @@ import com.exactpro.th2.rptdataprovider.entities.sse.EventType
 import com.exactpro.th2.rptdataprovider.entities.sse.HttpWriter
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
+import com.exactpro.th2.rptdataprovider.grpc.RptDataProviderGrpcHandler
 import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
+import io.grpc.Status
 import io.ktor.application.*
 import io.ktor.features.*
 import io.ktor.http.*
@@ -183,12 +186,18 @@ class HttpServer(private val applicationContext: Context) {
                         } finally {
                             if (useSse) sseRequestProcessed.inc() else restRequestProcessed.inc()
                         }
+                    } catch (e: CancellationException) {
+                        logger.debug(e) { "request processing was cancelled with CancellationException" }
                     } catch (e: InvalidRequestException) {
                         logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - invalid request" }
                     } catch (e: CradleObjectNotFoundException) {
                         logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - missing cradle data" }
+                    } catch (e: CodecResponseException) {
+                        logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - codec parses messages incorrectly" }
                     } catch (e: ClosedChannelException) {
                         logger.info { "request '$requestName' with parameters '${stringParameters.value}' has been cancelled by a client" }
+                    } catch (e: CradleIdException) {
+                        logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - unexpected cradle id exception" }
                     } catch (e: Exception) {
                         logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - unexpected exception" }
                     }
@@ -259,6 +268,8 @@ class HttpServer(private val applicationContext: Context) {
                     )
                     coroutineContext.cancelChildren()
                 }.join()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 when (val exception = e.rootCause ?: e) {
                     is InvalidRequestException -> sendErrorCode(call, exception, HttpStatusCode.BadRequest)
@@ -267,6 +278,7 @@ class HttpServer(private val applicationContext: Context) {
                     )
                     is ChannelClosedException -> sendErrorCode(call, exception, HttpStatusCode.RequestTimeout)
                     is CradleIdException -> sendErrorCodeOrEmptyJson(probe, call, e, HttpStatusCode.InternalServerError)
+                    is CodecResponseException -> sendErrorCode(call, exception, HttpStatusCode.InternalServerError)
                     else -> sendErrorCode(call, exception as Exception, HttpStatusCode.InternalServerError)
                 }
                 throw e

@@ -58,13 +58,14 @@ data class CodecRequestId(private val ids: Set<BaseMessageId>) {
 
 
 class CodecBatchRequest(
-    val protobufRawMessageBatch: MessageGroupBatch
+    val protobufRawMessageBatch: MessageGroupBatch,
+    val streamName: String
 ) {
     val requestId = CodecRequestId.fromMessageGroupBatch(protobufRawMessageBatch)
     val requestHash = requestId.hashCode()
 
     fun toPending(): PendingCodecBatchRequest {
-        return PendingCodecBatchRequest(CompletableDeferred())
+        return PendingCodecBatchRequest(CompletableDeferred(), streamName)
     }
 }
 
@@ -72,12 +73,15 @@ class MessageGroupBatchWrapper(
     val messageGroupBatch: MessageGroupBatch
 ) {
     val requestId = CodecRequestId.fromMessageGroupBatch(messageGroupBatch)
-    val requestHash = requestId.hashCode()
+    val responseHash = requestId.hashCode()
 }
 
 class PendingCodecBatchRequest(
-    val completableDeferred: CompletableDeferred<MessageGroupBatchWrapper?>
+    val completableDeferred: CompletableDeferred<MessageGroupBatchWrapper?>,
+    val streamName: String
 ) {
+    val startTimestamp = System.currentTimeMillis()
+
     fun toResponse(): CodecBatchResponse {
         return CodecBatchResponse(completableDeferred)
     }

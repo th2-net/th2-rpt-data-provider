@@ -68,6 +68,8 @@ class CustomConfigurationClass {
 
     val pipelineInfoSendDelay = 2000
 
+    val useStrictMode = false
+
     val serverType: ServerType = ServerType.HTTP
 }
 
@@ -195,6 +197,12 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
     val pipelineInfoSendDelay: Variable =
         Variable("pipelineInfoSendDelay", customConfiguration.pipelineInfoSendDelay.toString(), "2000")
 
+    val useStrictMode: Variable =
+        Variable("useStrictMode", customConfiguration.useStrictMode.toString(), "false")
+
     val serverType: Variable =
         Variable("serverType", customConfiguration.serverType.toString(), "HTTP")
+
+    val codecUsePinAttributes: Variable =
+        Variable("codecUsePinAttributes", customConfiguration.codecUsePinAttributes.toString(), "true")
 }

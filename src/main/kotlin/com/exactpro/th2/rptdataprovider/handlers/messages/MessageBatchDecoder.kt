@@ -99,6 +99,8 @@ class MessageBatchDecoder(
             } else {
                 logger.trace { "received converted batch (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.fullBatch.id} requestHash=${pipelineMessage.codecRequest.requestHash})" }
 
+                pipelineStatus.decodeStart(streamName.toString(), pipelineMessage.codecRequest.protobufRawMessageBatch.groupsCount.toLong())
+
                 val result = PipelineDecodedBatch(
                     pipelineMessage.streamEmpty,
                     pipelineMessage.lastProcessedId,
@@ -107,7 +109,10 @@ class MessageBatchDecoder(
                     context.rabbitMqService.sendToCodec(pipelineMessage.codecRequest),
                     protocol
                 )
+                pipelineStatus.decodeEnd(streamName.toString(), pipelineMessage.codecRequest.protobufRawMessageBatch.groupsCount.toLong())
                 sendToChannel(result)
+                pipelineStatus.decodeSendDownstream(streamName.toString(), pipelineMessage.codecRequest.protobufRawMessageBatch.groupsCount.toLong())
+
                 logger.trace { "decoded batch is sent downstream (stream=${streamName.toString()} id=${result.storedBatchWrapper.fullBatch.id} requestHash=${pipelineMessage.codecRequest.requestHash})" }
             }
 
@@ -115,7 +120,6 @@ class MessageBatchDecoder(
                 streamName.toString(),
                 pipelineMessage.storedBatchWrapper.trimmedMessages.count().toLong()
             )
-
 
         } else {
             sendToChannel(pipelineMessage)

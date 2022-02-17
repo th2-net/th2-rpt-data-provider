@@ -103,6 +103,7 @@ class SearchMessagesHandler(private val applicationContext: Context) {
                     coroutineContext.ensureActive()
 
                     if (it is PipelineFilteredMessage) {
+                        pipelineStatus.countSend()
                         writer.write(it.payload, lastMessageIdCounter)
                     } else if (it is PipelineKeepAlive) {
                         writer.write(LastScannedMessageInfo(it), lastMessageIdCounter)
