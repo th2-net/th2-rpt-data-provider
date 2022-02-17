@@ -27,6 +27,7 @@ import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import kotlinx.coroutines.CompletableDeferred
 
 class RabbitMqService(
     configuration: Configuration,
@@ -89,7 +90,7 @@ class RabbitMqService(
                     delay(responseTimeout)
 
                     pendingRequest.completableDeferred.let {
-                        if (it.isActive) {
+                        if (it.isActive && pendingRequests[request.requestId]?.completableDeferred == pendingRequest.completableDeferred) {
                             pendingRequests.remove(request.requestId)
                             it.complete(null)
 
@@ -139,4 +140,3 @@ class RabbitMqService(
         }
     }
 }
-
