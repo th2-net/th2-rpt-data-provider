@@ -41,16 +41,16 @@ class CustomConfigurationClass {
 
     val keepAliveTimeout: Long = 5000
 
-    val messageExtractorOutputBatchBuffer: Int = 10
-    val messageConverterOutputBatchBuffer: Int = 10
-    val messageDecoderOutputBatchBuffer: Int = 10
+    val messageExtractorOutputBatchBuffer: Int = 2
+    val messageConverterOutputBatchBuffer: Int = 2
+    val messageDecoderOutputBatchBuffer: Int = 2
     val messageUnpackerOutputMessageBuffer: Int = 1000
     val messageFilterOutputMessageBuffer: Int = 1000
     val messageMergerOutputMessageBuffer: Int = 10
 
     val codecResponseTimeout: Int = 6000
     val codecPendingBatchLimit: Int = 200
-    val codecCallbackThreadPool: Int = 1
+    val codecCallbackThreadPool: Int = 10
     val codecRequestThreadPool: Int = 1
     val codecUsePinAttributes: Boolean = true
 
@@ -123,21 +123,21 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
         Variable(
             "messageExtractorOutputBatchBuffer",
             customConfiguration.messageExtractorOutputBatchBuffer.toString(),
-            "10"
+            "2"
         )
 
     val messageConverterOutputBatchBuffer: Variable =
         Variable(
             "messageConverterOutputBatchBuffer",
             customConfiguration.messageConverterOutputBatchBuffer.toString(),
-            "10"
+            "2"
         )
 
     val messageDecoderOutputBatchBuffer: Variable =
         Variable(
             "messageDecoderOutputBatchBuffer",
             customConfiguration.messageDecoderOutputBatchBuffer.toString(),
-            "10"
+            "2"
         )
 
     val messageUnpackerOutputMessageBuffer: Variable =
@@ -170,7 +170,7 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
         Variable("codecPendingBatchLimit", customConfiguration.codecPendingBatchLimit.toString(), "200")
 
     val codecCallbackThreadPool: Variable =
-        Variable("codecCallbackThreadPool", customConfiguration.codecCallbackThreadPool.toString(), "1")
+        Variable("codecCallbackThreadPool", customConfiguration.codecCallbackThreadPool.toString(), "10")
 
     val codecRequestThreadPool: Variable =
         Variable("codecRequestThreadPool", customConfiguration.codecRequestThreadPool.toString(), "1")

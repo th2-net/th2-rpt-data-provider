@@ -52,27 +52,28 @@ class RabbitMqService(
     )
 
     @Suppress("unused")
-    private val receiveChannel = messageRouterParsedBatch.subscribeAll(
-        MessageListener { _, decodedBatch ->
-            mqCallbackScope.launch {
+    private val receiveChannel = mqCallbackScope.launch {
+        messageRouterParsedBatch.subscribeAll(
+            MessageListener { _, decodedBatch ->
+                mqCallbackScope.launch {
 
-                val response = MessageGroupBatchWrapper(decodedBatch)
+                    val response = MessageGroupBatchWrapper(decodedBatch)
 
-                logger.trace { "codec response with hash ${response.requestId.hashCode()} has been received" }
+                    logger.trace { "codec response with hash ${response.requestId.hashCode()} has been received" }
 
-                pendingRequests.remove(response.requestId)?.completableDeferred?.complete(response)
-                    ?: logger.trace {
+                    pendingRequests.remove(response.requestId)?.completableDeferred?.complete(response) ?: logger.warn {
                         val firstSequence = decodedBatch.groupsList.firstOrNull()?.messagesList?.firstOrNull()?.sequence
                         val lastSequence = decodedBatch.groupsList?.lastOrNull()?.messagesList?.lastOrNull()?.sequence
                         val stream =
                             "${decodedBatch.groupsList.firstOrNull()?.messagesList?.firstOrNull()?.message?.sessionAlias}:${decodedBatch.groupsList.firstOrNull()?.messagesList?.firstOrNull()?.message?.direction.toString()}"
                         "codec response with hash ${response.requestHash} has no matching requests (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} requestId=${response.requestId})"
                     }
-            }
-        },
+                }
+            },
 
-        "from_codec"
-    )
+            "from_codec"
+        )
+    }
 
     suspend fun sendToCodec(request: CodecBatchRequest): CodecBatchResponse {
 
