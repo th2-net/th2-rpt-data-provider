@@ -120,8 +120,13 @@ class MessageExtractor(
                                 }
                             }
                         } else {
-                            request.startTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
-                            request.endTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
+                            if (order == Order.DIRECT) {
+                                request.startTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
+                                request.endTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
+                            } else {
+                                request.startTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
+                                request.endTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
+                            }
                         }
                     }.build()
             )
