@@ -16,21 +16,14 @@
 
 package com.exactpro.th2.rptdataprovider.handlers
 
-import com.exactpro.cradle.Direction
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepObject
+import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import mu.KotlinLogging
 
-data class StreamName(val name: String, val direction: Direction) {
-    private val fullName = "$name:$direction"
-
-    override fun toString(): String {
-        return fullName
-    }
-}
 
 abstract class PipelineComponent(
     val context: Context,

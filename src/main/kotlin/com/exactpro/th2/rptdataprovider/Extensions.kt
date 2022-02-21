@@ -23,20 +23,15 @@ import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.common.grpc.ConnectionID
 import com.exactpro.th2.common.grpc.MessageID
-import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
-import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.prometheus.client.Gauge
 import io.prometheus.client.Histogram
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope.coroutineContext
-import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
 import mu.KotlinLogging
 import java.io.IOException
-import java.io.Writer
 import java.time.Instant
-import java.util.concurrent.Executors
 import kotlin.system.measureTimeMillis
 
 private val logger = KotlinLogging.logger { }

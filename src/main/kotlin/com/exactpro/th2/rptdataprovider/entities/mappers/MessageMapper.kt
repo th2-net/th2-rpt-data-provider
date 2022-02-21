@@ -16,8 +16,10 @@
 
 package com.exactpro.th2.rptdataprovider.entities.mappers
 
+import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.message.toTimestamp
-import com.exactpro.th2.dataprovider.grpc.MessageData
+import com.exactpro.th2.dataprovider.grpc.MessageGroupItem
+import com.exactpro.th2.dataprovider.grpc.MessageGroupResponse
 import com.exactpro.th2.rptdataprovider.convertToProto
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.entities.responses.BodyHttpMessage
@@ -28,6 +30,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.google.protobuf.ByteString
 import java.util.*
 
 object MessageMapper {
@@ -58,24 +61,37 @@ object MessageMapper {
 
     //FIXME: migrate to grpc interface 1.0.0+
     //FIXME: return raw message body
-    fun convertToGrpcMessageData(messageWithMetadata: MessageWithMetadata): List<MessageData> {
-        return messageWithMetadata.message.parsedMessageGroup?.map { groupElement ->
-            MessageData.newBuilder()
-                .setMessageId(groupElement.id)
-                .setTimestamp(groupElement.message.metadata.timestamp)
+    fun convertToGrpcMessageData(messageWithMetadata: MessageWithMetadata): MessageGroupResponse {
+        return MessageGroupResponse.newBuilder()
+            .setMessageId(messageWithMetadata.message.id.convertToProto())
+            .setTimestamp(messageWithMetadata.message.timestamp.toTimestamp())
 //                .setBodyBase64(messageWithMetadata.message.rawMessageBody.let {
 //                    Base64.getEncoder().encodeToString(it)
-//                })
-                .setMessageType(groupElement.messageType)
-                .setMessage(groupElement.message)
-                .build()
-        } ?: listOf(messageWithMetadata.message.let { message ->
-            MessageData.newBuilder()
-                .setMessageId(message.id.convertToProto())
-                .setTimestamp(message.timestamp.toTimestamp())
-//                .setBodyBase64(message.rawMessageBody.let { Base64.getEncoder().encodeToString(it) })
-                .build()
-        })
+//                }
+            .setBodyRaw(ByteString.copyFrom(messageWithMetadata.message.rawMessageBody))
+            .addAllAttachedEventId(messageWithMetadata.message.attachedEventIds.map {
+                EventID.newBuilder().setId(it).build()
+            })
+            .also { builder ->
+                messageWithMetadata.getMessagesWithMatches()?.let {
+                    builder.addAllMessageItem(
+                        it.map { (bodyWrapper, match) ->
+                            MessageGroupItem.newBuilder()
+                                .setMatch(match)
+                                .setMessage(bodyWrapper.message)
+                                .build()
+                        }
+                    )
+                }
+            }
+            .build()
+//        } ?: listOf(messageWithMetadata.message.let { message ->
+//            MessageData.newBuilder()
+//                .setMessageId(message.id.convertToProto())
+//                .setTimestamp(message.timestamp.toTimestamp())
+////                .setBodyBase64(message.rawMessageBody.let { Base64.getEncoder().encodeToString(it) })
+//                .build()
+//        })
     }
 
     suspend fun convertToHttpMessage(messageWithMetadata: MessageWithMetadata): HttpMessage {

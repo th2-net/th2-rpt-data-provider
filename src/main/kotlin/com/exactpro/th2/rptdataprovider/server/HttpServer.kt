@@ -31,10 +31,8 @@ import com.exactpro.th2.rptdataprovider.entities.sse.EventType
 import com.exactpro.th2.rptdataprovider.entities.sse.HttpWriter
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
-import com.exactpro.th2.rptdataprovider.grpc.RptDataProviderGrpcHandler
 import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
-import io.grpc.Status
 import io.ktor.application.*
 import io.ktor.features.*
 import io.ktor.http.*

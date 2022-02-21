@@ -24,7 +24,7 @@ import com.exactpro.th2.common.grpc.EventStatus.FAILED
 import com.exactpro.th2.common.grpc.EventStatus.SUCCESS
 import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.message.toTimestamp
-import com.exactpro.th2.dataprovider.grpc.EventData
+import com.exactpro.th2.dataprovider.grpc.EventResponse
 import com.exactpro.th2.rptdataprovider.cradleDirectionToGrpc
 import com.fasterxml.jackson.annotation.JsonRawValue
 import com.google.protobuf.ByteString
@@ -60,22 +60,20 @@ data class Event(
         }
     }
 
-    fun convertToGrpcEventData(): EventData {
-        return EventData.newBuilder()
+    fun convertToGrpcEventData(): EventResponse {
+        return EventResponse.newBuilder()
             .setEventId(EventID.newBuilder().setId(eventId))
             .setIsBatched(isBatched)
             .setEventName(eventName)
             .setStartTimestamp(startTimestamp.toTimestamp())
-            .setSuccessful(if (successful) SUCCESS else FAILED)
-            .addAllAttachedMessageIds(convertMessageIdToProto(attachedMessageIds))
-            .let { builder ->
+            .setStatus(if (successful) SUCCESS else FAILED)
+            .addAllAttachedMessageId(convertMessageIdToProto(attachedMessageIds))
+            .also { builder ->
                 batchId?.let { builder.setBatchId(EventID.newBuilder().setId(it)) }
                 eventType?.let { builder.setEventType(it) }
                 endTimestamp?.let { builder.setEndTimestamp(it.toTimestamp()) }
                 parentEventId?.let { builder.setParentEventId(EventID.newBuilder().setId(it)) }
-                attachedMessageIds?.let { builder.addAllAttachedMessageIds(convertMessageIdToProto(it)) }
                 body?.let { builder.setBody(ByteString.copyFrom(it.toByteArray())) }
-                builder
             }.build()
     }
 
@@ -99,6 +97,4 @@ data class Event(
         attachedMessageIds = messages,
         body = body
     )
-
-
 }

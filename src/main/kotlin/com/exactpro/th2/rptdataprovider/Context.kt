@@ -18,21 +18,14 @@ package com.exactpro.th2.rptdataprovider
 
 
 import com.exactpro.cradle.CradleManager
-import com.exactpro.th2.common.grpc.MessageBatch
-import com.exactpro.th2.common.grpc.MessageGroup
 import com.exactpro.th2.common.grpc.MessageGroupBatch
-import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.schema.grpc.configuration.GrpcConfiguration
 import com.exactpro.th2.common.schema.message.MessageRouter
 import com.exactpro.th2.rptdataprovider.cache.EventCache
 import com.exactpro.th2.rptdataprovider.cache.MessageCache
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.entities.filters.PredicateFactory
-import com.exactpro.th2.rptdataprovider.entities.filters.events.AttachedMessageFilter
-import com.exactpro.th2.rptdataprovider.entities.filters.events.EventBodyFilter
-import com.exactpro.th2.rptdataprovider.entities.filters.events.EventNameFilter
-import com.exactpro.th2.rptdataprovider.entities.filters.events.EventStatusFilter
-import com.exactpro.th2.rptdataprovider.entities.filters.events.EventTypeFilter
+import com.exactpro.th2.rptdataprovider.entities.filters.events.*
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.AttachedEventFilters
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyBinaryFilter
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyFilter

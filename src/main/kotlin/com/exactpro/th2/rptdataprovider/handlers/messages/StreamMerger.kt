@@ -21,7 +21,7 @@ import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidInitializationException
 import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageStreamPointer
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
@@ -250,9 +250,12 @@ class StreamMerger(
         }
     }
 
-    fun getStreamsInfo(): List<StreamInfo> {
+    fun getStreamsInfo(): List<MessageStreamPointer> {
         return messageStreams.map {
-            StreamInfo(it.messageStream.streamName!!, it.previousElement?.lastProcessedId)
+            val lastId = it.previousElement?.lastProcessedId
+            val streamEnded = it.previousElement?.streamEmpty ?: false
+
+            MessageStreamPointer(it.messageStream.streamName!!, lastId != null, streamEnded, lastId)
         }
     }
 }
