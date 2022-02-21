@@ -202,6 +202,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
                     checkContext(grpcContext)
                 }
                 responseObserver.onNext(calledFun.invoke())
+                responseObserver.onCompleted()
             } finally {
                 coroutineContext.cancelChildren()
             }
@@ -285,7 +286,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
             MessageStreamsResponse.newBuilder()
                 .addAllMessageStream(
                     cradleService.getMessageStreams().flatMap { stream ->
-                        Direction.values().map {
+                        listOf(Direction.FIRST, Direction.SECOND).map {
                             MessageStream
                                 .newBuilder()
                                 .setDirection(it)
