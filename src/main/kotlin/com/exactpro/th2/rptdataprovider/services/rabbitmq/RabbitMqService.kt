@@ -160,6 +160,7 @@ class RabbitMqService(
                     pendingRequest.completableDeferred.cancel(
                         "Unexpected exception while trying to send a codec request", e
                     )
+                    throw e
                 }
 
                 pendingRequest
