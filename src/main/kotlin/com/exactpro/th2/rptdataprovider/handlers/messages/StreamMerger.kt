@@ -185,7 +185,7 @@ class StreamMerger(
                         }
                     }
                 }
-            } while (!allStreamIsEmpty && ((resultCountLimit?.let { it > 0 } ?: true) != false) && inTimeRange)
+            } while (!allStreamIsEmpty && (resultCountLimit?.let { it > 0 } != false) && inTimeRange)
 
             sendToChannel(StreamEndObject(false, null, Instant.ofEpochMilli(0)))
             logger.debug { "StreamEndObject has been sent" }

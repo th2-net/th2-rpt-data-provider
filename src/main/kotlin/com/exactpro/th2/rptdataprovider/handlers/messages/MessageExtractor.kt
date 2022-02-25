@@ -161,6 +161,15 @@ class MessageExtractor(
                                 }
                             } ?: false
                         }
+                        .dropLastWhile {
+                            request.endTimestamp?.let { endTimestamp ->
+                                if (order == Order.DIRECT) {
+                                    it.timestamp.isAfter(endTimestamp)
+                                } else {
+                                    it.timestamp.isBefore(endTimestamp)
+                                }
+                            } ?: false
+                        }
 
                     val firstMessage = if (order == Order.DIRECT) batch.messages.first() else batch.messages.last()
                     val lastMessage = if (order == Order.DIRECT) batch.messages.last() else batch.messages.first()
