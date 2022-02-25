@@ -19,7 +19,6 @@ package com.exactpro.th2.rptdataprovider.handlers
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.Metrics
 import com.fasterxml.jackson.annotation.JsonIgnore
-import com.fasterxml.jackson.annotation.JsonValue
 import io.prometheus.client.Counter
 import java.util.concurrent.atomic.AtomicLong
 
@@ -112,7 +111,7 @@ class PipelineStatus(context: Context) {
             Counter.build("filterSendDownstream", "Count filterSendDownstream").labelNames("stream").register()
 
         private val mergedMetric = Counter.build("merged", "Count merged").labelNames("time").register()
-        private val sendedMetric = Counter.build("sended", "Count sended").labelNames("time").register()
+        private val sentMetric = Counter.build("sent", "Count sent").labelNames("time").register()
 
         val codecLatency: Metrics =
             Metrics("th2_codec_latency", "Codec requests latency", listOf("stream"))
@@ -139,9 +138,9 @@ class PipelineStatus(context: Context) {
                 codecLatency.labels(streamName)
             }
             mergedMetric.clear()
-            sendedMetric.clear()
+            sentMetric.clear()
             mergedMetric.labels(processingStartTimestamp.toString())
-            sendedMetric.labels(processingStartTimestamp.toString())
+            sentMetric.labels(processingStartTimestamp.toString())
         }
     }
 
@@ -306,7 +305,7 @@ class PipelineStatus(context: Context) {
 
     fun countSend() {
         if (!sendPipelineStatus) return
-        sendedMetric.labels(processingStartTimestamp.toString()).inc()
+        sentMetric.labels(processingStartTimestamp.toString()).inc()
         this.sended.incrementAndGet()
     }
 
