@@ -29,6 +29,8 @@ import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
+import com.exactpro.th2.rptdataprovider.isAfterOrEqual
+import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.time.Instant
@@ -121,7 +123,7 @@ class MessageExtractor(
                             }
                         } else {
                             request.startTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
-                            request.endTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
+                            request.endTimestamp?.let { builder.timestampTo().isLessThan(it) }
                         }
                     }.build()
             )
@@ -164,9 +166,9 @@ class MessageExtractor(
                         .dropLastWhile {
                             request.endTimestamp?.let { endTimestamp ->
                                 if (order == Order.DIRECT) {
-                                    it.timestamp.isAfter(endTimestamp)
+                                    it.timestamp.isAfterOrEqual(endTimestamp)
                                 } else {
-                                    it.timestamp.isBefore(endTimestamp)
+                                    it.timestamp.isBeforeOrEqual(endTimestamp)
                                 }
                             } ?: false
                         }
