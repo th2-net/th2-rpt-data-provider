@@ -93,7 +93,7 @@ class MessageFilter(
                 if (parsedMessage is PipelineParsedMessage) {
 
                     pipelineStatus.filterStart(streamName.toString())
-
+                    val timeStart = System.nanoTime()
                     val filtered = measureTimedValue {
                         pipelineStatus.countFilteredTotal(streamName.toString())
                         updateState(parsedMessage)
@@ -105,7 +105,15 @@ class MessageFilter(
 
                     pipelineStatus.filterEnd(streamName.toString())
                     if (filtered.finalFiltered) {
-                        sendToChannel(PipelineFilteredMessage(parsedMessage, filtered))
+                        sendToChannel(
+                            PipelineFilteredMessage(
+                                parsedMessage.also {
+                                    it.info.startFilter = timeStart
+                                    it.info.endFilter = System.nanoTime()
+                                },
+                                filtered
+                            )
+                        )
                         pipelineStatus.countFilterAccepted(streamName.toString())
                     } else {
                         pipelineStatus.countFilterDiscarded(streamName.toString())

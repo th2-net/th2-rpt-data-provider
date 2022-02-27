@@ -154,6 +154,8 @@ class MessageBatchUnpacker(
 
             }.value?.messageGroupBatch?.groupsList
 
+            pipelineMessage.info.endParseMessage = System.nanoTime()
+
             val requestsAndResponses =
                 if (responses != null && requests.size == responses.size) {
                     goodResponse(requests, responses, pipelineMessage)

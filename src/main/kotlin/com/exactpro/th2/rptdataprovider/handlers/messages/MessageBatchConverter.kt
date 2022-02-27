@@ -1,12 +1,14 @@
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
-import com.exactpro.th2.common.grpc.*
+import com.exactpro.th2.common.grpc.AnyMessage
+import com.exactpro.th2.common.grpc.MessageGroup
+import com.exactpro.th2.common.grpc.MessageGroupBatch
+import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.common.message.sequence
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineCodecRequest
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
@@ -69,6 +71,8 @@ class MessageBatchConverter(
                 pipelineMessage.storedBatchWrapper.trimmedMessages.size.toLong()
             )
 
+            val timeStart = System.nanoTime()
+
             logger.trace { "received raw batch (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.fullBatch.id})" }
 
             val filteredMessages = pipelineMessage.storedBatchWrapper.trimmedMessages
@@ -102,7 +106,11 @@ class MessageBatchConverter(
                         .addAllGroups(filteredMessages.map { it.first })
                         .build(),
                     streamName.toString()
-                )
+                ),
+                info = pipelineMessage.info.also {
+                    it.startConvert = timeStart
+                    it.endConvert = System.nanoTime()
+                }
             )
 
             pipelineStatus.convertEnd(

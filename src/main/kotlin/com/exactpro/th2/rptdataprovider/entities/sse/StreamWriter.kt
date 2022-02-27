@@ -18,7 +18,7 @@ package com.exactpro.th2.rptdataprovider.entities.sse
 
 import com.exactpro.th2.dataprovider.grpc.StreamResponse
 import com.exactpro.th2.dataprovider.grpc.StreamsInfo
-import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineFilteredMessage
 import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
@@ -26,6 +26,7 @@ import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatusSnapshot
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.grpc.stub.StreamObserver
+import io.prometheus.client.Histogram
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -35,6 +36,7 @@ import mu.KotlinLogging
 import java.io.Writer
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.roundToInt
+import kotlin.system.measureNanoTime
 import kotlin.system.measureTimeMillis
 import kotlin.time.ExperimentalTime
 import kotlin.time.measureTimedValue
@@ -42,9 +44,32 @@ import kotlin.time.measureTimedValue
 
 interface StreamWriter {
 
+    companion object {
+        val metric =  Histogram.build(
+            "th2_message_pipeline_seconds", "Time of message search pipeline steps"
+        ).buckets(.005, .01, .025, .05, .075, .1, .25, .5, .75, 1.0, 2.5, 5.0, 7.5, 10.0, 25.0, 50.0, 75.0)
+            .labelNames("step_name")
+            .register()
+
+        fun setMetrics(message: PipelineFilteredMessage) {
+            with(message.info) {
+                metric.labels("extract").observe(extractTime().toDouble())
+                metric.labels("convert").observe(convertTime().toDouble())
+                metric.labels("decode").observe(decodeTime().toDouble())
+                metric.labels("filter").observe(filterTime().toDouble())
+                metric.labels("serializing").observe(serializingTime.toDouble())
+            }
+        }
+
+        fun setSendingTime(sendingTime: Long) {
+            metric.labels("sending").observe(sendingTime.toDouble())
+        }
+
+    }
+
     suspend fun write(event: EventTreeNode, counter: AtomicLong)
 
-    suspend fun write(message: MessageWithMetadata, counter: AtomicLong)
+    suspend fun write(message: PipelineFilteredMessage, counter: AtomicLong)
 
     suspend fun write(event: Event, lastEventId: AtomicLong)
 
@@ -88,8 +113,20 @@ class HttpWriter(private val writer: Writer, private val jacksonMapper: ObjectMa
         eventWrite(SseEvent.build(jacksonMapper, event, counter))
     }
 
-    override suspend fun write(message: MessageWithMetadata, counter: AtomicLong) {
-        eventWrite(SseEvent.build(jacksonMapper, MessageMapper.convertToHttpMessage(message), counter))
+    @OptIn(ExperimentalTime::class)
+    override suspend fun write(message: PipelineFilteredMessage, counter: AtomicLong) {
+        val convertedMessage = measureTimedValue {
+            MessageMapper.convertToHttpMessage(message.payload)
+        }
+        message.info.serializingTime = convertedMessage.duration.toLongNanoseconds()
+
+        val sendingTime = measureNanoTime {
+            eventWrite(SseEvent.build(jacksonMapper, convertedMessage.value, counter))
+        }
+
+        StreamWriter.setMetrics(message)
+        StreamWriter.setSendingTime(sendingTime)
+
     }
 
     override suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong) {
@@ -138,6 +175,8 @@ class GrpcWriter(
                     awaited.value.forEach { writer.onNext(it) }
                 }
 
+                StreamWriter.setSendingTime(sendDuration)
+
                 logger.trace { "awaited response for ${awaited.duration.inMilliseconds.roundToInt()}ms, sent in ${sendDuration}ms" }
             }
             writer.onCompleted()
@@ -163,14 +202,22 @@ class GrpcWriter(
     }
 
 
-    override suspend fun write(message: MessageWithMetadata, counter: AtomicLong) {
+    override suspend fun write(message: PipelineFilteredMessage, counter: AtomicLong) {
         val result = CompletableDeferred<List<StreamResponse>>()
         responses.send(result)
 
         scope.launch {
             result.complete(
-                MessageMapper.convertToGrpcMessageData(message)
-                    .map { StreamResponse.newBuilder().setMessage(it).build() }
+                let {
+                    val convertedMessage = measureTimedValue {
+                        MessageMapper.convertToGrpcMessageData(message.payload)
+                            .map { StreamResponse.newBuilder().setMessage(it).build() }
+                    }
+                    message.info.serializingTime = convertedMessage.duration.toLongNanoseconds()
+                    StreamWriter.setMetrics(message)
+
+                    convertedMessage.value
+                }
             )
             counter.incrementAndGet()
         }

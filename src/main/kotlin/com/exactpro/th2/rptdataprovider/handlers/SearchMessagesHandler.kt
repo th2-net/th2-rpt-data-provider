@@ -104,7 +104,7 @@ class SearchMessagesHandler(private val applicationContext: Context) {
 
                     if (it is PipelineFilteredMessage) {
                         pipelineStatus.countSend()
-                        writer.write(it.payload, lastMessageIdCounter)
+                        writer.write(it, lastMessageIdCounter)
                     } else if (it is PipelineKeepAlive) {
                         writer.write(LastScannedMessageInfo(it), lastMessageIdCounter)
                     }

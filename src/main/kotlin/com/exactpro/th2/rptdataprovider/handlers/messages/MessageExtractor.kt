@@ -130,6 +130,9 @@ class MessageExtractor(
 
             for (batch in cradleMessageIterable) {
                 if (externalScope.isActive) {
+
+                    val timeStart = System.nanoTime()
+
                     pipelineStatus.fetchedStart(streamName.toString())
                     logger.trace { "batch ${batch.id.index} of stream $streamName with ${batch.messageCount} messages (${batch.batchSize} bytes) has been extracted" }
 
@@ -170,15 +173,19 @@ class MessageExtractor(
                     }
 
                     pipelineStatus.fetchedEnd(streamName.toString())
+
                     try {
-                        trimmedMessages.last().let {
+                        trimmedMessages.last().let { message ->
                             sendToChannel(
                                 PipelineRawBatch(
-                                    false, it.id, it.timestamp, MessageBatchWrapper(batch, trimmedMessages)
-                                )
+                                    false, message.id, message.timestamp, MessageBatchWrapper(batch, trimmedMessages)
+                                ).also {
+                                    it.info.startExtract = timeStart
+                                    it.info.endExtract = System.nanoTime()
+                                }
                             )
-                            lastElement = it.id
-                            lastTimestamp = it.timestamp
+                            lastElement = message.id
+                            lastTimestamp = message.timestamp
 
                             logger.trace { "batch ${batch.id.index} of stream $streamName has been sent downstream" }
 
