@@ -39,6 +39,8 @@ class RabbitMqService(
         val logger = KotlinLogging.logger { }
     }
 
+    private val toCodecAttributeName = "to_codec"
+
     private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
     private val pendingRequests = ConcurrentHashMap<CodecRequestId, PendingCodecBatchRequest>()
 
@@ -138,9 +140,9 @@ class RabbitMqService(
 
                         codecLatency.gaugeInc(listOf(request.streamName))
 
-                        messageRouterRawBatch.sendAll(request.protobufRawMessageBatch, sessionAlias)
+                        messageRouterRawBatch.sendAll(request.protobufRawMessageBatch, sessionAlias, toCodecAttributeName)
                     } else {
-                        messageRouterRawBatch.sendAll(request.protobufRawMessageBatch)
+                        messageRouterRawBatch.sendAll(request.protobufRawMessageBatch, toCodecAttributeName)
                     }
 
                     logger.trace {
