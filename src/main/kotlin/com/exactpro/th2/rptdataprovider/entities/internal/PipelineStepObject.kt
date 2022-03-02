@@ -21,6 +21,7 @@ import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchRequest
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchResponse
 import java.time.Instant
+import kotlin.math.max
 
 class PipelineStepsInfo {
     var startExtract: Long = 0
@@ -29,6 +30,7 @@ class PipelineStepsInfo {
     var endConvert: Long = 0
     var startParseMessage: Long = 0
     var endParseMessage: Long = 0
+    var codecResponse: Long = 0
     var startFilter: Long = 0
     var endFilter: Long = 0
 
@@ -38,7 +40,9 @@ class PipelineStepsInfo {
 
     fun convertTime() = endConvert - startConvert
 
-    fun decodeTime() = endParseMessage - startParseMessage
+    fun decodeCodecResponse() = max(codecResponse - startParseMessage, 0)
+
+    fun decodeTimeAll() = endParseMessage - startParseMessage
 
     fun filterTime() = endFilter - startFilter
 }

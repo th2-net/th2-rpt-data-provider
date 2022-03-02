@@ -54,7 +54,8 @@ interface StreamWriter {
             with(message.info) {
                 metric.labels("extract").observe(extractTime().toDouble())
                 metric.labels("convert").observe(convertTime().toDouble())
-                metric.labels("decode").observe(decodeTime().toDouble())
+                metric.labels("decode_codec").observe(decodeCodecResponse().toDouble())
+                metric.labels("decode_all").observe(decodeTimeAll().toDouble())
                 metric.labels("filter").observe(filterTime().toDouble())
                 metric.labels("serializing").observe(serializingTime.toDouble())
             }

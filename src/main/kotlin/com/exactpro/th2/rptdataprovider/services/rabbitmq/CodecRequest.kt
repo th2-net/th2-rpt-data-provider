@@ -74,6 +74,7 @@ class MessageGroupBatchWrapper(
 ) {
     val requestId = CodecRequestId.fromMessageGroupBatch(messageGroupBatch)
     val responseHash = requestId.hashCode()
+    val responseTime = System.currentTimeMillis()
 }
 
 class PendingCodecBatchRequest(
