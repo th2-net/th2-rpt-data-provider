@@ -36,7 +36,6 @@ import mu.KotlinLogging
 import java.io.Writer
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.roundToInt
-import kotlin.system.measureNanoTime
 import kotlin.system.measureTimeMillis
 import kotlin.time.ExperimentalTime
 import kotlin.time.measureTimedValue
@@ -118,9 +117,9 @@ class HttpWriter(private val writer: Writer, private val jacksonMapper: ObjectMa
         val convertedMessage = measureTimedValue {
             MessageMapper.convertToHttpMessage(message.payload)
         }
-        message.info.serializingTime = convertedMessage.duration.toLongNanoseconds()
+        message.info.serializingTime = convertedMessage.duration.toLongMilliseconds()
 
-        val sendingTime = measureNanoTime {
+        val sendingTime = measureTimeMillis {
             eventWrite(SseEvent.build(jacksonMapper, convertedMessage.value, counter))
         }
 
@@ -213,7 +212,7 @@ class GrpcWriter(
                         MessageMapper.convertToGrpcMessageData(message.payload)
                             .map { StreamResponse.newBuilder().setMessage(it).build() }
                     }
-                    message.info.serializingTime = convertedMessage.duration.toLongNanoseconds()
+                    message.info.serializingTime = convertedMessage.duration.toLongMilliseconds()
                     StreamWriter.setMetrics(message)
 
                     convertedMessage.value

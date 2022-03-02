@@ -93,7 +93,7 @@ class MessageFilter(
                 if (parsedMessage is PipelineParsedMessage) {
 
                     pipelineStatus.filterStart(streamName.toString())
-                    val timeStart = System.nanoTime()
+                    val timeStart = System.currentTimeMillis()
                     val filtered = measureTimedValue {
                         pipelineStatus.countFilteredTotal(streamName.toString())
                         updateState(parsedMessage)
@@ -109,7 +109,7 @@ class MessageFilter(
                             PipelineFilteredMessage(
                                 parsedMessage.also {
                                     it.info.startFilter = timeStart
-                                    it.info.endFilter = System.nanoTime()
+                                    it.info.endFilter = System.currentTimeMillis()
                                 },
                                 filtered
                             )

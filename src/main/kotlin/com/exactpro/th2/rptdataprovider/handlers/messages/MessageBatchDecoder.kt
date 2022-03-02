@@ -92,7 +92,7 @@ class MessageBatchDecoder(
                 sendToChannel(
                     PipelineDecodedBatch(
                         pipelineMessage.also {
-                            it.info.startParseMessage = System.nanoTime()
+                            it.info.startParseMessage = System.currentTimeMillis()
                         },
                         CodecBatchResponse(CompletableDeferred(value = null)),
                         protocol
@@ -108,7 +108,7 @@ class MessageBatchDecoder(
 
                 val result = PipelineDecodedBatch(
                     pipelineMessage.also {
-                        it.info.startParseMessage = System.nanoTime()
+                        it.info.startParseMessage = System.currentTimeMillis()
                     },
                     context.rabbitMqService.sendToCodec(pipelineMessage.codecRequest),
                     protocol

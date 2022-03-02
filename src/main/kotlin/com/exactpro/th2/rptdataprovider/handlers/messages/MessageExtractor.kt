@@ -131,7 +131,7 @@ class MessageExtractor(
             for (batch in cradleMessageIterable) {
                 if (externalScope.isActive) {
 
-                    val timeStart = System.nanoTime()
+                    val timeStart = System.currentTimeMillis()
 
                     pipelineStatus.fetchedStart(streamName.toString())
                     logger.trace { "batch ${batch.id.index} of stream $streamName with ${batch.messageCount} messages (${batch.batchSize} bytes) has been extracted" }
@@ -181,7 +181,7 @@ class MessageExtractor(
                                     false, message.id, message.timestamp, MessageBatchWrapper(batch, trimmedMessages)
                                 ).also {
                                     it.info.startExtract = timeStart
-                                    it.info.endExtract = System.nanoTime()
+                                    it.info.endExtract = System.currentTimeMillis()
                                 }
                             )
                             lastElement = message.id

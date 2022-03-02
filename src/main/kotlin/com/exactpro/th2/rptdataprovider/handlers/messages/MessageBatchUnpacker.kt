@@ -154,7 +154,7 @@ class MessageBatchUnpacker(
 
             }.value?.messageGroupBatch?.groupsList
 
-            pipelineMessage.info.endParseMessage = System.nanoTime()
+            pipelineMessage.info.endParseMessage = System.currentTimeMillis()
 
             val requestsAndResponses =
                 if (responses != null && requests.size == responses.size) {

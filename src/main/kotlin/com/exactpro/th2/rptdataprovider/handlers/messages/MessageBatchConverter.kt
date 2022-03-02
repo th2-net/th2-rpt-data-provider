@@ -71,7 +71,7 @@ class MessageBatchConverter(
                 pipelineMessage.storedBatchWrapper.trimmedMessages.size.toLong()
             )
 
-            val timeStart = System.nanoTime()
+            val timeStart = System.currentTimeMillis()
 
             logger.trace { "received raw batch (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.fullBatch.id})" }
 
@@ -109,7 +109,7 @@ class MessageBatchConverter(
                 ),
                 info = pipelineMessage.info.also {
                     it.startConvert = timeStart
-                    it.endConvert = System.nanoTime()
+                    it.endConvert = System.currentTimeMillis()
                 }
             )
 
