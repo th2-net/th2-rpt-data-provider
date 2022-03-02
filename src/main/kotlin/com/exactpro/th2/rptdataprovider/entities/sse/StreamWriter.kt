@@ -44,7 +44,7 @@ import kotlin.time.measureTimedValue
 interface StreamWriter {
 
     companion object {
-        val metric =  Histogram.build(
+        val metric = Histogram.build(
             "th2_message_pipeline_seconds", "Time of message search pipeline steps"
         ).buckets(.005, .01, .025, .05, .075, .1, .25, .5, .75, 1.0, 2.5, 5.0, 7.5, 10.0, 25.0, 50.0, 75.0)
             .labelNames("step_name")
@@ -52,17 +52,17 @@ interface StreamWriter {
 
         fun setMetrics(message: PipelineFilteredMessage) {
             with(message.info) {
-                metric.labels("extract").observe(extractTime().toDouble())
-                metric.labels("convert").observe(convertTime().toDouble())
-                metric.labels("decode_codec").observe(decodeCodecResponse().toDouble())
-                metric.labels("decode_all").observe(decodeTimeAll().toDouble())
-                metric.labels("filter").observe(filterTime().toDouble())
-                metric.labels("serializing").observe(serializingTime.toDouble())
+                metric.labels("extract").observe(extractTime().toDouble() / 1000)
+                metric.labels("convert").observe(convertTime().toDouble() / 1000)
+                metric.labels("decode_codec").observe(decodeCodecResponse().toDouble() / 1000)
+                metric.labels("decode_all").observe(decodeTimeAll().toDouble() / 1000)
+                metric.labels("filter").observe(filterTime().toDouble() / 1000)
+                metric.labels("serializing").observe(serializingTime.toDouble() / 1000)
             }
         }
 
         fun setSendingTime(sendingTime: Long) {
-            metric.labels("sending").observe(sendingTime.toDouble())
+            metric.labels("sending").observe(sendingTime.toDouble() / 1000)
         }
 
     }
