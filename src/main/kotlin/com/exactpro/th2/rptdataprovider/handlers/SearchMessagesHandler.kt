@@ -16,15 +16,16 @@
 
 package com.exactpro.th2.rptdataprovider.handlers
 
+import com.exactpro.cradle.Direction
+import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
-import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
-import com.exactpro.th2.rptdataprovider.entities.internal.PipelineFilteredMessage
-import com.exactpro.th2.rptdataprovider.entities.internal.PipelineKeepAlive
-import com.exactpro.th2.rptdataprovider.entities.internal.StreamEndObject
+import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedMessageInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.messages.ChainBuilder
+import com.exactpro.th2.rptdataprovider.handlers.messages.MessageExtractor
 import com.exactpro.th2.rptdataprovider.handlers.messages.StreamMerger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collect
@@ -110,5 +111,44 @@ class SearchMessagesHandler(private val applicationContext: Context) {
                     }
                 }
         }
+    }
+
+    @OptIn(ExperimentalTime::class, InternalCoroutinesApi::class)
+    suspend fun getIds(request: SseMessageSearchRequest): List<StreamInfo> {
+        val pipelineStatus = PipelineStatus(context = applicationContext)
+        val streamNames = request.stream.flatMap { stream -> Direction.values().map { StreamName(stream, it) } }
+        val coroutineScope = CoroutineScope(coroutineContext + Job(coroutineContext[Job]))
+        pipelineStatus.addStreams(streamNames.map { it.toString() })
+
+        val streamInfoList = mutableListOf<StreamInfo>()
+
+        streamNames.forEach { streamName ->
+            val messageExtractor = MessageExtractor(
+                applicationContext,
+                request,
+                streamName,
+                coroutineScope,
+                1,
+                pipelineStatus
+            )
+
+            var pair: Pair<StoredMessageId?, Boolean>? = null
+
+            do {
+                messageExtractor.pollMessage().let {
+                    pair = if (it is PipelineRawBatch) {
+                        val storedMessage = it.storedBatchWrapper.trimmedMessages.firstOrNull()
+                        Pair(storedMessage?.id, false)
+                    } else {
+                        it.streamEmpty
+                        Pair(null, it.streamEmpty)
+                    }
+                }
+            } while (pair?.first == null && !pair?.second!!)
+
+            pair!!.first?.let { streamInfoList.add(StreamInfo(streamName, it)) }
+        }
+
+        return streamInfoList
     }
 }

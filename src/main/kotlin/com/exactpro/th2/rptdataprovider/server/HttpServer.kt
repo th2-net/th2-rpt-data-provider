@@ -48,6 +48,7 @@ import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.nio.channels.ClosedChannelException
+import java.time.Instant
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -434,6 +435,27 @@ class HttpServer(private val applicationContext: Context) {
                         val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
                         val message = messageCache.getOrPut(call.parameters["id"]!!)
                         filterPredicate.apply(MessageWithMetadata(message))
+                    }
+                }
+
+                get("/messageIds") {
+                    val queryParametersMap = call.request.queryParameters.toMap()
+                    handleRequest(call, context, "message ids", null, false, false, queryParametersMap) {
+                        val streams = queryParametersMap["stream"]
+                        val timestamp =
+                            queryParametersMap["startTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) }
+
+                        when {
+                            streams.isNullOrEmpty() ->
+                                throw InvalidRequestException("Stream list cannot be empty")
+                            timestamp == null ->
+                                throw InvalidRequestException("Start timestamp cannot be empty")
+                            else -> {
+                                val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
+                                val request = SseMessageSearchRequest(queryParametersMap,filterPredicate)
+                                searchMessagesHandler.getIds(request)
+                            }
+                        }
                     }
                 }
             }
