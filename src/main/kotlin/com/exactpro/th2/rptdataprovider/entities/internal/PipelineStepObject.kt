@@ -34,6 +34,7 @@ class PipelineStepsInfo {
     var startFilter: Long = 0
     var endFilter: Long = 0
 
+    var buildMessage: Long = 0
     var serializingTime: Long = 0
 
     fun extractTime() = endExtract - startExtract

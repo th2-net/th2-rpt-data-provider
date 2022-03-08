@@ -19,6 +19,8 @@ package com.exactpro.th2.rptdataprovider.entities.sse
 import com.exactpro.th2.dataprovider.grpc.StreamResponse
 import com.exactpro.th2.dataprovider.grpc.StreamsInfo
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineFilteredMessage
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepObject
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepsInfo
 import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
@@ -50,16 +52,45 @@ interface StreamWriter {
             .labelNames("step_name")
             .register()
 
-        fun setMetrics(message: PipelineFilteredMessage) {
-            with(message.info) {
-                metric.labels("extract").observe(extractTime().toDouble() / 1000)
-                metric.labels("convert").observe(convertTime().toDouble() / 1000)
-                metric.labels("decode_codec").observe(decodeCodecResponse().toDouble() / 1000)
-                metric.labels("decode_all").observe(decodeTimeAll().toDouble() / 1000)
-                metric.labels("filter").observe(filterTime().toDouble() / 1000)
-                metric.labels("serializing").observe(serializingTime.toDouble() / 1000)
-            }
+//        fun setMetrics(message: PipelineFilteredMessage) {
+//            with(message.info) {
+//                metric.labels("extract").observe(extractTime().toDouble() / 1000)
+//                metric.labels("convert").observe(convertTime().toDouble() / 1000)
+//                metric.labels("decode_codec").observe(decodeCodecResponse().toDouble() / 1000)
+//                metric.labels("decode_all").observe(decodeTimeAll().toDouble() / 1000)
+//                metric.labels("filter").observe(filterTime().toDouble() / 1000)
+//                metric.labels("serializing").observe(serializingTime.toDouble() / 1000)
+//            }
+//        }
+
+        fun setExtract(info: PipelineStepsInfo) {
+            metric.labels("extract").observe(info.extractTime().toDouble() / 1000)
         }
+
+        fun setConvert(info: PipelineStepsInfo) {
+            metric.labels("convert").observe(info.convertTime().toDouble() / 1000)
+        }
+
+        fun setDecodeCodec(info: PipelineStepsInfo) {
+            metric.labels("decode_codec").observe(info.decodeCodecResponse().toDouble() / 1000)
+        }
+
+        fun setDecodeAll(info: PipelineStepsInfo) {
+            metric.labels("decode_all").observe(info.decodeTimeAll().toDouble() / 1000)
+        }
+
+        fun setFilter(info: PipelineStepsInfo) {
+            metric.labels("filter").observe(info.filterTime().toDouble() / 1000)
+        }
+
+        fun setBuildMessage(info: PipelineStepsInfo) {
+            metric.labels("build_message").observe(info.buildMessage.toDouble() / 1000)
+        }
+
+        fun setSerializing(info: PipelineStepsInfo) {
+            metric.labels("serializing").observe(info.serializingTime.toDouble() / 1000)
+        }
+
 
         fun setSendingTime(sendingTime: Long) {
             metric.labels("sending").observe(sendingTime.toDouble() / 1000)
@@ -119,12 +150,12 @@ class HttpWriter(private val writer: Writer, private val jacksonMapper: ObjectMa
             MessageMapper.convertToHttpMessage(message.payload)
         }
         message.info.serializingTime = convertedMessage.duration.toLongMilliseconds()
+        StreamWriter.setSerializing(message.info)
 
         val sendingTime = measureTimeMillis {
             eventWrite(SseEvent.build(jacksonMapper, convertedMessage.value, counter))
         }
 
-        StreamWriter.setMetrics(message)
         StreamWriter.setSendingTime(sendingTime)
 
     }
@@ -214,7 +245,7 @@ class GrpcWriter(
                             .map { StreamResponse.newBuilder().setMessage(it).build() }
                     }
                     message.info.serializingTime = convertedMessage.duration.toLongMilliseconds()
-                    StreamWriter.setMetrics(message)
+                    StreamWriter.setSerializing(message.info)
 
                     convertedMessage.value
                 }

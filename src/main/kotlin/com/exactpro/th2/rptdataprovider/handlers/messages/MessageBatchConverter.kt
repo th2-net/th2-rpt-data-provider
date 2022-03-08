@@ -9,6 +9,7 @@ import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineCodecRequest
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
@@ -110,6 +111,7 @@ class MessageBatchConverter(
                 info = pipelineMessage.info.also {
                     it.startConvert = timeStart
                     it.endConvert = System.currentTimeMillis()
+                    StreamWriter.setConvert(it)
                 }
             )
 

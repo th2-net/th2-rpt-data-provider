@@ -26,6 +26,7 @@ import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
+import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
@@ -182,6 +183,7 @@ class MessageExtractor(
                                 ).also {
                                     it.info.startExtract = timeStart
                                     it.info.endExtract = System.currentTimeMillis()
+                                    StreamWriter.setExtract(it.info)
                                 }
                             )
                             lastElement = message.id

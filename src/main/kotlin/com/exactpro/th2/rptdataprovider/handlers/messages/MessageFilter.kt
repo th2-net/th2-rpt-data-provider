@@ -19,6 +19,7 @@ package com.exactpro.th2.rptdataprovider.handlers.messages
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
@@ -110,6 +111,7 @@ class MessageFilter(
                                 parsedMessage.also {
                                     it.info.startFilter = timeStart
                                     it.info.endFilter = System.currentTimeMillis()
+                                    StreamWriter.setFilter(it.info)
                                 },
                                 filtered
                             )
