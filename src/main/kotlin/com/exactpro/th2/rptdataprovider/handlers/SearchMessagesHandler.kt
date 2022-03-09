@@ -17,8 +17,10 @@
 package com.exactpro.th2.rptdataprovider.handlers
 
 import com.exactpro.cradle.Direction
+import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
@@ -114,39 +116,46 @@ class SearchMessagesHandler(private val applicationContext: Context) {
     }
 
     @OptIn(ExperimentalTime::class, InternalCoroutinesApi::class)
-    suspend fun getIds(request: SseMessageSearchRequest): List<StreamInfo> {
+    suspend fun getIds(requests: List<SseMessageSearchRequest>): Map<String, List<StreamInfo>> {
         val pipelineStatus = PipelineStatus(context = applicationContext)
-        val streamNames = request.stream.flatMap { stream -> Direction.values().map { StreamName(stream, it) } }
+        val streamNames = requests[0].stream.flatMap { stream -> Direction.values().map { StreamName(stream, it) } }
         val coroutineScope = CoroutineScope(coroutineContext + Job(coroutineContext[Job]))
         pipelineStatus.addStreams(streamNames.map { it.toString() })
 
-        val streamInfoList = mutableListOf<StreamInfo>()
+        val streamInfoList = mutableMapOf<String, MutableList<StreamInfo>>()
+        streamInfoList[SearchDirection.NEXT.direction] = mutableListOf()
+        streamInfoList[SearchDirection.PREVIOUS.direction] = mutableListOf()
 
         streamNames.forEach { streamName ->
-            val messageExtractor = MessageExtractor(
-                applicationContext,
-                request,
-                streamName,
-                coroutineScope,
-                1,
-                pipelineStatus
-            )
+            requests.forEach { request ->
 
-            var pair: Pair<StoredMessageId?, Boolean>? = null
+                val searchDirection = if (request.searchDirection === TimeRelation.AFTER) SearchDirection.NEXT else SearchDirection.PREVIOUS
 
-            do {
-                messageExtractor.pollMessage().let {
-                    pair = if (it is PipelineRawBatch) {
-                        val storedMessage = it.storedBatchWrapper.trimmedMessages.firstOrNull()
-                        Pair(storedMessage?.id, false)
-                    } else {
-                        it.streamEmpty
-                        Pair(null, it.streamEmpty)
+                val messageExtractor = MessageExtractor(
+                    applicationContext,
+                    request,
+                    streamName,
+                    coroutineScope,
+                    1,
+                    pipelineStatus
+                )
+
+                var pair: Pair<StoredMessageId?, Boolean>? = null
+
+                do {
+                    messageExtractor.pollMessage().let {
+                        pair = if (it is PipelineRawBatch) {
+                            val storedMessage = it.storedBatchWrapper.trimmedMessages.firstOrNull()
+                            Pair(storedMessage?.id, false)
+                        } else {
+                            it.streamEmpty
+                            Pair(null, it.streamEmpty)
+                        }
                     }
-                }
-            } while (pair?.first == null && !pair?.second!!)
+                } while (pair?.first == null && !pair?.second!!)
 
-            pair!!.first?.let { streamInfoList.add(StreamInfo(streamName, it)) }
+                pair!!.first?.let { streamInfoList[searchDirection.direction]!!.add(StreamInfo(streamName, it)) }
+            }
         }
 
         return streamInfoList

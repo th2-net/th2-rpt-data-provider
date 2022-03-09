@@ -24,6 +24,7 @@ import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedExcepti
 import com.exactpro.th2.rptdataprovider.entities.exceptions.CodecResponseException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
+import com.exactpro.th2.rptdataprovider.entities.internal.SearchDirection
 import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
@@ -31,10 +32,8 @@ import com.exactpro.th2.rptdataprovider.entities.sse.EventType
 import com.exactpro.th2.rptdataprovider.entities.sse.HttpWriter
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
-import com.exactpro.th2.rptdataprovider.grpc.RptDataProviderGrpcHandler
 import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
-import io.grpc.Status
 import io.ktor.application.*
 import io.ktor.features.*
 import io.ktor.http.*
@@ -48,7 +47,6 @@ import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.nio.channels.ClosedChannelException
-import java.time.Instant
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -442,18 +440,23 @@ class HttpServer(private val applicationContext: Context) {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "message ids", null, false, false, queryParametersMap) {
                         val streams = queryParametersMap["stream"]
-                        val timestamp =
-                            queryParametersMap["startTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) }
+                        val timestamp = queryParametersMap["startTimestamp"]
 
                         when {
                             streams.isNullOrEmpty() ->
                                 throw InvalidRequestException("Stream list cannot be empty")
-                            timestamp == null ->
+                            timestamp.isNullOrEmpty() ->
                                 throw InvalidRequestException("Start timestamp cannot be empty")
                             else -> {
-                                val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
-                                val request = SseMessageSearchRequest(queryParametersMap,filterPredicate)
-                                searchMessagesHandler.getIds(request)
+                                val requests = SearchDirection.values().map { it.direction }.map {
+                                    val mutableMap = queryParametersMap.toMutableMap()
+                                    mutableMap["searchDirection"] = listOf(it)
+                                    SseMessageSearchRequest(
+                                        mutableMap,
+                                        messageFiltersPredicateFactory.build(mutableMap)
+                                    )
+                                }
+                                searchMessagesHandler.getIds(requests)
                             }
                         }
                     }
