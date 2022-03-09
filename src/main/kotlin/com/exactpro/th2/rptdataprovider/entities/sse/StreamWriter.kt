@@ -79,6 +79,10 @@ interface StreamWriter {
             metric.labels("decode_all").observe(info.decodeTimeAll().toDouble() / 1000)
         }
 
+        fun setSendToCodecTime(sendingTime: Long) {
+            metric.labels("send_to_codec").observe(sendingTime.toDouble() / 1000)
+        }
+
         fun setFilter(info: PipelineStepsInfo) {
             metric.labels("filter").observe(info.filterTime().toDouble() / 1000)
         }
@@ -90,6 +94,7 @@ interface StreamWriter {
         fun setSerializing(info: PipelineStepsInfo) {
             metric.labels("serializing").observe(info.serializingTime.toDouble() / 1000)
         }
+
 
 
         fun setSendingTime(sendingTime: Long) {
