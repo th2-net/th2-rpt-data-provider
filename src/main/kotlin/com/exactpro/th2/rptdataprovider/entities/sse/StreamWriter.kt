@@ -96,7 +96,6 @@ interface StreamWriter {
         }
 
 
-
         fun setSendingTime(sendingTime: Long) {
             metric.labels("sending").observe(sendingTime.toDouble() / 1000)
         }
@@ -200,8 +199,6 @@ class GrpcWriter(
     // yes, channel of deferred responses is required, since the order is critical
     private val responses = Channel<Deferred<List<StreamResponse>>>(responseBufferCapacity)
 
-    private val counter = AtomicLong(0)
-
     init {
         scope.launch {
             for (response in responses) {
@@ -210,11 +207,7 @@ class GrpcWriter(
                 }
 
                 val sendDuration = measureTimeMillis {
-                    awaited.value.forEach {
-                        if (counter.incrementAndGet() % 100 == 0L) {
-                            writer.onNext(it)
-                        }
-                    }
+                    awaited.value.forEach { writer.onNext(it) }
                 }
 
                 StreamWriter.setSendingTime(sendDuration)
