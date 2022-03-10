@@ -105,14 +105,17 @@ class MessageFilter(
                     }.value
 
                     pipelineStatus.filterEnd(streamName.toString())
+
+                    parsedMessage.also {
+                        it.info.startFilter = timeStart
+                        it.info.endFilter = System.currentTimeMillis()
+                        StreamWriter.setFilter(it.info)
+                    }
+
                     if (filtered.finalFiltered) {
                         sendToChannel(
                             PipelineFilteredMessage(
-                                parsedMessage.also {
-                                    it.info.startFilter = timeStart
-                                    it.info.endFilter = System.currentTimeMillis()
-                                    StreamWriter.setFilter(it.info)
-                                },
+                                parsedMessage,
                                 filtered
                             )
                         )

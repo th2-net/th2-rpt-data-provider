@@ -95,6 +95,9 @@ interface StreamWriter {
             metric.labels("serializing").observe(info.serializingTime.toDouble() / 1000)
         }
 
+        fun setMerging(time: Long) {
+            metric.labels("merging").observe(time.toDouble() / 1000)
+        }
 
         fun setSendingTime(sendingTime: Long) {
             metric.labels("sending").observe(sendingTime.toDouble() / 1000)

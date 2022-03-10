@@ -22,6 +22,7 @@ import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidInitializatio
 import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
+import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
@@ -29,6 +30,8 @@ import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.time.Instant
+import kotlin.time.ExperimentalTime
+import kotlin.time.measureTimedValue
 
 //FIXME: Check stream stop condition and streaminfo object
 class StreamMerger(
@@ -155,7 +158,7 @@ class StreamMerger(
         }
     }
 
-
+    @OptIn(ExperimentalTime::class)
     override suspend fun processMessage() {
         coroutineScope {
 
@@ -164,7 +167,12 @@ class StreamMerger(
             messageStreams.forEach { it.init() }
 
             do {
-                val nextMessage = getNextMessage()
+                val nextMessage = measureTimedValue {
+                     getNextMessage()
+                }.let {
+                    StreamWriter.setMerging(it.duration.inMilliseconds.toLong())
+                    it.value
+                }
 
                 val inTimeRange = inTimeRange(nextMessage)
 
