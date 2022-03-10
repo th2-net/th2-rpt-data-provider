@@ -19,7 +19,6 @@ package com.exactpro.th2.rptdataprovider.entities.sse
 import com.exactpro.th2.dataprovider.grpc.StreamResponse
 import com.exactpro.th2.dataprovider.grpc.StreamsInfo
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineFilteredMessage
-import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepObject
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepsInfo
 import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
@@ -29,13 +28,11 @@ import com.exactpro.th2.rptdataprovider.handlers.PipelineStatusSnapshot
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.grpc.stub.StreamObserver
 import io.prometheus.client.Histogram
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.launch
 import mu.KotlinLogging
 import java.io.Writer
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.roundToInt
 import kotlin.system.measureTimeMillis
@@ -192,18 +189,30 @@ class GrpcWriter(
     responseBufferCapacity: Int,
     private val writer: StreamObserver<StreamResponse>,
     private val jacksonMapper: ObjectMapper,
-    private val scope: CoroutineScope
+    private val writerPool: CoroutineScope
 ) : StreamWriter {
-
-    private val logger = KotlinLogging.logger { }
-
     //FIXME: List<StreamResponse> is a temporary solution to send messages group without merging the content
 
     // yes, channel of deferred responses is required, since the order is critical
     private val responses = Channel<Deferred<List<StreamResponse>>>(responseBufferCapacity)
 
+    companion object {
+//        private const val poolSize = 5
+
+        private val logger = KotlinLogging.logger { }
+//
+//        val handler = CoroutineExceptionHandler { _, exception ->
+//            logger.error(exception) { "GRPC send error" }
+//        }
+//
+//        private val writerPool = CoroutineScope(
+//            Executors.newFixedThreadPool(poolSize).asCoroutineDispatcher() + handler
+//        )
+    }
+
+
     init {
-        scope.launch {
+        writerPool.launch {
             for (response in responses) {
                 val awaited = measureTimedValue {
                     response.await()
@@ -226,7 +235,7 @@ class GrpcWriter(
         val result = CompletableDeferred<List<StreamResponse>>()
         responses.send(result)
 
-        scope.launch {
+        writerPool.launch {
             result.complete(
                 listOf(
                     StreamResponse.newBuilder()
@@ -244,7 +253,7 @@ class GrpcWriter(
         val result = CompletableDeferred<List<StreamResponse>>()
         responses.send(result)
 
-        scope.launch {
+        writerPool.launch {
             result.complete(
                 let {
                     val convertedMessage = measureTimedValue {
@@ -265,7 +274,7 @@ class GrpcWriter(
         val result = CompletableDeferred<List<StreamResponse>>()
         responses.send(result)
 
-        scope.launch {
+        writerPool.launch {
             result.complete(
                 listOf(
                     StreamResponse.newBuilder()
@@ -288,7 +297,7 @@ class GrpcWriter(
         val result = CompletableDeferred<List<StreamResponse>>()
         responses.send(result)
 
-        scope.launch {
+        writerPool.launch {
             result.complete(
                 listOf(
                     StreamResponse.newBuilder()
@@ -305,7 +314,7 @@ class GrpcWriter(
         val result = CompletableDeferred<List<StreamResponse>>()
         responses.send(result)
 
-        scope.launch {
+        writerPool.launch {
             result.complete(
                 listOf(
                     StreamResponse.newBuilder().setStreamInfo(

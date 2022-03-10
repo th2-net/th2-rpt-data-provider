@@ -40,12 +40,14 @@ import com.google.protobuf.MessageOrBuilder
 import com.google.protobuf.TextFormat
 import io.grpc.Status
 import io.grpc.stub.StreamObserver
+import io.ktor.http.*
 import io.ktor.server.engine.*
 import io.ktor.util.*
 import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import org.apache.commons.lang3.exception.ExceptionUtils
+import java.util.concurrent.Executors
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -87,6 +89,8 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
                 .register()
 
         private val logger = KotlinLogging.logger {}
+
+        private val grpcThreadPool = Executors.newFixedThreadPool(20).asCoroutineDispatcher()
 
     }
 
@@ -211,7 +215,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
         grpcContext: io.grpc.Context,
         calledFun: Streaming
     ) {
-        coroutineScope {
+        CoroutineScope(grpcThreadPool + CoroutineExceptionHandler { _, exception -> throw exception }).launch {
             val job = launch {
                 checkContext(grpcContext)
             }
@@ -220,7 +224,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
                 context.configuration.grpcWriterMessageBuffer.value.toInt(),
                 responseObserver,
                 context.jacksonMapper,
-                this@coroutineScope
+                this
             )
 
             try {
