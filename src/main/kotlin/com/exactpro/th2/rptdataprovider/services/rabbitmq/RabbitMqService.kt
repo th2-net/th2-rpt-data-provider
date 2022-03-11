@@ -17,9 +17,13 @@
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
 import com.exactpro.th2.common.grpc.MessageGroupBatch
+import com.exactpro.th2.common.message.direction
+import com.exactpro.th2.common.message.sequence
+import com.exactpro.th2.common.message.sessionAlias
 import com.exactpro.th2.common.schema.message.MessageListener
 import com.exactpro.th2.common.schema.message.MessageRouter
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
+import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.util.concurrent.ConcurrentHashMap
@@ -36,7 +40,10 @@ class RabbitMqService(
     }
 
     private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
-    private val pendingRequests = ConcurrentHashMap<CodecId, PendingCodecBatchRequest>()
+    private val pendingRequests = ConcurrentHashMap<CodecRequestId, PendingCodecBatchRequest>()
+
+    private val usePinAttributes = configuration.codecUsePinAttributes.value.toBoolean()
+
     private val maximumPendingRequests = configuration.codecPendingBatchLimit.value.toInt()
 
     private val mqRequestSenderScope = CoroutineScope(
@@ -47,21 +54,38 @@ class RabbitMqService(
         Executors.newFixedThreadPool(configuration.codecCallbackThreadPool.value.toInt()).asCoroutineDispatcher()
     )
 
+    private val codecLatency = PipelineStatus.codecLatency
+
     @Suppress("unused")
-    private val receiveChannel = messageRouterParsedBatch.subscribeAll(
-        MessageListener { _, decodedBatch ->
-            mqCallbackScope.launch {
-                val response = MessageGroupBatchWrapper(decodedBatch)
+    private val receiveChannel = mqCallbackScope.launch {
+        messageRouterParsedBatch.subscribeAll(
+            MessageListener { _, decodedBatch ->
+                mqCallbackScope.launch {
 
-                logger.trace { "codec response with hash ${response.requestHash.hashCode()} has been received" }
+                    val response = MessageGroupBatchWrapper(decodedBatch)
 
-                pendingRequests.remove(response.requestHash)?.completableDeferred?.complete(response)
-                    ?: logger.debug { "codec response ${response.requestHash} has no matching requests" }
-            }
-        },
+                    logger.trace { "codec response with hash ${response.responseHash} has been received" }
 
-        "from_codec"
-    )
+                    pendingRequests.remove(response.requestId)?.let {
+                        codecLatency.gaugeDec(listOf(it.streamName))
+                        codecLatency.setDuration(it.startTimestamp.toDouble(), listOf(it.streamName))
+                        it.completableDeferred.complete(response)
+                    }
+                        ?: logger.trace {
+                            val firstSequence =
+                                decodedBatch.groupsList.firstOrNull()?.messagesList?.firstOrNull()?.sequence
+                            val lastSequence =
+                                decodedBatch.groupsList?.lastOrNull()?.messagesList?.lastOrNull()?.sequence
+                            val stream =
+                                "${decodedBatch.groupsList.firstOrNull()?.messagesList?.firstOrNull()?.message?.sessionAlias}:${decodedBatch.groupsList.firstOrNull()?.messagesList?.firstOrNull()?.message?.direction.toString()}"
+                            "codec response with hash ${response.responseHash} has no matching requests (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} requestId=${response.requestId})"
+                        }
+                }
+            },
+
+            "from_codec"
+        )
+    }
 
     suspend fun sendToCodec(request: CodecBatchRequest): CodecBatchResponse {
 
@@ -70,30 +94,66 @@ class RabbitMqService(
                 delay(100)
             }
 
-            pendingRequests.computeIfAbsent(request.requestHash) {
+            pendingRequests.computeIfAbsent(request.requestId) {
                 val pendingRequest = request.toPending()
 
                 mqCallbackScope.launch {
                     delay(responseTimeout)
 
-                    pendingRequests.remove(request.requestHash)
-
                     pendingRequest.completableDeferred.let {
-                        if (it.isActive) {
+                        if (it.isActive &&
+                            pendingRequests[request.requestId]?.completableDeferred == pendingRequest.completableDeferred
+                        ) {
+
+                            pendingRequests.remove(request.requestId)
                             it.complete(null)
-                            logger.warn { "codec request timed out after $responseTimeout ms" }
+
+                            codecLatency.gaugeDec(listOf(request.streamName))
+                            codecLatency.setDuration(
+                                pendingRequest.startTimestamp.toDouble(),
+                                listOf(request.streamName)
+                            )
+
+                            logger.warn {
+                                val firstSequence =
+                                    request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sequence
+                                val lastSequence =
+                                    request.protobufRawMessageBatch.groupsList.last()?.messagesList?.last()?.rawMessage?.sequence
+                                val stream =
+                                    "${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sessionAlias}:${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.direction.toString()}"
+
+                                "codec request timed out after $responseTimeout ms (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} hash=${request.requestHash}) requestId=${request.requestId}"
+                            }
                         }
                     }
                 }
 
                 try {
-                    val sessionAlias =
-                        request.protobufRawMessageBatch.groupsList
-                            .first().messagesList
-                            .first().rawMessage.metadata.id.connectionId.sessionAlias
 
-                    messageRouterRawBatch.sendAll(request.protobufRawMessageBatch, sessionAlias)
+                    if (usePinAttributes) {
+                        val sessionAlias =
+                            request.protobufRawMessageBatch.groupsList
+                                .first().messagesList
+                                .first().rawMessage.metadata.id.connectionId.sessionAlias
 
+                        codecLatency.gaugeInc(listOf(request.streamName))
+
+                        messageRouterRawBatch.sendAll(request.protobufRawMessageBatch, sessionAlias)
+                    } else {
+                        messageRouterRawBatch.sendAll(request.protobufRawMessageBatch)
+                    }
+
+                    logger.trace {
+                        val firstSequence =
+                            request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sequence
+                        val lastSequence =
+                            request.protobufRawMessageBatch.groupsList.last()?.messagesList?.last()?.rawMessage?.sequence
+                        val stream =
+                            "${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sessionAlias}:${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.direction.toString()}"
+
+
+                        "codec request with hash ${request.requestHash} has been sent (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} hash=${request.requestHash}) requestId=${request.requestId})"
+                    }
                     logger.debug { "codec request with hash ${request.requestHash.hashCode()} has been sent" }
 
                 } catch (e: Exception) {
@@ -107,4 +167,3 @@ class RabbitMqService(
         }
     }
 }
-

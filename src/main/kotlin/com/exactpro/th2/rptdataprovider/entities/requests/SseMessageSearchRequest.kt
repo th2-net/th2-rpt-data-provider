@@ -15,6 +15,7 @@
  ******************************************************************************/
 package com.exactpro.th2.rptdataprovider.entities.requests
 
+import com.exactpro.cradle.Direction
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.dataprovider.grpc.MessageSearchRequest
@@ -25,17 +26,25 @@ import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.grpcDirectionToCradle
 import java.time.Instant
 
+data class StreamPointer(
+    val sequence: Long,
+    val streamName: String,
+    val direction: Direction,
+    val hasStarted: Boolean
+)
+
 data class SseMessageSearchRequest(
     val filterPredicate: FilterPredicate<MessageWithMetadata>,
     val startTimestamp: Instant?,
     val stream: List<String>,
     val searchDirection: TimeRelation,
     val endTimestamp: Instant?,
-    val resumeFromId: String?,
     val resultCountLimit: Int?,
     val attachedEvents: Boolean,
     val lookupLimitDays: Int?,
-    val resumeFromIdsList: List<StoredMessageId>
+    val resumeFromIdsList: List<StreamPointer>,
+    val includeProtocols: List<String>?,
+    val excludeProtocols: List<String>?
 ) {
 
     companion object {
@@ -57,11 +66,24 @@ data class SseMessageSearchRequest(
             )
         } ?: TimeRelation.AFTER,
         endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
-        resumeFromId = parameters["resumeFromId"]?.firstOrNull(),
-        resumeFromIdsList = parameters["messageId"]?.map { StoredMessageId.fromString(it) } ?: emptyList(),
+
+        //FIXME: negative value is used to mark a stream that has not yet started. This needs to be replaced with an explicit flag
+        resumeFromIdsList = parameters["messageId"]
+            ?.map {
+                StoredMessageId.fromString(it).let { id ->
+                    StreamPointer(
+                        id.index, id.streamName, id.direction, id.index > 0
+                    )
+                }
+            }
+            ?: emptyList(),
+
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt(),
         attachedEvents = parameters["attachedEvents"]?.firstOrNull()?.toBoolean() ?: false,
-        lookupLimitDays = parameters["lookupLimitDays"]?.firstOrNull()?.toInt()
+        lookupLimitDays = parameters["lookupLimitDays"]?.firstOrNull()?.toInt(),
+
+        includeProtocols = parameters["includeProtocols"],
+        excludeProtocols = parameters["excludeProtocols"]
     )
 
     constructor(request: MessageSearchRequest, filterPredicate: FilterPredicate<MessageWithMetadata>) : this(
@@ -91,12 +113,12 @@ data class SseMessageSearchRequest(
             request.resultCountLimit.value
         } else null,
 
+
+        //FIXME: negative value is used to mark a stream that has not yet started. This needs to be replaced with an explicit flag
         resumeFromIdsList = if (request.messageIdList.isNotEmpty()) {
             request.messageIdList.map {
-                StoredMessageId(
-                    it.connectionId.sessionAlias,
-                    grpcDirectionToCradle(it.direction),
-                    it.sequence
+                StreamPointer(
+                    it.sequence, it.connectionId.sessionAlias, grpcDirectionToCradle(it.direction), it.sequence > 0
                 )
             }
         } else emptyList(),
@@ -105,7 +127,9 @@ data class SseMessageSearchRequest(
 
         lookupLimitDays = null,
 
-        resumeFromId = null
+        includeProtocols = null,
+
+        excludeProtocols = null
     )
 
     private fun checkEndTimestamp() {
@@ -121,8 +145,8 @@ data class SseMessageSearchRequest(
     }
 
     private fun checkStartPoint() {
-        if (startTimestamp == null && resumeFromId == null && resumeFromIdsList.isEmpty())
-            throw InvalidRequestException("One of the 'startTimestamp' or 'resumeFromId' or 'messageId' must not be null")
+        if (startTimestamp == null && resumeFromIdsList.isEmpty())
+            throw InvalidRequestException("One of the 'startTimestamp' or 'messageId' must not be null")
     }
 
     private fun checkStreamList() {

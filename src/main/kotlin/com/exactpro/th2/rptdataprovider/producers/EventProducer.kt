@@ -29,6 +29,7 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundExcep
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.tryToGetTestEvents
 import com.fasterxml.jackson.databind.ObjectMapper
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -170,7 +171,8 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
             }
         }.let {
             if (!request.metadataOnly && request.attachedMessages
-                || request.filterPredicate.getSpecialTypes().contains(NEED_ATTACHED_MESSAGES)) {
+                || request.filterPredicate.getSpecialTypes().contains(NEED_ATTACHED_MESSAGES)
+            ) {
                 setAttachedMessage(it)
             } else {
                 it
@@ -191,7 +193,8 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
             }
         }.let {
             if (!request.metadataOnly && request.attachedMessages
-                || request.filterPredicate.getSpecialTypes().contains(NEED_ATTACHED_MESSAGES)) {
+                || request.filterPredicate.getSpecialTypes().contains(NEED_ATTACHED_MESSAGES)
+            ) {
                 setAttachedMessage(it)
             } else {
                 it
@@ -247,6 +250,8 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
                         attachedMessageIds = event.id.eventId.let {
                             try {
                                 cradle.getMessageIdsSuspend(it).map(Any::toString).toSet()
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: Exception) {
                                 KotlinLogging.logger { }
                                     .error(e) { "unable to get messages attached to event (id=${event.id})" }

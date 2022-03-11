@@ -32,8 +32,9 @@ class ChainBuilder(
     fun buildChain(): StreamMerger {
         val streamNames = request.stream.flatMap { stream -> Direction.values().map { StreamName(stream, it) } }
 
+        pipelineStatus.addStreams(streamNames.map { it.toString() })
+
         val dataStreams = streamNames.map { streamName ->
-            pipelineStatus.addStream(streamName.toString())
 
             val messageExtractor = MessageExtractor(
                 context,

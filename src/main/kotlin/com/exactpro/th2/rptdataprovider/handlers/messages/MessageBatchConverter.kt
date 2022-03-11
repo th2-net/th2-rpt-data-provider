@@ -1,10 +1,12 @@
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.th2.common.grpc.*
+import com.exactpro.th2.common.message.sequence
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineCodecRequest
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
@@ -54,43 +56,75 @@ class MessageBatchConverter(
         pipelineStatus
     )
 
+    private val included = searchRequest.includeProtocols
+    private val excluded = searchRequest.excludeProtocols
+
     override suspend fun processMessage() {
         val pipelineMessage = previousComponent!!.pollMessage()
 
         if (pipelineMessage is PipelineRawBatch) {
 
+            pipelineStatus.convertStart(
+                streamName.toString(),
+                pipelineMessage.storedBatchWrapper.trimmedMessages.size.toLong()
+            )
+
             logger.trace { "received raw batch (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.fullBatch.id})" }
+
+            val filteredMessages = pipelineMessage.storedBatchWrapper.trimmedMessages
+                .map {
+                    MessageGroup.newBuilder().addMessages(
+                        AnyMessage.newBuilder()
+                            .setRawMessage(RawMessage.parseFrom(it.content))
+                            .build()
+                    ).build() to it
+                }
+                .filter { (messages, _) ->
+                    val message = messages.messagesList.firstOrNull()?.message
+                    val protocol = message?.metadata?.protocol
+
+                    ((included.isNullOrEmpty() || included.contains(protocol))
+                            && (excluded.isNullOrEmpty() || !excluded.contains(protocol)))
+                        .also {
+                            logger.trace { "message ${message?.sequence} has protocol $protocol (matchesProtocolFilter=${it}) (stream=${streamName.toString()} batchId=${pipelineMessage.storedBatchWrapper.fullBatch.id})" }
+                        }
+                }
+
 
             val codecRequest = PipelineCodecRequest(
                 pipelineMessage.streamEmpty,
                 pipelineMessage.lastProcessedId,
                 pipelineMessage.lastScannedTime,
-                pipelineMessage.storedBatchWrapper,
-
+                pipelineMessage.storedBatchWrapper.copy(trimmedMessages = filteredMessages.map { it.second }),
                 CodecBatchRequest(
                     MessageGroupBatch
                         .newBuilder()
-                        .addAllGroups(
-
-                            pipelineMessage.storedBatchWrapper.trimmedMessages
-                                .map {
-                                    MessageGroup.newBuilder().addMessages(
-                                        AnyMessage.newBuilder().setRawMessage(RawMessage.parseFrom(it.content)).build()
-                                    ).build()
-                                }
-
-                        )
-                        .build()
+                        .addAllGroups(filteredMessages.map { it.first })
+                        .build(),
+                    streamName.toString()
                 )
             )
 
-            sendToChannel(codecRequest)
+            pipelineStatus.convertEnd(
+                streamName.toString(),
+                pipelineMessage.storedBatchWrapper.trimmedMessages.size.toLong()
+            )
 
-            logger.trace { "converted batch is sent downstream (stream=${streamName.toString()} id=${codecRequest.storedBatchWrapper.fullBatch.id} requestHash=${codecRequest.codecRequest.requestHash})" }
+            if (codecRequest.codecRequest.protobufRawMessageBatch.groupsCount > 0) {
+                sendToChannel(codecRequest)
+                logger.trace { "converted batch is sent downstream (stream=${streamName.toString()} id=${codecRequest.storedBatchWrapper.fullBatch.id} requestHash=${codecRequest.codecRequest.requestHash})" }
+            } else {
+                logger.trace { "converted batch is discarded because it has no messages (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.fullBatch.id})" }
+            }
+
+            pipelineStatus.convertSendDownstream(
+                streamName.toString(),
+                pipelineMessage.storedBatchWrapper.trimmedMessages.size.toLong()
+            )
 
             pipelineStatus.countParsePrepared(
                 streamName.toString(),
-                pipelineMessage.storedBatchWrapper.trimmedMessages.count().toLong()
+                filteredMessages.size.toLong()
             )
 
         } else {
