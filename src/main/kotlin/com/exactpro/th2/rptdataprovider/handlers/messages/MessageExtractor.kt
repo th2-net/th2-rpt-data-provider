@@ -58,7 +58,6 @@ class MessageExtractor(
     private var lastElement: StoredMessageId? = null
     private var lastTimestamp: Instant? = null
 
-
     init {
         externalScope.launch {
             try {
