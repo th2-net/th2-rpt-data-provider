@@ -118,20 +118,21 @@ class SearchMessagesHandler(private val applicationContext: Context) {
     @OptIn(ExperimentalTime::class, InternalCoroutinesApi::class)
     suspend fun getIds(requests: List<SseMessageSearchRequest>): Map<String, List<StreamInfo>> {
         val pipelineStatus = PipelineStatus(context = applicationContext)
-        val streamNames = requests[0].stream.flatMap { stream -> Direction.values().map { StreamName(stream, it) } }
+
+        val streamNames = requests.first().stream.flatMap { stream ->
+            Direction.values().map { StreamName(stream, it) }
+        }
+
         val coroutineScope = CoroutineScope(coroutineContext + Job(coroutineContext[Job]))
         pipelineStatus.addStreams(streamNames.map { it.toString() })
 
-        val streamInfoList = mutableMapOf<String, MutableList<StreamInfo>>()
-        streamInfoList[SearchDirection.NEXT.direction] = mutableListOf()
-        streamInfoList[SearchDirection.PREVIOUS.direction] = mutableListOf()
+        val streamInfoList = mutableMapOf<TimeRelation, MutableList<StreamInfo>>()
+        streamInfoList[TimeRelation.AFTER] = mutableListOf()
+        streamInfoList[TimeRelation.BEFORE] = mutableListOf()
 
-        streamNames.forEach { streamName ->
-            requests.forEach { request ->
-
-                val searchDirection = if (request.searchDirection === TimeRelation.AFTER) SearchDirection.NEXT else SearchDirection.PREVIOUS
-
-                val messageExtractor = MessageExtractor(
+        val extractors = streamNames.flatMap { streamName ->
+            requests.map { request ->
+                MessageExtractor(
                     applicationContext,
                     request,
                     streamName,
@@ -139,25 +140,30 @@ class SearchMessagesHandler(private val applicationContext: Context) {
                     1,
                     pipelineStatus
                 )
-
-                var pair: Pair<StoredMessageId?, Boolean>? = null
-
-                do {
-                    messageExtractor.pollMessage().let {
-                        pair = if (it is PipelineRawBatch) {
-                            val storedMessage = it.storedBatchWrapper.trimmedMessages.firstOrNull()
-                            Pair(storedMessage?.id, false)
-                        } else {
-                            it.streamEmpty
-                            Pair(null, it.streamEmpty)
-                        }
-                    }
-                } while (pair?.first == null && !pair?.second!!)
-
-                pair!!.first?.let { streamInfoList[searchDirection.direction]!!.add(StreamInfo(streamName, it)) }
             }
         }
 
-        return streamInfoList
+        extractors.forEach { messageExtractor ->
+            var pair: Pair<StoredMessageId?, Boolean>
+
+            do {
+                messageExtractor.pollMessage().let {
+                    pair = if (it is PipelineRawBatch) {
+                        val storedMessage = it.storedBatchWrapper.trimmedMessages.firstOrNull()
+                        Pair(storedMessage?.id, it.streamEmpty)
+                    } else {
+                        Pair(null, it.streamEmpty)
+                    }
+                }
+            } while (pair.first == null && !pair.second)
+
+            pair.first?.let {
+                streamInfoList
+                    .getValue(messageExtractor.request.searchDirection)
+                    .add(StreamInfo(messageExtractor.streamName!!, it))
+            }
+        }
+
+        return streamInfoList.entries.associate { it.key.label to it.value }
     }
 }

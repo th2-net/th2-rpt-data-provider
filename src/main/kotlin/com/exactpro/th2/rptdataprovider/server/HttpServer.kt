@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider.server
 
+import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.utils.CradleIdException
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.Metrics
@@ -24,7 +25,6 @@ import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedExcepti
 import com.exactpro.th2.rptdataprovider.entities.exceptions.CodecResponseException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
-import com.exactpro.th2.rptdataprovider.entities.internal.SearchDirection
 import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
@@ -439,26 +439,14 @@ class HttpServer(private val applicationContext: Context) {
                 get("/messageIds") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "message ids", null, false, false, queryParametersMap) {
-                        val streams = queryParametersMap["stream"]
-                        val timestamp = queryParametersMap["startTimestamp"]
-
-                        when {
-                            streams.isNullOrEmpty() ->
-                                throw InvalidRequestException("Stream list cannot be empty")
-                            timestamp.isNullOrEmpty() ->
-                                throw InvalidRequestException("Start timestamp cannot be empty")
-                            else -> {
-                                val requests = SearchDirection.values().map { it.direction }.map {
-                                    val mutableMap = queryParametersMap.toMutableMap()
-                                    mutableMap["searchDirection"] = listOf(it)
-                                    SseMessageSearchRequest(
-                                        mutableMap,
-                                        messageFiltersPredicateFactory.build(mutableMap)
-                                    )
-                                }
-                                searchMessagesHandler.getIds(requests)
-                            }
+                        val requests = TimeRelation.values().map {
+                            SseMessageSearchRequest(
+                                queryParametersMap,
+                                messageFiltersPredicateFactory.build(queryParametersMap),
+                                it
+                            ).also { request -> request.checkRequest() }
                         }
+                        searchMessagesHandler.getIds(requests)
                     }
                 }
             }
