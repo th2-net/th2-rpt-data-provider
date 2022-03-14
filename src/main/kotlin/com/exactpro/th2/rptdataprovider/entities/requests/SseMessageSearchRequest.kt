@@ -56,7 +56,11 @@ data class SseMessageSearchRequest(
         }
     }
 
-    constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<MessageWithMetadata>) : this(
+    constructor(
+        parameters: Map<String, List<String>>,
+        filterPredicate: FilterPredicate<MessageWithMetadata>,
+        searchDirection: TimeRelation
+    ) : this(
         filterPredicate = filterPredicate,
         startTimestamp = parameters["startTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
         stream = parameters["stream"] ?: emptyList(),
@@ -64,7 +68,7 @@ data class SseMessageSearchRequest(
             asCradleTimeRelation(
                 it
             )
-        } ?: TimeRelation.AFTER,
+        } ?: searchDirection,
         endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
 
         //FIXME: negative value is used to mark a stream that has not yet started. This needs to be replaced with an explicit flag
@@ -86,7 +90,11 @@ data class SseMessageSearchRequest(
         excludeProtocols = parameters["excludeProtocols"]
     )
 
-    constructor(request: MessageSearchRequest, filterPredicate: FilterPredicate<MessageWithMetadata>) : this(
+    constructor(
+        request: MessageSearchRequest,
+        filterPredicate: FilterPredicate<MessageWithMetadata>,
+        searchDirection: TimeRelation
+    ) : this(
         filterPredicate = filterPredicate,
         startTimestamp = if (request.hasStartTimestamp())
             request.startTimestamp.let {
@@ -100,7 +108,7 @@ data class SseMessageSearchRequest(
         searchDirection = request.searchDirection.let {
             when (it) {
                 PREVIOUS -> TimeRelation.BEFORE
-                else -> TimeRelation.AFTER
+                else -> searchDirection
             }
         },
 
@@ -130,6 +138,18 @@ data class SseMessageSearchRequest(
         includeProtocols = null,
 
         excludeProtocols = null
+    )
+
+    constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<MessageWithMetadata>) : this(
+        parameters = parameters,
+        filterPredicate = filterPredicate,
+        searchDirection = TimeRelation.AFTER
+    )
+
+    constructor(request: MessageSearchRequest, filterPredicate: FilterPredicate<MessageWithMetadata>) : this(
+        request = request,
+        filterPredicate = filterPredicate,
+        searchDirection = TimeRelation.AFTER
     )
 
     private fun checkEndTimestamp() {

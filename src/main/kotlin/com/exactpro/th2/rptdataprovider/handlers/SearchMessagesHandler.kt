@@ -16,15 +16,18 @@
 
 package com.exactpro.th2.rptdataprovider.handlers
 
+import com.exactpro.cradle.Direction
+import com.exactpro.cradle.TimeRelation
+import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
-import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
-import com.exactpro.th2.rptdataprovider.entities.internal.PipelineFilteredMessage
-import com.exactpro.th2.rptdataprovider.entities.internal.PipelineKeepAlive
-import com.exactpro.th2.rptdataprovider.entities.internal.StreamEndObject
+import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
+import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedMessageInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.messages.ChainBuilder
+import com.exactpro.th2.rptdataprovider.handlers.messages.MessageExtractor
 import com.exactpro.th2.rptdataprovider.handlers.messages.StreamMerger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collect
@@ -110,5 +113,57 @@ class SearchMessagesHandler(private val applicationContext: Context) {
                     }
                 }
         }
+    }
+
+    @OptIn(ExperimentalTime::class, InternalCoroutinesApi::class)
+    suspend fun getIds(requests: List<SseMessageSearchRequest>): Map<String, List<StreamInfo>> {
+        val pipelineStatus = PipelineStatus(context = applicationContext)
+
+        val streamNames = requests.first().stream.flatMap { stream ->
+            Direction.values().map { StreamName(stream, it) }
+        }
+
+        val coroutineScope = CoroutineScope(coroutineContext + Job(coroutineContext[Job]))
+        pipelineStatus.addStreams(streamNames.map { it.toString() })
+
+        val streamInfoList = mutableMapOf<TimeRelation, MutableList<StreamInfo>>()
+        streamInfoList[TimeRelation.AFTER] = mutableListOf()
+        streamInfoList[TimeRelation.BEFORE] = mutableListOf()
+
+        val extractors = streamNames.flatMap { streamName ->
+            requests.map { request ->
+                MessageExtractor(
+                    applicationContext,
+                    request,
+                    streamName,
+                    coroutineScope,
+                    1,
+                    pipelineStatus
+                )
+            }
+        }
+
+        extractors.forEach { messageExtractor ->
+            var pair: Pair<StoredMessageId?, Boolean>
+
+            do {
+                messageExtractor.pollMessage().let {
+                    pair = if (it is PipelineRawBatch) {
+                        val storedMessage = it.storedBatchWrapper.trimmedMessages.firstOrNull()
+                        Pair(storedMessage?.id, it.streamEmpty)
+                    } else {
+                        Pair(null, it.streamEmpty)
+                    }
+                }
+            } while (pair.first == null && !pair.second)
+
+            pair.first?.let {
+                streamInfoList
+                    .getValue(messageExtractor.request.searchDirection)
+                    .add(StreamInfo(messageExtractor.streamName!!, it))
+            }
+        }
+
+        return streamInfoList.entries.associate { it.key.label to it.value }
     }
 }

@@ -30,6 +30,8 @@ import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
+import com.exactpro.th2.rptdataprovider.isAfterOrEqual
+import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.time.Instant
@@ -56,7 +58,6 @@ class MessageExtractor(
 
     private var lastElement: StoredMessageId? = null
     private var lastTimestamp: Instant? = null
-
 
     init {
         externalScope.launch {
@@ -120,10 +121,14 @@ class MessageExtractor(
                                     it.isLessThan(resumeFromId.sequence)
                                 }
                             }
-                        } else {
+                        } else if (order == Order.DIRECT) {
                             request.startTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
                             request.endTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
+                        } else {
+                            request.startTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
+                            request.endTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
                         }
+
                     }.build()
             )
 
@@ -162,6 +167,15 @@ class MessageExtractor(
                                     it.timestamp.isBefore(startTimestamp)
                                 } else {
                                     it.timestamp.isAfter(startTimestamp)
+                                }
+                            } ?: false
+                        }
+                        .dropLastWhile {
+                            request.endTimestamp?.let { endTimestamp ->
+                                if (order == Order.DIRECT) {
+                                    it.timestamp.isAfterOrEqual(endTimestamp)
+                                } else {
+                                    it.timestamp.isBeforeOrEqual(endTimestamp)
                                 }
                             } ?: false
                         }
