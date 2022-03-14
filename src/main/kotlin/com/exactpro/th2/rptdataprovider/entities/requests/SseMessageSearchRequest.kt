@@ -59,7 +59,7 @@ data class SseMessageSearchRequest(
     constructor(
         parameters: Map<String, List<String>>,
         filterPredicate: FilterPredicate<MessageWithMetadata>,
-        searchDirection: TimeRelation = TimeRelation.AFTER
+        searchDirection: TimeRelation
     ) : this(
         filterPredicate = filterPredicate,
         startTimestamp = parameters["startTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
@@ -93,7 +93,7 @@ data class SseMessageSearchRequest(
     constructor(
         request: MessageSearchRequest,
         filterPredicate: FilterPredicate<MessageWithMetadata>,
-        searchDirection: TimeRelation = TimeRelation.AFTER
+        searchDirection: TimeRelation
     ) : this(
         filterPredicate = filterPredicate,
         startTimestamp = if (request.hasStartTimestamp())
@@ -138,6 +138,18 @@ data class SseMessageSearchRequest(
         includeProtocols = null,
 
         excludeProtocols = null
+    )
+
+    constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<MessageWithMetadata>) : this(
+        parameters = parameters,
+        filterPredicate = filterPredicate,
+        searchDirection = TimeRelation.AFTER
+    )
+
+    constructor(request: MessageSearchRequest, filterPredicate: FilterPredicate<MessageWithMetadata>) : this(
+        request = request,
+        filterPredicate = filterPredicate,
+        searchDirection = TimeRelation.AFTER
     )
 
     private fun checkEndTimestamp() {
