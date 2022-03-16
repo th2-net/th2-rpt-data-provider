@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider
 
+import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageFilter
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
@@ -23,6 +24,7 @@ import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.common.grpc.ConnectionID
 import com.exactpro.th2.common.grpc.MessageID
+import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -185,5 +187,3 @@ fun StoredMessageId.convertToProto(): MessageID {
         .setConnectionId(ConnectionID.newBuilder().setSessionAlias(streamName))
         .build()
 }
-
-
