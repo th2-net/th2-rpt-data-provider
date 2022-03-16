@@ -18,7 +18,6 @@ package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.cradle.Order
 import com.exactpro.cradle.TimeRelation
-import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
