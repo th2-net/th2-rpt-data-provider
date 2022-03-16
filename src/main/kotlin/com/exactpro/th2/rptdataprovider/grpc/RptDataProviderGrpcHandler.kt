@@ -90,8 +90,6 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
 
         private val logger = KotlinLogging.logger {}
 
-        private val grpcThreadPool = Executors.newFixedThreadPool(20).asCoroutineDispatcher()
-
     }
 
     val cradleService = this.context.cradleService
@@ -104,6 +102,10 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
 
     private val eventFiltersPredicateFactory = this.context.eventFiltersPredicateFactory
     private val messageFiltersPredicateFactory = this.context.messageFiltersPredicateFactory
+
+    private val grpcThreadPoolSize = context.configuration.grpcThreadPoolSize.value.toInt()
+    private val grpcThreadPool = Executors.newFixedThreadPool(grpcThreadPoolSize).asCoroutineDispatcher()
+
 
 
     private suspend fun checkContext(grpcContext: io.grpc.Context) {

@@ -56,6 +56,8 @@ class CustomConfigurationClass {
 
     val grpcWriterMessageBuffer: Int = 100
 
+    val grpcThreadPoolSize: Int = 20
+
     val cradleDispatcherPoolSize: Long = 1
 
     val sseSearchDelay: Long = 6000
@@ -205,4 +207,7 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
 
     val codecUsePinAttributes: Variable =
         Variable("codecUsePinAttributes", customConfiguration.codecUsePinAttributes.toString(), "true")
+
+    val grpcThreadPoolSize: Variable =
+        Variable("grpcThreadPoolSize", customConfiguration.grpcThreadPoolSize.toString(), "20")
 }
