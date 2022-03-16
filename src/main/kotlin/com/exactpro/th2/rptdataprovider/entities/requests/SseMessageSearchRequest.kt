@@ -23,6 +23,7 @@ import com.exactpro.th2.dataprovider.grpc.TimeRelation.PREVIOUS
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
+import com.exactpro.th2.rptdataprovider.entities.mappers.TimeRelationMapper
 import com.exactpro.th2.rptdataprovider.grpcDirectionToCradle
 import java.time.Instant
 
@@ -46,16 +47,6 @@ data class SseMessageSearchRequest(
     val includeProtocols: List<String>?,
     val excludeProtocols: List<String>?
 ) {
-
-    companion object {
-        private fun asCradleTimeRelation(value: String): TimeRelation {
-            if (value == "next") return TimeRelation.AFTER
-            if (value == "previous") return TimeRelation.BEFORE
-
-            throw InvalidRequestException("'$value' is not a valid timeline direction. Use 'next' or 'previous'")
-        }
-    }
-
     constructor(
         parameters: Map<String, List<String>>,
         filterPredicate: FilterPredicate<MessageWithMetadata>,
@@ -64,11 +55,7 @@ data class SseMessageSearchRequest(
         filterPredicate = filterPredicate,
         startTimestamp = parameters["startTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
         stream = parameters["stream"] ?: emptyList(),
-        searchDirection = parameters["searchDirection"]?.firstOrNull()?.let {
-            asCradleTimeRelation(
-                it
-            )
-        } ?: searchDirection,
+        searchDirection = parameters["searchDirection"]?.firstOrNull()?.let { TimeRelationMapper.fromHttpString(it) } ?: searchDirection,
         endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
 
         //FIXME: negative value is used to mark a stream that has not yet started. This needs to be replaced with an explicit flag
@@ -161,6 +148,21 @@ data class SseMessageSearchRequest(
         if (stream.isEmpty()) {
             throw InvalidRequestException("Streams list can not be empty")
         }
+    }
+
+    private fun checkTimestampAndId() {
+        if (startTimestamp!=null&&resumeFromIdsList.isNotEmpty())
+            throw InvalidRequestException("You cannot specify resume Id and start timestamp at the same time")
+    }
+
+    private fun checkResumeIds() {
+        if (resumeFromIdsList.size>1)
+            throw InvalidRequestException("you cannot specify more than one id")
+    }
+
+    fun checkIdsRequest() {
+        checkTimestampAndId()
+        checkResumeIds()
     }
 
     fun checkRequest() {

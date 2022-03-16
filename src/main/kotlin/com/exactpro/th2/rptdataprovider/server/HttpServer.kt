@@ -444,7 +444,10 @@ class HttpServer(private val applicationContext: Context) {
                                 queryParametersMap,
                                 messageFiltersPredicateFactory.build(queryParametersMap),
                                 it
-                            ).also { request -> request.checkRequest() }
+                            ).also { request ->
+                                request.checkRequest()
+                                request.checkIdsRequest()
+                            }
                         }
                         searchMessagesHandler.getIds(requests)
                     }
