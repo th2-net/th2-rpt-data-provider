@@ -55,7 +55,8 @@ data class SseMessageSearchRequest(
         filterPredicate = filterPredicate,
         startTimestamp = parameters["startTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
         stream = parameters["stream"] ?: emptyList(),
-        searchDirection = parameters["searchDirection"]?.firstOrNull()?.let { TimeRelationMapper.fromHttpString(it) } ?: searchDirection,
+        searchDirection = parameters["searchDirection"]?.firstOrNull()?.let { TimeRelationMapper.fromHttpString(it) }
+            ?: searchDirection,
         endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
 
         //FIXME: negative value is used to mark a stream that has not yet started. This needs to be replaced with an explicit flag
@@ -151,12 +152,12 @@ data class SseMessageSearchRequest(
     }
 
     private fun checkTimestampAndId() {
-        if (startTimestamp!=null&&resumeFromIdsList.isNotEmpty())
+        if (startTimestamp != null && resumeFromIdsList.isNotEmpty())
             throw InvalidRequestException("You cannot specify resume Id and start timestamp at the same time")
     }
 
     private fun checkResumeIds() {
-        if (resumeFromIdsList.size>1)
+        if (resumeFromIdsList.size > 1)
             throw InvalidRequestException("you cannot specify more than one id")
     }
 

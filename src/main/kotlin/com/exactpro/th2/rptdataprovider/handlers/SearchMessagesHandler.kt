@@ -117,8 +117,7 @@ class SearchMessagesHandler(private val applicationContext: Context) {
 
     @OptIn(ExperimentalTime::class, InternalCoroutinesApi::class)
     suspend fun getIds(requests: List<SseMessageSearchRequest>): Map<String, List<StreamInfo>> {
-        val resumeId =
-            requests.first().let { if (it.resumeFromIdsList.size == 1) it.resumeFromIdsList.first() else null }
+        val resumeId = requests.first().resumeFromIdsList.firstOrNull()
 
         val message = resumeId?.let {
             applicationContext.cradleService.getMessageSuspend(
@@ -130,13 +129,13 @@ class SearchMessagesHandler(private val applicationContext: Context) {
             )
         }
 
-        val requests = if (message != null) {
+        val resultRequests = message?.let {
             requests.map { it.copy(startTimestamp = message.timestamp) }
-        } else requests.map { it }
+        } ?: requests
 
         val pipelineStatus = PipelineStatus(context = applicationContext)
 
-        val streamNames = requests.first().stream.flatMap { stream ->
+        val streamNames = resultRequests.first().stream.flatMap { stream ->
             Direction.values().map { StreamName(stream, it) }
         }
 
@@ -148,7 +147,7 @@ class SearchMessagesHandler(private val applicationContext: Context) {
         streamInfoMap[TimeRelation.BEFORE] = mutableListOf()
 
         val extractors = streamNames.flatMap { streamName ->
-            requests.map { request ->
+            resultRequests.map { request ->
                 MessageExtractor(
                     applicationContext,
                     request,

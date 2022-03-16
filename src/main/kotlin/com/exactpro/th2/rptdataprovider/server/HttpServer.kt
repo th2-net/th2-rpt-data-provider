@@ -442,7 +442,7 @@ class HttpServer(private val applicationContext: Context) {
                         val requests = TimeRelation.values().map {
                             SseMessageSearchRequest(
                                 queryParametersMap,
-                                messageFiltersPredicateFactory.build(queryParametersMap),
+                                messageFiltersPredicateFactory.getEmptyPredicate(),
                                 it
                             ).also { request ->
                                 request.checkRequest()
