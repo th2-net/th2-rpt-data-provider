@@ -41,16 +41,16 @@ class CustomConfigurationClass {
 
     val keepAliveTimeout: Long = 5000
 
-    val messageExtractorOutputBatchBuffer: Int = 2
-    val messageConverterOutputBatchBuffer: Int = 2
-    val messageDecoderOutputBatchBuffer: Int = 2
-    val messageUnpackerOutputMessageBuffer: Int = 1000
-    val messageFilterOutputMessageBuffer: Int = 1000
+    val messageExtractorOutputBatchBuffer: Int = 1
+    val messageConverterOutputBatchBuffer: Int = 1
+    val messageDecoderOutputBatchBuffer: Int = 1
+    val messageUnpackerOutputMessageBuffer: Int = 100
+    val messageFilterOutputMessageBuffer: Int = 100
     val messageMergerOutputMessageBuffer: Int = 10
 
     val codecResponseTimeout: Int = 6000
-    val codecPendingBatchLimit: Int = 200
-    val codecCallbackThreadPool: Int = 10
+    val codecPendingBatchLimit: Int = 16
+    val codecCallbackThreadPool: Int = 4
     val codecRequestThreadPool: Int = 1
     val codecUsePinAttributes: Boolean = true
 

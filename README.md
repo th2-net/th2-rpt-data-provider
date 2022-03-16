@@ -203,7 +203,6 @@ spec:
     
     eventCacheSize: 1000 // internal event cache size
     messageCacheSize: 1000 // internal message cache size
-    codecCacheSize: 100 // size of the internal cache for parsed messages
     serverCacheTimeout: 60000 // cached event lifetime in milliseconds
     
     ioDispatcherThreadPoolSize: 10 // thread pool size for blocking database calls
@@ -213,33 +212,23 @@ spec:
     enableCaching: true // enables proxy and client cache (Cache-control response headers)
     notModifiedObjectsLifetime: 3600 // max-age in seconds
     rarelyModifiedObjects: 500 // max-age in seconds
-    frequentlyModifiedObjects: 100 // max-age in seconds
-    
-    maxMessagesLimit: 100 // limits how many messages can be requested from cradle per query
-    messageSearchPipelineBuffer: 500 // search/messages pipeline buffer size (defines how many messages could be processed concurrently)
-    
+              
     sseEventSearchStep: 200 // step size in seconds when requesting events 
     keepAliveTimeout: 5000 // timeout in milliseconds. keep_alive sending frequency
-    dbRetryDelay: 5000 // delay in milliseconds before repeated queries to the database
     cradleDispatcherPoolSize: 1 // number of threads in the cradle dispatcher
     sseSearchDelay: 5 // the number of seconds by which the search to the future is delayed when keepOpen = true
-
-    getEventsLimit: 100 // the maximum number of events that can be requested in the getEvents methodf
-
-    rabbitBatchMergeFrequency: 200 // messages are packed into batches after a given time (rabbitBatchMergeFrequency) or when the maximum batch size is reached (rabbitMergedBatchSize)
-    rabbitMergedBatchSize: 16      // 
-    
-    rabbitBatchMergeBuffer: 500 // size of the message batch buffer 
-    
-    decodeMessageConsumerCount: 64 // number of batch handlers running in parallel
-
-    messageContinuousStreamBuffer: 50 // number of batches in ContinuousStreamBuffer
-    
-    messageDecoderBuffer: 500 // number of batches in DecoderBuffer
-
-    messageFilterBuffer: 500 // number of batches in FilterBuffer
-
-    messageStreamMergerBuffer: 500 // number of batches in StreamMergerBuffer
+      
+    messageExtractorOutputBatchBuffer: 1       // buffer size of message search pipeline
+    messageConverterOutputBatchBuffer: 1
+    messageDecoderOutputBatchBuffer: 1
+    messageUnpackerOutputMessageBuffer: 100
+    messageFilterOutputMessageBuffer: 100
+    messageMergerOutputMessageBuffer: 10
+   
+    codecPendingBatchLimit: 16              // the total number of messages sent to the codec batches in parallel for all pipelines
+    codecCallbackThreadPool: 4              // thread pool for parsing messages received from codecs
+    codecRequestThreadPool: 1               // thread pool for sending message to codecs
+    grpcWriterMessageBuffer: 10            // buffer before send grpc response
 
     sendEmptyDelay: 100 // frequency of sending empty messages
 
