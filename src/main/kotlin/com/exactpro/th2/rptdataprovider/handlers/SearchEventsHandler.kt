@@ -31,6 +31,7 @@ import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
+import com.exactpro.th2.rptdataprovider.minInstant
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
@@ -214,21 +215,23 @@ class SearchEventsHandler(private val context: Context) {
         initTimestamp: Instant
     ): Sequence<Pair<Boolean, Pair<Instant, Instant>>> {
 
-        val isSearchInFuture = request.keepOpen && request.searchDirection == AFTER
-        var timestamp = initTimestamp to (request.endTimestamp ?: initTimestamp.plusSeconds(sseEventSearchStep))
+        var isSearchInFuture = false
+        var timestamp = initTimestamp to minInstant(request.endTimestamp ?: initTimestamp.plusSeconds(sseEventSearchStep), Instant.now())
 
         return sequence {
             do {
                 yield(isSearchInFuture to timestamp)
 
-                if (isSearchInFuture && timestamp.second.isAfter(Instant.now())) {
+                val jumpedOver = request.keepOpen && request.searchDirection == AFTER && timestamp.second.isAfterOrEqual(Instant.now())
+                if (isSearchInFuture && jumpedOver) {
+                    isSearchInFuture = true
                     timestamp =
                         timestamp.let { (f, s) -> f.plusSeconds(sseSearchDelay) to s.plusSeconds(sseSearchDelay) }
                 } else if (request.endTimestamp == null) {
                     timestamp =
                         timestamp.let { (f, s) -> f.plusSeconds(sseEventSearchStep) to s.plusSeconds(sseEventSearchStep) }
                 }
-            } while (request.keepOpen)
+            } while (true)
         }
     }
 
