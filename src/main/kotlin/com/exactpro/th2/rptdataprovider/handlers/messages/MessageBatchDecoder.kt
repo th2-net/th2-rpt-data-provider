@@ -9,7 +9,7 @@ import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchReques
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
-import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchResponse
+import com.exactpro.th2.rptdataprovider.services.CodecBatchResponse
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.isActive
@@ -106,7 +106,7 @@ class MessageBatchDecoder(
                     pipelineMessage.lastProcessedId,
                     pipelineMessage.lastScannedTime,
                     pipelineMessage.storedBatchWrapper,
-                    context.rabbitMqService.sendToCodec(pipelineMessage.codecRequest),
+                    context.decoderService.sendToCodec(pipelineMessage.codecRequest),
                     protocol
                 )
                 pipelineStatus.decodeEnd(streamName.toString(), pipelineMessage.codecRequest.protobufRawMessageBatch.groupsCount.toLong())

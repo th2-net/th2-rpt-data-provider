@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2022 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,17 +20,15 @@ import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.*
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.Message
-import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
-import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchRequest
-import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
+import com.exactpro.th2.rptdataprovider.services.CodecBatchRequest
+import com.exactpro.th2.rptdataprovider.services.DecoderService
 
 class MessageProducer(
     private val cradle: CradleService,
-    private val rabbitMqService: RabbitMqService
+    private val rabbitMqService: DecoderService
 ) {
-
     suspend fun fromId(id: StoredMessageId): Message {
 
         return cradle.getMessageSuspend(id)?.let { stored ->
@@ -62,8 +60,6 @@ class MessageProducer(
 
             Message(stored, decoded, stored.content, setOf())
         }
-
             ?: throw CradleMessageNotFoundException("message '${id}' does not exist in cradle")
     }
 }
-

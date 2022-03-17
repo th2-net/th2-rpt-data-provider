@@ -18,8 +18,8 @@ package com.exactpro.th2.rptdataprovider.entities.internal
 
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
-import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchRequest
-import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchResponse
+import com.exactpro.th2.rptdataprovider.services.CodecBatchRequest
+import com.exactpro.th2.rptdataprovider.services.CodecBatchResponse
 import java.time.Instant
 
 data class StreamEndObject(
