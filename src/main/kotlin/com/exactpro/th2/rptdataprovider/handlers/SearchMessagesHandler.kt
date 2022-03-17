@@ -29,6 +29,7 @@ import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.messages.ChainBuilder
 import com.exactpro.th2.rptdataprovider.handlers.messages.MessageExtractor
 import com.exactpro.th2.rptdataprovider.handlers.messages.StreamMerger
+import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flow
@@ -46,6 +47,9 @@ class SearchMessagesHandler(private val applicationContext: Context) {
 
     companion object {
         private val logger = KotlinLogging.logger { }
+        private val searchMessageRequests =
+            Counter.build("th2_search_messages", "Count of search message requests")
+                .register()
     }
 
     private val pipelineInfoSendDelay = applicationContext.configuration.pipelineInfoSendDelay.value.toLong()
@@ -66,6 +70,9 @@ class SearchMessagesHandler(private val applicationContext: Context) {
     @OptIn(ExperimentalTime::class, ExperimentalCoroutinesApi::class)
     suspend fun searchMessagesSse(request: SseMessageSearchRequest, writer: StreamWriter) {
         withContext(coroutineContext) {
+
+            searchMessageRequests.inc()
+
             val lastMessageIdCounter = AtomicLong(0)
             val pipelineStatus = PipelineStatus(context = applicationContext)
             var streamMerger: StreamMerger? = null
@@ -117,6 +124,9 @@ class SearchMessagesHandler(private val applicationContext: Context) {
 
     @OptIn(ExperimentalTime::class, InternalCoroutinesApi::class)
     suspend fun getIds(requests: List<SseMessageSearchRequest>): Map<String, List<StreamInfo>> {
+
+        searchMessageRequests.inc()
+
         val resumeId = requests.first().resumeFromIdsList.firstOrNull()
 
         val message = resumeId?.let {

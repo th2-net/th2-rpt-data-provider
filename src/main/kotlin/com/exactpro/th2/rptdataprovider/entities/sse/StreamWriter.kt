@@ -49,16 +49,6 @@ interface StreamWriter {
             .labelNames("step_name")
             .register()
 
-//        fun setMetrics(message: PipelineFilteredMessage) {
-//            with(message.info) {
-//                metric.labels("extract").observe(extractTime().toDouble() / 1000)
-//                metric.labels("convert").observe(convertTime().toDouble() / 1000)
-//                metric.labels("decode_codec").observe(decodeCodecResponse().toDouble() / 1000)
-//                metric.labels("decode_all").observe(decodeTimeAll().toDouble() / 1000)
-//                metric.labels("filter").observe(filterTime().toDouble() / 1000)
-//                metric.labels("serializing").observe(serializingTime.toDouble() / 1000)
-//            }
-//        }
 
         fun setExtract(info: PipelineStepsInfo) {
             metric.labels("extract").observe(info.extractTime().toDouble() / 1000)

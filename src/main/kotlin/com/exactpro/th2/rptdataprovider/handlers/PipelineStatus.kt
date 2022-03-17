@@ -131,14 +131,10 @@ class PipelineStatus(context: Context) {
             for (streamName in streams) {
                 this.streams[streamName] = PipelineStreamCounters()
                 metrics.forEach {
-                    it.remove(streamName)
                     it.labels(streamName)
                 }
-                codecLatency.remove(streamName)
                 codecLatency.labels(streamName)
             }
-            mergedMetric.clear()
-            sentMetric.clear()
             mergedMetric.labels(processingStartTimestamp.toString())
             sentMetric.labels(processingStartTimestamp.toString())
         }
