@@ -22,24 +22,26 @@ import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.TimeRelation.AFTER
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
-import com.exactpro.th2.rptdataprovider.*
+import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedEventInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
+import com.exactpro.th2.rptdataprovider.isAfterOrEqual
+import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
+import com.exactpro.th2.rptdataprovider.minInstant
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
+import com.exactpro.th2.rptdataprovider.tryToGetTestEvents
 import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel.Factory.BUFFERED
 import kotlinx.coroutines.flow.*
 import mu.KotlinLogging
 import java.time.Instant
-import java.time.LocalTime
-import java.time.ZoneOffset
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.CoroutineContext
@@ -208,81 +210,28 @@ class SearchEventsHandler(private val context: Context) {
     }
 
 
-    private fun changeOfDayProcessing(from: Instant, to: Instant): Iterable<Pair<Instant, Instant>> {
-        return if (from.atOffset(ZoneOffset.UTC).dayOfYear != to.atOffset(ZoneOffset.UTC).dayOfYear) {
-            val pivot = from.atOffset(ZoneOffset.UTC)
-                .plusDays(1).with(LocalTime.of(0, 0, 0, 0))
-                .toInstant()
-            listOf(Pair(from, pivot.minusNanos(1)), Pair(pivot, to))
-        } else {
-            listOf(Pair(from, to))
-        }
-    }
-
-
-    private fun getComparator(searchDirection: TimeRelation, endTimestamp: Instant?): (Instant) -> Boolean {
-        return if (searchDirection == AFTER) {
-            { timestamp: Instant -> timestamp.isBefore(endTimestamp ?: Instant.MAX) }
-        } else {
-            { timestamp: Instant -> timestamp.isAfter(endTimestamp ?: Instant.MIN) }
-        }
-    }
-
-
-    private fun getTimeIntervals(
-        request: SseEventSearchRequest,
-        sseEventSearchStep: Long,
-        initTimestamp: Instant
-    ): Sequence<Pair<Instant, Instant>> {
-
-        var timestamp = initTimestamp
-
-        return sequence {
-            val comparator = getComparator(request.searchDirection, request.endTimestamp)
-            while (comparator.invoke(timestamp)) {
-                yieldAll(
-                    if (request.searchDirection == AFTER) {
-                        val toTimestamp = minInstant(timestamp.plusSeconds(sseEventSearchStep), Instant.MAX)
-                        changeOfDayProcessing(timestamp, toTimestamp).also { timestamp = toTimestamp }
-                    } else {
-                        val fromTimestamp = maxInstant(timestamp.minusSeconds(sseEventSearchStep), Instant.MIN)
-                        changeOfDayProcessing(fromTimestamp, timestamp).reversed()
-                            .also { timestamp = fromTimestamp }
-                    }
-                )
-            }
-        }
-    }
-
-
     private suspend fun getNextTimestampGenerator(
         request: SseEventSearchRequest,
-        sseEventSearchStep: Long,
         initTimestamp: Instant
     ): Sequence<Pair<Boolean, Pair<Instant, Instant>>> {
 
         var isSearchInFuture = false
-        val isSearchNext = request.searchDirection == AFTER
-
-        var timeIntervals = getTimeIntervals(request, sseEventSearchStep, initTimestamp).iterator()
+        var timestamp = initTimestamp to minInstant(request.endTimestamp ?: initTimestamp.plusSeconds(sseEventSearchStep), Instant.now())
 
         return sequence {
-            while (timeIntervals.hasNext()) {
-                val timestamp = timeIntervals.next()
-                if (!isSearchInFuture && isSearchNext
-                    && timestamp.second.isAfter(maxInstant(Instant.now(), request.endTimestamp ?: Instant.MIN))
-                ) {
-                    if (request.keepOpen) {
-                        timeIntervals = getTimeIntervals(request, sseSearchDelay, timestamp.first).iterator()
-                        isSearchInFuture = true
-                        continue
-                    } else {
-                        yield(isSearchInFuture to timestamp)
-                        return@sequence
-                    }
-                }
+            do {
                 yield(isSearchInFuture to timestamp)
-            }
+
+                val jumpedOver = request.keepOpen && request.searchDirection == AFTER && timestamp.second.isAfterOrEqual(Instant.now())
+                if (isSearchInFuture && jumpedOver) {
+                    isSearchInFuture = true
+                    timestamp =
+                        timestamp.let { (f, s) -> f.plusSeconds(sseSearchDelay) to s.plusSeconds(sseSearchDelay) }
+                } else if (request.endTimestamp == null) {
+                    timestamp =
+                        timestamp.let { (f, s) -> f.plusSeconds(sseEventSearchStep) to s.plusSeconds(sseEventSearchStep) }
+                }
+            } while (true)
         }
     }
 
@@ -343,7 +292,7 @@ class SearchEventsHandler(private val context: Context) {
                 eventProducer.fromId(ProviderEventId(it))
             }
             val startTimestamp = resumeFromEvent?.startTimestamp ?: request.startTimestamp!!
-            val timeIntervals = getNextTimestampGenerator(request, sseEventSearchStep, startTimestamp)
+            val timeIntervals = getNextTimestampGenerator(request, startTimestamp)
             val parentEventCounter = ParentEventCounter(request.limitForParent)
 
             flow {
