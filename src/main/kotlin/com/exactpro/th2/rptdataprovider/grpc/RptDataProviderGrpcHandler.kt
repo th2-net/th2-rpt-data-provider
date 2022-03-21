@@ -34,13 +34,11 @@ import com.exactpro.th2.rptdataprovider.entities.sse.GrpcWriter
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.grpcDirectionToCradle
 import com.exactpro.th2.rptdataprovider.logMetrics
-import com.exactpro.th2.rptdataprovider.server.HttpServer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import com.google.protobuf.MessageOrBuilder
 import com.google.protobuf.TextFormat
 import io.grpc.Status
 import io.grpc.stub.StreamObserver
-import io.ktor.http.*
 import io.ktor.server.engine.*
 import io.ktor.util.*
 import io.prometheus.client.Counter
@@ -141,7 +139,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
             logger.error(exception) { "Coroutine context exception from the handleRequest method with $requestName" }
         }
 
-        CoroutineScope(Dispatchers.IO + handler).launch {
+        CoroutineScope(grpcThreadPool + handler).launch {
             logMetrics(if (useStream) grpcStreamRequestsProcessedInParallelQuantity else grpcSingleRequestsProcessedInParallelQuantity) {
                 measureTimeMillis {
                     logger.debug { "handling '$requestName' request with parameters '${stringParameters.value}'" }
@@ -158,6 +156,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
                             } else {
                                 handleRestApiRequest(responseObserver, context, calledFun as suspend () -> T)
                             }
+                            responseObserver.onCompleted()
                         } catch (e: Exception) {
                             throw ExceptionUtils.getRootCause(e) ?: e
                         } finally {
@@ -217,7 +216,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
         grpcContext: io.grpc.Context,
         calledFun: Streaming
     ) {
-        CoroutineScope(grpcThreadPool + CoroutineExceptionHandler { _, exception -> throw exception }).launch {
+        coroutineScope {
             val job = launch {
                 checkContext(grpcContext)
             }
