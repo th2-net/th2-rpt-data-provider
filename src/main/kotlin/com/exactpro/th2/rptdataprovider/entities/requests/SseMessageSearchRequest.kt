@@ -173,6 +173,21 @@ data class SseMessageSearchRequest(
             throw InvalidRequestException("you cannot specify more than one id")
     }
 
+    private fun checkIdForStreams() {
+        if (resumeFromIdsList.isEmpty()) return
+        stream.forEach { stream ->
+            var haveFirst: Boolean = false
+            var haveSecond: Boolean = false
+            resumeFromIdsList.forEach {
+                if (it.streamName == stream) {
+                    if (it.direction === Direction.FIRST) haveFirst = true else haveSecond = true
+                }
+            }
+            if (!haveFirst || !haveSecond)
+                throw InvalidRequestException("ResumeId was not passed for the stream: $stream direction: ${if (!haveFirst) "first" else "second"}")
+        }
+    }
+
     fun checkIdsRequest() {
         checkTimestampAndId()
         checkResumeIds()
@@ -182,6 +197,7 @@ data class SseMessageSearchRequest(
         checkStartPoint()
         checkEndTimestamp()
         checkStreamList()
+        checkIdForStreams()
     }
 }
 
