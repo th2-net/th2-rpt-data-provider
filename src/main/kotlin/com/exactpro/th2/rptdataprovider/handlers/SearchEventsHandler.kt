@@ -215,15 +215,15 @@ class SearchEventsHandler(private val context: Context) {
         initTimestamp: Instant
     ): Sequence<Pair<Boolean, Pair<Instant, Instant>>> {
 
-        var isSearchInFuture = request.keepOpen
+        var isSearchInFuture = false
         var timestamp = initTimestamp to minInstant(request.endTimestamp ?: initTimestamp.plusSeconds(sseEventSearchStep), Instant.now())
 
         return sequence {
             do {
                 yield(isSearchInFuture to timestamp)
 
-                val jumpedOver = request.searchDirection == AFTER && timestamp.second.isAfterOrEqual(Instant.now())
-                if (isSearchInFuture && jumpedOver) {
+                val jumpedOver = request.keepOpen && request.searchDirection == AFTER && timestamp.second.isAfterOrEqual(Instant.now())
+                if (jumpedOver) {
                     isSearchInFuture = true
                     timestamp =
                         timestamp.let { (f, s) -> f.plusSeconds(sseSearchDelay) to s.plusSeconds(sseSearchDelay) }
