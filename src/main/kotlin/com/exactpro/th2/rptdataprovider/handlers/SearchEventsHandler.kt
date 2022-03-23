@@ -303,7 +303,6 @@ class SearchEventsHandler(private val context: Context) {
                     if (isSearchInFuture)
                         delay(sseSearchDelay * 1000)
 
-                    logger.debug { timestamp }
                     getEventFlow(
                         request, timestamp.first, timestamp.second, coroutineContext
                     ).collect { emit(it) }
