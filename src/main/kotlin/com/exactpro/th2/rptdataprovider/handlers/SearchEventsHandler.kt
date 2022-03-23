@@ -223,14 +223,14 @@ class SearchEventsHandler(private val context: Context) {
                 yield(isSearchInFuture to timestamp)
 
                 val jumpedOver = request.keepOpen && request.searchDirection == AFTER && timestamp.second.isAfterOrEqual(Instant.now())
-                if (isSearchInFuture && jumpedOver) {
+                if (isSearchInFuture || jumpedOver) {
                     isSearchInFuture = true
                     timestamp =
                         timestamp.let { (f, s) -> f.plusSeconds(sseSearchDelay) to s.plusSeconds(sseSearchDelay) }
                 } else if (request.endTimestamp == null) {
                     timestamp =
                         timestamp.let { (f, s) -> f.plusSeconds(sseEventSearchStep) to s.plusSeconds(sseEventSearchStep) }
-                }
+                } else break
             } while (true)
         }
     }
