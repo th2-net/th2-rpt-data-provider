@@ -215,14 +215,14 @@ class SearchEventsHandler(private val context: Context) {
         initTimestamp: Instant
     ): Sequence<Pair<Boolean, Pair<Instant, Instant>>> {
 
-        var isSearchInFuture = false
+        var isSearchInFuture = request.keepOpen
         var timestamp = initTimestamp to minInstant(request.endTimestamp ?: initTimestamp.plusSeconds(sseEventSearchStep), Instant.now())
 
         return sequence {
             do {
                 yield(isSearchInFuture to timestamp)
 
-                val jumpedOver = request.keepOpen && request.searchDirection == AFTER && timestamp.second.isAfterOrEqual(Instant.now())
+                val jumpedOver = request.searchDirection == AFTER && timestamp.second.isAfterOrEqual(Instant.now())
                 if (isSearchInFuture && jumpedOver) {
                     isSearchInFuture = true
                     timestamp =
@@ -230,7 +230,7 @@ class SearchEventsHandler(private val context: Context) {
                 } else if (request.endTimestamp == null) {
                     timestamp =
                         timestamp.let { (f, s) -> f.plusSeconds(sseEventSearchStep) to s.plusSeconds(sseEventSearchStep) }
-                }
+                } else break
             } while (true)
         }
     }
@@ -303,6 +303,7 @@ class SearchEventsHandler(private val context: Context) {
                     if (isSearchInFuture)
                         delay(sseSearchDelay * 1000)
 
+                    logger.debug { timestamp }
                     getEventFlow(
                         request, timestamp.first, timestamp.second, coroutineContext
                     ).collect { emit(it) }
