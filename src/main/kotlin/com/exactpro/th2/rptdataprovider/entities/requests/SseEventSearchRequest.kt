@@ -33,7 +33,6 @@ data class SseEventSearchRequest(
     val endTimestamp: Instant?,
     val resumeFromId: String?,
     val resultCountLimit: Int?,
-    val keepOpen: Boolean,
     val limitForParent: Long?,
     val metadataOnly: Boolean,
     val attachedMessages: Boolean
@@ -57,7 +56,6 @@ data class SseEventSearchRequest(
         endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
         resumeFromId = parameters["resumeFromId"]?.firstOrNull(),
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt(),
-        keepOpen = parameters["keepOpen"]?.firstOrNull()?.toBoolean() ?: false,
         limitForParent = parameters["limitForParent"]?.firstOrNull()?.toLong(),
         metadataOnly = parameters["metadataOnly"]?.firstOrNull()?.toBoolean() ?: true,
         attachedMessages = parameters["attachedMessages"]?.firstOrNull()?.toBoolean() ?: false
@@ -88,9 +86,6 @@ data class SseEventSearchRequest(
         resultCountLimit = if (request.hasResultCountLimit()) {
             request.resultCountLimit.value
         } else null,
-        keepOpen = if (request.hasKeepOpen()) {
-            request.keepOpen.value
-        } else false,
         limitForParent = if (request.hasLimitForParent()) {
             request.limitForParent.value
         } else null,

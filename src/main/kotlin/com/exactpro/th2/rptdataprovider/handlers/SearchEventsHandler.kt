@@ -31,6 +31,7 @@ import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
+import com.exactpro.th2.rptdataprovider.maxInstant
 import com.exactpro.th2.rptdataprovider.minInstant
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
@@ -58,7 +59,6 @@ class SearchEventsHandler(private val context: Context) {
 
     private val cradle: CradleService = context.cradleService
     private val eventProducer: EventProducer = context.eventProducer
-    private val sseSearchDelay: Long = context.configuration.sseSearchDelay.value.toLong()
     private val sseEventSearchStep: Long = context.configuration.sseEventSearchStep.value.toLong()
     private val eventSearchChunkSize: Int = context.configuration.eventSearchChunkSize.value.toInt()
     private val keepAliveTimeout: Long = context.configuration.keepAliveTimeout.value.toLong()
@@ -213,25 +213,39 @@ class SearchEventsHandler(private val context: Context) {
     private suspend fun getNextTimestampGenerator(
         request: SseEventSearchRequest,
         initTimestamp: Instant
-    ): Sequence<Pair<Boolean, Pair<Instant, Instant>>> {
+    ): Sequence<Pair<Instant, Instant>> {
+        val isDirAfter = request.searchDirection == AFTER
+        val min = Instant.ofEpochMilli(Long.MIN_VALUE)
 
-        var isSearchInFuture = false
-        var timestamp = initTimestamp to minInstant(request.endTimestamp ?: initTimestamp.plusSeconds(sseEventSearchStep), Instant.now())
+        var jumpedOver = false
+        var timestamp = initTimestamp to minInstant(
+            request.endTimestamp ?: initTimestamp.plusSeconds(sseEventSearchStep), Instant.now()
+        )
 
         return sequence {
             do {
-                yield(isSearchInFuture to timestamp)
+                yield(timestamp)
 
-                val jumpedOver = request.keepOpen && request.searchDirection == AFTER && timestamp.second.isAfterOrEqual(Instant.now())
-                if (isSearchInFuture || jumpedOver) {
-                    isSearchInFuture = true
-                    timestamp =
-                        timestamp.let { (f, s) -> f.plusSeconds(sseSearchDelay) to s.plusSeconds(sseSearchDelay) }
-                } else if (request.endTimestamp == null) {
-                    timestamp =
-                        timestamp.let { (f, s) -> f.plusSeconds(sseEventSearchStep) to s.plusSeconds(sseEventSearchStep) }
-                } else break
-            } while (true)
+                if (request.endTimestamp != null) break
+
+                timestamp = timestamp.let { (start, end) ->
+                    val (stepStart, stepEnd) = if (isDirAfter) {
+                        end to end.plusSeconds(sseEventSearchStep)
+                    } else {
+                        maxInstant(start.minusSeconds(sseEventSearchStep), min) to start
+                    }
+
+                    if (isDirAfter && stepEnd.isAfterOrEqual(Instant.now())) {
+                        jumpedOver = true
+                        stepStart to Instant.now()
+                    } else {
+                        stepStart to stepEnd
+                    }
+                }
+
+                if (timestamp.first.isAfterOrEqual(min))
+                    break
+            } while (!jumpedOver)
         }
     }
 
@@ -296,12 +310,9 @@ class SearchEventsHandler(private val context: Context) {
             val parentEventCounter = ParentEventCounter(request.limitForParent)
 
             flow {
-                for ((isSearchInFuture, timestamp) in timeIntervals) {
+                for (timestamp in timeIntervals) {
 
                     lastScannedObject.update(timestamp.first)
-
-                    if (isSearchInFuture)
-                        delay(sseSearchDelay * 1000)
 
                     getEventFlow(
                         request, timestamp.first, timestamp.second, coroutineContext
