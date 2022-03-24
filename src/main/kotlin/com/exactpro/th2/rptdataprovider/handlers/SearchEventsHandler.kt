@@ -216,10 +216,9 @@ class SearchEventsHandler(private val context: Context) {
 
         var jumpedOver = false
         val isDirAfter = request.searchDirection == AFTER
-        val operation = if (isDirAfter) Instant::plusSeconds else Instant::minusSeconds
 
         var timestamp = initTimestamp to minInstant(
-            request.endTimestamp ?: operation(initTimestamp, sseEventSearchStep),
+            request.endTimestamp ?: initTimestamp.plusSeconds(sseEventSearchStep),
             Instant.now()
         )
 
