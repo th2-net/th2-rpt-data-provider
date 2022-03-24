@@ -58,7 +58,6 @@ class SearchEventsHandler(private val context: Context) {
 
     private val cradle: CradleService = context.cradleService
     private val eventProducer: EventProducer = context.eventProducer
-    private val sseSearchDelay: Long = context.configuration.sseSearchDelay.value.toLong()
     private val sseEventSearchStep: Long = context.configuration.sseEventSearchStep.value.toLong()
     private val eventSearchChunkSize: Int = context.configuration.eventSearchChunkSize.value.toInt()
     private val keepAliveTimeout: Long = context.configuration.keepAliveTimeout.value.toLong()
@@ -213,25 +212,28 @@ class SearchEventsHandler(private val context: Context) {
     private suspend fun getNextTimestampGenerator(
         request: SseEventSearchRequest,
         initTimestamp: Instant
-    ): Sequence<Pair<Boolean, Pair<Instant, Instant>>> {
+    ): Sequence<Pair<Instant, Instant>> {
 
-        var isSearchInFuture = false
+        var jumpedOver = false
         var timestamp = initTimestamp to minInstant(request.endTimestamp ?: initTimestamp.plusSeconds(sseEventSearchStep), Instant.now())
 
         return sequence {
             do {
-                yield(isSearchInFuture to timestamp)
+                yield(timestamp)
 
-                val jumpedOver = request.keepOpen && request.searchDirection == AFTER && timestamp.second.isAfterOrEqual(Instant.now())
-                if (isSearchInFuture || jumpedOver) {
-                    isSearchInFuture = true
-                    timestamp =
-                        timestamp.let { (f, s) -> f.plusSeconds(sseSearchDelay) to s.plusSeconds(sseSearchDelay) }
-                } else if (request.endTimestamp == null) {
-                    timestamp =
-                        timestamp.let { (f, s) -> f.plusSeconds(sseEventSearchStep) to s.plusSeconds(sseEventSearchStep) }
-                } else break
-            } while (true)
+                if (request.endTimestamp != null ) break
+
+                timestamp = timestamp.apply {
+                    first.plusSeconds(sseEventSearchStep)
+                    second.plusSeconds(sseEventSearchStep)
+                }.let {
+                    if (request.searchDirection == AFTER && it.second.isAfterOrEqual(Instant.now())) {
+                        jumpedOver = true
+                        it.first to Instant.now()
+                    }
+                    it
+                }
+            } while (!jumpedOver)
         }
     }
 
@@ -296,12 +298,9 @@ class SearchEventsHandler(private val context: Context) {
             val parentEventCounter = ParentEventCounter(request.limitForParent)
 
             flow {
-                for ((isSearchInFuture, timestamp) in timeIntervals) {
+                for (timestamp in timeIntervals) {
 
                     lastScannedObject.update(timestamp.first)
-
-                    if (isSearchInFuture)
-                        delay(sseSearchDelay * 1000)
 
                     getEventFlow(
                         request, timestamp.first, timestamp.second, coroutineContext
