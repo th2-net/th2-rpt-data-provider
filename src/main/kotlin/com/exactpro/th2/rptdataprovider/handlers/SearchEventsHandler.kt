@@ -243,7 +243,7 @@ class SearchEventsHandler(private val context: Context) {
                     }
                 }
 
-                if (timestamp.first.isBefore(min))
+                if (timestamp.first.isAfterOrEqual(min))
                     break
             } while (!jumpedOver)
         }
