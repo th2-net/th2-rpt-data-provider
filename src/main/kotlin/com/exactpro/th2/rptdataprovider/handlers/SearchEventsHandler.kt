@@ -215,24 +215,35 @@ class SearchEventsHandler(private val context: Context) {
     ): Sequence<Pair<Instant, Instant>> {
 
         var jumpedOver = false
-        var timestamp = initTimestamp to minInstant(request.endTimestamp ?: initTimestamp.plusSeconds(sseEventSearchStep), Instant.now())
+        val isDirAfter = request.searchDirection == AFTER
+        val operation = if (isDirAfter) Instant::plusSeconds else Instant::minusSeconds
+
+        var timestamp = initTimestamp to minInstant(
+            request.endTimestamp ?: operation(initTimestamp, sseEventSearchStep),
+            Instant.now()
+        )
 
         return sequence {
             do {
                 yield(timestamp)
 
-                if (request.endTimestamp != null ) break
+                if (request.endTimestamp != null) break
 
-                timestamp.let {(_, second) ->
-                    second to second.plusSeconds(sseEventSearchStep)
-                }.also { step ->
-                    timestamp = step.let {
-                        if (request.searchDirection == AFTER && it.second.isAfterOrEqual(Instant.now())) {
-                            jumpedOver = true
-                            it.first to Instant.now()
-                        } else it
+                timestamp = timestamp.let { (start, end) ->
+                    val (stepStart, stepEnd) = if (isDirAfter) {
+                        end to end.plusSeconds(sseEventSearchStep)
+                    } else {
+                        start.minusSeconds(sseEventSearchStep) to start
+                    }
+
+                    if (isDirAfter && stepEnd.isAfterOrEqual(Instant.now())) {
+                        jumpedOver = true
+                        stepStart to Instant.now()
+                    } else {
+                        stepStart to stepEnd
                     }
                 }
+
             } while (!jumpedOver)
         }
     }
