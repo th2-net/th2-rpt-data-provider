@@ -223,15 +223,15 @@ class SearchEventsHandler(private val context: Context) {
 
                 if (request.endTimestamp != null ) break
 
-                timestamp = timestamp.apply {
-                    first.plusSeconds(sseEventSearchStep)
-                    second.plusSeconds(sseEventSearchStep)
-                }.let {
-                    if (request.searchDirection == AFTER && it.second.isAfterOrEqual(Instant.now())) {
-                        jumpedOver = true
-                        it.first to Instant.now()
+                timestamp.let {(_, second) ->
+                    second to second.plusSeconds(sseEventSearchStep)
+                }.also { step ->
+                    timestamp = step.let {
+                        if (request.searchDirection == AFTER && it.second.isAfterOrEqual(Instant.now())) {
+                            jumpedOver = true
+                            it.first to Instant.now()
+                        } else it
                     }
-                    it
                 }
             } while (!jumpedOver)
         }
