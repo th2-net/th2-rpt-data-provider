@@ -31,6 +31,7 @@ import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
+import com.exactpro.th2.rptdataprovider.maxInstant
 import com.exactpro.th2.rptdataprovider.minInstant
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
@@ -213,13 +214,12 @@ class SearchEventsHandler(private val context: Context) {
         request: SseEventSearchRequest,
         initTimestamp: Instant
     ): Sequence<Pair<Instant, Instant>> {
+        val isDirAfter = request.searchDirection == AFTER
+        val min = Instant.ofEpochMilli(Long.MIN_VALUE)
 
         var jumpedOver = false
-        val isDirAfter = request.searchDirection == AFTER
-
         var timestamp = initTimestamp to minInstant(
-            request.endTimestamp ?: initTimestamp.plusSeconds(sseEventSearchStep),
-            Instant.now()
+            request.endTimestamp ?: initTimestamp.plusSeconds(sseEventSearchStep), Instant.now()
         )
 
         return sequence {
@@ -232,7 +232,7 @@ class SearchEventsHandler(private val context: Context) {
                     val (stepStart, stepEnd) = if (isDirAfter) {
                         end to end.plusSeconds(sseEventSearchStep)
                     } else {
-                        start.minusSeconds(sseEventSearchStep) to start
+                        maxInstant(start.minusSeconds(sseEventSearchStep), min) to start
                     }
 
                     if (isDirAfter && stepEnd.isAfterOrEqual(Instant.now())) {
@@ -243,6 +243,8 @@ class SearchEventsHandler(private val context: Context) {
                     }
                 }
 
+                if (timestamp.first.isBefore(min))
+                    break
             } while (!jumpedOver)
         }
     }
