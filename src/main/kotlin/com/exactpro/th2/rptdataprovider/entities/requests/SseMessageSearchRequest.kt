@@ -189,6 +189,9 @@ data class SseMessageSearchRequest(
     }
 
     fun checkIdsRequest() {
+        checkStartPoint()
+        checkEndTimestamp()
+        checkStreamList()
         checkTimestampAndId()
         checkResumeIds()
     }

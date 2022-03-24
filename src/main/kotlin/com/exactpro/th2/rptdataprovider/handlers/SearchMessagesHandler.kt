@@ -123,11 +123,11 @@ class SearchMessagesHandler(private val applicationContext: Context) {
     }
 
     @OptIn(ExperimentalTime::class, InternalCoroutinesApi::class)
-    suspend fun getIds(requests: List<SseMessageSearchRequest>): Map<String, List<StreamInfo>> {
+    suspend fun getIds(request: SseMessageSearchRequest): Map<String, List<StreamInfo>> {
 
         searchMessageRequests.inc()
 
-        val resumeId = requests.first().resumeFromIdsList.firstOrNull()
+        val resumeId = request.resumeFromIdsList.firstOrNull()
 
         val message = resumeId?.let {
             applicationContext.cradleService.getMessageSuspend(
@@ -139,13 +139,13 @@ class SearchMessagesHandler(private val applicationContext: Context) {
             )
         }
 
-        val resultRequests = message?.let {
-            requests.map { it.copy(startTimestamp = message.timestamp) }
-        } ?: requests
+        val resultRequest = message?.let {
+            request.copy(startTimestamp = message.timestamp)
+        } ?: request
 
         val pipelineStatus = PipelineStatus(context = applicationContext)
 
-        val streamNames = resultRequests.first().stream.flatMap { stream ->
+        val streamNames = resultRequest.stream.flatMap { stream ->
             Direction.values().map { StreamName(stream, it) }
         }
 
@@ -156,37 +156,44 @@ class SearchMessagesHandler(private val applicationContext: Context) {
         streamInfoMap[TimeRelation.AFTER] = mutableListOf()
         streamInfoMap[TimeRelation.BEFORE] = mutableListOf()
 
-        val extractors = streamNames.flatMap { streamName ->
-            resultRequests.map { request ->
-                MessageExtractor(
-                    applicationContext,
-                    request,
-                    streamName,
-                    coroutineScope,
-                    1,
-                    pipelineStatus
-                )
-            }
+        val extractors = streamNames.map { streamName ->
+            MessageExtractor(
+                applicationContext,
+                resultRequest,
+                streamName,
+                coroutineScope,
+                1,
+                pipelineStatus
+            )
         }
 
         extractors.forEach { messageExtractor ->
-            var pair: Pair<StoredMessageId?, Boolean>
+            val listPair = mutableListOf<Pair<StoredMessageId?, Boolean>>()
 
-            do {
-                messageExtractor.pollMessage().let {
-                    pair = if (it is PipelineRawBatch) {
-                        val storedMessage = it.storedBatchWrapper.trimmedMessages.firstOrNull()
-                        Pair(storedMessage?.id, it.streamEmpty)
-                    } else {
-                        Pair(null, it.streamEmpty)
+            for (i in 1..2) {
+                var pair: Pair<StoredMessageId?, Boolean>
+                do {
+                    messageExtractor.pollMessage().let {
+                        pair = if (it is PipelineRawBatch) {
+                            val storedMessage = it.storedBatchWrapper.trimmedMessages.firstOrNull()
+                            Pair(storedMessage?.id, it.streamEmpty)
+                        } else {
+                            Pair(null, it.streamEmpty)
+                        }
                     }
-                }
-            } while (pair.first == null && !pair.second)
+                } while (pair.first == null && !pair.second)
+                listPair.add(pair)
+            }
 
-            pair.first?.let {
+            listPair.first().let {
                 streamInfoMap
-                    .getValue(messageExtractor.request.searchDirection)
-                    .add(StreamInfo(messageExtractor.streamName!!, it))
+                    .getValue(TimeRelation.BEFORE)
+                    .add(StreamInfo(messageExtractor.streamName!!, it.first))
+            }
+            listPair.last().let {
+                streamInfoMap
+                    .getValue(TimeRelation.AFTER)
+                    .add(StreamInfo(messageExtractor.streamName!!,it.first))
             }
         }
 
