@@ -18,6 +18,7 @@ package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidInitializationException
 import com.exactpro.th2.rptdataprovider.entities.internal.*
@@ -276,7 +277,15 @@ class StreamMerger(
 
     fun getStreamsInfo(): List<StreamInfo> {
         return messageStreams.map {
-            StreamInfo(it.messageStream.streamName!!, it.previousElement?.lastProcessedId)
+            StreamInfo(
+                it.messageStream.streamName!!,
+                it.previousElement?.lastProcessedId
+                    ?: StoredMessageId(
+                        it.messageStream.streamName.name,
+                        it.messageStream.streamName.direction,
+                        -1
+                    )
+            )
         }
     }
 }
