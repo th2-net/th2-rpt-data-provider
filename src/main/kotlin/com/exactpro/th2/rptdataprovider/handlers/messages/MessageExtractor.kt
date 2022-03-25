@@ -108,17 +108,19 @@ class MessageExtractor(
             request.startTimestamp?.let { logger.debug { "start timestamp for stream $streamName is set to $it" } }
 
             val cradleMessageIterable = context.cradleService.getMessagesBatchesSuspend(
-                StoredMessageFilterBuilder().streamName().isEqualTo(streamName.name).direction()
-                    .isEqualTo(streamName.direction).order(order)
+                StoredMessageFilterBuilder()
+                    .streamName().isEqualTo(streamName.name)
+                    .direction().isEqualTo(streamName.direction)
+                    .order(order)
 
                     // timestamps will be ignored if resumeFromId is present
                     .also { builder ->
                         if (resumeFromId != null && resumeFromId.hasStarted) {
                             builder.index().let {
                                 if (order == Order.DIRECT) {
-                                    it.isGreaterThan(resumeFromId.sequence)
+                                    it.isGreaterThanOrEqualTo(resumeFromId.sequence)
                                 } else {
-                                    it.isLessThan(resumeFromId.sequence)
+                                    it.isLessThanOrEqualTo(resumeFromId.sequence)
                                 }
                             }
                         } else if (order == Order.DIRECT) {
@@ -153,9 +155,9 @@ class MessageExtractor(
                         .dropWhile {
                             resumeFromId?.sequence?.let { start ->
                                 if (order == Order.DIRECT) {
-                                    it.index <= start
+                                    it.index < start
                                 } else {
-                                    it.index >= start
+                                    it.index > start
                                 }
                             } ?: false
                         }

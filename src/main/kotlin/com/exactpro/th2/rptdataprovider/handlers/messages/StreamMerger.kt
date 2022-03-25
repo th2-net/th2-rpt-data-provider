@@ -17,6 +17,8 @@
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.cradle.TimeRelation
+import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidInitializationException
 import com.exactpro.th2.rptdataprovider.entities.internal.*
@@ -67,15 +69,6 @@ class StreamMerger(
         var previousElement: PipelineStepObject? = null
             private set
 
-
-        private fun changePreviousElement(currentElement: PipelineStepObject?) {
-            if (previousElement == null
-                || currentElement is PipelineFilteredMessage
-            ) {
-                previousElement = currentElement
-            }
-        }
-
         fun top(): PipelineStepObject {
             return currentElement!!
         }
@@ -97,7 +90,7 @@ class StreamMerger(
                     val currentElementTemporary = currentElement
 
                     currentElementTemporary?.also {
-                        changePreviousElement(currentElement)
+                        previousElement = currentElement
                         currentElement = newElement
                     }
                         ?: throw InvalidInitializationException("StreamHolder ${messageStream.streamName} need initialization")
@@ -275,7 +268,16 @@ class StreamMerger(
 
     fun getStreamsInfo(): List<StreamInfo> {
         return messageStreams.map {
-            StreamInfo(it.messageStream.streamName!!, it.previousElement?.lastProcessedId)
+            val storedMessageId = if (it.currentElement != null && it.currentElement?.streamEmpty!!) {
+                StoredMessageId(it.messageStream.streamName?.name, it.messageStream.streamName!!.direction, -1)
+            } else {
+                it.currentElement?.lastProcessedId
+            }
+
+            StreamInfo(
+                it.messageStream.streamName!!,
+                storedMessageId
+            )
         }
     }
 }

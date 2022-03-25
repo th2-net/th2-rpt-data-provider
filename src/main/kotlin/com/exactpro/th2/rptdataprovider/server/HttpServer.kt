@@ -439,17 +439,13 @@ class HttpServer(private val applicationContext: Context) {
                 get("/messageIds") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "message ids", null, false, false, queryParametersMap) {
-                        val requests = TimeRelation.values().map {
-                            SseMessageSearchRequest(
-                                queryParametersMap,
-                                messageFiltersPredicateFactory.getEmptyPredicate(),
-                                it
-                            ).also { request ->
-                                request.checkRequest()
-                                request.checkIdsRequest()
-                            }
+                        val request = SseMessageSearchRequest(
+                            queryParametersMap,
+                            messageFiltersPredicateFactory.getEmptyPredicate()
+                        ).also {
+                            it.checkIdsRequest()
                         }
-                        searchMessagesHandler.getIds(requests)
+                        searchMessagesHandler.getIds(request)
                     }
                 }
             }
