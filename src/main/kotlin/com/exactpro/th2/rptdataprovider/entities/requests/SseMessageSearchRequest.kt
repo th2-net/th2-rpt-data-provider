@@ -175,16 +175,13 @@ data class SseMessageSearchRequest(
 
     private fun checkIdForStreams() {
         if (resumeFromIdsList.isEmpty()) return
-        stream.forEach { stream ->
-            var haveFirst: Boolean = false
-            var haveSecond: Boolean = false
-            resumeFromIdsList.forEach {
-                if (it.streamName == stream) {
-                    if (it.direction === Direction.FIRST) haveFirst = true else haveSecond = true
-                }
-            }
-            if (!haveFirst || !haveSecond)
-                throw InvalidRequestException("ResumeId was not passed for the stream: $stream direction: ${if (!haveFirst) "first" else "second"}")
+
+        val mapStreams = stream.associateWith { mutableListOf<StreamPointer>() }
+        resumeFromIdsList.forEach { mapStreams[it.streamName]?.add(it) }
+        mapStreams.forEach {
+            val set = it.value.map { streamPointer ->  streamPointer.direction }.toSet()
+            if (set.size != 2)
+                throw InvalidRequestException("ResumeId was not passed for the stream: ${it.key}")
         }
     }
 

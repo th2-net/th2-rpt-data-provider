@@ -170,20 +170,19 @@ class SearchMessagesHandler(private val applicationContext: Context) {
         extractors.forEach { messageExtractor ->
             val listPair = mutableListOf<Pair<StoredMessageId?, Boolean>>()
 
-            for (i in 1..2) {
-                var pair: Pair<StoredMessageId?, Boolean>
-                do {
-                    messageExtractor.pollMessage().let {
-                        pair = if (it is PipelineRawBatch) {
-                            val storedMessage = it.storedBatchWrapper.trimmedMessages.firstOrNull()
-                            Pair(storedMessage?.id, it.streamEmpty)
-                        } else {
-                            Pair(null, it.streamEmpty)
+            do {
+                messageExtractor.pollMessage().let {
+                    if (it is PipelineRawBatch && listPair.size < 2) {
+                        val trimmedMessages = it.storedBatchWrapper.trimmedMessages
+                        for (trimmedMessage in trimmedMessages) {
+                            if (listPair.size == 2) break
+                            listPair.add(Pair(trimmedMessage.id, it.streamEmpty))
                         }
+                    } else if (listPair.size < 2) {
+                        listPair.add(Pair(null, it.streamEmpty))
                     }
-                } while (pair.first == null && !pair.second)
-                listPair.add(pair)
-            }
+                }
+            } while (listPair.size < 2)
 
             listPair.first().let {
                 streamInfoMap
@@ -193,7 +192,7 @@ class SearchMessagesHandler(private val applicationContext: Context) {
             listPair.last().let {
                 streamInfoMap
                     .getValue(TimeRelation.AFTER)
-                    .add(StreamInfo(messageExtractor.streamName!!,it.first))
+                    .add(StreamInfo(messageExtractor.streamName!!, it.first))
             }
         }
 

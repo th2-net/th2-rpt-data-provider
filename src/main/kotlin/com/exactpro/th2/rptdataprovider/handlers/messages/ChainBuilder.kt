@@ -30,16 +30,7 @@ class ChainBuilder(
     private val pipelineStatus: PipelineStatus
 ) {
     fun buildChain(): StreamMerger {
-        val streamNames = if (request.resumeFromIdsList.isNotEmpty()) {
-            request.resumeFromIdsList.map { streamPointer ->
-                StreamName(
-                    streamPointer.streamName,
-                    streamPointer.direction
-                )
-            }
-        } else {
-            request.stream.flatMap { stream -> Direction.values().map { StreamName(stream, it) } }
-        }
+        val streamNames = request.stream.flatMap { stream -> Direction.values().map { StreamName(stream, it) } }
 
         pipelineStatus.addStreams(streamNames.map { it.toString() })
 
