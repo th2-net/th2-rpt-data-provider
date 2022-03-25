@@ -178,7 +178,7 @@ class SearchMessagesHandler(private val applicationContext: Context) {
                             if (listPair.size == 2) break
                             listPair.add(Pair(trimmedMessage.id, it.streamEmpty))
                         }
-                    } else if (listPair.size < 2) {
+                    } else if (listPair.size < 2 && it.streamEmpty) {
                         listPair.add(Pair(null, it.streamEmpty))
                     }
                 }
