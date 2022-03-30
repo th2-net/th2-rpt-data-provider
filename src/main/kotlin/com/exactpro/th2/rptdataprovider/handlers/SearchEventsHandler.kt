@@ -19,9 +19,8 @@ package com.exactpro.th2.rptdataprovider.handlers
 
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.TimeRelation.AFTER
+
 import com.exactpro.cradle.TimeRelation.BEFORE
-import com.exactpro.cradle.testevents.StoredTestEventId
-import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventWrapper
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
@@ -36,7 +35,6 @@ import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import com.exactpro.th2.rptdataprovider.maxInstant
 import com.exactpro.th2.rptdataprovider.minInstant
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
-import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import io.prometheus.client.Counter
 import kotlinx.coroutines.*
@@ -130,50 +128,25 @@ class SearchEventsHandler(private val context: Context) {
         }
     }
 
-
-    private suspend fun prepareNonBatchedEvent(
-        metadata: List<StoredTestEventWrapper>,
+    private suspend fun prepareEvents(
+        wrappers: List<StoredTestEventWrapper>,
         request: SseEventSearchRequest
     ): List<BaseEventEntity> {
-        return metadata.map {
-            eventProducer.fromEventMetadata(it, null)
+        return wrappers.groupBy { it.isBatch }.flatMap { entry ->
+            if (entry.key) {
+                entry.value.map { it.asBatch() }
+                    .map { it to it.testEvents }
+                    .flatMap { (batch, events) ->
+                        events.map { event -> event to eventProducer.fromStoredEvent(event, batch) }
+                    }
+            } else {
+                entry.value.map { it.asSingle() }
+                    .map { it to eventProducer.fromStoredEvent(it, null) }
+            }
         }.let { eventTreesNodes ->
-            eventProducer.fromSingleEventsProcessed(eventTreesNodes, request)
+            eventProducer.fromEventsProcessed(eventTreesNodes, request)
         }
     }
-
-
-    private suspend fun prepareBatchedEvent(
-        metadata: List<StoredTestEventWrapper>,
-        timestampFrom: Instant,
-        timestampTo: Instant,
-        request: SseEventSearchRequest
-    ): List<BaseEventEntity> {
-        return metadata.map { it to it.tryToGetTestEvents(request.parentEvent?.eventId) }.let { eventsWithBatch ->
-            eventsWithBatch.map { (batch, events) ->
-                batch.id to events?.map {
-                    eventProducer.fromEventMetadata(StoredTestEventMetadata(it), batch)
-                }
-            }.filter { it.second?.isNotEmpty() ?: true }
-                .let { eventTreeNodes ->
-                    val notNullEvents = eventTreeNodes.mapNotNull { (batch, events) ->
-                        events?.let { batch to it }
-                    }
-                    val nullEvents = eventTreeNodes.filter { it.second == null }
-
-                    val parsedEvents = eventProducer.fromBatchIdsProcessed(notNullEvents, request)
-
-                    parsedEvents.toMutableList().apply {
-                        addAll(
-                            nullEvents.flatMap { (batch, _) ->
-                                getDirectBatchedChildren(batch, timestampFrom, timestampTo, request)
-                            }
-                        )
-                    }
-                }
-        }
-    }
-
 
     @FlowPreview
     @ExperimentalCoroutinesApi
@@ -192,22 +165,15 @@ class SearchEventsHandler(private val context: Context) {
                 for (event in eventsCollection)
                     emit(event)
             }
-                .map { metadata ->
+                .map { wrappers ->
                     async(parentContext) {
-                        metadata.groupBy { it.isBatch }.flatMap { entry ->
-                            if (entry.key) {
-                                prepareBatchedEvent(
-                                    entry.value, timestampFrom, timestampTo, request
-                                )
-                            } else {
-                                prepareNonBatchedEvent(entry.value, request)
-                            }
-                        }.let { events ->
-                            if (request.searchDirection == AFTER)
-                                events.sortedBy { it.startTimestamp }
-                            else
-                                events.sortedByDescending { it.startTimestamp }
-                        }.also { parentContext.ensureActive() }
+                        prepareEvents(wrappers, request)
+                            .let { events ->
+                                if (request.searchDirection == AFTER)
+                                    events.sortedBy { it.startTimestamp }
+                                else
+                                    events.sortedByDescending { it.startTimestamp }
+                            }.also { parentContext.ensureActive() }
                     }
                 }
                 .buffer(BUFFERED)
@@ -389,26 +355,5 @@ class SearchEventsHandler(private val context: Context) {
                     }
                 }
         }
-    }
-
-
-    // this is a fallback that should be deprecated after migration to cradle 1.6
-    private suspend fun getDirectBatchedChildren(
-        batchId: StoredTestEventId,
-        timestampFrom: Instant,
-        timestampTo: Instant,
-        request: SseEventSearchRequest
-    ): List<BaseEventEntity> {
-        val batch = cradle.getEventSuspend(batchId)?.asBatch()
-
-        return (batch?.testEvents
-            ?: throw CradleEventNotFoundException("unable to get test events of batch '$batchId'"))
-            .filter { it.startTimestamp.isAfter(timestampFrom) && it.startTimestamp.isBefore(timestampTo) }
-            .filter { request.parentEvent?.eventId?.let { id -> it.parentId == id } ?: true }
-            .map { testEvent ->
-                eventProducer.fromStoredEvent(testEvent, batch)
-            }.let { events ->
-                eventProducer.fromBatchIdsProcessed(listOf(batch.id to events), request)
-            }
     }
 }
