@@ -111,7 +111,7 @@ class PipelineStatus(context: Context) {
             Counter.build("filterSendDownstream", "Count filterSendDownstream").labelNames("stream").register()
 
         private val mergedMetric = Counter.build("merged", "Count merged").labelNames("time").register()
-        private val sendedMetric = Counter.build("sended", "Count sended").labelNames("time").register()
+        private val sentMetric = Counter.build("sent", "Count sent").labelNames("time").register()
 
         val codecLatency: Metrics =
             Metrics("th2_codec_latency", "Codec requests latency", listOf("stream"))
@@ -131,16 +131,12 @@ class PipelineStatus(context: Context) {
             for (streamName in streams) {
                 this.streams[streamName] = PipelineStreamCounters()
                 metrics.forEach {
-                    it.remove(streamName)
                     it.labels(streamName)
                 }
-                codecLatency.remove(streamName)
                 codecLatency.labels(streamName)
             }
-            mergedMetric.clear()
-            sendedMetric.clear()
             mergedMetric.labels(processingStartTimestamp.toString())
-            sendedMetric.labels(processingStartTimestamp.toString())
+            sentMetric.labels(processingStartTimestamp.toString())
         }
     }
 
@@ -305,7 +301,7 @@ class PipelineStatus(context: Context) {
 
     fun countSend() {
         if (!sendPipelineStatus) return
-        sendedMetric.labels(processingStartTimestamp.toString()).inc()
+        sentMetric.labels(processingStartTimestamp.toString()).inc()
         this.sended.incrementAndGet()
     }
 

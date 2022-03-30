@@ -180,5 +180,3 @@ fun StoredMessageId.convertToProto(): MessageID {
         .setConnectionId(ConnectionID.newBuilder().setSessionAlias(streamName))
         .build()
 }
-
-

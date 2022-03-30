@@ -10,6 +10,7 @@ import com.exactpro.th2.rptdataprovider.entities.internal.PipelineCodecRequest
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
 import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchRequest
@@ -71,6 +72,8 @@ class MessageBatchConverter(
                 pipelineMessage.storedBatchWrapper.trimmedMessages.size.toLong()
             )
 
+            val timeStart = System.currentTimeMillis()
+
             logger.trace { "received raw batch (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.fullBatch.id})" }
 
             val filteredMessages = pipelineMessage.storedBatchWrapper.trimmedMessages
@@ -104,7 +107,12 @@ class MessageBatchConverter(
                         .addAllGroups(filteredMessages.map { it.first })
                         .build(),
                     streamName.toString()
-                )
+                ),
+                info = pipelineMessage.info.also {
+                    it.startConvert = timeStart
+                    it.endConvert = System.currentTimeMillis()
+                    StreamWriter.setConvert(it)
+                }
             )
 
             pipelineStatus.convertEnd(

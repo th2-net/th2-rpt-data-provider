@@ -26,11 +26,15 @@ import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
 import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
+import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
+import com.exactpro.th2.rptdataprovider.isAfterOrEqual
+import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.time.Instant
+import java.util.*
 
 
 class MessageExtractor(
@@ -54,7 +58,6 @@ class MessageExtractor(
 
     private var lastElement: StoredMessageId? = null
     private var lastTimestamp: Instant? = null
-
 
     init {
         externalScope.launch {
@@ -106,23 +109,30 @@ class MessageExtractor(
             request.startTimestamp?.let { logger.debug { "start timestamp for stream $streamName is set to $it" } }
 
             val cradleMessageIterable = context.cradleService.getMessagesBatchesSuspend(
-                StoredMessageFilterBuilder().streamName().isEqualTo(streamName.name).direction()
-                    .isEqualTo(streamName.direction).order(order)
+                StoredMessageFilterBuilder()
+                    .streamName().isEqualTo(streamName.name)
+                    .direction().isEqualTo(streamName.direction)
+                    .order(order)
 
                     // timestamps will be ignored if resumeFromId is present
                     .also { builder ->
                         if (resumeFromId != null && resumeFromId.hasStarted) {
                             builder.index().let {
                                 if (order == Order.DIRECT) {
-                                    it.isGreaterThan(resumeFromId.lastId!!.index)
+                                    it.isGreaterThanOrEqualTo(resumeFromId.lastId!!.index)
                                 } else {
-                                    it.isLessThan(resumeFromId.lastId!!.index)
+                                    it.isLessThanOrEqualTo(resumeFromId.lastId!!.index)
+
                                 }
                             }
-                        } else {
+                        } else if (order == Order.DIRECT) {
                             request.startTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
                             request.endTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
+                        } else {
+                            request.startTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
+                            request.endTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
                         }
+
                     }.build()
             )
 
@@ -130,6 +140,9 @@ class MessageExtractor(
 
             for (batch in cradleMessageIterable) {
                 if (externalScope.isActive) {
+
+                    val timeStart = System.currentTimeMillis()
+
                     pipelineStatus.fetchedStart(streamName.toString())
                     logger.trace { "batch ${batch.id.index} of stream $streamName with ${batch.messageCount} messages (${batch.batchSize} bytes) has been extracted" }
 
@@ -144,9 +157,9 @@ class MessageExtractor(
                         .dropWhile {
                             resumeFromId?.lastId?.index?.let { start ->
                                 if (order == Order.DIRECT) {
-                                    it.index <= start
+                                    it.index < start
                                 } else {
-                                    it.index >= start
+                                    it.index > start
                                 }
                             } ?: false
                         }
@@ -161,6 +174,15 @@ class MessageExtractor(
                                 }
                             } ?: false
                         }
+                        .dropLastWhile {
+                            request.endTimestamp?.let { endTimestamp ->
+                                if (order == Order.DIRECT) {
+                                    it.timestamp.isAfterOrEqual(endTimestamp)
+                                } else {
+                                    it.timestamp.isBeforeOrEqual(endTimestamp)
+                                }
+                            } ?: false
+                        }
 
                     val firstMessage = if (order == Order.DIRECT) batch.messages.first() else batch.messages.last()
                     val lastMessage = if (order == Order.DIRECT) batch.messages.last() else batch.messages.first()
@@ -170,15 +192,20 @@ class MessageExtractor(
                     }
 
                     pipelineStatus.fetchedEnd(streamName.toString())
+
                     try {
-                        trimmedMessages.last().let {
+                        trimmedMessages.last().let { message ->
                             sendToChannel(
                                 PipelineRawBatch(
-                                    false, it.id, it.timestamp, MessageBatchWrapper(batch, trimmedMessages)
-                                )
+                                    false, message.id, message.timestamp, MessageBatchWrapper(batch, trimmedMessages)
+                                ).also {
+                                    it.info.startExtract = timeStart
+                                    it.info.endExtract = System.currentTimeMillis()
+                                    StreamWriter.setExtract(it.info)
+                                }
                             )
-                            lastElement = it.id
-                            lastTimestamp = it.timestamp
+                            lastElement = message.id
+                            lastTimestamp = message.timestamp
 
                             logger.trace { "batch ${batch.id.index} of stream $streamName has been sent downstream" }
 

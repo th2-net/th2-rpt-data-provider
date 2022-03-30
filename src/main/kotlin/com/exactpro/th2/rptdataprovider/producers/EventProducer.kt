@@ -16,10 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider.producers
 
-import com.exactpro.cradle.testevents.StoredTestEventBatch
-import com.exactpro.cradle.testevents.StoredTestEventId
-import com.exactpro.cradle.testevents.StoredTestEventMetadata
-import com.exactpro.cradle.testevents.StoredTestEventWithContent
+import com.exactpro.cradle.testevents.*
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType.NEED_ATTACHED_MESSAGES
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType.NEED_BODY
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
@@ -204,7 +201,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
 
 
     fun fromEventMetadata(
-        storedEvent: StoredTestEventMetadata,
+        storedEvent: StoredTestEventWrapper,
         batch: StoredTestEventMetadata?
     ): BaseEventEntity {
         return BaseEventEntity(

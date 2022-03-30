@@ -32,7 +32,6 @@ import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.sse.EventGrpcWriter
-import com.exactpro.th2.rptdataprovider.entities.sse.GrpcWriter
 import com.exactpro.th2.rptdataprovider.entities.sse.MessageGrpcWriter
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.grpcDirectionToCradle
@@ -48,7 +47,7 @@ import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import org.apache.commons.lang3.exception.ExceptionUtils
-import kotlin.coroutines.CoroutineContext
+import java.util.concurrent.Executors
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -106,6 +105,10 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     private val eventFiltersPredicateFactory = this.context.eventFiltersPredicateFactory
     private val messageFiltersPredicateFactory = this.context.messageFiltersPredicateFactory
 
+    private val grpcThreadPoolSize = context.configuration.grpcThreadPoolSize.value.toInt()
+    private val grpcThreadPool = Executors.newFixedThreadPool(grpcThreadPoolSize).asCoroutineDispatcher()
+
+
 
     private suspend fun checkContext(grpcContext: io.grpc.Context) {
         while (coroutineContext.isActive) {
@@ -140,7 +143,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
             logger.error(exception) { "Coroutine context exception from the handleRequest method with $requestName" }
         }
 
-        CoroutineScope(Dispatchers.IO + handler).launch {
+        CoroutineScope(grpcThreadPool + handler).launch {
             logMetrics(if (useStream) grpcStreamRequestsProcessedInParallelQuantity else grpcSingleRequestsProcessedInParallelQuantity) {
                 measureTimeMillis {
                     logger.debug { "handling '$requestName' request with parameters '${stringParameters.value}'" }
@@ -158,6 +161,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
                                 @Suppress("UNCHECKED_CAST")
                                 handleRestApiRequest(responseObserver.streamObserver, context, calledFun as suspend () -> T)
                             }
+                            responseObserver.streamObserver.onCompleted()
                         } catch (e: Exception) {
                             throw ExceptionUtils.getRootCause(e) ?: e
                         } finally {
@@ -228,14 +232,14 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
                     context.configuration.grpcWriterMessageBuffer.value.toInt(),
                     responseObserver.streamObserver as StreamObserver<EventSearchResponse>,
                     context.jacksonMapper,
-                    this@coroutineScope
+                    this
                 )
             } else {
                 MessageGrpcWriter(
                     context.configuration.grpcWriterMessageBuffer.value.toInt(),
                     responseObserver.streamObserver as StreamObserver<MessageSearchResponse>,
                     context.jacksonMapper,
-                    this@coroutineScope
+                    this
                 )
             }
 

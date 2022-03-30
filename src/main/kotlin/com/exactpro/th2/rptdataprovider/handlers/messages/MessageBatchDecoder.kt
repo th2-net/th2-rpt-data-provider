@@ -91,7 +91,9 @@ class MessageBatchDecoder(
             if (isImage(protocol)) {
                 sendToChannel(
                     PipelineDecodedBatch(
-                        pipelineMessage,
+                        pipelineMessage.also {
+                            it.info.startParseMessage = System.currentTimeMillis()
+                        },
                         CodecBatchResponse(CompletableDeferred(value = null)),
                         protocol
                     )
@@ -99,19 +101,27 @@ class MessageBatchDecoder(
             } else {
                 logger.trace { "received converted batch (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.fullBatch.id} requestHash=${pipelineMessage.codecRequest.requestHash})" }
 
-                pipelineStatus.decodeStart(streamName.toString(), pipelineMessage.codecRequest.protobufRawMessageBatch.groupsCount.toLong())
+                pipelineStatus.decodeStart(
+                    streamName.toString(),
+                    pipelineMessage.codecRequest.protobufRawMessageBatch.groupsCount.toLong()
+                )
 
                 val result = PipelineDecodedBatch(
-                    pipelineMessage.streamEmpty,
-                    pipelineMessage.lastProcessedId,
-                    pipelineMessage.lastScannedTime,
-                    pipelineMessage.storedBatchWrapper,
+                    pipelineMessage.also {
+                        it.info.startParseMessage = System.currentTimeMillis()
+                    },
                     context.rabbitMqService.sendToCodec(pipelineMessage.codecRequest),
                     protocol
                 )
-                pipelineStatus.decodeEnd(streamName.toString(), pipelineMessage.codecRequest.protobufRawMessageBatch.groupsCount.toLong())
+                pipelineStatus.decodeEnd(
+                    streamName.toString(),
+                    pipelineMessage.codecRequest.protobufRawMessageBatch.groupsCount.toLong()
+                )
                 sendToChannel(result)
-                pipelineStatus.decodeSendDownstream(streamName.toString(), pipelineMessage.codecRequest.protobufRawMessageBatch.groupsCount.toLong())
+                pipelineStatus.decodeSendDownstream(
+                    streamName.toString(),
+                    pipelineMessage.codecRequest.protobufRawMessageBatch.groupsCount.toLong()
+                )
 
                 logger.trace { "decoded batch is sent downstream (stream=${streamName.toString()} id=${result.storedBatchWrapper.fullBatch.id} requestHash=${pipelineMessage.codecRequest.requestHash})" }
             }

@@ -41,11 +41,12 @@ class AttachedEventFilters private constructor(
                 conjunct = filterRequest.isConjunct(),
                 messagesFromAttachedId = filterRequest.getValues()
                     ?.map {
-                        cradleService.getMessageIdsSuspend(
-                            StoredTestEventId(it)
-                        )
-                            .map { id -> id.toString() }
-                            .toSet()
+                        cradleService.getEventSuspend(StoredTestEventId(it))
+                            ?.asSingle()
+                            ?.messageIds
+                            ?.map { id -> id.toString() }
+                            ?.toSet()
+                            ?: emptySet()
                     }
                     ?.reduce { set, element ->
                         if (filterRequest.isConjunct()) {
