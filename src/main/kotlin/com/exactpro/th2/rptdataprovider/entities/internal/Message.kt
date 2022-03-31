@@ -18,6 +18,7 @@ package com.exactpro.th2.rptdataprovider.entities.internal
 
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.th2.common.grpc.RawMessage
 import java.time.Instant
 
 
@@ -53,7 +54,7 @@ data class Message(
         timestamp = rawStoredMessage.timestamp ?: Instant.ofEpochMilli(0),
         sessionId = rawStoredMessage.streamName ?: "",
         attachedEventIds = events,
-        rawMessageBody = rawBody,
+        rawMessageBody = RawMessage.parseFrom(rawBody).body.toByteArray(),
         parsedMessageGroup = parsedMessageGroup,
         imageType = imageType
     )
