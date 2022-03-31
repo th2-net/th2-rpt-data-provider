@@ -25,13 +25,11 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundExc
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchRequest
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
-import mu.KotlinLogging
 
 class MessageProducer(
     private val cradle: CradleService,
     private val rabbitMqService: RabbitMqService
 ) {
-    private val logger = KotlinLogging.logger { }
 
     suspend fun fromId(id: StoredMessageId): Message {
 
