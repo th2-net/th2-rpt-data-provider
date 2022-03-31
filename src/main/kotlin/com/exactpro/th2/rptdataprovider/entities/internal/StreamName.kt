@@ -40,7 +40,7 @@ data class StreamName(val name: String, val direction: Direction) {
         private fun getDirection(value: String): Direction {
             return value.split(separator).let {
                 check(it)
-                Direction.valueOf(it.last().toLowerCase())
+                Direction.byLabel(it.last().toLowerCase())
             }
         }
     }
