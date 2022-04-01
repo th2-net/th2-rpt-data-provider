@@ -5,6 +5,7 @@ import com.exactpro.th2.common.grpc.MessageGroupBatch
 import com.exactpro.th2.common.message.direction
 import com.exactpro.th2.common.message.sequence
 import com.exactpro.th2.common.message.sessionAlias
+import com.exactpro.th2.common.metrics.SESSION_ALIAS_LABEL
 import com.exactpro.th2.common.schema.grpc.router.GrpcRouter
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
@@ -125,7 +126,7 @@ class GrpcService(
                                 .first().rawMessage.metadata.id.connectionId.sessionAlias
 
                         codecLatency.gaugeInc(listOf(request.streamName))
-                        codecService.decode(request.protobufRawMessageBatch, mapOf("session-alias" to sessionAlias), responseObserver)
+                        codecService.decode(request.protobufRawMessageBatch, mapOf(SESSION_ALIAS_LABEL to sessionAlias), responseObserver)
                     } else {
                         codecService.decode(request.protobufRawMessageBatch, emptyMap(), responseObserver)
                     }
