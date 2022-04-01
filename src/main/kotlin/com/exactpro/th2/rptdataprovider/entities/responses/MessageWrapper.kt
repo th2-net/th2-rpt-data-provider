@@ -11,7 +11,10 @@ data class MessageWrapper(
     val rawMessage: RawMessage,
     val sessionId: String,
     val direction: Direction,
-    val timestamp: Instant
+    val timestamp: Instant,
+
+    @Suppress("ArrayInDataClass")
+    val storedContent: ByteArray
 ) {
     constructor(
         rawStoredMessage: StoredMessage,
@@ -19,6 +22,7 @@ data class MessageWrapper(
     ) : this(
         id = rawStoredMessage.id,
         rawMessage = rawMessage,
+        storedContent = rawStoredMessage.content,
         direction = Direction.fromStored(rawStoredMessage.direction ?: com.exactpro.cradle.Direction.FIRST),
         timestamp = rawStoredMessage.timestamp ?: Instant.ofEpochMilli(0),
         sessionId = rawStoredMessage.streamName ?: ""

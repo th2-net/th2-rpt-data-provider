@@ -53,7 +53,7 @@ data class Message(
         timestamp = messageWrapper.timestamp,
         sessionId = messageWrapper.sessionId,
         attachedEventIds = events,
-        rawMessageBody = messageWrapper.rawMessage.body.toByteArray(),
+        rawMessageBody = if(imageType != null) messageWrapper.storedContent else messageWrapper.rawMessage.body.toByteArray(),
         parsedMessageGroup = parsedMessageGroup,
         imageType = imageType
     )
