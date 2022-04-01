@@ -32,7 +32,6 @@ import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
-import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
 import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel.Factory.BUFFERED
@@ -57,7 +56,6 @@ class SearchEventsHandler(private val context: Context) {
 
     private val cradle: CradleService = context.cradleService
     private val eventProducer: EventProducer = context.eventProducer
-    private val dbRetryDelay: Long = context.configuration.dbRetryDelay.value.toLong()
     private val sseSearchDelay: Long = context.configuration.sseSearchDelay.value.toLong()
     private val sseEventSearchStep: Long = context.configuration.sseEventSearchStep.value.toLong()
     private val eventSearchChunkSize: Int = context.configuration.eventSearchChunkSize.value.toInt()
@@ -181,9 +179,8 @@ class SearchEventsHandler(private val context: Context) {
         return coroutineScope {
             flow {
                 val eventsCollection =
-                    databaseRequestRetry(dbRetryDelay) {
-                        getEventsSuspend(request.parentEvent, timestampFrom, timestampTo, request.searchDirection)
-                    }.asSequence().chunked(eventSearchChunkSize)
+                    getEventsSuspend(request.parentEvent, timestampFrom, timestampTo, request.searchDirection)
+                        .asSequence().chunked(eventSearchChunkSize)
 
                 for (event in eventsCollection)
                     emit(event)

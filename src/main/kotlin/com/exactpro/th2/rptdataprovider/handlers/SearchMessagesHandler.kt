@@ -17,58 +17,95 @@
 package com.exactpro.th2.rptdataprovider.handlers
 
 import com.exactpro.th2.rptdataprovider.Context
-import com.exactpro.th2.rptdataprovider.entities.internal.*
+import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineFilteredMessage
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineKeepAlive
+import com.exactpro.th2.rptdataprovider.entities.internal.StreamEndObject
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedMessageInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.messages.ChainBuilder
 import com.exactpro.th2.rptdataprovider.handlers.messages.StreamMerger
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.takeWhile
 import mu.KotlinLogging
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
-import kotlin.math.log
+import kotlin.math.roundToInt
+import kotlin.system.measureTimeMillis
+import kotlin.time.ExperimentalTime
+import kotlin.time.measureTimedValue
 
-class SearchMessagesHandler(private val context: Context) {
+class SearchMessagesHandler(private val applicationContext: Context) {
 
     companion object {
         private val logger = KotlinLogging.logger { }
     }
 
-    @InternalCoroutinesApi
-    @FlowPreview
-    @ExperimentalCoroutinesApi
+    private val pipelineInfoSendDelay = applicationContext.configuration.pipelineInfoSendDelay.value.toLong()
+    private val sendPipelineStatus = applicationContext.configuration.sendPipelineStatus.value.toBoolean()
+
+    private suspend fun sendPipelineStatus(
+        pipelineStatus: PipelineStatus,
+        writer: StreamWriter,
+        coroutineScope: CoroutineScope,
+        lastMessageIdCounter: AtomicLong
+    ) {
+        while (coroutineScope.isActive) {
+            writer.write(pipelineStatus.getSnapshot(), lastMessageIdCounter)
+            delay(pipelineInfoSendDelay)
+        }
+    }
+
+    @OptIn(ExperimentalTime::class, ExperimentalCoroutinesApi::class)
     suspend fun searchMessagesSse(request: SseMessageSearchRequest, writer: StreamWriter) {
         withContext(coroutineContext) {
             val lastMessageIdCounter = AtomicLong(0)
+            val pipelineStatus = PipelineStatus(context = applicationContext)
             var streamMerger: StreamMerger? = null
+            val chainScope = CoroutineScope(coroutineContext + Job(coroutineContext[Job]))
 
             flow {
-                streamMerger = ChainBuilder(context, request, this@withContext).buildChain()
+                streamMerger = ChainBuilder(applicationContext, request, chainScope, pipelineStatus).buildChain()
+
+                if (sendPipelineStatus) {
+                    launch {
+                        sendPipelineStatus(pipelineStatus, writer, chainScope, lastMessageIdCounter)
+                    }
+                }
 
                 do {
-                    val message = streamMerger?.pollMessage()
-                    logger.trace { message?.lastProcessedId }
-                    message?.let { emit(it) }
+                    val message = measureTimedValue {
+                        streamMerger?.pollMessage()
+                    }
+
+                    measureTimeMillis {
+                        message.value?.let { emit(it) }
+                    }.also {
+                        if (message.value !is EmptyPipelineObject) {
+                            logger.trace { "message was produced in ${message.duration.inMilliseconds.roundToInt()} and consumed in ${it}ms" }
+                        }
+                    }
+
                 } while (true)
             }
                 .takeWhile { it !is StreamEndObject }
                 .onCompletion {
                     streamMerger?.let { merger -> writer.write(merger.getStreamsInfo()) }
-                    coroutineContext.cancelChildren()
+                    chainScope.cancel()
                     it?.let { throwable -> throw throwable }
+                    logger.debug { "message pipeline flow has been completed" }
                 }
                 .collect {
                     coroutineContext.ensureActive()
 
-                    logger.trace { it.lastProcessedId }
-
                     if (it is PipelineFilteredMessage) {
-                        logger.trace { it.lastProcessedId }
+                        pipelineStatus.countSend()
                         writer.write(it.payload, lastMessageIdCounter)
                     } else if (it is PipelineKeepAlive) {
-                        logger.trace { it.lastProcessedId }
                         writer.write(LastScannedMessageInfo(it), lastMessageIdCounter)
                     }
                 }

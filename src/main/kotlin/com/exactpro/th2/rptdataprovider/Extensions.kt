@@ -24,25 +24,18 @@ import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.th2.common.grpc.ConnectionID
 import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
-import com.exactpro.th2.rptdataprovider.services.rabbitmq.BatchRequest
+import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.prometheus.client.Gauge
 import io.prometheus.client.Histogram
-import kotlinx.coroutines.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope.coroutineContext
-import kotlinx.coroutines.channels.*
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.selects.whileSelect
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.withContext
 import mu.KotlinLogging
 import java.io.IOException
 import java.io.Writer
-import java.time.Duration
 import java.time.Instant
-import java.time.LocalTime
-import java.time.ZoneOffset
-import java.util.*
 import java.util.concurrent.Executors
 import kotlin.system.measureTimeMillis
 
@@ -72,6 +65,8 @@ suspend fun <T> logTime(methodName: String, lambda: suspend () -> T): T? {
     return withContext(coroutineContext) {
         var result: T? = null
 
+        logger.debug { "cradle: $methodName is starting" }
+
         measureTimeMillis { result = lambda.invoke() }
             .also { logger.debug { "cradle: $methodName took ${it}ms" } }
 
@@ -84,23 +79,48 @@ data class Metrics(
     private val gauge: Gauge
 ) {
 
-    constructor(variableName: String, descriptionName: String) : this(
+    constructor(variableName: String, descriptionName: String, labels: List<String> = listOf()) : this(
         histogramTime = Histogram.build(
             "${variableName}_hist_time", "Time of $descriptionName"
         ).buckets(.005, .01, .025, .05, .075, .1, .25, .5, .75, 1.0, 2.5, 5.0, 7.5, 10.0, 25.0, 50.0, 75.0)
+            .labelNames(*labels.toTypedArray())
             .register(),
-        gauge = Gauge.build(
-            "${variableName}_gauge", "Quantity of $descriptionName using Gauge"
-        ).register()
+        gauge = Gauge.build("${variableName}_gauge", "Quantity of $descriptionName using Gauge")
+            .labelNames(*labels.toTypedArray())
+            .register()
     )
 
-    fun startObserve(): Histogram.Timer {
-        gauge.inc()
-        return histogramTime.startTimer()
+    fun gaugeInc(labels: List<String> = listOf()) {
+        gauge.labels(*labels.toTypedArray()).inc()
     }
 
-    fun stopObserve(timer: Histogram.Timer) {
-        gauge.dec()
+    fun gaugeDec(labels: List<String> = listOf()) {
+        gauge.labels(*labels.toTypedArray()).dec()
+    }
+
+    fun setDuration(amount: Double, labels: List<String> = listOf()) {
+        histogramTime.labels(*labels.toTypedArray()).observe(
+            System.currentTimeMillis() - amount
+        )
+    }
+
+    fun remove(streamName: String) {
+        gauge.remove(streamName)
+        histogramTime.remove(streamName)
+    }
+
+    fun labels(streamName: String) {
+        gauge.labels(streamName)
+        histogramTime.labels(streamName)
+    }
+
+    fun startObserve(labels: List<String> = listOf()): Histogram.Timer {
+        gauge.labels(*labels.toTypedArray()).inc()
+        return histogramTime.labels(*labels.toTypedArray()).startTimer()
+    }
+
+    fun stopObserve(timer: Histogram.Timer, labels: List<String> = listOf()) {
+        gauge.labels(*labels.toTypedArray()).dec()
         timer.observeDuration()
     }
 }
@@ -113,33 +133,6 @@ suspend fun <T> logMetrics(metrics: Metrics, lambda: suspend () -> T): T? {
         } finally {
             metrics.stopObserve(timer)
         }
-    }
-}
-
-private val writerDispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
-
-suspend fun Writer.eventWrite(event: SseEvent) {
-    withContext(writerDispatcher) {
-        if (event.event != null) {
-            write("event: ${event.event}\n")
-        }
-
-        for (dataLine in event.data.lines()) {
-            write("data: $dataLine\n")
-        }
-
-        if (event.metadata != null) {
-            write("id: ${event.metadata}\n")
-        }
-
-        write("\n")
-        flush()
-    }
-}
-
-suspend fun Writer.closeWriter() {
-    withContext(writerDispatcher) {
-        close()
     }
 }
 
@@ -185,72 +178,6 @@ fun StoredTestEventMetadata.tryToGetTestEvents(parentEventId: StoredTestEventId?
 }
 
 
-@ObsoleteCoroutinesApi
-@ExperimentalCoroutinesApi
-@InternalCoroutinesApi
-fun ReceiveChannel<BatchRequest>.chunked(size: Int, time: Long, capacity: Int = 1000) =
-    CoroutineScope(Dispatchers.Default).produce<List<BatchRequest>>(capacity = capacity, onCompletion = consumes()) {
-        while (true) {
-            val chunk = ArrayList<BatchRequest>()
-            val ticker = ticker(time)
-            var messageCount = 0
-            try {
-                whileSelect {
-                    ticker.onReceive {
-                        false
-                    }
-                    this@chunked.onReceive {
-                        chunk += it
-                        messageCount += it.messagesCount
-                        messageCount < size
-                    }
-                }
-            } catch (e: ClosedReceiveChannelException) {
-                return@produce
-            } finally {
-                ticker.cancel()
-                if (chunk.isNotEmpty()) send(chunk)
-            }
-        }
-    }
-
-@InternalCoroutinesApi
-@ExperimentalCoroutinesApi
-@ObsoleteCoroutinesApi
-fun <T> Flow<T>.chunked(size: Int, duration: Duration): Flow<List<T>> {
-    return flow {
-        coroutineScope {
-            val buffer = ArrayList<T>(size)
-            val ticker = ticker(duration.toMillis())
-            try {
-                val upstreamValues = produce { collect { send(it) } }
-
-                whileSelect {
-                    ticker.onReceive {
-                        false
-                    }
-                    upstreamValues.onReceive {
-                        buffer += it
-                        buffer.size < size
-                    }
-                }
-
-                if (buffer.isNotEmpty()) {
-                    emit(buffer.toList())
-                    buffer.clear()
-                }
-
-            } catch (e: ClosedReceiveChannelException) {
-                return@coroutineScope
-            } finally {
-                if (buffer.isNotEmpty()) emit(buffer.toList())
-                ticker.cancel()
-            }
-        }
-    }
-}
-
-
 fun StoredMessageId.convertToProto(): MessageID {
     return MessageID.newBuilder()
         .setSequence(index)
@@ -260,16 +187,3 @@ fun StoredMessageId.convertToProto(): MessageID {
 }
 
 
-fun Instant.dayEnd(): Instant {
-    val utcTimestamp = this.atOffset(ZoneOffset.UTC)
-    return utcTimestamp
-        .with(LocalTime.of(0, 0, 0, 0))
-        .minusNanos(1)
-        .toInstant()
-}
-
-
-fun Instant.dayStart(): Instant {
-    val utcTimestamp = this.atOffset(ZoneOffset.UTC)
-    return utcTimestamp.with(LocalTime.of(0, 0, 0, 0)).toInstant()
-}

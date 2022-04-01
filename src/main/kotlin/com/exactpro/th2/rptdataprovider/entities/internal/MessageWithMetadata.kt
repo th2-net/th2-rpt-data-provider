@@ -31,11 +31,11 @@ data class MessageWithMetadata(
 
     constructor(message: Message) : this(
         message = message,
-        filteredBody = message.messageBody?.let { List(it.size) { true } as MutableList } ?: mutableListOf()
+        filteredBody = message.parsedMessageGroup?.let { List(it.size) { true } as MutableList } ?: mutableListOf()
     )
 
     constructor(message: Message, id: MessageID) : this(message) {
-        message.messageBody?.let { body ->
+        message.parsedMessageGroup?.let { body ->
             val messageIndexWithSubsequence = body.indexOfFirst { it.id == id }
             if (messageIndexWithSubsequence >= 0) {
                 for (i in 0 until filteredBody.size) {
