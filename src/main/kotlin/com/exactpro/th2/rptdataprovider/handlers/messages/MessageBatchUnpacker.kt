@@ -10,6 +10,7 @@ import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineDecodedBatch
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineParsedMessage
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
@@ -68,10 +69,10 @@ class MessageBatchUnpacker(
 
 
     private fun badResponse(
-        requests: Collection<StoredMessage>,
+        requests: Collection<MessageWrapper>,
         responses: List<MessageGroup>?,
         pipelineMessage: PipelineDecodedBatch
-    ): List<Pair<StoredMessage, MessageGroup?>> {
+    ): List<Pair<MessageWrapper, MessageGroup?>> {
 
         val messages = pipelineMessage.storedBatchWrapper.trimmedMessages
 
@@ -92,10 +93,10 @@ class MessageBatchUnpacker(
     }
 
     private fun goodResponse(
-        requests: Collection<StoredMessage>,
+        requests: Collection<MessageWrapper>,
         responses: List<MessageGroup>,
         pipelineMessage: PipelineDecodedBatch
-    ): List<Pair<StoredMessage, MessageGroup?>> {
+    ): List<Pair<MessageWrapper, MessageGroup?>> {
 
         val requestsToResponse = requests.zip(responses)
 
@@ -186,8 +187,6 @@ class MessageBatchUnpacker(
 
                                 response?.messagesList?.map { BodyWrapper(it.message) }
                             },
-
-                            rawMessage.content,
                             emptySet(),
                             pipelineMessage.imageType
                         )

@@ -16,9 +16,9 @@
 
 package com.exactpro.th2.rptdataprovider.entities.internal
 
-import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.RawMessage
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
 import java.time.Instant
 
 
@@ -43,18 +43,17 @@ data class Message(
 
 
     constructor(
-        rawStoredMessage: StoredMessage,
+        messageWrapper: MessageWrapper,
         parsedMessageGroup: List<BodyWrapper>?,
-        rawBody: ByteArray,
         events: Set<String>,
         imageType: String? = null
     ) : this(
-        id = rawStoredMessage.id,
-        direction = Direction.fromStored(rawStoredMessage.direction ?: com.exactpro.cradle.Direction.FIRST),
-        timestamp = rawStoredMessage.timestamp ?: Instant.ofEpochMilli(0),
-        sessionId = rawStoredMessage.streamName ?: "",
+        id = messageWrapper.id,
+        direction = messageWrapper.direction,
+        timestamp = messageWrapper.timestamp,
+        sessionId = messageWrapper.sessionId,
         attachedEventIds = events,
-        rawMessageBody = RawMessage.parseFrom(rawBody).body.toByteArray(),
+        rawMessageBody = messageWrapper.rawMessage.body.toByteArray(),
         parsedMessageGroup = parsedMessageGroup,
         imageType = imageType
     )

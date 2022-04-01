@@ -9,6 +9,7 @@ import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineCodecRequest
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
@@ -80,7 +81,7 @@ class MessageBatchConverter(
                 .map {
                     MessageGroup.newBuilder().addMessages(
                         AnyMessage.newBuilder()
-                            .setRawMessage(RawMessage.parseFrom(it.content))
+                            .setRawMessage(it.rawMessage)
                             .build()
                     ).build() to it
                 }

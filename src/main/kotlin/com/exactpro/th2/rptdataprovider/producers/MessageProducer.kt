@@ -20,6 +20,7 @@ import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.*
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.Message
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
@@ -35,6 +36,9 @@ class MessageProducer(
 
         return cradle.getMessageSuspend(id)?.let { stored ->
 
+            val rawMessage = RawMessage.parseFrom(stored.content)
+            val messageWrapper = MessageWrapper(stored,rawMessage)
+
             val decoded = rabbitMqService.sendToCodec(
                 CodecBatchRequest(
                     MessageGroupBatch
@@ -45,7 +49,7 @@ class MessageProducer(
                                 .addMessages(
                                     AnyMessage
                                         .newBuilder()
-                                        .setRawMessage(RawMessage.parseFrom(stored.content))
+                                        .setRawMessage(rawMessage)
                                         .build()
                                 ).build()
                         ).build(),
@@ -60,7 +64,7 @@ class MessageProducer(
                 ?.messagesList
                 ?.map { BodyWrapper(it.message) }
 
-            Message(stored, decoded, stored.content, setOf())
+            Message(messageWrapper, decoded, setOf())
         }
 
             ?: throw CradleMessageNotFoundException("message '${id}' does not exist in cradle")

@@ -20,11 +20,13 @@ import com.exactpro.cradle.Order
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
@@ -181,6 +183,7 @@ class MessageExtractor(
                                 }
                             } ?: false
                         }
+                        .map { MessageWrapper(it, RawMessage.parseFrom(it.content)) }
 
                     val firstMessage = if (order == Order.DIRECT) batch.messages.first() else batch.messages.last()
                     val lastMessage = if (order == Order.DIRECT) batch.messages.last() else batch.messages.first()
