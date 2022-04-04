@@ -9,6 +9,7 @@ import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineCodecRequest
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
@@ -79,11 +80,13 @@ class MessageBatchConverter(
 
             val filteredMessages = pipelineMessage.storedBatchWrapper.trimmedMessages
                 .map {
+                    val messageWrapper = MessageWrapper(it, RawMessage.parseFrom(it.content))
+
                     MessageGroup.newBuilder().addMessages(
                         AnyMessage.newBuilder()
-                            .setRawMessage(it.rawMessage)
+                            .setRawMessage(messageWrapper.rawMessage)
                             .build()
-                    ).build() to it
+                    ).build() to messageWrapper
                 }
                 .filter { (messages, _) ->
                     val message = messages.messagesList.firstOrNull()?.message
@@ -101,7 +104,7 @@ class MessageBatchConverter(
                 pipelineMessage.streamEmpty,
                 pipelineMessage.lastProcessedId,
                 pipelineMessage.lastScannedTime,
-                pipelineMessage.storedBatchWrapper.copy(trimmedMessages = filteredMessages.map { it.second }),
+                MessageBatchWrapper(pipelineMessage.storedBatchWrapper.fullBatch, filteredMessages.map { it.second }),
                 CodecBatchRequest(
                     MessageGroupBatch
                         .newBuilder()

@@ -27,6 +27,7 @@ import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
+import com.exactpro.th2.rptdataprovider.entities.responses.StoredMessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
@@ -183,7 +184,6 @@ class MessageExtractor(
                                 }
                             } ?: false
                         }
-                        .map { MessageWrapper(it, RawMessage.parseFrom(it.content)) }
 
                     val firstMessage = if (order == Order.DIRECT) batch.messages.first() else batch.messages.last()
                     val lastMessage = if (order == Order.DIRECT) batch.messages.last() else batch.messages.first()
@@ -198,7 +198,7 @@ class MessageExtractor(
                         trimmedMessages.last().let { message ->
                             sendToChannel(
                                 PipelineRawBatch(
-                                    false, message.id, message.timestamp, MessageBatchWrapper(batch, trimmedMessages)
+                                    false, message.id, message.timestamp, StoredMessageBatchWrapper(batch, trimmedMessages)
                                 ).also {
                                     it.info.startExtract = timeStart
                                     it.info.endExtract = System.currentTimeMillis()
