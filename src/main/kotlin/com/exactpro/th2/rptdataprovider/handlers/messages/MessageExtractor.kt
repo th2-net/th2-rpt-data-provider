@@ -198,7 +198,7 @@ class MessageExtractor(
                         trimmedMessages.last().let { message ->
                             sendToChannel(
                                 PipelineRawBatch(
-                                    false, message.id, message.timestamp, StoredMessageBatchWrapper(batch, trimmedMessages)
+                                    false, message.id, message.timestamp, StoredMessageBatchWrapper(batch.id, trimmedMessages)
                                 ).also {
                                     it.info.startExtract = timeStart
                                     it.info.endExtract = System.currentTimeMillis()

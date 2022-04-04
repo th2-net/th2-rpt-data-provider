@@ -76,7 +76,7 @@ class MessageBatchConverter(
 
             val timeStart = System.currentTimeMillis()
 
-            logger.trace { "received raw batch (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.fullBatch.id})" }
+            logger.trace { "received raw batch (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.batchId})" }
 
             val filteredMessages = pipelineMessage.storedBatchWrapper.trimmedMessages
                 .map {
@@ -95,7 +95,7 @@ class MessageBatchConverter(
                     ((included.isNullOrEmpty() || included.contains(protocol))
                             && (excluded.isNullOrEmpty() || !excluded.contains(protocol)))
                         .also {
-                            logger.trace { "message ${message?.sequence} has protocol $protocol (matchesProtocolFilter=${it}) (stream=${streamName.toString()} batchId=${pipelineMessage.storedBatchWrapper.fullBatch.id})" }
+                            logger.trace { "message ${message?.sequence} has protocol $protocol (matchesProtocolFilter=${it}) (stream=${streamName.toString()} batchId=${pipelineMessage.storedBatchWrapper.batchId})" }
                         }
                 }
 
@@ -104,7 +104,7 @@ class MessageBatchConverter(
                 pipelineMessage.streamEmpty,
                 pipelineMessage.lastProcessedId,
                 pipelineMessage.lastScannedTime,
-                MessageBatchWrapper(pipelineMessage.storedBatchWrapper.fullBatch, filteredMessages.map { it.second }),
+                MessageBatchWrapper(pipelineMessage.storedBatchWrapper.batchId, filteredMessages.map { it.second }),
                 CodecBatchRequest(
                     MessageGroupBatch
                         .newBuilder()
@@ -126,9 +126,9 @@ class MessageBatchConverter(
 
             if (codecRequest.codecRequest.protobufRawMessageBatch.groupsCount > 0) {
                 sendToChannel(codecRequest)
-                logger.trace { "converted batch is sent downstream (stream=${streamName.toString()} id=${codecRequest.storedBatchWrapper.fullBatch.id} requestHash=${codecRequest.codecRequest.requestHash})" }
+                logger.trace { "converted batch is sent downstream (stream=${streamName.toString()} id=${codecRequest.storedBatchWrapper.batchId} requestHash=${codecRequest.codecRequest.requestHash})" }
             } else {
-                logger.trace { "converted batch is discarded because it has no messages (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.fullBatch.id})" }
+                logger.trace { "converted batch is discarded because it has no messages (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.batchId})" }
             }
 
             pipelineStatus.convertSendDownstream(
