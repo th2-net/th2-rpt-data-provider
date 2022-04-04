@@ -27,6 +27,8 @@ import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import kotlinx.coroutines.*
 import mu.KotlinLogging
+import java.lang.IllegalArgumentException
+import java.lang.IllegalStateException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import kotlin.system.measureTimeMillis
@@ -169,11 +171,10 @@ class RabbitMqService(
                         logger.debug { "codec request with hash ${request.requestHash.hashCode()} has been sent" }
                     }
                     StreamWriter.setSendToCodecTime(sendAllTime)
-                } catch (e: Exception) {
-                    pendingRequest.completableDeferred.cancel(
-                        "Unexpected exception while trying to send a codec request", e
-                    )
-                    throw e
+                }
+                catch (e: Exception) {
+                    pendingRequest.completableDeferred.complete(null)
+                    logger.error(e){ "Unexpected exception while trying to send a codec request" }
                 }
             }
 

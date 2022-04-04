@@ -267,8 +267,6 @@ class HttpServer(private val applicationContext: Context) {
                     )
                     coroutineContext.cancelChildren()
                 }.join()
-            } catch (e: CancellationException) {
-                throw e
             } catch (e: Exception) {
                 when (val exception = e.rootCause ?: e) {
                     is InvalidRequestException -> sendErrorCode(call, exception, HttpStatusCode.BadRequest)
@@ -278,6 +276,7 @@ class HttpServer(private val applicationContext: Context) {
                     is ChannelClosedException -> sendErrorCode(call, exception, HttpStatusCode.RequestTimeout)
                     is CradleIdException -> sendErrorCodeOrEmptyJson(probe, call, e, HttpStatusCode.InternalServerError)
                     is CodecResponseException -> sendErrorCode(call, exception, HttpStatusCode.InternalServerError)
+                    is CancellationException -> Unit
                     else -> sendErrorCode(call, exception as Exception, HttpStatusCode.InternalServerError)
                 }
                 throw e

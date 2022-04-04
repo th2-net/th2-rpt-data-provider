@@ -20,6 +20,9 @@ import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.*
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.Message
+import com.exactpro.th2.rptdataprovider.entities.internal.ProtoProtocolInfo
+import com.exactpro.th2.rptdataprovider.entities.internal.ProtoProtocolInfo.getProtocolField
+import com.exactpro.th2.rptdataprovider.entities.internal.ProtoProtocolInfo.isImage
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
@@ -35,30 +38,32 @@ class MessageProducer(
 
         return cradle.getMessageSuspend(id)?.let { stored ->
 
-            val decoded = rabbitMqService.sendToCodec(
-                CodecBatchRequest(
-                    MessageGroupBatch
+            val content = MessageGroupBatch
+                .newBuilder()
+                .addGroups(
+                    MessageGroup
                         .newBuilder()
-                        .addGroups(
-                            MessageGroup
+                        .addMessages(
+                            AnyMessage
                                 .newBuilder()
-                                .addMessages(
-                                    AnyMessage
-                                        .newBuilder()
-                                        .setRawMessage(RawMessage.parseFrom(stored.content))
-                                        .build()
-                                ).build()
-                        ).build(),
-                    "single_request"
+                                .setRawMessage(RawMessage.parseFrom(stored.content))
+                                .build()
+                        ).build()
+                ).build()
+
+
+            val decoded = if (!isImage(getProtocolField(content))) {
+                rabbitMqService.sendToCodec(
+                    CodecBatchRequest(content, "single_request")
                 )
-            )
-                .protobufParsedMessageBatch
-                .await()
-                ?.messageGroupBatch
-                ?.groupsList
-                ?.find { it.messagesList.first().message.metadata.id.sequence == id.index }
-                ?.messagesList
-                ?.map { BodyWrapper(it.message) }
+                    .protobufParsedMessageBatch
+                    .await()
+                    ?.messageGroupBatch
+                    ?.groupsList
+                    ?.find { it.messagesList.first().message.metadata.id.sequence == id.index }
+                    ?.messagesList
+                    ?.map { BodyWrapper(it.message) }
+            } else null
 
             Message(stored, decoded, stored.content, setOf())
         }
