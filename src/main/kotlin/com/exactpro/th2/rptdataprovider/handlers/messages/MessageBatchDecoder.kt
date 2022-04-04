@@ -99,7 +99,7 @@ class MessageBatchDecoder(
                     )
                 )
             } else {
-                logger.trace { "received converted batch (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.fullBatch.id} requestHash=${pipelineMessage.codecRequest.requestHash})" }
+                logger.trace { "received converted batch (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.batchId} requestHash=${pipelineMessage.codecRequest.requestHash})" }
 
                 pipelineStatus.decodeStart(
                     streamName.toString(),
@@ -123,7 +123,7 @@ class MessageBatchDecoder(
                     pipelineMessage.codecRequest.protobufRawMessageBatch.groupsCount.toLong()
                 )
 
-                logger.trace { "decoded batch is sent downstream (stream=${streamName.toString()} id=${result.storedBatchWrapper.fullBatch.id} requestHash=${pipelineMessage.codecRequest.requestHash})" }
+                logger.trace { "decoded batch is sent downstream (stream=${streamName.toString()} id=${result.storedBatchWrapper.batchId} requestHash=${pipelineMessage.codecRequest.requestHash})" }
             }
 
             pipelineStatus.countParseRequested(
