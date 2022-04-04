@@ -23,6 +23,7 @@ import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.entities.internal.ProtoProtocolInfo
 import com.exactpro.th2.rptdataprovider.entities.internal.ProtoProtocolInfo.getProtocolField
 import com.exactpro.th2.rptdataprovider.entities.internal.ProtoProtocolInfo.isImage
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
@@ -38,6 +39,7 @@ class MessageProducer(
 
         return cradle.getMessageSuspend(id)?.let { stored ->
 
+            val rawMessage = RawMessage.parseFrom(stored.content)
             val content = MessageGroupBatch
                 .newBuilder()
                 .addGroups(
@@ -46,7 +48,7 @@ class MessageProducer(
                         .addMessages(
                             AnyMessage
                                 .newBuilder()
-                                .setRawMessage(RawMessage.parseFrom(stored.content))
+                                .setRawMessage(rawMessage)
                                 .build()
                         ).build()
                 ).build()
@@ -65,7 +67,7 @@ class MessageProducer(
                     ?.map { BodyWrapper(it.message) }
             } else null
 
-            Message(stored, decoded, stored.content, setOf())
+            Message(MessageWrapper(stored, rawMessage), decoded, setOf())
         }
 
             ?: throw CradleMessageNotFoundException("message '${id}' does not exist in cradle")
