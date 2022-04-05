@@ -20,6 +20,9 @@ import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.*
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.Message
+import com.exactpro.th2.rptdataprovider.entities.internal.ProtoProtocolInfo
+import com.exactpro.th2.rptdataprovider.entities.internal.ProtoProtocolInfo.getProtocolField
+import com.exactpro.th2.rptdataprovider.entities.internal.ProtoProtocolInfo.isImage
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
@@ -37,34 +40,34 @@ class MessageProducer(
         return cradle.getMessageSuspend(id)?.let { stored ->
 
             val rawMessage = RawMessage.parseFrom(stored.content)
-            val messageWrapper = MessageWrapper(stored,rawMessage)
-
-            val decoded = rabbitMqService.sendToCodec(
-                CodecBatchRequest(
-                    MessageGroupBatch
+            val content = MessageGroupBatch
+                .newBuilder()
+                .addGroups(
+                    MessageGroup
                         .newBuilder()
-                        .addGroups(
-                            MessageGroup
+                        .addMessages(
+                            AnyMessage
                                 .newBuilder()
-                                .addMessages(
-                                    AnyMessage
-                                        .newBuilder()
-                                        .setRawMessage(rawMessage)
-                                        .build()
-                                ).build()
-                        ).build(),
-                    "single_request"
-                )
-            )
-                .protobufParsedMessageBatch
-                .await()
-                ?.messageGroupBatch
-                ?.groupsList
-                ?.find { it.messagesList.first().message.metadata.id.sequence == id.index }
-                ?.messagesList
-                ?.map { BodyWrapper(it.message) }
+                                .setRawMessage(rawMessage)
+                                .build()
+                        ).build()
+                ).build()
 
-            Message(messageWrapper, decoded, setOf())
+
+            val decoded = if (!isImage(getProtocolField(content))) {
+                rabbitMqService.sendToCodec(
+                    CodecBatchRequest(content, "single_request")
+                )
+                    .protobufParsedMessageBatch
+                    .await()
+                    ?.messageGroupBatch
+                    ?.groupsList
+                    ?.find { it.messagesList.first().message.metadata.id.sequence == id.index }
+                    ?.messagesList
+                    ?.map { BodyWrapper(it.message) }
+            } else null
+
+            Message(MessageWrapper(stored, rawMessage), decoded, setOf())
         }
 
             ?: throw CradleMessageNotFoundException("message '${id}' does not exist in cradle")
