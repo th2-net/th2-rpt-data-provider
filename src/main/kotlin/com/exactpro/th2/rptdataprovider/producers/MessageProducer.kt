@@ -54,7 +54,8 @@ class MessageProducer(
                 ).build()
 
 
-            val decoded = if (!isImage(getProtocolField(content))) {
+            val protocol = getProtocolField(content)
+            val decoded = if (!isImage(protocol)) {
                 rabbitMqService.sendToCodec(
                     CodecBatchRequest(content, "single_request")
                 )
@@ -67,7 +68,7 @@ class MessageProducer(
                     ?.map { BodyWrapper(it.message) }
             } else null
 
-            Message(MessageWrapper(stored, rawMessage), decoded, setOf())
+            Message(MessageWrapper(stored, rawMessage), decoded, setOf(), protocol)
         }
 
             ?: throw CradleMessageNotFoundException("message '${id}' does not exist in cradle")
