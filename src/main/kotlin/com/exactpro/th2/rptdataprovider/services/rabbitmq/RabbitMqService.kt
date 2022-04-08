@@ -100,6 +100,8 @@ class RabbitMqService(
 
     suspend fun sendToCodec(request: CodecBatchRequest): CodecBatchResponse {
 
+        logger.trace { "Send batch before cycle ${request.requestId} with id to codec" }
+
         while (pendingRequests.keys.size > maximumPendingRequests) {
             delay(100)
         }
@@ -111,14 +113,13 @@ class RabbitMqService(
 
             logger.trace { "Get pending request for batch ${request.requestId}" }
 
+            // launch timeout handler coroutine
             mqCallbackScope.launch {
                 measureTimeMillis {
                     delay(responseTimeout)
 
                     pendingRequest.completableDeferred.let {
-                        if (it.isActive &&
-                            pendingRequests[request.requestId]?.completableDeferred == pendingRequest.completableDeferred
-                        ) {
+                        if (pendingRequests[request.requestId]?.completableDeferred === pendingRequest.completableDeferred) {
 
                             pendingRequests.remove(request.requestId)
                             it.complete(null)
@@ -195,7 +196,10 @@ class RabbitMqService(
                         }
                         StreamWriter.setSendToCodecTime(sendAllTime)
                     } catch (e: Exception) {
-                        pendingRequest.completableDeferred.complete(null)
+                        if (pendingRequests[request.requestId]?.completableDeferred === pendingRequest.completableDeferred) {
+                            pendingRequest.completableDeferred.complete(null)
+                            pendingRequests.remove(request.requestId)
+                        }
                         logger.error(e) { "Unexpected exception while trying to send a codec request" }
                     }
                 }.also { logger.info { "${request.requestId} mqRequestSenderScope ${it}ms" } }
