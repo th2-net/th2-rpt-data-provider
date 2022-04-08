@@ -25,50 +25,63 @@ import com.exactpro.th2.rptdataprovider.entities.internal.ProtoProtocolInfo.getP
 import com.exactpro.th2.rptdataprovider.entities.internal.ProtoProtocolInfo.isImage
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
+import com.exactpro.th2.rptdataprovider.logTime
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchRequest
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
+import mu.KotlinLogging
+import kotlin.system.measureTimeMillis
 
 class MessageProducer(
     private val cradle: CradleService,
     private val rabbitMqService: RabbitMqService
 ) {
 
+    companion object {
+        val logger = KotlinLogging.logger { }
+    }
+
     suspend fun fromId(id: StoredMessageId): Message {
 
         return cradle.getMessageSuspend(id)?.let { stored ->
 
             val rawMessage = RawMessage.parseFrom(stored.content)
-            val content = MessageGroupBatch
-                .newBuilder()
-                .addGroups(
-                    MessageGroup
-                        .newBuilder()
-                        .addMessages(
-                            AnyMessage
-                                .newBuilder()
-                                .setRawMessage(rawMessage)
-                                .build()
-                        ).build()
-                ).build()
+            var content: MessageGroupBatch? = null
+            measureTimeMillis {
+                content = MessageGroupBatch
+                    .newBuilder()
+                    .addGroups(
+                        MessageGroup
+                            .newBuilder()
+                            .addMessages(
+                                AnyMessage
+                                    .newBuilder()
+                                    .setRawMessage(rawMessage)
+                                    .build()
+                            ).build()
+                    ).build()
+            }.also { logger.debug { "Grouping message $id ${it}ms" } }
 
+            var message: Message? = null
+            measureTimeMillis {
+                val protocol = getProtocolField(content!!)
+                val decoded = if (!isImage(protocol)) {
+                    rabbitMqService.sendToCodec(
+                        CodecBatchRequest(content!!, "single_request")
+                    )
+                        .protobufParsedMessageBatch
+                        .await()
+                        ?.messageGroupBatch
+                        ?.groupsList
+                        ?.find { it.messagesList.first().message.metadata.id.sequence == id.index }
+                        ?.messagesList
+                        ?.map { BodyWrapper(it.message) }
+                } else null
 
-            val protocol = getProtocolField(content)
-            val decoded = if (!isImage(protocol)) {
-                rabbitMqService.sendToCodec(
-                    CodecBatchRequest(content, "single_request")
-                )
-                    .protobufParsedMessageBatch
-                    .await()
-                    ?.messageGroupBatch
-                    ?.groupsList
-                    ?.find { it.messagesList.first().message.metadata.id.sequence == id.index }
-                    ?.messagesList
-                    ?.map { BodyWrapper(it.message) }
-            } else null
-
-            Message(MessageWrapper(stored, rawMessage), decoded, setOf(), protocol)
+                message = Message(MessageWrapper(stored, rawMessage), decoded, setOf(), protocol)
+            }.also { logger.debug { "Decoded message $id ${it}ms" } }
+            message
         }
 
             ?: throw CradleMessageNotFoundException("message '${id}' does not exist in cradle")

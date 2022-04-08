@@ -25,6 +25,7 @@ import com.exactpro.th2.common.schema.message.MessageRouter
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
+import com.exactpro.th2.rptdataprovider.logTime
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.lang.IllegalArgumentException
@@ -107,75 +108,82 @@ class RabbitMqService(
             val pendingRequest = request.toPending()
 
             mqCallbackScope.launch {
-                delay(responseTimeout)
+                measureTimeMillis {
+                    delay(responseTimeout)
 
-                pendingRequest.completableDeferred.let {
-                    if (it.isActive &&
-                        pendingRequests[request.requestId]?.completableDeferred == pendingRequest.completableDeferred
-                    ) {
+                    pendingRequest.completableDeferred.let {
+                        if (it.isActive &&
+                            pendingRequests[request.requestId]?.completableDeferred == pendingRequest.completableDeferred
+                        ) {
 
-                        pendingRequests.remove(request.requestId)
-                        it.complete(null)
+                            pendingRequests.remove(request.requestId)
+                            it.complete(null)
 
-                        codecLatency.gaugeDec(listOf(request.streamName))
-                        codecLatency.setDuration(
-                            pendingRequest.startTimestamp.toDouble(),
-                            listOf(request.streamName)
-                        )
+                            codecLatency.gaugeDec(listOf(request.streamName))
+                            codecLatency.setDuration(
+                                pendingRequest.startTimestamp.toDouble(),
+                                listOf(request.streamName)
+                            )
 
-                        logger.warn {
-                            val firstSequence =
-                                request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sequence
-                            val lastSequence =
-                                request.protobufRawMessageBatch.groupsList.last()?.messagesList?.last()?.rawMessage?.sequence
-                            val stream =
-                                "${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sessionAlias}:${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.direction.toString()}"
+                            logger.warn {
+                                val firstSequence =
+                                    request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sequence
+                                val lastSequence =
+                                    request.protobufRawMessageBatch.groupsList.last()?.messagesList?.last()?.rawMessage?.sequence
+                                val stream =
+                                    "${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sessionAlias}:${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.direction.toString()}"
 
-                            "codec request timed out after $responseTimeout ms (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} hash=${request.requestHash}) requestId=${request.requestId}"
+                                "codec request timed out after $responseTimeout ms (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} hash=${request.requestHash}) requestId=${request.requestId}"
+                            }
                         }
                     }
-                }
+                }.also { logger.debug { "${request.requestId} mqCallbackScope ${it}ms" } }
             }
 
             mqRequestSenderScope.launch {
-                try {
-                    val sendAllTime = measureTimeMillis {
-                        if (usePinAttributes) {
-                            val sessionAlias =
-                                request.protobufRawMessageBatch.groupsList
-                                    .first().messagesList
-                                    .first().rawMessage.metadata.id.connectionId.sessionAlias
+                measureTimeMillis {
+                    try {
+                        val sendAllTime = measureTimeMillis {
+                            if (usePinAttributes) {
+                                val sessionAlias =
+                                    request.protobufRawMessageBatch.groupsList
+                                        .first().messagesList
+                                        .first().rawMessage.metadata.id.connectionId.sessionAlias
 
-                            codecLatency.gaugeInc(listOf(request.streamName))
+                                codecLatency.gaugeInc(listOf(request.streamName))
 
-                            messageRouterRawBatch.sendAll(
-                                request.protobufRawMessageBatch,
-                                sessionAlias,
-                                toCodecAttributeName
-                            )
-                        } else {
-                            messageRouterRawBatch.sendAll(request.protobufRawMessageBatch, toCodecAttributeName)
+                                measureTimeMillis {
+                                    messageRouterRawBatch.sendAll(
+                                        request.protobufRawMessageBatch,
+                                        sessionAlias,
+                                        toCodecAttributeName
+                                    )
+                                }.also { logger.debug {  "messageRouterRawBatch sendAll ${it}ms"} }
+                            } else {
+                                measureTimeMillis {
+                                    messageRouterRawBatch.sendAll(request.protobufRawMessageBatch, toCodecAttributeName)
+                                }.also { logger.debug {  "messageRouterRawBatch sendAll ${it}ms" }}
+                            }
+
+                            logger.trace {
+                                val firstSequence =
+                                    request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sequence
+                                val lastSequence =
+                                    request.protobufRawMessageBatch.groupsList.last()?.messagesList?.last()?.rawMessage?.sequence
+                                val stream =
+                                    "${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sessionAlias}:${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.direction.toString()}"
+
+
+                                "codec request with hash ${request.requestHash} has been sent (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} hash=${request.requestHash}) requestId=${request.requestId})"
+                            }
+                            logger.debug { "codec request with hash ${request.requestHash.hashCode()} has been sent" }
                         }
-
-                        logger.trace {
-                            val firstSequence =
-                                request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sequence
-                            val lastSequence =
-                                request.protobufRawMessageBatch.groupsList.last()?.messagesList?.last()?.rawMessage?.sequence
-                            val stream =
-                                "${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sessionAlias}:${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.direction.toString()}"
-
-
-                            "codec request with hash ${request.requestHash} has been sent (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} hash=${request.requestHash}) requestId=${request.requestId})"
-                        }
-                        logger.debug { "codec request with hash ${request.requestHash.hashCode()} has been sent" }
+                        StreamWriter.setSendToCodecTime(sendAllTime)
+                    } catch (e: Exception) {
+                        pendingRequest.completableDeferred.complete(null)
+                        logger.error(e) { "Unexpected exception while trying to send a codec request" }
                     }
-                    StreamWriter.setSendToCodecTime(sendAllTime)
-                }
-                catch (e: Exception) {
-                    pendingRequest.completableDeferred.complete(null)
-                    logger.error(e){ "Unexpected exception while trying to send a codec request" }
-                }
+                }.also { logger.info { "${request.requestId} mqRequestSenderScope ${it}ms" } }
             }
 
             pendingRequest
