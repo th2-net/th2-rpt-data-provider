@@ -110,118 +110,123 @@ class MessageExtractor(
             resumeFromId?.let { logger.debug { "resume sequence for stream $streamName is set to ${it.sequence}" } }
             request.startTimestamp?.let { logger.debug { "start timestamp for stream $streamName is set to $it" } }
 
-            val cradleMessageIterable = context.cradleService.getMessagesBatchesSuspend(
-                StoredMessageFilterBuilder()
-                    .streamName().isEqualTo(streamName.name)
-                    .direction().isEqualTo(streamName.direction)
-                    .order(order)
+            if (resumeFromId == null || resumeFromId.hasStarted) {
+                val cradleMessageIterable = context.cradleService.getMessagesBatchesSuspend(
+                    StoredMessageFilterBuilder()
+                        .streamName().isEqualTo(streamName.name)
+                        .direction().isEqualTo(streamName.direction)
+                        .order(order)
 
-                    // timestamps will be ignored if resumeFromId is present
-                    .also { builder ->
-                        if (resumeFromId != null && resumeFromId.hasStarted) {
-                            builder.index().let {
-                                if (order == Order.DIRECT) {
-                                    it.isGreaterThanOrEqualTo(resumeFromId.sequence)
-                                } else {
-                                    it.isLessThanOrEqualTo(resumeFromId.sequence)
+                        // timestamps will be ignored if resumeFromId is present
+                        .also { builder ->
+                            if (resumeFromId != null) {
+                                builder.index().let {
+                                    if (order == Order.DIRECT) {
+                                        it.isGreaterThanOrEqualTo(resumeFromId.sequence)
+                                    } else {
+                                        it.isLessThanOrEqualTo(resumeFromId.sequence)
+                                    }
                                 }
+                            } else if (order == Order.DIRECT) {
+                                request.startTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
+                                request.endTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
+                            } else {
+                                request.startTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
+                                request.endTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
                             }
-                        } else if (order == Order.DIRECT) {
-                            request.startTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
-                            request.endTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
-                        } else {
-                            request.startTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
-                            request.endTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
+
+                        }.build()
+                )
+
+                logger.debug { "cradle iterator has been built for stream $streamName" }
+
+                for (batch in cradleMessageIterable) {
+                    if (externalScope.isActive) {
+
+                        val timeStart = System.currentTimeMillis()
+
+                        pipelineStatus.fetchedStart(streamName.toString())
+                        logger.trace { "batch ${batch.id.index} of stream $streamName with ${batch.messageCount} messages (${batch.batchSize} bytes) has been extracted" }
+
+                        val trimmedMessages = let {
+                            if (order == Order.DIRECT) {
+                                batch.messages
+                            } else {
+                                batch.messagesReverse
+                            }
+                        }
+                            // trim messages if resumeFromId is present
+                            .dropWhile {
+                                resumeFromId?.sequence?.let { start ->
+                                    if (order == Order.DIRECT) {
+                                        it.index < start
+                                    } else {
+                                        it.index > start
+                                    }
+                                } ?: false
+                            }
+
+                            //trim messages that do not strictly match time filter
+                            .dropWhile {
+                                request.startTimestamp?.let { startTimestamp ->
+                                    if (order == Order.DIRECT) {
+                                        it.timestamp.isBefore(startTimestamp)
+                                    } else {
+                                        it.timestamp.isAfter(startTimestamp)
+                                    }
+                                } ?: false
+                            }
+                            .dropLastWhile {
+                                request.endTimestamp?.let { endTimestamp ->
+                                    if (order == Order.DIRECT) {
+                                        it.timestamp.isAfterOrEqual(endTimestamp)
+                                    } else {
+                                        it.timestamp.isBeforeOrEqual(endTimestamp)
+                                    }
+                                } ?: false
+                            }
+
+                        val firstMessage = if (order == Order.DIRECT) batch.messages.first() else batch.messages.last()
+                        val lastMessage = if (order == Order.DIRECT) batch.messages.last() else batch.messages.first()
+
+                        logger.trace {
+                            "batch ${batch.id.index} of stream $streamName has been trimmed (targetTimestamp=${request.startTimestamp} targetId=${resumeFromId?.sequence}) - ${trimmedMessages.size} of ${batch.messages.size} messages left (firstId=${firstMessage.id.index} firstTimestamp=${firstMessage.timestamp} lastId=${lastMessage.id.index} lastTimestamp=${lastMessage.timestamp})"
                         }
 
-                    }.build()
-            )
+                        pipelineStatus.fetchedEnd(streamName.toString())
 
-            logger.debug { "cradle iterator has been built for stream $streamName" }
+                        try {
+                            trimmedMessages.last().let { message ->
+                                sendToChannel(
+                                    PipelineRawBatch(
+                                        false,
+                                        message.id,
+                                        message.timestamp,
+                                        StoredMessageBatchWrapper(batch.id, trimmedMessages)
+                                    ).also {
+                                        it.info.startExtract = timeStart
+                                        it.info.endExtract = System.currentTimeMillis()
+                                        StreamWriter.setExtract(it.info)
+                                    }
+                                )
+                                lastElement = message.id
+                                lastTimestamp = message.timestamp
 
-            for (batch in cradleMessageIterable) {
-                if (externalScope.isActive) {
+                                logger.trace { "batch ${batch.id.index} of stream $streamName has been sent downstream" }
 
-                    val timeStart = System.currentTimeMillis()
-
-                    pipelineStatus.fetchedStart(streamName.toString())
-                    logger.trace { "batch ${batch.id.index} of stream $streamName with ${batch.messageCount} messages (${batch.batchSize} bytes) has been extracted" }
-
-                    val trimmedMessages = let {
-                        if (order == Order.DIRECT) {
-                            batch.messages
-                        } else {
-                            batch.messagesReverse
-                        }
-                    }
-                        // trim messages if resumeFromId is present
-                        .dropWhile {
-                            resumeFromId?.sequence?.let { start ->
-                                if (order == Order.DIRECT) {
-                                    it.index < start
-                                } else {
-                                    it.index > start
-                                }
-                            } ?: false
-                        }
-
-                        //trim messages that do not strictly match time filter
-                        .dropWhile {
-                            request.startTimestamp?.let { startTimestamp ->
-                                if (order == Order.DIRECT) {
-                                    it.timestamp.isBefore(startTimestamp)
-                                } else {
-                                    it.timestamp.isAfter(startTimestamp)
-                                }
-                            } ?: false
-                        }
-                        .dropLastWhile {
-                            request.endTimestamp?.let { endTimestamp ->
-                                if (order == Order.DIRECT) {
-                                    it.timestamp.isAfterOrEqual(endTimestamp)
-                                } else {
-                                    it.timestamp.isBeforeOrEqual(endTimestamp)
-                                }
-                            } ?: false
-                        }
-
-                    val firstMessage = if (order == Order.DIRECT) batch.messages.first() else batch.messages.last()
-                    val lastMessage = if (order == Order.DIRECT) batch.messages.last() else batch.messages.first()
-
-                    logger.trace {
-                        "batch ${batch.id.index} of stream $streamName has been trimmed (targetTimestamp=${request.startTimestamp} targetId=${resumeFromId?.sequence}) - ${trimmedMessages.size} of ${batch.messages.size} messages left (firstId=${firstMessage.id.index} firstTimestamp=${firstMessage.timestamp} lastId=${lastMessage.id.index} lastTimestamp=${lastMessage.timestamp})"
-                    }
-
-                    pipelineStatus.fetchedEnd(streamName.toString())
-
-                    try {
-                        trimmedMessages.last().let { message ->
-                            sendToChannel(
-                                PipelineRawBatch(
-                                    false, message.id, message.timestamp, StoredMessageBatchWrapper(batch.id, trimmedMessages)
-                                ).also {
-                                    it.info.startExtract = timeStart
-                                    it.info.endExtract = System.currentTimeMillis()
-                                    StreamWriter.setExtract(it.info)
-                                }
-                            )
-                            lastElement = message.id
-                            lastTimestamp = message.timestamp
-
-                            logger.trace { "batch ${batch.id.index} of stream $streamName has been sent downstream" }
-
-                        }
-                    } catch (e: NoSuchElementException) {
+                            }
+                        } catch (e: NoSuchElementException) {
 //                        logger.debug { "skipping batch ${batch.id.index} of stream $streamName - no messages left after trimming" }
-                    }
-                    pipelineStatus.fetchedSendDownstream(streamName.toString())
+                        }
+                        pipelineStatus.fetchedSendDownstream(streamName.toString())
 
-                    pipelineStatus.countFetchedBytes(streamName.toString(), batch.batchSize)
-                    pipelineStatus.countFetchedBatches(streamName.toString())
-                    pipelineStatus.countFetchedMessages(streamName.toString(), trimmedMessages.size.toLong())
-                } else {
-                    logger.trace { "exiting $streamName loop" }
-                    break
+                        pipelineStatus.countFetchedBytes(streamName.toString(), batch.batchSize)
+                        pipelineStatus.countFetchedBatches(streamName.toString())
+                        pipelineStatus.countFetchedMessages(streamName.toString(), trimmedMessages.size.toLong())
+                    } else {
+                        logger.trace { "exiting $streamName loop" }
+                        break
+                    }
                 }
             }
 
