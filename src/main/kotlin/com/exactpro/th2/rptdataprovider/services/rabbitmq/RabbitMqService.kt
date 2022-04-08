@@ -104,8 +104,12 @@ class RabbitMqService(
             delay(100)
         }
 
+        logger.trace { "Send batch ${request.requestId} with id to codec" }
+
         return pendingRequests.computeIfAbsent(request.requestId) {
             val pendingRequest = request.toPending()
+
+            logger.trace { "Get pending request for batch ${request.requestId}" }
 
             mqCallbackScope.launch {
                 measureTimeMillis {
@@ -140,7 +144,14 @@ class RabbitMqService(
                 }.also { logger.debug { "${request.requestId} mqCallbackScope ${it}ms" } }
             }
 
+            logger.trace { "Check timeout callback for batch ${request.requestId}" }
+
+            logger.trace { "Check mqRequestSenderScope alive ${mqRequestSenderScope.isActive}" }
+
             mqRequestSenderScope.launch {
+
+                logger.trace { "Launch sendAll coroutine ${request.requestId}" }
+
                 measureTimeMillis {
                     try {
                         val sendAllTime = measureTimeMillis {
@@ -150,7 +161,11 @@ class RabbitMqService(
                                         .first().messagesList
                                         .first().rawMessage.metadata.id.connectionId.sessionAlias
 
+                                logger.trace { "Session aliases for batch ${request.requestId}, alias $sessionAlias" }
+
                                 codecLatency.gaugeInc(listOf(request.streamName))
+
+                                logger.trace { "Start sendAll method for batch ${request.requestId}" }
 
                                 measureTimeMillis {
                                     messageRouterRawBatch.sendAll(
@@ -158,11 +173,11 @@ class RabbitMqService(
                                         sessionAlias,
                                         toCodecAttributeName
                                     )
-                                }.also { logger.debug {  "messageRouterRawBatch sendAll ${it}ms"} }
+                                }.also { logger.debug { "messageRouterRawBatch ${request.requestId} sendAll ${it}ms" } }
                             } else {
                                 measureTimeMillis {
                                     messageRouterRawBatch.sendAll(request.protobufRawMessageBatch, toCodecAttributeName)
-                                }.also { logger.debug {  "messageRouterRawBatch sendAll ${it}ms" }}
+                                }.also { logger.debug { "messageRouterRawBatch ${request.requestId} sendAll ${it}ms" } }
                             }
 
                             logger.trace {
