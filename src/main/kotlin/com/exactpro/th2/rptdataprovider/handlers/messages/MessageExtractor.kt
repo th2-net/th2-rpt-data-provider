@@ -212,7 +212,7 @@ class MessageExtractor(
 
                         }
                     } catch (e: NoSuchElementException) {
-                        logger.debug { "skipping batch ${batch.id.index} of stream $streamName - no messages left after trimming" }
+//                        logger.debug { "skipping batch ${batch.id.index} of stream $streamName - no messages left after trimming" }
                     }
                     pipelineStatus.fetchedSendDownstream(streamName.toString())
 
