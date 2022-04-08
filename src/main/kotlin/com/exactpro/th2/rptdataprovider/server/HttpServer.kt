@@ -437,7 +437,8 @@ class HttpServer(private val applicationContext: Context) {
                     handleRequest(call, context, "message ids", null, false, false, queryParametersMap) {
                         val request = SseMessageSearchRequest(
                             queryParametersMap,
-                            messageFiltersPredicateFactory.getEmptyPredicate()
+                            messageFiltersPredicateFactory.getEmptyPredicate(),
+                            TimeRelation.BEFORE
                         ).also {
                             it.checkIdsRequest()
                         }

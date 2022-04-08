@@ -187,12 +187,12 @@ class SearchMessagesHandler(private val applicationContext: Context) {
 
             listPair.first().let {
                 streamInfoMap
-                    .getValue(TimeRelation.BEFORE)
+                    .getValue(TimeRelation.AFTER)
                     .add(StreamInfo(messageExtractor.streamName!!, it.first))
             }
             listPair.last().let {
                 streamInfoMap
-                    .getValue(TimeRelation.AFTER)
+                    .getValue(TimeRelation.BEFORE)
                     .add(StreamInfo(messageExtractor.streamName!!, it.first))
             }
         }
