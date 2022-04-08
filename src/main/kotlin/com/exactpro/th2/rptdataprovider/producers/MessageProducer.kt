@@ -17,15 +17,15 @@
 package com.exactpro.th2.rptdataprovider.producers
 
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.common.grpc.*
+import com.exactpro.th2.common.grpc.AnyMessage
+import com.exactpro.th2.common.grpc.MessageGroup
+import com.exactpro.th2.common.grpc.MessageGroupBatch
+import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.Message
-import com.exactpro.th2.rptdataprovider.entities.internal.ProtoProtocolInfo
 import com.exactpro.th2.rptdataprovider.entities.internal.ProtoProtocolInfo.getProtocolField
 import com.exactpro.th2.rptdataprovider.entities.internal.ProtoProtocolInfo.isImage
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
-import com.exactpro.th2.rptdataprovider.handlers.StreamName
-import com.exactpro.th2.rptdataprovider.logTime
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchRequest
@@ -61,7 +61,7 @@ class MessageProducer(
                                     .build()
                             ).build()
                     ).build()
-            }.also { logger.debug { "Grouping message $id ${it}ms" } }
+            }.also { logger.trace { "Grouping message $id ${it}ms" } }
 
             var message: Message? = null
             measureTimeMillis {
@@ -80,7 +80,7 @@ class MessageProducer(
                 } else null
 
                 message = Message(MessageWrapper(stored, rawMessage), decoded, setOf(), protocol)
-            }.also { logger.debug { "Decoded message $id ${it}ms" } }
+            }.also { logger.trace { "Decoded message $id ${it}ms" } }
             message
         }
 

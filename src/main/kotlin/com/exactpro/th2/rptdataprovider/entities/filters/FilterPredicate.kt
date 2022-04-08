@@ -36,7 +36,7 @@ class FilterPredicate<T>(private val filters: List<Filter<T>>, private val speci
         measureTimeMillis {
             result = isEmpty()
             result = filters.all { it.match(element) }
-        }.also { logger.info { "applying filters $it ms" } }
+        }.also { logger.trace { "applying filters $it ms" } }
         return result
     }
 
