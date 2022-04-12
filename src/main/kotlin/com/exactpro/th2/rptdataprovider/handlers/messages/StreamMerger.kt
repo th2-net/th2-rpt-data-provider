@@ -17,18 +17,24 @@
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.cradle.TimeRelation
+import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidInitializationException
 import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
+import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
+import io.prometheus.client.Histogram
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.time.Instant
+import kotlin.time.ExperimentalTime
+import kotlin.time.measureTimedValue
 
 //FIXME: Check stream stop condition and streaminfo object
 class StreamMerger(
@@ -48,21 +54,20 @@ class StreamMerger(
 
         companion object {
             private val logger = KotlinLogging.logger { }
+            private val pullFromStream = Histogram.build(
+                "th2_stream_pull_time", "Time of stream pull"
+            ).buckets(.0001, .0005, .001, .005, .01)
+                .labelNames("stream")
+                .register()
         }
+
+        private val streamName = messageStream.streamName.toString()
+        private val labelMetric = pullFromStream.labels(streamName)
 
         var currentElement: PipelineStepObject? = null
             private set
         var previousElement: PipelineStepObject? = null
             private set
-
-
-        private fun changePreviousElement(currentElement: PipelineStepObject?) {
-            if (previousElement == null
-                || currentElement is PipelineFilteredMessage
-            ) {
-                previousElement = currentElement
-            }
-        }
 
         fun top(): PipelineStepObject {
             return currentElement!!
@@ -78,15 +83,21 @@ class StreamMerger(
             }
         }
 
+        @OptIn(ExperimentalTime::class)
         suspend fun pop(): PipelineStepObject {
-            return messageStream.pollMessage().let { newElement ->
-                val currentElementTemporary = currentElement
+            return measureTimedValue {
+                messageStream.pollMessage().let { newElement ->
+                    val currentElementTemporary = currentElement
 
-                currentElementTemporary?.also {
-                    changePreviousElement(currentElement)
-                    currentElement = newElement
+                    currentElementTemporary?.also {
+                        previousElement = currentElement
+                        currentElement = newElement
+                    }
+                        ?: throw InvalidInitializationException("StreamHolder ${messageStream.streamName} need initialization")
                 }
-                    ?: throw InvalidInitializationException("StreamHolder ${messageStream.streamName} need initialization")
+            }.let {
+                labelMetric.observe(it.duration.inSeconds)
+                it.value
             }
         }
     }
@@ -155,7 +166,7 @@ class StreamMerger(
         }
     }
 
-
+    @OptIn(ExperimentalTime::class)
     override suspend fun processMessage() {
         coroutineScope {
 
@@ -164,7 +175,12 @@ class StreamMerger(
             messageStreams.forEach { it.init() }
 
             do {
-                val nextMessage = getNextMessage()
+                val nextMessage = measureTimedValue {
+                    getNextMessage()
+                }.let {
+                    StreamWriter.setMerging(it.duration.inMilliseconds.toLong())
+                    it.value
+                }
 
                 val inTimeRange = inTimeRange(nextMessage)
 
@@ -252,7 +268,16 @@ class StreamMerger(
 
     fun getStreamsInfo(): List<StreamInfo> {
         return messageStreams.map {
-            StreamInfo(it.messageStream.streamName!!, it.previousElement?.lastProcessedId)
+            val storedMessageId = if (it.currentElement != null && it.currentElement?.streamEmpty!!) {
+                StoredMessageId(it.messageStream.streamName?.name, it.messageStream.streamName!!.direction, -1)
+            } else {
+                it.currentElement?.lastProcessedId
+            }
+
+            StreamInfo(
+                it.messageStream.streamName!!,
+                storedMessageId
+            )
         }
     }
 }

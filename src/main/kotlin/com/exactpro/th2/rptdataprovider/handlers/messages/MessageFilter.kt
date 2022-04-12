@@ -19,6 +19,7 @@ package com.exactpro.th2.rptdataprovider.handlers.messages
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
@@ -93,7 +94,7 @@ class MessageFilter(
                 if (parsedMessage is PipelineParsedMessage) {
 
                     pipelineStatus.filterStart(streamName.toString())
-
+                    val timeStart = System.currentTimeMillis()
                     val filtered = measureTimedValue {
                         pipelineStatus.countFilteredTotal(streamName.toString())
                         updateState(parsedMessage)
@@ -104,8 +105,20 @@ class MessageFilter(
                     }.value
 
                     pipelineStatus.filterEnd(streamName.toString())
+
+                    parsedMessage.also {
+                        it.info.startFilter = timeStart
+                        it.info.endFilter = System.currentTimeMillis()
+                        StreamWriter.setFilter(it.info)
+                    }
+
                     if (filtered.finalFiltered) {
-                        sendToChannel(PipelineFilteredMessage(parsedMessage, filtered))
+                        sendToChannel(
+                            PipelineFilteredMessage(
+                                parsedMessage,
+                                filtered
+                            )
+                        )
                         pipelineStatus.countFilterAccepted(streamName.toString())
                     } else {
                         pipelineStatus.countFilterDiscarded(streamName.toString())

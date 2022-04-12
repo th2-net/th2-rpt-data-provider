@@ -54,6 +54,10 @@ class PredicateFactory<T>(
         return FilterPredicate(filtersList)
     }
 
+    suspend fun getEmptyPredicate(): FilterPredicate<T> {
+        return FilterPredicate(emptyList())
+    }
+
     suspend fun build(filters: List<com.exactpro.th2.dataprovider.grpc.Filter>): FilterPredicate<T> {
         val filtersList = mutableListOf<Filter<T>>().apply {
             for (filter in filters) {

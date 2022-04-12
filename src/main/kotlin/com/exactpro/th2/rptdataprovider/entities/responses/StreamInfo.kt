@@ -23,9 +23,13 @@ import com.exactpro.th2.dataprovider.grpc.Stream
 import com.exactpro.th2.rptdataprovider.convertToProto
 import com.exactpro.th2.rptdataprovider.cradleDirectionToGrpc
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
+import com.fasterxml.jackson.annotation.JsonIgnore
 import mu.KotlinLogging
 
-data class StreamInfo(val stream: StreamName, val lastElement: StoredMessageId? = null) {
+data class StreamInfo(val stream: StreamName, @JsonIgnore val lastMessage: StoredMessageId? = null) {
+
+    val lastElement = lastMessage?.toString()
+
     companion object {
         val logger = KotlinLogging.logger { }
     }
@@ -35,7 +39,7 @@ data class StreamInfo(val stream: StreamName, val lastElement: StoredMessageId? 
             .setDirection(cradleDirectionToGrpc(stream.direction))
             .setSession(stream.name)
             .setLastId(
-                lastElement?.let {
+                lastMessage?.let {
                     logger.trace { "stream $stream - lastElement is ${it.index}" }
                     it.convertToProto()
 

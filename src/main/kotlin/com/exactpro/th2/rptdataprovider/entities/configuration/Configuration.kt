@@ -41,24 +41,24 @@ class CustomConfigurationClass {
 
     val keepAliveTimeout: Long = 5000
 
-    val messageExtractorOutputBatchBuffer: Int = 2
-    val messageConverterOutputBatchBuffer: Int = 2
-    val messageDecoderOutputBatchBuffer: Int = 2
-    val messageUnpackerOutputMessageBuffer: Int = 1000
-    val messageFilterOutputMessageBuffer: Int = 1000
+    val messageExtractorOutputBatchBuffer: Int = 1
+    val messageConverterOutputBatchBuffer: Int = 1
+    val messageDecoderOutputBatchBuffer: Int = 1
+    val messageUnpackerOutputMessageBuffer: Int = 100
+    val messageFilterOutputMessageBuffer: Int = 100
     val messageMergerOutputMessageBuffer: Int = 10
 
     val codecResponseTimeout: Int = 6000
-    val codecPendingBatchLimit: Int = 200
-    val codecCallbackThreadPool: Int = 10
+    val codecPendingBatchLimit: Int = 16
+    val codecCallbackThreadPool: Int = 4
     val codecRequestThreadPool: Int = 1
     val codecUsePinAttributes: Boolean = true
 
     val grpcWriterMessageBuffer: Int = 100
 
-    val cradleDispatcherPoolSize: Long = 1
+    val grpcThreadPoolSize: Int = 20
 
-    val sseSearchDelay: Long = 6000
+    val cradleDispatcherPoolSize: Long = 1
 
     val sendEmptyDelay = 100
 
@@ -183,8 +183,6 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
     val cradleDispatcherPoolSize: Variable =
         Variable("cradleDispatcherPoolSize", customConfiguration.cradleDispatcherPoolSize.toString(), "1")
 
-    val sseSearchDelay: Variable = Variable("sseSearchDelay", customConfiguration.sseSearchDelay.toString(), "6000")
-
     val sendEmptyDelay: Variable =
         Variable("sendEmptyDelay", customConfiguration.sendEmptyDelay.toString(), "100")
 
@@ -205,4 +203,7 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
 
     val codecUsePinAttributes: Variable =
         Variable("codecUsePinAttributes", customConfiguration.codecUsePinAttributes.toString(), "true")
+
+    val grpcThreadPoolSize: Variable =
+        Variable("grpcThreadPoolSize", customConfiguration.grpcThreadPoolSize.toString(), "20")
 }

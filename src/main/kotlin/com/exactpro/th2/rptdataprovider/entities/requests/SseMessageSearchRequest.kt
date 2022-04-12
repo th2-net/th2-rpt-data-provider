@@ -23,6 +23,7 @@ import com.exactpro.th2.dataprovider.grpc.TimeRelation.PREVIOUS
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
+import com.exactpro.th2.rptdataprovider.entities.mappers.TimeRelationMapper
 import com.exactpro.th2.rptdataprovider.grpcDirectionToCradle
 import java.time.Instant
 
@@ -46,25 +47,16 @@ data class SseMessageSearchRequest(
     val includeProtocols: List<String>?,
     val excludeProtocols: List<String>?
 ) {
-
-    companion object {
-        private fun asCradleTimeRelation(value: String): TimeRelation {
-            if (value == "next") return TimeRelation.AFTER
-            if (value == "previous") return TimeRelation.BEFORE
-
-            throw InvalidRequestException("'$value' is not a valid timeline direction. Use 'next' or 'previous'")
-        }
-    }
-
-    constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<MessageWithMetadata>) : this(
+    constructor(
+        parameters: Map<String, List<String>>,
+        filterPredicate: FilterPredicate<MessageWithMetadata>,
+        searchDirection: TimeRelation
+    ) : this(
         filterPredicate = filterPredicate,
         startTimestamp = parameters["startTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
         stream = parameters["stream"] ?: emptyList(),
-        searchDirection = parameters["searchDirection"]?.firstOrNull()?.let {
-            asCradleTimeRelation(
-                it
-            )
-        } ?: TimeRelation.AFTER,
+        searchDirection = parameters["searchDirection"]?.firstOrNull()?.let { TimeRelationMapper.fromHttpString(it) }
+            ?: searchDirection,
         endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
 
         //FIXME: negative value is used to mark a stream that has not yet started. This needs to be replaced with an explicit flag
@@ -86,7 +78,11 @@ data class SseMessageSearchRequest(
         excludeProtocols = parameters["excludeProtocols"]
     )
 
-    constructor(request: MessageSearchRequest, filterPredicate: FilterPredicate<MessageWithMetadata>) : this(
+    constructor(
+        request: MessageSearchRequest,
+        filterPredicate: FilterPredicate<MessageWithMetadata>,
+        searchDirection: TimeRelation
+    ) : this(
         filterPredicate = filterPredicate,
         startTimestamp = if (request.hasStartTimestamp())
             request.startTimestamp.let {
@@ -100,7 +96,7 @@ data class SseMessageSearchRequest(
         searchDirection = request.searchDirection.let {
             when (it) {
                 PREVIOUS -> TimeRelation.BEFORE
-                else -> TimeRelation.AFTER
+                else -> searchDirection
             }
         },
 
@@ -132,6 +128,18 @@ data class SseMessageSearchRequest(
         excludeProtocols = null
     )
 
+    constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<MessageWithMetadata>) : this(
+        parameters = parameters,
+        filterPredicate = filterPredicate,
+        searchDirection = TimeRelation.AFTER
+    )
+
+    constructor(request: MessageSearchRequest, filterPredicate: FilterPredicate<MessageWithMetadata>) : this(
+        request = request,
+        filterPredicate = filterPredicate,
+        searchDirection = TimeRelation.AFTER
+    )
+
     private fun checkEndTimestamp() {
         if (endTimestamp == null || startTimestamp == null) return
 
@@ -155,10 +163,45 @@ data class SseMessageSearchRequest(
         }
     }
 
+    private fun checkTimestampAndId() {
+        if (startTimestamp != null && resumeFromIdsList.isNotEmpty())
+            throw InvalidRequestException("You cannot specify resume Id and start timestamp at the same time")
+    }
+
+    private fun checkResumeIds() {
+        if (resumeFromIdsList.size > 1)
+            throw InvalidRequestException("you cannot specify more than one id")
+    }
+
+    private fun checkIdForStreams() {
+        if (resumeFromIdsList.isEmpty()) return
+
+        val mapStreams = stream.associateWith { mutableListOf<StreamPointer>() }
+        resumeFromIdsList.forEach { mapStreams[it.streamName]?.add(it) }
+        mapStreams.forEach {
+            val messageDirectionList = it.value.map { streamPointer -> streamPointer.direction }
+
+            if (!messageDirectionList.containsAll(Direction.values().toList())) {
+                throw InvalidRequestException("ResumeId was not passed for the stream: ${it.key}")
+            } else if (messageDirectionList.size > 2) {
+                throw InvalidRequestException("Stream ${it.key} has more than two id")
+            }
+        }
+    }
+
+    fun checkIdsRequest() {
+        checkStartPoint()
+        checkEndTimestamp()
+        checkStreamList()
+        checkTimestampAndId()
+        checkResumeIds()
+    }
+
     fun checkRequest() {
         checkStartPoint()
         checkEndTimestamp()
         checkStreamList()
+        checkIdForStreams()
     }
 }
 

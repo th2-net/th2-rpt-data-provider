@@ -34,7 +34,6 @@ import com.exactpro.th2.rptdataprovider.entities.sse.GrpcWriter
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.grpcDirectionToCradle
 import com.exactpro.th2.rptdataprovider.logMetrics
-import com.exactpro.th2.rptdataprovider.server.HttpServer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import com.google.protobuf.MessageOrBuilder
 import com.google.protobuf.TextFormat
@@ -46,6 +45,7 @@ import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import org.apache.commons.lang3.exception.ExceptionUtils
+import java.util.concurrent.Executors
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -101,6 +101,10 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     private val eventFiltersPredicateFactory = this.context.eventFiltersPredicateFactory
     private val messageFiltersPredicateFactory = this.context.messageFiltersPredicateFactory
 
+    private val grpcThreadPoolSize = context.configuration.grpcThreadPoolSize.value.toInt()
+    private val grpcThreadPool = Executors.newFixedThreadPool(grpcThreadPoolSize).asCoroutineDispatcher()
+
+
 
     private suspend fun checkContext(grpcContext: io.grpc.Context) {
         while (coroutineContext.isActive) {
@@ -135,7 +139,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
             logger.error(exception) { "Coroutine context exception from the handleRequest method with $requestName" }
         }
 
-        CoroutineScope(Dispatchers.IO + handler).launch {
+        CoroutineScope(grpcThreadPool + handler).launch {
             logMetrics(if (useStream) grpcStreamRequestsProcessedInParallelQuantity else grpcSingleRequestsProcessedInParallelQuantity) {
                 measureTimeMillis {
                     logger.debug { "handling '$requestName' request with parameters '${stringParameters.value}'" }
@@ -152,6 +156,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
                             } else {
                                 handleRestApiRequest(responseObserver, context, calledFun as suspend () -> T)
                             }
+                            responseObserver.onCompleted()
                         } catch (e: Exception) {
                             throw ExceptionUtils.getRootCause(e) ?: e
                         } finally {
@@ -220,7 +225,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
                 context.configuration.grpcWriterMessageBuffer.value.toInt(),
                 responseObserver,
                 context.jacksonMapper,
-                this@coroutineScope
+                this
             )
 
             try {

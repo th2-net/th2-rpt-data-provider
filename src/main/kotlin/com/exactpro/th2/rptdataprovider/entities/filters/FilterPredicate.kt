@@ -17,8 +17,14 @@
 package com.exactpro.th2.rptdataprovider.entities.filters
 
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType
+import com.exactpro.th2.rptdataprovider.logTime
+import mu.KotlinLogging
+import kotlin.system.measureTimeMillis
 
 class FilterPredicate<T>(private val filters: List<Filter<T>>, private val specialTypes: List<FilterSpecialType>) {
+    companion object {
+        val logger = KotlinLogging.logger {  }
+    }
 
     constructor(filters: List<Filter<T>>) : this(
         filters = filters,
@@ -26,8 +32,12 @@ class FilterPredicate<T>(private val filters: List<Filter<T>>, private val speci
     )
 
     fun apply(element: T): Boolean {
-        if (isEmpty()) return true
-        return filters.all { it.match(element) }
+        var result = false
+        measureTimeMillis {
+            result = isEmpty()
+            result = filters.all { it.match(element) }
+        }.also { logger.trace { "applying filters $it ms" } }
+        return result
     }
 
 
