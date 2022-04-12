@@ -28,6 +28,7 @@ import org.ehcache.config.builders.CacheConfigurationBuilder
 import org.ehcache.config.builders.CacheManagerBuilder
 import org.ehcache.config.builders.ResourcePoolsBuilder
 
+//FIXME remove it later
 class MessageCache(configuration: Configuration, private val messageProducer: MessageProducer) {
     private val manager = CacheManagerBuilder.newCacheManagerBuilder().build(true)
     private val logger = KotlinLogging.logger { }
@@ -58,15 +59,5 @@ class MessageCache(configuration: Configuration, private val messageProducer: Me
     @InternalCoroutinesApi
     suspend fun getOrPut(id: String): Message {
         return messageProducer.fromId(StoredMessageId.fromString(id))
-        //TODO remove it later
-//            .also {
-//                logger.debug { "Message cache miss for id=$id" }
-//
-//                val type = it.parsedMessageGroup?.get(0)?.messageType
-//
-//                if (!nonCachedTypes.contains(type)) {
-//                    put(id, it)
-//                }
-//            }
     }
 }
