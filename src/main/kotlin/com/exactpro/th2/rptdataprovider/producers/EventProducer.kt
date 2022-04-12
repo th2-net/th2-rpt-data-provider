@@ -107,7 +107,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
             .filterNotNull()
             .map {
                 setBody(it, fromStoredEvent(it, null)).apply {
-                    attachedMessageIds = it.messageIds.map(Any::toString).toSet()
+                    attachedMessageIds = it.messageIds?.map(Any::toString)?.toSet() ?: emptySet()
                 }
             }
             .toList()
@@ -135,7 +135,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
             ) {
                 it.map { (content, event) ->
                     event.apply {
-                        attachedMessageIds = content.messageIds.map(Any::toString).toSet()
+                        attachedMessageIds = content.messageIds?.map(Any::toString)?.toSet() ?: emptySet()
                     }
                 }
             } else {
