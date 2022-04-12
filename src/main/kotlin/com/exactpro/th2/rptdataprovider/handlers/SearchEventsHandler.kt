@@ -33,7 +33,6 @@ import com.exactpro.th2.rptdataprovider.maxInstant
 import com.exactpro.th2.rptdataprovider.minInstant
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
-import com.exactpro.th2.rptdataprovider.services.cradle.databaseRequestRetry
 import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel.Factory.BUFFERED
@@ -58,8 +57,6 @@ class SearchEventsHandler(private val context: Context) {
 
     private val cradle: CradleService = context.cradleService
     private val eventProducer: EventProducer = context.eventProducer
-    private val dbRetryDelay: Long = context.configuration.dbRetryDelay.value.toLong()
-    private val sseSearchDelay: Long = context.configuration.sseSearchDelay.value.toLong()
     private val sseEventSearchStep: Long = context.configuration.sseEventSearchStep.value.toLong()
     private val eventSearchChunkSize: Int = context.configuration.eventSearchChunkSize.value.toInt()
     private val keepAliveTimeout: Long = context.configuration.keepAliveTimeout.value.toLong()
@@ -155,10 +152,8 @@ class SearchEventsHandler(private val context: Context) {
         return coroutineScope {
             flow {
                 val eventsCollection =
-                    databaseRequestRetry(dbRetryDelay) {
-                        getEventsSuspend(request.parentEvent, timestampFrom, timestampTo)
-                    }.asSequence().chunked(eventSearchChunkSize)
-
+                    getEventsSuspend(request.parentEvent, timestampFrom, timestampTo)
+                        .asSequence().chunked(eventSearchChunkSize)
                 for (event in eventsCollection)
                     emit(event)
             }
@@ -172,17 +167,14 @@ class SearchEventsHandler(private val context: Context) {
                                     events.sortedByDescending { it.startTimestamp }
                             }.also { parentContext.ensureActive() }
                     }
-                }
-                .buffer(BUFFERED)
+                }.buffer(BUFFERED)
         }
     }
 
 
     private fun changeOfDayProcessing(from: Instant, to: Instant): Iterable<Pair<Instant, Instant>> {
         return if (from.atOffset(ZoneOffset.UTC).dayOfYear != to.atOffset(ZoneOffset.UTC).dayOfYear) {
-            val pivot = from.atOffset(ZoneOffset.UTC)
-                .plusDays(1).with(LocalTime.of(0, 0, 0, 0))
-                .toInstant()
+            val pivot = from.atOffset(ZoneOffset.UTC).plusDays(1).with(LocalTime.of(0, 0, 0, 0)).toInstant()
             listOf(Pair(from, pivot.minusNanos(1)), Pair(pivot, to))
         } else {
             listOf(Pair(from, to))
@@ -200,9 +192,7 @@ class SearchEventsHandler(private val context: Context) {
 
 
     private fun getTimeIntervals(
-        request: SseEventSearchRequest,
-        sseEventSearchStep: Long,
-        initTimestamp: Instant
+        request: SseEventSearchRequest, sseEventSearchStep: Long, initTimestamp: Instant
     ): Sequence<Pair<Instant, Instant>> {
 
         var timestamp = initTimestamp
@@ -210,56 +200,25 @@ class SearchEventsHandler(private val context: Context) {
         return sequence {
             val comparator = getComparator(request.searchDirection, request.endTimestamp)
             while (comparator.invoke(timestamp)) {
-                yieldAll(
-                    if (request.searchDirection == AFTER) {
-                        val toTimestamp = minInstant(timestamp.plusSeconds(sseEventSearchStep), Instant.MAX)
-                        changeOfDayProcessing(timestamp, toTimestamp).also { timestamp = toTimestamp }
-                    } else {
-                        val fromTimestamp = maxInstant(timestamp.minusSeconds(sseEventSearchStep), Instant.MIN)
-                        changeOfDayProcessing(fromTimestamp, timestamp).reversed()
-                            .also { timestamp = fromTimestamp }
-                    }
-                )
+                yieldAll(if (request.searchDirection == AFTER) {
+                    val toTimestamp = minInstant(
+                        minInstant(timestamp.plusSeconds(sseEventSearchStep), Instant.MAX),
+                        request.endTimestamp ?: Instant.MAX
+                    )
+                    changeOfDayProcessing(timestamp, toTimestamp).also { timestamp = toTimestamp }
+                } else {
+                    val fromTimestamp = maxInstant(
+                        maxInstant(timestamp.minusSeconds(sseEventSearchStep), Instant.MIN),
+                        request.endTimestamp ?: Instant.MIN
+                    )
+                    changeOfDayProcessing(fromTimestamp, timestamp).reversed().also { timestamp = fromTimestamp }
+                })
             }
         }
     }
-
-
-    private suspend fun getNextTimestampGenerator(
-        request: SseEventSearchRequest,
-        sseEventSearchStep: Long,
-        initTimestamp: Instant
-    ): Sequence<Pair<Boolean, Pair<Instant, Instant>>> {
-
-        var isSearchInFuture = false
-        val isSearchNext = request.searchDirection == AFTER
-
-        var timeIntervals = getTimeIntervals(request, sseEventSearchStep, initTimestamp).iterator()
-
-        return sequence {
-            while (timeIntervals.hasNext()) {
-                val timestamp = timeIntervals.next()
-                if (!isSearchInFuture && isSearchNext
-                    && timestamp.second.isAfter(maxInstant(Instant.now(), request.endTimestamp ?: Instant.MIN))
-                ) {
-                    if (request.keepOpen) {
-                        timeIntervals = getTimeIntervals(request, sseSearchDelay, timestamp.first).iterator()
-                        isSearchInFuture = true
-                        continue
-                    } else {
-                        yield(isSearchInFuture to timestamp)
-                        return@sequence
-                    }
-                }
-                yield(isSearchInFuture to timestamp)
-            }
-        }
-    }
-
 
     private suspend fun dropByTimestampFilter(
-        request: SseEventSearchRequest,
-        resumeFromEvent: BaseEventEntity
+        request: SseEventSearchRequest, resumeFromEvent: BaseEventEntity
     ): (BaseEventEntity) -> Boolean {
         return { event: BaseEventEntity ->
             if (request.searchDirection == AFTER) {
@@ -313,23 +272,19 @@ class SearchEventsHandler(private val context: Context) {
                 eventProducer.fromId(ProviderEventId(it))
             }
             val startTimestamp = resumeFromEvent?.startTimestamp ?: request.startTimestamp!!
-            val timeIntervals = getNextTimestampGenerator(request, sseEventSearchStep, startTimestamp)
+            val timeIntervals = getTimeIntervals(request, sseEventSearchStep, startTimestamp)
             val parentEventCounter = ParentEventCounter(request.limitForParent)
 
             flow {
-                for ((isSearchInFuture, timestamp) in timeIntervals) {
+                for (timestamp in timeIntervals) {
 
                     lastScannedObject.update(timestamp.first)
-
-                    if (isSearchInFuture)
-                        delay(sseSearchDelay * 1000)
 
                     getEventFlow(
                         request, timestamp.first, timestamp.second, coroutineContext
                     ).collect { emit(it) }
 
-                    if (request.parentEvent?.batchId != null)
-                        break
+                    if (request.parentEvent?.batchId != null) break
                 }
             }
                 .map { it.await() }

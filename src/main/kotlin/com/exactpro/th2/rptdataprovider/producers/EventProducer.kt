@@ -91,7 +91,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
 
         return fromStoredEvent(storedEvent, batch).let {
             setBody(storedEvent, it).apply {
-                it.attachedMessageIds = storedEvent.messageIds.map(Any::toString).toSet()
+                it.attachedMessageIds = storedEvent.messageIds?.map(Any::toString)?.toSet() ?: emptySet()
             }
         }
     }
@@ -145,25 +145,6 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
     }
 
 
-    fun fromEventMetadata(
-        storedEvent: StoredTestEventMetadata,
-        batch: StoredTestEventMetadata?
-    ): BaseEventEntity {
-        return BaseEventEntity(
-            storedEvent,
-            ProviderEventId(batch?.id, storedEvent.id),
-            batch?.id,
-            storedEvent.parentId?.let { parentId ->
-                if (batch?.tryToGetTestEvents()?.firstOrNull { it.id == parentId } != null) {
-                    ProviderEventId(batch?.id, parentId)
-                } else {
-                    ProviderEventId(null, parentId)
-                }
-            }
-        )
-    }
-
-
     fun fromStoredEvent(
         storedEvent: StoredTestEventWithContent,
         batch: StoredTestEventBatch?
@@ -181,6 +162,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
             }
         )
     }
+
 
     private fun setBody(
         storedEvent: StoredTestEventWithContent,

@@ -58,13 +58,14 @@ class MessageBodyFilter private constructor(
 
     private fun predicate(element: BodyWrapper): Boolean {
         val predicate: (String) -> Boolean = { item ->
-            JsonFormat.printer().print(element.message).toLowerCase().contains(item.toLowerCase())
+            JsonFormat.printer().omittingInsignificantWhitespace().print(element.message).toLowerCase()
+                .contains(item.toLowerCase())
         }
         return negative.xor(if (conjunct) body.all(predicate) else body.any(predicate))
     }
 
     override fun match(element: MessageWithMetadata): Boolean {
-        return element.message.messageBody?.let { messageBody ->
+        return element.message.parsedMessageGroup?.let { messageBody ->
             messageBody.forEachIndexed { index, bodyWrapper ->
                 predicate(bodyWrapper).also {
                     element.filteredBody[index] = element.filteredBody[index] && it

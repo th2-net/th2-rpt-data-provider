@@ -19,10 +19,11 @@ package com.exactpro.th2.rptdataprovider
 
 import com.exactpro.cradle.CradleManager
 import com.exactpro.th2.common.grpc.MessageBatch
+import com.exactpro.th2.common.grpc.MessageGroup
+import com.exactpro.th2.common.grpc.MessageGroupBatch
 import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.schema.grpc.configuration.GrpcConfiguration
 import com.exactpro.th2.common.schema.message.MessageRouter
-import com.exactpro.th2.rptdataprovider.cache.CodecCache
 import com.exactpro.th2.rptdataprovider.cache.EventCache
 import com.exactpro.th2.rptdataprovider.cache.MessageCache
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
@@ -64,8 +65,9 @@ class Context(
         .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES),
 
     val cradleManager: CradleManager,
-    val messageRouterRawBatch: MessageRouter<RawMessageBatch>,
-    val messageRouterParsedBatch: MessageRouter<MessageBatch>,
+    val messageRouterRawBatch: MessageRouter<MessageGroupBatch>,
+
+    val messageRouterParsedBatch: MessageRouter<MessageGroupBatch>,
     val grpcConfig: GrpcConfiguration,
 
     val cradleService: CradleService = CradleService(
@@ -83,12 +85,9 @@ class Context(
 
     val eventCache: EventCache = EventCache(cacheTimeout, configuration.eventCacheSize.value.toLong(), eventProducer),
 
-    val codecCache: CodecCache = CodecCache(configuration),
-
     val messageProducer: MessageProducer = MessageProducer(
         cradleService,
-        rabbitMqService,
-        codecCache
+        rabbitMqService
     ),
 
     val messageCache: MessageCache = MessageCache(configuration, messageProducer),

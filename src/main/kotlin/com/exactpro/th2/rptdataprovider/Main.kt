@@ -62,6 +62,7 @@ class Main {
         val configuration =
             Configuration(configurationFactory.getCustomConfiguration(CustomConfigurationClass::class.java))
 
+
         context = Context(
             configuration,
 
@@ -70,10 +71,10 @@ class Main {
             cradleManager = configurationFactory.cradleManager.also {
                 resources += AutoCloseable { it.dispose() }
             },
-            messageRouterRawBatch = configurationFactory.messageRouterRawBatch.also {
+            messageRouterRawBatch = configurationFactory.messageRouterMessageGroupBatch.also {
                 resources += it
             },
-            messageRouterParsedBatch = configurationFactory.messageRouterParsedBatch.also {
+            messageRouterParsedBatch = configurationFactory.messageRouterMessageGroupBatch.also {
                 resources += it
             },
             grpcConfig = configurationFactory.grpcConfiguration

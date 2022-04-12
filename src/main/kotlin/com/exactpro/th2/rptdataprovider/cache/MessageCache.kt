@@ -57,11 +57,10 @@ class MessageCache(configuration: Configuration, private val messageProducer: Me
 
     @InternalCoroutinesApi
     suspend fun getOrPut(id: String): Message {
-        return cache.get(id)
-            ?: messageProducer.fromId(StoredMessageId.fromString(id)).also {
+        return messageProducer.fromId(StoredMessageId.fromString(id)).also {
                 logger.debug { "Message cache miss for id=$id" }
 
-                val type = it.messageBody?.get(0)?.messageType
+                val type = it.parsedMessageGroup?.get(0)?.messageType
 
                 if (!nonCachedTypes.contains(type)) {
                     put(id, it)

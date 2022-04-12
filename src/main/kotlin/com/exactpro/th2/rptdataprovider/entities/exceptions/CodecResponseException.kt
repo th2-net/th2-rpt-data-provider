@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+﻿/*******************************************************************************
+ * Copyright 2022-2022 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,18 +14,6 @@
  * limitations under the License.
  ******************************************************************************/
 
-package com.exactpro.th2.rptdataprovider.entities.responses
+package com.exactpro.th2.rptdataprovider.entities.exceptions
 
-import com.exactpro.cradle.messages.StoredMessage
-import com.exactpro.cradle.messages.StoredMessageBatch
-import com.exactpro.cradle.messages.StoredMessageBatchId
-
-data class MessageBatchWrapper(
-    val batchId: StoredMessageBatchId,
-    val trimmedMessages: Collection<MessageWrapper>
-)
-
-data class StoredMessageBatchWrapper(
-    val batchId: StoredMessageBatchId,
-    val trimmedMessages: Collection<StoredMessage>
-)
+open class CodecResponseException(message: String) : Exception(message)
