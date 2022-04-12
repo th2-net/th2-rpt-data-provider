@@ -45,26 +45,28 @@ class MessageCache(configuration: Configuration, private val messageProducer: Me
         ).build()
     )
 
-    fun put(id: String, message: Message) {
+    private fun put(id: String, message: Message) {
         if (!cache.containsKey(id)) {
             cache.put(id, message)
         }
     }
 
-    fun get(id: String): Message? {
+    private fun get(id: String): Message? {
         return cache.get(id)
     }
 
     @InternalCoroutinesApi
     suspend fun getOrPut(id: String): Message {
-        return messageProducer.fromId(StoredMessageId.fromString(id)).also {
-                logger.debug { "Message cache miss for id=$id" }
-
-                val type = it.parsedMessageGroup?.get(0)?.messageType
-
-                if (!nonCachedTypes.contains(type)) {
-                    put(id, it)
-                }
-            }
+        return messageProducer.fromId(StoredMessageId.fromString(id))
+        //TODO remove it later
+//            .also {
+//                logger.debug { "Message cache miss for id=$id" }
+//
+//                val type = it.parsedMessageGroup?.get(0)?.messageType
+//
+//                if (!nonCachedTypes.contains(type)) {
+//                    put(id, it)
+//                }
+//            }
     }
 }
