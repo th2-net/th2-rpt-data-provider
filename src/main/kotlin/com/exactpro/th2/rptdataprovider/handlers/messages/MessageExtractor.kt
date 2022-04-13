@@ -105,9 +105,8 @@ class MessageExtractor(
                 Order.REVERSE
             }
 
-            logger.debug { "acquiring cradle iterator for stream $streamName" }
+            resumeFromId?.let { logger.debug { "stream='$streamName', sequence='${it.sequence}', hasStarted='${it.hasStarted}'" } }
 
-            resumeFromId?.let { logger.debug { "resume sequence for stream $streamName is set to ${it.sequence}" } }
             request.startTimestamp?.let { logger.debug { "start timestamp for stream $streamName is set to $it" } }
 
             if (resumeFromId == null || resumeFromId.hasStarted) {
