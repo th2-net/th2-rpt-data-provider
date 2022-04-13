@@ -35,6 +35,8 @@ data class PipelineStreamCounters(
     val fetched: AtomicLong = AtomicLong(0),
     val fetchedBytes: AtomicLong = AtomicLong(0),
     val fetchedBatches: AtomicLong = AtomicLong(0),
+    val skipped: AtomicLong = AtomicLong(0),
+    val skippedBatches: AtomicLong = AtomicLong(0),
     val parsePrepared: AtomicLong = AtomicLong(0),
     val parseRequested: AtomicLong = AtomicLong(0),
     val parseReceivedTotal: AtomicLong = AtomicLong(0),
@@ -78,6 +80,8 @@ class PipelineStatus(context: Context) {
         private val fetched = Counter.build("fetched", "Count fetched").labelNames("stream").labelNames("stream").register()
         private val fetchedBytes = Counter.build("fetchedBytes", "Count fetchedBytes").labelNames("stream").register()
         private val fetchedBatches = Counter.build("fetchedBatches", "Count fetchedBatches").labelNames("stream").register()
+        private val skipped = Counter.build("skipped", "Count skipped").labelNames("stream").register()
+        private val skippedBatches = Counter.build("skippedBatches", "Count skippedBatches").labelNames("stream").register()
         private val parsePrepared = Counter.build("parsePrepared", "Count parsePrepared").labelNames("stream").register()
         private val parseRequested = Counter.build("parseRequested", "Count parseRequested").labelNames("stream").register()
         private val parseReceivedTotal = Counter.build("parseReceivedTotal", "Count parseReceivedTotal").labelNames("stream").register()
@@ -273,6 +277,18 @@ class PipelineStatus(context: Context) {
         if (!sendPipelineStatus) return
         fetchedBatches.labels(streamName).inc(count.toDouble())
         this.streams[streamName]?.fetchedBatches?.addAndGet(count)
+    }
+
+    fun countSkippedMessages(streamName: String, count: Long = 1) {
+        if (!sendPipelineStatus) return
+        skipped.labels(streamName).inc(count.toDouble())
+        this.streams[streamName]?.skipped?.addAndGet(count)
+    }
+
+    fun countSkippedBatches(streamName: String, count: Long = 1) {
+        if (!sendPipelineStatus) return
+        skippedBatches.labels(streamName).inc(count.toDouble())
+        this.streams[streamName]?.skippedBatches?.addAndGet(count)
     }
 
     fun countFilterAccepted(streamName: String, count: Long = 1) {

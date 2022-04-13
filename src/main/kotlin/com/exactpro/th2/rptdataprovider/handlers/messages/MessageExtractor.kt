@@ -20,13 +20,10 @@ import com.exactpro.cradle.Order
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
-import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.responses.StoredMessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
@@ -217,12 +214,14 @@ class MessageExtractor(
                             }
                         } catch (e: NoSuchElementException) {
 //                        logger.debug { "skipping batch ${batch.id.index} of stream $streamName - no messages left after trimming" }
+                            pipelineStatus.countSkippedBatches(streamName.toString())
                         }
                         pipelineStatus.fetchedSendDownstream(streamName.toString())
 
                         pipelineStatus.countFetchedBytes(streamName.toString(), batch.batchSize)
                         pipelineStatus.countFetchedBatches(streamName.toString())
                         pipelineStatus.countFetchedMessages(streamName.toString(), trimmedMessages.size.toLong())
+                        pipelineStatus.countSkippedMessages(streamName.toString(), batch.messageCount - trimmedMessages.size.toLong())
                     } else {
                         logger.trace { "exiting $streamName loop" }
                         break
