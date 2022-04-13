@@ -214,6 +214,7 @@ class MessageExtractor(
                             }
                         } catch (e: NoSuchElementException) {
 //                        logger.debug { "skipping batch ${batch.id.index} of stream $streamName - no messages left after trimming" }
+                            pipelineStatus.countSkippedBatches(streamName.toString())
                         }
                         pipelineStatus.fetchedSendDownstream(streamName.toString())
 
@@ -221,7 +222,6 @@ class MessageExtractor(
                         pipelineStatus.countFetchedBatches(streamName.toString())
                         pipelineStatus.countFetchedMessages(streamName.toString(), trimmedMessages.size.toLong())
                         pipelineStatus.countSkippedMessages(streamName.toString(), batch.messageCount - trimmedMessages.size.toLong())
-                        pipelineStatus.countSkippedBatches(streamName.toString(), if (trimmedMessages.isEmpty()) 1 else 0 )
                     } else {
                         logger.trace { "exiting $streamName loop" }
                         break
