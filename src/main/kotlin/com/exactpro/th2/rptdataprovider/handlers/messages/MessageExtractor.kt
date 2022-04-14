@@ -134,7 +134,6 @@ class MessageExtractor(
                             if (order == Order.DIRECT) {
                                 request.endTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
                             } else {
-
                                 request.endTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
                             }
                         }.build()
