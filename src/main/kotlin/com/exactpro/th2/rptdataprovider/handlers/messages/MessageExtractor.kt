@@ -124,14 +124,18 @@ class MessageExtractor(
                                         it.isLessThanOrEqualTo(resumeFromId.sequence)
                                     }
                                 }
-                            } else if (order == Order.DIRECT) {
-                                request.startTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
+                            } else {
+                                if (order == Order.DIRECT) {
+                                    request.startTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
+                                } else {
+                                    request.startTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
+                                }
+                            }
+                            if (order == Order.DIRECT) {
                                 request.endTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
                             } else {
-                                request.startTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
                                 request.endTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
                             }
-
                         }.build()
                 )
 
@@ -221,7 +225,10 @@ class MessageExtractor(
                         pipelineStatus.countFetchedBytes(streamName.toString(), batch.batchSize)
                         pipelineStatus.countFetchedBatches(streamName.toString())
                         pipelineStatus.countFetchedMessages(streamName.toString(), trimmedMessages.size.toLong())
-                        pipelineStatus.countSkippedMessages(streamName.toString(), batch.messageCount - trimmedMessages.size.toLong())
+                        pipelineStatus.countSkippedMessages(
+                            streamName.toString(),
+                            batch.messageCount - trimmedMessages.size.toLong()
+                        )
                     } else {
                         logger.trace { "exiting $streamName loop" }
                         break
