@@ -304,7 +304,7 @@ class HttpServer(private val applicationContext: Context) {
 
         val getEventsLimit = this.applicationContext.configuration.eventSearchChunkSize.value.toInt()
 
-        embeddedServer(Netty, configuration.port.value.toInt()) {
+        embeddedServer(Netty, configuration.port.value.toInt(), configure = { responseWriteTimeoutSeconds = -1 }) {
 
             install(Compression)
             install(Timeouts) {
@@ -353,7 +353,7 @@ class HttpServer(private val applicationContext: Context) {
                     val probe = call.parameters["probe"]?.toBoolean() ?: false
                     handleRequest(
                         call, context, "get single message",
-                        notModifiedCacheControl, probe, false, call.parameters.toMap()
+                        rarelyModifiedCacheControl, probe, false, call.parameters.toMap()
                     ) {
                         MessageWithMetadata(messageCache.getOrPut(call.parameters["id"]!!)).let {
                             MessageMapper.convertToHttpMessage(it)
