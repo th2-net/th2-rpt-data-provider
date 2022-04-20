@@ -24,6 +24,7 @@ import com.exactpro.th2.dataprovider.grpc.*
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
+import com.exactpro.th2.rptdataprovider.entities.exceptions.CodecResponseException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.internal.FilteredMessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
@@ -44,6 +45,7 @@ import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import org.apache.commons.lang3.exception.ExceptionUtils
+import java.util.concurrent.Executors
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -92,7 +94,6 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     private val eventCache = this.context.eventCache
     private val messageCache = this.context.messageCache
     private val checkRequestAliveDelay = context.configuration.checkRequestsAliveDelay.value.toLong()
-    private val getEventsLimit = this.context.configuration.eventSearchChunkSize.value.toInt()
 
     private val searchEventsHandler = this.context.searchEventsHandler
     private val searchMessagesHandler = this.context.searchMessagesHandler
@@ -100,10 +101,14 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     private val eventFiltersPredicateFactory = this.context.eventFiltersPredicateFactory
     private val messageFiltersPredicateFactory = this.context.filteredMessageFiltersPredicateFactory
 
+    private val grpcThreadPoolSize = context.configuration.grpcThreadPoolSize.value.toInt()
+    private val grpcThreadPool = Executors.newFixedThreadPool(grpcThreadPoolSize).asCoroutineDispatcher()
 
-    private suspend fun checkContext(context: io.grpc.Context) {
+
+
+    private suspend fun checkContext(grpcContext: io.grpc.Context) {
         while (coroutineContext.isActive) {
-            if (context.isCancelled)
+            if (grpcContext.isCancelled)
                 throw ChannelClosedException("Channel is closed")
 
             delay(checkRequestAliveDelay)
@@ -130,7 +135,11 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
         val stringParameters = lazy { request?.let { TextFormat.shortDebugString(request) } ?: "" }
         val context = io.grpc.Context.current()
 
-        CoroutineScope(Dispatchers.IO).launch {
+        val handler = CoroutineExceptionHandler { _, exception ->
+            logger.error(exception) { "Coroutine context exception from the handleRequest method with $requestName" }
+        }
+
+        CoroutineScope(grpcThreadPool + handler).launch {
             logMetrics(if (useStream) grpcStreamRequestsProcessedInParallelQuantity else grpcSingleRequestsProcessedInParallelQuantity) {
                 measureTimeMillis {
                     logger.debug { "handling '$requestName' request with parameters '${stringParameters.value}'" }
@@ -147,13 +156,14 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
                             } else {
                                 handleRestApiRequest(responseObserver, context, calledFun as suspend () -> T)
                             }
-
                             responseObserver.onCompleted()
                         } catch (e: Exception) {
                             throw ExceptionUtils.getRootCause(e) ?: e
                         } finally {
                             if (useStream) streamRequestProcessed.inc() else singleRequestProcessed.inc()
                         }
+                    } catch (e: CancellationException) {
+                        logger.debug(e) { "request processing was cancelled with CancellationException" }
                     } catch (e: InvalidRequestException) {
                         errorLogging(e, requestName, stringParameters.value, "invalid request")
                         sendErrorCode(responseObserver, e, Status.INVALID_ARGUMENT)
@@ -163,6 +173,9 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
                     } catch (e: ChannelClosedException) {
                         errorLogging(e, requestName, stringParameters.value, "channel closed")
                         sendErrorCode(responseObserver, e, Status.DEADLINE_EXCEEDED)
+                    } catch (e: CodecResponseException) {
+                        errorLogging(e, requestName, stringParameters.value, "codec parses messages incorrectly")
+                        sendErrorCode(responseObserver, e, Status.INTERNAL)
                     } catch (e: CradleIdException) {
                         errorLogging(e, requestName, stringParameters.value, "unexpected cradle id exception")
                         sendErrorCode(responseObserver, e, Status.INTERNAL)
@@ -179,13 +192,13 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
 
     private suspend fun <T> handleRestApiRequest(
         responseObserver: StreamObserver<T>,
-        context: io.grpc.Context,
+        grpcContext: io.grpc.Context,
         calledFun: suspend () -> T
     ) {
         coroutineScope {
             try {
                 launch {
-                    checkContext(context)
+                    checkContext(grpcContext)
                 }
                 responseObserver.onNext(calledFun.invoke())
             } finally {
@@ -200,17 +213,30 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     @InternalAPI
     private suspend fun handleSseRequest(
         responseObserver: StreamObserver<StreamResponse>,
-        context: io.grpc.Context,
+        grpcContext: io.grpc.Context,
         calledFun: Streaming
     ) {
         coroutineScope {
+            val job = launch {
+                checkContext(grpcContext)
+            }
+
+            val grpcWriter = GrpcWriter(
+                context.configuration.grpcWriterMessageBuffer.value.toInt(),
+                responseObserver,
+                context.jacksonMapper,
+                this
+            )
+
             try {
-                launch {
-                    checkContext(context)
-                }
-                calledFun.invoke(GrpcWriter(responseObserver))
+                calledFun.invoke(grpcWriter)
             } finally {
-                coroutineContext.cancelChildren()
+                kotlin.runCatching {
+                    grpcWriter.closeWriter()
+                    job.cancel()
+                }.onFailure { e ->
+                    logger.error(e) { "unexpected exception while closing grpc writer" }
+                }
             }
         }
     }
@@ -263,7 +289,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
             suspend fun(streamWriter: StreamWriter) {
                 val filterPredicate = messageFiltersPredicateFactory.build(grpcRequest.filtersList)
                 val request = SseMessageSearchRequest(grpcRequest, filterPredicate)
-                request.checkRequest()
+                request.checkRequest() // FIXME: Encapsulate into the SseMessageSearchRequest's constructor
 
                 searchMessagesHandler.searchMessagesSse(request, streamWriter)
             }

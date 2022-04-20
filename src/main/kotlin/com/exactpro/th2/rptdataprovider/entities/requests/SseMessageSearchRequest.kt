@@ -15,73 +15,96 @@
  ******************************************************************************/
 package com.exactpro.th2.rptdataprovider.entities.requests
 
+import com.exactpro.cradle.Direction
 import com.exactpro.cradle.TimeRelation
-import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.th2.common.util.toCradleDirection
 import com.exactpro.th2.dataprovider.grpc.MessageSearchRequest
 import com.exactpro.th2.dataprovider.grpc.TimeRelation.PREVIOUS
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.internal.FilteredMessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageIdWithSubsequences
+import com.exactpro.th2.rptdataprovider.entities.mappers.TimeRelationMapper
 import com.exactpro.th2.rptdataprovider.grpcDirectionToCradle
+import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import java.time.Instant
+
+data class StreamPointer(
+    val sequence: Long,
+    val streamName: String,
+    val direction: Direction,
+    val hasStarted: Boolean,
+    val hasEnded: Boolean
+)
 
 data class SseMessageSearchRequest(
     val filterPredicate: FilterPredicate<FilteredMessageWrapper>,
     val startTimestamp: Instant?,
-    val stream: List<String>,
+    val stream: List<StreamName>,
     val searchDirection: TimeRelation,
     val endTimestamp: Instant?,
     val resultCountLimit: Int?,
-    val keepOpen: Boolean,
     val attachedEvents: Boolean,
     val lookupLimitDays: Int?,
-    val resumeFromIdsList: List<StoredMessageId>
+    val streamPointers: List<StreamPointer>,
+    val includeProtocols: List<String>?,
+    val excludeProtocols: List<String>?
 ) {
-
-    companion object {
-        private fun asCradleTimeRelation(value: String): TimeRelation {
-            if (value == "next") return TimeRelation.AFTER
-            if (value == "previous") return TimeRelation.BEFORE
-
-            throw InvalidRequestException("'$value' is not a valid timeline direction. Use 'next' or 'previous'")
-        }
-    }
-
-    constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<FilteredMessageWrapper>) : this(
+    constructor(
+        parameters: Map<String, List<String>>,
+        filterPredicate: FilterPredicate<FilteredMessageWrapper>,
+        searchDirection: TimeRelation
+    ) : this(
         filterPredicate = filterPredicate,
         startTimestamp = parameters["startTimestamp"]?.firstOrNull()?.let { Instant.parse(it) },
-        stream = parameters["stream"] ?: emptyList(),
+        stream = parameters["stream"]?.map {
+            StreamName.fromString(it)
+        } ?: emptyList(),
         searchDirection = parameters["searchDirection"]?.firstOrNull()?.let {
-            asCradleTimeRelation(
+            TimeRelationMapper.fromHttpString(
                 it
             )
-        } ?: TimeRelation.AFTER,
+        } ?: searchDirection,
         endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.parse(it) },
-        resumeFromIdsList = parameters["resumeFromIds"]?.map {
-            MessageIdWithSubsequences.from(it).messageId
-        } ?: emptyList(),
+
+        //FIXME: negative value is used to mark a stream that has not yet started. This needs to be replaced with an explicit flag
+        streamPointers = parameters["messageId"] //FIXME: or resumeMessageIds?
+            ?.map {
+                MessageIdWithSubsequences.from(it).messageId.let { id ->
+                    StreamPointer(
+                        id.index, id.streamName, id.direction, id.index > 0, false //FIXME: Refine hasEnded
+                    )
+                }
+            }
+            ?: emptyList(),
+
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt(),
-        keepOpen = parameters["keepOpen"]?.firstOrNull()?.toBoolean() ?: false,
         attachedEvents = parameters["attachedEvents"]?.firstOrNull()?.toBoolean() ?: false,
-        lookupLimitDays = parameters["lookupLimitDays"]?.firstOrNull()?.toInt()
+        lookupLimitDays = parameters["lookupLimitDays"]?.firstOrNull()?.toInt(),
+
+        includeProtocols = parameters["includeProtocols"],
+        excludeProtocols = parameters["excludeProtocols"]
     )
 
-    constructor(request: MessageSearchRequest, filterPredicate: FilterPredicate<FilteredMessageWrapper>) : this(
+    constructor(
+        request: MessageSearchRequest,
+        filterPredicate: FilterPredicate<FilteredMessageWrapper>,
+        searchDirection: TimeRelation
+    ) : this(
         filterPredicate = filterPredicate,
         startTimestamp = if (request.hasStartTimestamp())
             request.startTimestamp.let {
                 Instant.ofEpochSecond(it.seconds, it.nanos.toLong())
             } else null,
 
-        stream = if (request.hasStream()) {
-            request.stream.listStringList
-        } else emptyList<String>(),
+        stream = if (request.streamList.isNotEmpty()) {
+            request.streamList.map { StreamName(it.name, it.direction.toCradleDirection()) }
+        } else emptyList<StreamName>(),
 
         searchDirection = request.searchDirection.let {
             when (it) {
                 PREVIOUS -> TimeRelation.BEFORE
-                else -> TimeRelation.AFTER
+                else -> searchDirection
             }
         },
 
@@ -94,23 +117,38 @@ data class SseMessageSearchRequest(
             request.resultCountLimit.value
         } else null,
 
-        keepOpen = if (request.hasKeepOpen()) {
-            request.keepOpen.value
-        } else false,
-
-        resumeFromIdsList = if (request.resumeFromIdsList.isNotEmpty()) {
-            request.resumeFromIdsList.map {
-                StoredMessageId(
-                    it.connectionId.sessionAlias,
-                    grpcDirectionToCradle(it.direction),
-                    it.sequence
+        //FIXME: negative value is used to mark a stream that has not yet started. This needs to be replaced with an explicit flag
+        streamPointers = if (request.streamPointerList.isNotEmpty()) {
+            request.streamPointerList.map {
+                StreamPointer(
+                    it.lastId.sequence,
+                    it.messageStream.name,
+                    grpcDirectionToCradle(it.messageStream.direction),
+                    it.hasStarted,
+                    it.hasEnded
                 )
             }
         } else emptyList(),
 
         attachedEvents = false,
 
-        lookupLimitDays = null
+        lookupLimitDays = null,
+
+        includeProtocols = null,
+
+        excludeProtocols = null
+    )
+
+    constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<FilteredMessageWrapper>) : this(
+        parameters = parameters,
+        filterPredicate = filterPredicate,
+        searchDirection = TimeRelation.AFTER
+    )
+
+    constructor(request: MessageSearchRequest, filterPredicate: FilterPredicate<FilteredMessageWrapper>) : this(
+        request = request,
+        filterPredicate = filterPredicate,
+        searchDirection = TimeRelation.AFTER
     )
 
     private fun checkEndTimestamp() {
@@ -126,7 +164,7 @@ data class SseMessageSearchRequest(
     }
 
     private fun checkStartPoint() {
-        if (startTimestamp == null && resumeFromIdsList.isEmpty())
+        if (startTimestamp == null && streamPointers.isEmpty())
             throw InvalidRequestException("One of the 'startTimestamp' or 'messageId' must not be null")
     }
 
@@ -136,10 +174,39 @@ data class SseMessageSearchRequest(
         }
     }
 
+    private fun checkTimestampAndId() {
+        if (startTimestamp != null && streamPointers.isNotEmpty())
+            throw InvalidRequestException("You cannot specify resume Id and start timestamp at the same time")
+    }
+
+    private fun checkResumeIds() {
+        if (streamPointers.size > 1)
+            throw InvalidRequestException("you cannot specify more than one id")
+    }
+
+    private fun checkIdForStreams() {
+        if (streamPointers.isEmpty()) return
+
+        val setStreamName = stream.toSet()
+        val setStreamPointer = streamPointers.map { StreamName(it.streamName, it.direction) }.toSet()
+        if (setStreamName != setStreamPointer) {
+            throw InvalidRequestException("Incorrect request ${setStreamName - setStreamPointer} no id`s specified")
+        }
+    }
+
+    fun checkIdsRequest() {
+        checkStartPoint()
+        checkEndTimestamp()
+        checkStreamList()
+        checkTimestampAndId()
+        checkResumeIds()
+    }
+
     fun checkRequest() {
         checkStartPoint()
         checkEndTimestamp()
         checkStreamList()
+        checkIdForStreams()
     }
 }
 

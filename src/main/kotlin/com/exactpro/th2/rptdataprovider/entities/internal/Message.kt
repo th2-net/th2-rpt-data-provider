@@ -16,9 +16,9 @@
 
 package com.exactpro.th2.rptdataprovider.entities.internal
 
-import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.RawMessage
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
 import com.google.protobuf.ByteString
 import java.time.Instant
 
@@ -26,10 +26,10 @@ import java.time.Instant
 data class Message(
     val type: String = "message",
     val timestamp: Instant,
-    val direction: Direction?,
+    val direction: Direction,
     val sessionId: String,
     val attachedEventIds: Set<String>,
-    val messageBody: List<BodyWrapper>?,
+    val parsedMessageGroup: List<BodyWrapper>?,
     val rawMessageBody: ByteString?,
     val imageType: String?,
     val id: StoredMessageId
@@ -40,48 +40,19 @@ data class Message(
 
 
     constructor(
-        rawStoredMessage: StoredMessage,
-        messageBody: List<BodyWrapper>?,
-        rawBody: ByteString?,
-        events: Set<String>?,
-        imageType: String?
+        messageWrapper: MessageWrapper,
+        parsedMessageGroup: List<BodyWrapper>?,
+        events: Set<String>,
+        imageType: String? = null
     ) : this(
-        id = rawStoredMessage.id,
-        direction = Direction.fromStored(rawStoredMessage.direction ?: com.exactpro.cradle.Direction.FIRST),
-        timestamp = rawStoredMessage.timestamp ?: Instant.ofEpochMilli(0),
-        sessionId = rawStoredMessage.streamName ?: "",
-        attachedEventIds = events ?: emptySet(),
-        rawMessageBody = rawBody,
-        messageBody = messageBody,
+        id = messageWrapper.id,
+        direction = messageWrapper.direction,
+        timestamp = messageWrapper.timestamp,
+        sessionId = messageWrapper.sessionId,
+        attachedEventIds = events,
+        rawMessageBody = messageWrapper.rawMessage.body,
+        parsedMessageGroup = parsedMessageGroup,
         imageType = imageType
     )
-
-    private constructor(builder: Builder) : this(
-        builder.storedMessage,
-        builder.messageBody,
-        builder.protobufMessage?.body,
-        builder.events,
-        builder.imageType
-    )
-
-    class Builder(val storedMessage: StoredMessage, val protobufMessage: RawMessage?) {
-        var messageBody: List<BodyWrapper>? = null
-            private set
-
-        var events: Set<String>? = null
-            private set
-
-        var imageType: String? = null
-            private set
-
-        fun parsedMessage(messageBody: List<BodyWrapper>?) = apply { this.messageBody = messageBody }
-
-        fun attachedEvents(events: Set<String>?) = apply { this.events = events }
-
-        fun imageType(imageType: String?) = apply { this.imageType = imageType }
-
-        fun build() = Message(this)
-    }
-
 }
 

@@ -29,11 +29,11 @@ data class FilteredMessageWrapper(
 
     constructor(message: Message) : this(
         message = message,
-        filteredBody = message.messageBody?.let { List(it.size) { true } as MutableList } ?: mutableListOf()
+        filteredBody = message.parsedMessageGroup?.let { List(it.size) { true } as MutableList } ?: mutableListOf()
     )
 
     constructor(message: Message, subsequences: List<Int>) : this(message) {
-        message.messageBody?.let { body ->
+        message.parsedMessageGroup?.let { body ->
 
             if (subsequences.isEmpty())
                 return
@@ -45,7 +45,6 @@ data class FilteredMessageWrapper(
             val messageIndexWithSubsequence = body.indexOfFirst {
                 it.id.subsequenceList == subsequences
             }
-
             if (messageIndexWithSubsequence >= 0) {
                 filteredBody[messageIndexWithSubsequence] = true
             }

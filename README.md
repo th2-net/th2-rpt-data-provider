@@ -126,7 +126,6 @@ As example:
 - `resultCountLimit` - number - Sets the maximum amount of events to return. Defaults to `null (unlimited)`.
 - `endTimestamp` - string, unix timestamp in a format ('2021-10-14T15:00:02.238700000Z') - Sets the timestamp to which the search will be performed, starting with `startTimestamp`. When `searchDirection` is `previous`, `endTimestamp` must be less then `startTimestamp`. Defaults to `null` (the search is carried out endlessly into the past or the future).
 - `limitForParent` - number - How many children for each parent do we want to request. Default `not limited`.
-- `keepOpen` - boolean - If the search has reached the current moment, is it necessary to wait further for the appearance of new data. Default `false`.
 - `metadataOnly` - boolean - Receive only metadata (`true`) or entire event (`false`) (without `attachedMessageIds`). Default `true`.
 - `attachedMessages`- boolean - If the `metadataOnly` is `false` additionally load `attachedMessageIds`. Default `false`.
 
@@ -158,9 +157,14 @@ Event metadata object example (in sse):
 - `stream` - text, accepts multiple values - Sets the stream ids to search in. Case-sensitive. **Required**. 
 - `searchDirection` - `next`/`previous` - Sets the lookup direction. Can be used for pagination. Defaults to `next`.
 - `resultCountLimit` - number - Sets the maximum amount of messages to return. Defaults to `null (unlimited)`.
+<<<<<<< HEAD
 - `endTimestamp` - string, unix timestamp in a format ('2021-10-14T15:00:02.238700000Z') - Sets the timestamp to which the search will be performed, starting with `startTimestamp`. When `searchDirection` is `previous`, `endTimestamp` must be less then `startTimestamp`. Defaults to `null` (the search is carried out endlessly into the past or the future).
 - `keepOpen` - boolean - If the search has reached the current moment, is it necessary to wait further for the appearance of new data. Default `false`.
 - `resumeFromIds` - text, accepts multiple values - List of message IDs to restore search. If given, streams whose id were specified start with this id (not inclusive). Other streams start with `startTimestamp` (if specified) or calculate `startTimestamp` based on the passed id. Defaults to `null`
+=======
+- `endTimestamp` - number, unix timestamp in milliseconds - Sets the timestamp to which the search will be performed, starting with `startTimestamp`. When `searchDirection` is `previous`, `endTimestamp` must be less then `startTimestamp`. Defaults to `null` (the search is carried out endlessly into the past or the future).
+- `messageId` - text, accepts multiple values - List of message IDs to restore search. If given, it has the highest priority and ignores `stream` (uses streams from ids), `startTimestamp` and `resumeFromId`. Defaults to `null`
+>>>>>>> master
 - `attachedEvents`- boolean - If `true`, additionally load `attachedEventIds`. Default `false`.
 - `lookupLimitDays` - number - The number of days that will be viewed on the first request to get the one closest to the specified timestamp. Default `null` - not limited to the past and up to the present moment to the future.
 
@@ -197,7 +201,6 @@ spec:
     
     eventCacheSize: 1000 // internal event cache size
     messageCacheSize: 1000 // internal message cache size
-    codecCacheSize: 100 // size of the internal cache for parsed messages
     serverCacheTimeout: 60000 // cached event lifetime in milliseconds
     
     ioDispatcherThreadPoolSize: 10 // thread pool size for blocking database calls
@@ -207,13 +210,17 @@ spec:
     enableCaching: true // enables proxy and client cache (Cache-control response headers)
     notModifiedObjectsLifetime: 3600 // max-age in seconds
     rarelyModifiedObjects: 500 // max-age in seconds
+<<<<<<< HEAD
     
     maxMessagesLimit: 5000 // limits how many messages can be requested from cradle per query (it is recommended to set equal to the page size in the cradle)
     
+=======
+              
+>>>>>>> master
     sseEventSearchStep: 200 // step size in seconds when requesting events 
     keepAliveTimeout: 5000 // timeout in milliseconds. keep_alive sending frequency
-    dbRetryDelay: 5000 // delay in milliseconds before repeated queries to the database
     cradleDispatcherPoolSize: 1 // number of threads in the cradle dispatcher
+<<<<<<< HEAD
     sseSearchDelay: 5 // the number of seconds by which the search to the future is delayed when keepOpen = true
 
     rabbitMergedBatchSize: 16 //  the maximum number of messages in a batch glued from several others
@@ -229,12 +236,34 @@ spec:
     messageFilterBuffer: 500 // number of batches in FilterBuffer
 
     messageStreamMergerBuffer: 500 // number of batches in StreamMergerBuffer
+=======
+      
+    messageExtractorOutputBatchBuffer: 1       // buffer size of message search pipeline
+    messageConverterOutputBatchBuffer: 1
+    messageDecoderOutputBatchBuffer: 1
+    messageUnpackerOutputMessageBuffer: 100
+    messageFilterOutputMessageBuffer: 100
+    messageMergerOutputMessageBuffer: 10
+   
+    codecPendingBatchLimit: 16              // the total number of messages sent to the codec batches in parallel for all pipelines
+    codecCallbackThreadPool: 4              // thread pool for parsing messages received from codecs
+    codecRequestThreadPool: 1               // thread pool for sending message to codecs
+    grpcWriterMessageBuffer: 10            // buffer before send grpc response
+>>>>>>> master
 
     sendEmptyDelay: 100 // frequency of sending empty messages
 
     eventSearchChunkSize: 64 // the size of event chunks during sse search and the maximum size of the batch of messages upon request getEvents
 
-    serverType: HTTP // provider server type. Allows 'HTTP' and 'GRPC' (case sensetive). 
+    sendPipelineStatus: false // enable profiling
+
+    grpcThreadPoolSize: 20 // thread pool size for grpc requests
+
+    useStrictMode: false // if true throw an exception when bad messages are received from the codec otherwise return messages with null body and type
+
+    serverType: HTTP // provider server type. Allows 'HTTP' and 'GRPC' (case sensetive).
+
+    codecUsePinAttributes: true // send raw message to specified codec (true) or send to all codecs (false) 
 
   pins: // pins are used to communicate with codec components to parse message data
     - name: to_codec

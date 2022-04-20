@@ -18,8 +18,7 @@ package com.exactpro.th2.rptdataprovider.entities.mappers
 
 import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.message.toTimestamp
-import com.exactpro.th2.dataprovider.grpc.MessageBodyWrapper
-import com.exactpro.th2.dataprovider.grpc.MessageData
+import com.exactpro.th2.dataprovider.grpc.MessageSearchResponse
 import com.exactpro.th2.rptdataprovider.convertToProto
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.FilteredMessageWrapper
@@ -40,7 +39,7 @@ object MessageMapper {
 
     private fun wrapSubMessages(filteredMessageWrapper: FilteredMessageWrapper): List<MessageBodyWrapper> {
         return with(filteredMessageWrapper) {
-            message.messageBody?.let { subMessages ->
+            message.parsedMessageGroup?.let { subMessages ->
                 (subMessages zip filteredBody).map { (subMessage, matched) ->
                     wrapSubMessage(subMessage, matched)
                 }
@@ -50,7 +49,7 @@ object MessageMapper {
 
     suspend fun convertToGrpcMessageData(filteredMessageWrapper: FilteredMessageWrapper): MessageData {
         return with(filteredMessageWrapper) {
-            MessageData.newBuilder()
+            MessageSearchResponse.newBuilder()
                 .setMessageId(message.id.convertToProto())
                 .setTimestamp(message.timestamp.toTimestamp())
                 .setBodyRaw(message.rawMessageBody)
@@ -70,7 +69,7 @@ object MessageMapper {
                 sequence = message.id.index.toString(),
                 attachedEventIds = message.attachedEventIds,
                 rawMessageBase64 = message.rawMessageBody?.let { Base64.getEncoder().encodeToString(it.toByteArray()) },
-                parsedMessages = message.messageBody?.let {
+                parsedMessages = message.parsedMessageGroup?.let {
                     it.zip(filteredBody).map { (msg, filtered) ->
                         HttpBodyWrapper.from(msg, filtered)
                     }
