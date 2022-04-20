@@ -17,42 +17,85 @@
 package com.exactpro.th2.rptdataprovider.entities.responses
 
 import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.th2.common.grpc.ConnectionID
+import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.grpc.MessageID
-import com.exactpro.th2.dataprovider.grpc.Stream
+import com.exactpro.th2.common.util.toCradleDirection
+import com.exactpro.th2.dataprovider.grpc.EventStreamPointer
+import com.exactpro.th2.dataprovider.grpc.MessageStream
+import com.exactpro.th2.dataprovider.grpc.MessageStreamPointer
 import com.exactpro.th2.rptdataprovider.convertToProto
 import com.exactpro.th2.rptdataprovider.cradleDirectionToGrpc
-import com.exactpro.th2.rptdataprovider.handlers.StreamName
-import com.fasterxml.jackson.annotation.JsonIgnore
+import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
+import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
 import mu.KotlinLogging
 
-data class StreamInfo(val stream: StreamName, @JsonIgnore val lastMessage: StoredMessageId? = null) {
-
-    val lastElement = lastMessage?.toString()
-
+data class EventStreamPointer(
+    val hasStarted: Boolean,
+    val hasEnded: Boolean,
+    val lastId: ProviderEventId? = null
+) {
     companion object {
         val logger = KotlinLogging.logger { }
     }
 
-    fun convertToProto(): Stream {
-        return Stream.newBuilder()
-            .setDirection(cradleDirectionToGrpc(stream.direction))
-            .setSession(stream.name)
+    fun convertToProto(): EventStreamPointer {
+        return EventStreamPointer.newBuilder()
+            .setHasEnded(hasEnded)
+            .setHasStarted(hasStarted)
+            .also { builder ->
+                lastId?.let { builder.setLastId(EventID.newBuilder().setId(it.toString())) }
+            }.build()
+    }
+}
+
+
+data class MessageStreamPointer(
+    val streamName: StreamName,
+    val hasStarted: Boolean,
+    val hasEnded: Boolean,
+    val lastId: StoredMessageId? = null
+) {
+    companion object {
+        val logger = KotlinLogging.logger { }
+    }
+
+    constructor(lastId: MessageID, messageStream: StreamName, hasStarted: Boolean, hasEnded: Boolean) : this(
+        lastId = StoredMessageId(
+            lastId.connectionId.sessionAlias,
+            lastId.direction.toCradleDirection(),
+            lastId.sequence
+        ),
+        streamName = messageStream,
+        hasStarted = hasStarted,
+        hasEnded = hasEnded
+    )
+
+    fun convertToProto(): MessageStreamPointer {
+        return MessageStreamPointer.newBuilder()
+            .setMessageStream(
+                MessageStream.newBuilder()
+                    .setDirection(cradleDirectionToGrpc(streamName.direction))
+                    .setName(streamName.name)
+            )
+            .setHasStarted(hasStarted)
+            .setHasEnded(hasEnded)
             .setLastId(
-                lastMessage?.let {
-                    logger.trace { "stream $stream - lastElement is ${it.index}" }
+                lastId?.let {
+                    logger.trace { "stream $streamName - lastElement is ${it.index}" }
                     it.convertToProto()
 
                 } ?: let {
                     // set sequence to a negative value if stream has not started to avoid mistaking it for the default value
                     // FIXME change interface to make that case explicit
-                    logger.trace { "lastElement is null - StreamInfo should be build as if the stream $stream has no messages" }
+                    logger.trace { "lastElement is null - StreamInfo should be build as if the stream $streamName has no messages" }
 
                     MessageID
                         .newBuilder()
                         .setSequence(-1)
-                        .setDirection(cradleDirectionToGrpc(stream.direction))
-                        .setConnectionId(ConnectionID.newBuilder().setSessionAlias(stream.name).build())
+                        .setDirection(cradleDirectionToGrpc(streamName.direction))
+                        .setConnectionId(ConnectionID.newBuilder().setSessionAlias(streamName.name).build())
                         .build()
                 }
             )

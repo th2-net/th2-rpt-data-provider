@@ -5,13 +5,12 @@ import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineCodecRequest
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineDecodedBatch
-import com.exactpro.th2.rptdataprovider.entities.internal.ProtoProtocolInfo
 import com.exactpro.th2.rptdataprovider.entities.internal.ProtoProtocolInfo.getProtocolField
 import com.exactpro.th2.rptdataprovider.entities.internal.ProtoProtocolInfo.isImage
+import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
-import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchResponse
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope

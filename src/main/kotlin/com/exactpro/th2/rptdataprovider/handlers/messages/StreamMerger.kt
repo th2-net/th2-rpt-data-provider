@@ -18,80 +18,22 @@ package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidInitializationException
 import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageStreamPointer
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
-<<<<<<< HEAD
-import io.ktor.util.pipeline.*
-import kotlinx.coroutines.*
-import mu.KotlinLogging
-import java.time.Instant
-
-
-private class StreamHolder(val messageStream: PipelineComponent) {
-
-    companion object {
-        private val logger = KotlinLogging.logger { }
-    }
-
-    val startId = messageStream.startId
-
-    var currentElement: PipelineStepObject? = null
-        private set
-    var previousElement: PipelineStepObject? = null
-        private set
-
-
-    private fun changePreviousElement(currentElement: PipelineStepObject?) {
-        if (previousElement == null || currentElement is PipelineFilteredMessage) {
-            previousElement = currentElement
-        }
-    }
-
-    fun top(): PipelineStepObject {
-        return currentElement!!
-    }
-
-    suspend fun init() {
-        messageStream.pollMessage().let {
-            if (previousElement == null && currentElement == null) {
-                logger.trace { it.lastProcessedId }
-                currentElement = it
-            } else {
-                throw InvalidInitializationException("StreamHolder ${messageStream.streamName} already initialized")
-            }
-        }
-    }
-
-    suspend fun pop(): PipelineStepObject {
-        return messageStream.pollMessage().let { newElement ->
-            val currentElementTemporary = currentElement
-
-            currentElementTemporary?.also {
-                logger.trace { newElement.lastProcessedId }
-                changePreviousElement(currentElement)
-                currentElement = newElement
-            } ?: throw InvalidInitializationException("StreamHolder ${messageStream.streamName} need initialization")
-        }
-    }
-}
-
-=======
 import io.prometheus.client.Histogram
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.time.Instant
 import kotlin.time.ExperimentalTime
 import kotlin.time.measureTimedValue
->>>>>>> master
 
 //FIXME: Check stream stop condition and streaminfo object
 class StreamMerger(
@@ -169,13 +111,6 @@ class StreamMerger(
         }
     }
 
-<<<<<<< HEAD
-    private suspend fun messageStreamsInit() {
-        messageStreams.forEach { it.init() }
-    }
-
-=======
->>>>>>> master
     private fun timestampInRange(pipelineStepObject: PipelineStepObject): Boolean {
         return pipelineStepObject.lastScannedTime.let { timestamp ->
             if (searchRequest.searchDirection == TimeRelation.AFTER) {
@@ -185,15 +120,6 @@ class StreamMerger(
             }
         }
     }
-
-<<<<<<< HEAD
-    private fun keepSearch(): Boolean {
-        val isKeepOpen = searchRequest.keepOpen && searchRequest.searchDirection == TimeRelation.AFTER
-        val haveNotReachedLimit = resultCountLimit?.let { it > 0 } ?: true
-        return (!allStreamIsEmpty || isKeepOpen) && haveNotReachedLimit
-    }
-=======
->>>>>>> master
 
     private fun inTimeRange(pipelineStepObject: PipelineStepObject): Boolean {
         return if (pipelineStepObject !is EmptyPipelineObject) {
@@ -235,10 +161,7 @@ class StreamMerger(
         }
     }
 
-<<<<<<< HEAD
-=======
     @OptIn(ExperimentalTime::class)
->>>>>>> master
     override suspend fun processMessage() {
         coroutineScope {
 
@@ -336,18 +259,14 @@ class StreamMerger(
         }
     }
 
-    fun getStreamsInfo(): List<StreamInfo> {
+    fun getStreamsInfo(): List<MessageStreamPointer> {
         return messageStreams.map {
-            val storedMessageId = if (it.currentElement != null && it.currentElement?.streamEmpty!!) {
-                StoredMessageId(it.messageStream.streamName?.name, it.messageStream.streamName!!.direction, -1)
-            } else {
-                it.currentElement?.lastProcessedId
-            }
 
-            StreamInfo(
-                it.messageStream.streamName!!,
-                storedMessageId
-            )
+            val streamEnded = it.currentElement?.streamEmpty ?: false
+
+            val lastId = it.currentElement?.lastProcessedId
+
+            MessageStreamPointer(it.messageStream.streamName!!, lastId != null, streamEnded, lastId)
         }
     }
 }

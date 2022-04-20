@@ -23,7 +23,7 @@ import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.mappers.TimeRelationMapper
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageStreamPointer
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedMessageInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.messages.ChainBuilder
@@ -123,7 +123,7 @@ class SearchMessagesHandler(private val applicationContext: Context) {
     }
 
     @OptIn(ExperimentalTime::class, InternalCoroutinesApi::class)
-    suspend fun getIds(request: SseMessageSearchRequest): Map<String, List<StreamInfo>> {
+    suspend fun getIds(request: SseMessageSearchRequest): Map<String, List<MessageStreamPointer>> {
 
         searchMessageRequests.inc()
 
@@ -131,11 +131,7 @@ class SearchMessagesHandler(private val applicationContext: Context) {
 
         val message = resumeId?.let {
             applicationContext.cradleService.getMessageSuspend(
-                StoredMessageId(
-                    it.streamName,
-                    it.direction,
-                    it.sequence
-                )
+                it.lastId!!
             )
         }
 
@@ -146,13 +142,13 @@ class SearchMessagesHandler(private val applicationContext: Context) {
         val pipelineStatus = PipelineStatus(context = applicationContext)
 
         val streamNames = resultRequest.stream.flatMap { stream ->
-            Direction.values().map { StreamName(stream, it) }
+            Direction.values().map { stream.copy(direction = it) }
         }
 
         val coroutineScope = CoroutineScope(coroutineContext + Job(coroutineContext[Job]))
         pipelineStatus.addStreams(streamNames.map { it.toString() })
 
-        val streamInfoMap = mutableMapOf<TimeRelation, MutableList<StreamInfo>>()
+        val streamInfoMap = mutableMapOf<TimeRelation, MutableList<MessageStreamPointer>>()
         streamInfoMap[TimeRelation.AFTER] = mutableListOf()
         streamInfoMap[TimeRelation.BEFORE] = mutableListOf()
 
@@ -188,12 +184,12 @@ class SearchMessagesHandler(private val applicationContext: Context) {
             listPair.first().let {
                 streamInfoMap
                     .getValue(TimeRelation.AFTER)
-                    .add(StreamInfo(messageExtractor.streamName!!, it.first))
+                    .add(MessageStreamPointer(messageExtractor.streamName!!, it.first != null, it.second, it.first))
             }
             listPair.last().let {
                 streamInfoMap
                     .getValue(TimeRelation.BEFORE)
-                    .add(StreamInfo(messageExtractor.streamName!!, it.first))
+                    .add(MessageStreamPointer(messageExtractor.streamName!!, it.first != null, it.second, it.first))
             }
         }
 

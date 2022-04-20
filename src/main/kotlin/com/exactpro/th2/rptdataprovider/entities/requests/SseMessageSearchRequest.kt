@@ -24,9 +24,10 @@ import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestExcept
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.internal.FilteredMessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageIdWithSubsequences
+import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
 import com.exactpro.th2.rptdataprovider.entities.mappers.TimeRelationMapper
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageStreamPointer
 import com.exactpro.th2.rptdataprovider.grpcDirectionToCradle
-import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import java.time.Instant
 
 data class StreamPointer(
@@ -37,6 +38,7 @@ data class StreamPointer(
     val hasEnded: Boolean
 )
 
+
 data class SseMessageSearchRequest(
     val filterPredicate: FilterPredicate<FilteredMessageWrapper>,
     val startTimestamp: Instant?,
@@ -46,7 +48,7 @@ data class SseMessageSearchRequest(
     val resultCountLimit: Int?,
     val attachedEvents: Boolean,
     val lookupLimitDays: Int?,
-    val streamPointers: List<StreamPointer>,
+    val streamPointers: List<MessageStreamPointer>,
     val includeProtocols: List<String>?,
     val excludeProtocols: List<String>?
 ) {
@@ -58,8 +60,9 @@ data class SseMessageSearchRequest(
         filterPredicate = filterPredicate,
         startTimestamp = parameters["startTimestamp"]?.firstOrNull()?.let { Instant.parse(it) },
         stream = parameters["stream"]?.map {
-            StreamName.fromString(it)
+            StreamName(it)
         } ?: emptyList(),
+
         searchDirection = parameters["searchDirection"]?.firstOrNull()?.let {
             TimeRelationMapper.fromHttpString(
                 it
@@ -71,9 +74,12 @@ data class SseMessageSearchRequest(
         streamPointers = parameters["messageId"] //FIXME: or resumeMessageIds?
             ?.map {
                 MessageIdWithSubsequences.from(it).messageId.let { id ->
-                    StreamPointer(
-                        id.index, id.streamName, id.direction, id.index > 0, false //FIXME: Refine hasEnded
-                    )
+                    MessageStreamPointer(
+                        StreamName(id.streamName, id.direction),
+                        id.index > 0,
+                        false,
+                        id
+                    ) //FIXME: Refine hasEnded
                 }
             }
             ?: emptyList(),
@@ -97,11 +103,10 @@ data class SseMessageSearchRequest(
                 Instant.ofEpochSecond(it.seconds, it.nanos.toLong())
             } else null,
 
-        stream = if (request.streamList.isNotEmpty()) {
-            request.streamList.map { StreamName(it.name, it.direction.toCradleDirection()) }
-        } else emptyList<StreamName>(),
+        stream = request.streamList.map { StreamName(it) },
 
-        searchDirection = request.searchDirection.let {
+        searchDirection = request.searchDirection.let
+        {
             when (it) {
                 PREVIOUS -> TimeRelation.BEFORE
                 else -> searchDirection
@@ -109,7 +114,8 @@ data class SseMessageSearchRequest(
         },
 
         endTimestamp = if (request.hasEndTimestamp())
-            request.endTimestamp.let {
+            request.endTimestamp.let
+            {
                 Instant.ofEpochSecond(it.seconds, it.nanos.toLong())
             } else null,
 
@@ -120,12 +126,8 @@ data class SseMessageSearchRequest(
         //FIXME: negative value is used to mark a stream that has not yet started. This needs to be replaced with an explicit flag
         streamPointers = if (request.streamPointerList.isNotEmpty()) {
             request.streamPointerList.map {
-                StreamPointer(
-                    it.lastId.sequence,
-                    it.messageStream.name,
-                    grpcDirectionToCradle(it.messageStream.direction),
-                    it.hasStarted,
-                    it.hasEnded
+                MessageStreamPointer(
+                    it.lastId, StreamName(it.messageStream), it.hasStarted, it.hasEnded
                 )
             }
         } else emptyList(),
@@ -188,7 +190,7 @@ data class SseMessageSearchRequest(
         if (streamPointers.isEmpty()) return
 
         val setStreamName = stream.toSet()
-        val setStreamPointer = streamPointers.map { StreamName(it.streamName, it.direction) }.toSet()
+        val setStreamPointer = streamPointers.map { it.streamName }.toSet()
         if (setStreamName != setStreamPointer) {
             throw InvalidRequestException("Incorrect request ${setStreamName - setStreamPointer} no id`s specified")
         }

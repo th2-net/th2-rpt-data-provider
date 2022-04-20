@@ -50,4 +50,10 @@ data class FilteredMessageWrapper(
             }
         }
     }
+
+    fun getMessagesWithMatches(): List<Pair<BodyWrapper, Boolean>>? {
+        return message.parsedMessageGroup?.let {
+            it zip filteredBody
+        }
+    }
 }

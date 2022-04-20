@@ -55,8 +55,7 @@ data class GrpcFilter(val filterName: String, val filter: Filter) : FilterReques
     }
 
     override fun isConjunct(): Boolean {
-        // FIXME: temporary fix for the old grpc interface (0.4.0)
-        return false
+        return filter.conjunct
     }
 
     override fun getValues(): List<String>? {

@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider.entities.filters.info
 
+import com.exactpro.th2.dataprovider.grpc.FilterInfoResponse
 import com.exactpro.th2.dataprovider.grpc.FilterName
 import com.fasterxml.jackson.annotation.JsonFormat
 import com.fasterxml.jackson.annotation.JsonIgnore
@@ -82,8 +83,8 @@ data class FilterInfo(
     @JsonIgnore
     val filterSpecialType: FilterSpecialType = FilterSpecialType.ORDINARY
 ) {
-    fun convertToProto(): com.exactpro.th2.dataprovider.grpc.FilterInfoResponse {
-        return com.exactpro.th2.dataprovider.grpc.FilterInfoResponse.newBuilder()
+    fun convertToProto(): FilterInfoResponse {
+        return FilterInfoResponse.newBuilder()
             .setName(FilterName.newBuilder().setName(name))
             .addAllParameter(parameters.map { it.convertToProto() })
             .also { builder ->

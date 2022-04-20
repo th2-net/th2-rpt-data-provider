@@ -23,12 +23,12 @@ import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
+import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.StoredMessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
-import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import kotlinx.coroutines.*
@@ -92,8 +92,10 @@ class MessageExtractor(
 
             streamName!!
 
+
             val resumeFromId = request.streamPointers.firstOrNull {
-                it.streamName == streamName.name && it.direction == streamName.direction
+                it.streamName.name == streamName.name
+                        && it.streamName.direction == streamName.direction
             }
 
             val order = if (request.searchDirection == TimeRelation.AFTER) {
@@ -104,7 +106,7 @@ class MessageExtractor(
 
             logger.debug { "acquiring cradle iterator for stream $streamName" }
 
-            resumeFromId?.let { logger.debug { "resume sequence for stream $streamName is set to ${it.sequence}" } }
+            resumeFromId?.let { logger.debug { "resume sequence for stream $streamName is set to ${it.lastId?.index}" } }
             request.startTimestamp?.let { logger.debug { "start timestamp for stream $streamName is set to $it" } }
 
             if (resumeFromId == null || resumeFromId.hasStarted) {
@@ -119,9 +121,9 @@ class MessageExtractor(
                             if (resumeFromId != null) {
                                 builder.index().let {
                                     if (order == Order.DIRECT) {
-                                        it.isGreaterThanOrEqualTo(resumeFromId.sequence)
+                                        it.isGreaterThanOrEqualTo(resumeFromId.lastId?.index)
                                     } else {
-                                        it.isLessThanOrEqualTo(resumeFromId.sequence)
+                                        it.isLessThanOrEqualTo(resumeFromId.lastId?.index)
                                     }
                                 }
                             } else {
@@ -158,7 +160,7 @@ class MessageExtractor(
                         }
                             // trim messages if resumeFromId is present
                             .dropWhile {
-                                resumeFromId?.sequence?.let { start ->
+                                resumeFromId?.lastId?.index?.let { start ->
                                     if (order == Order.DIRECT) {
                                         it.index < start
                                     } else {
@@ -191,7 +193,7 @@ class MessageExtractor(
                         val lastMessage = if (order == Order.DIRECT) batch.messages.last() else batch.messages.first()
 
                         logger.trace {
-                            "batch ${batch.id.index} of stream $streamName has been trimmed (targetTimestamp=${request.startTimestamp} targetId=${resumeFromId?.sequence}) - ${trimmedMessages.size} of ${batch.messages.size} messages left (firstId=${firstMessage.id.index} firstTimestamp=${firstMessage.timestamp} lastId=${lastMessage.id.index} lastTimestamp=${lastMessage.timestamp})"
+                            "batch ${batch.id.index} of stream $streamName has been trimmed (targetTimestamp=${request.startTimestamp} targetId=${resumeFromId?.lastId?.index}) - ${trimmedMessages.size} of ${batch.messages.size} messages left (firstId=${firstMessage.id.index} firstTimestamp=${firstMessage.timestamp} lastId=${lastMessage.id.index} lastTimestamp=${lastMessage.timestamp})"
                         }
 
                         pipelineStatus.fetchedEnd(streamName.toString())
