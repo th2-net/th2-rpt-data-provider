@@ -23,11 +23,11 @@ import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.CodecBatchRequest
-import com.exactpro.th2.rptdataprovider.services.DecoderService
+import com.exactpro.th2.rptdataprovider.services.AbstractDecoderService
 
 class MessageProducer(
     private val cradle: CradleService,
-    private val rabbitMqService: DecoderService
+    private val rabbitMqService: AbstractDecoderService
 ) {
     suspend fun fromId(id: StoredMessageId): Message {
 

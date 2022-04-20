@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider
 
-
 import com.exactpro.cradle.CradleManager
 import com.exactpro.th2.common.grpc.MessageGroupBatch
 import com.exactpro.th2.common.schema.grpc.configuration.GrpcConfiguration
@@ -42,17 +41,17 @@ import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
 import com.exactpro.th2.rptdataprovider.server.ServerType
-import com.exactpro.th2.rptdataprovider.services.DecoderService
+import com.exactpro.th2.rptdataprovider.services.AbstractDecoderService
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.grpc.GrpcService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import io.ktor.http.*
+import io.ktor.http.CacheControl
 
 @Suppress("MemberVisibilityCanBePrivate")
-class Context constructor(
+class Context(
     val configuration: Configuration,
 
     val serverType: ServerType,
@@ -78,7 +77,7 @@ class Context constructor(
         cradleManager
     ),
 
-    val decoderService: DecoderService = if (configuration.codecUseGrpc.value.toBoolean()) {
+    val decoderService: AbstractDecoderService = if (configuration.codecUseGrpc.value.toBoolean()) {
         GrpcService(
             configuration,
             grpcRouter
