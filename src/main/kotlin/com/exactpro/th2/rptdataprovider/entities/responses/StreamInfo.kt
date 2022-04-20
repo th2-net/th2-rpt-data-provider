@@ -17,17 +17,45 @@
 package com.exactpro.th2.rptdataprovider.entities.responses
 
 import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.th2.common.grpc.ConnectionID
+import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.dataprovider.grpc.Stream
 import com.exactpro.th2.rptdataprovider.convertToProto
 import com.exactpro.th2.rptdataprovider.cradleDirectionToGrpc
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
+import com.fasterxml.jackson.annotation.JsonIgnore
+import mu.KotlinLogging
 
-data class StreamInfo(val stream: StreamName, val lastElement: StoredMessageId? = null) {
+data class StreamInfo(val stream: StreamName, @JsonIgnore val lastMessage: StoredMessageId? = null) {
+
+    val lastElement = lastMessage?.toString()
+
+    companion object {
+        val logger = KotlinLogging.logger { }
+    }
+
     fun convertToProto(): Stream {
         return Stream.newBuilder()
             .setDirection(cradleDirectionToGrpc(stream.direction))
-            .setSession(stream.name).also { builder ->
-                lastElement?.let { builder.setLastId(it.convertToProto()) }
-            }.build()
+            .setSession(stream.name)
+            .setLastId(
+                lastMessage?.let {
+                    logger.trace { "stream $stream - lastElement is ${it.index}" }
+                    it.convertToProto()
+
+                } ?: let {
+                    // set sequence to a negative value if stream has not started to avoid mistaking it for the default value
+                    // FIXME change interface to make that case explicit
+                    logger.trace { "lastElement is null - StreamInfo should be build as if the stream $stream has no messages" }
+
+                    MessageID
+                        .newBuilder()
+                        .setSequence(-1)
+                        .setDirection(cradleDirectionToGrpc(stream.direction))
+                        .setConnectionId(ConnectionID.newBuilder().setSessionAlias(stream.name).build())
+                        .build()
+                }
+            )
+            .build()
     }
 }

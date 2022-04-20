@@ -16,22 +16,20 @@
 
 package com.exactpro.th2.rptdataprovider.server
 
-import com.exactpro.cradle.Order
 import com.exactpro.cradle.TimeRelation
-import com.exactpro.cradle.messages.StoredMessageFilterBuilder
-import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.utils.CradleIdException
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
+import com.exactpro.th2.rptdataprovider.entities.exceptions.CodecResponseException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
-import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
-import com.exactpro.th2.rptdataprovider.entities.sse.*
-import com.exactpro.th2.rptdataprovider.handlers.messages.MessageLoader
+import com.exactpro.th2.rptdataprovider.entities.sse.EventType
+import com.exactpro.th2.rptdataprovider.entities.sse.HttpWriter
+import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
+import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import io.ktor.application.*
 import io.ktor.features.*
@@ -46,8 +44,6 @@ import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.nio.channels.ClosedChannelException
-import java.time.Instant
-import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -86,7 +82,6 @@ class HttpServer(private val applicationContext: Context) {
 
     private val jacksonMapper = applicationContext.jacksonMapper
     private val checkRequestAliveDelay = applicationContext.configuration.checkRequestsAliveDelay.value.toLong()
-    private val keepAliveTimeout = applicationContext.configuration.keepAliveTimeout.value.toLong()
     private val configuration = applicationContext.configuration
 
     private class Timeouts {
@@ -187,12 +182,18 @@ class HttpServer(private val applicationContext: Context) {
                         } finally {
                             if (useSse) sseRequestProcessed.inc() else restRequestProcessed.inc()
                         }
+                    } catch (e: CancellationException) {
+                        logger.debug(e) { "request processing was cancelled with CancellationException" }
                     } catch (e: InvalidRequestException) {
                         logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - invalid request" }
                     } catch (e: CradleObjectNotFoundException) {
                         logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - missing cradle data" }
+                    } catch (e: CodecResponseException) {
+                        logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - codec parses messages incorrectly" }
                     } catch (e: ClosedChannelException) {
                         logger.info { "request '$requestName' with parameters '${stringParameters.value}' has been cancelled by a client" }
+                    } catch (e: CradleIdException) {
+                        logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - unexpected cradle id exception" }
                     } catch (e: Exception) {
                         logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - unexpected exception" }
                     }
@@ -212,22 +213,30 @@ class HttpServer(private val applicationContext: Context) {
     ) {
         coroutineScope {
             launch {
-                launch {
+                val job = launch {
                     checkContext(context)
                 }
-                call.response.headers.append(HttpHeaders.CacheControl, "no-cache, no-store")
+                call.response.headers.append(HttpHeaders.CacheControl, "no-cache, no-store, no-transform")
                 call.respondTextWriter(contentType = ContentType.Text.EventStream) {
+                    val httpWriter = HttpWriter(this, jacksonMapper)
+
                     try {
-                        calledFun.invoke(SseWriter(this, jacksonMapper))
+                        calledFun.invoke(httpWriter)
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
-                        eventWrite(SseEvent.build(jacksonMapper, e))
+                        httpWriter.eventWrite(SseEvent.build(jacksonMapper, e))
                         throw e
                     } finally {
-                        eventWrite(SseEvent(event = EventType.CLOSE))
-                        closeWriter()
+                        kotlin.runCatching {
+                            httpWriter.eventWrite(SseEvent(event = EventType.CLOSE))
+                            httpWriter.closeWriter()
+                            job.cancel()
+                        }.onFailure { e ->
+                            logger.error(e) { "unexpected exception while trying to close http writer" }
+                        }
                     }
                 }
-                coroutineContext.cancelChildren()
             }.join()
         }
     }
@@ -263,6 +272,8 @@ class HttpServer(private val applicationContext: Context) {
                     )
                     is ChannelClosedException -> sendErrorCode(call, exception, HttpStatusCode.RequestTimeout)
                     is CradleIdException -> sendErrorCodeOrEmptyJson(probe, call, e, HttpStatusCode.InternalServerError)
+                    is CodecResponseException -> sendErrorCode(call, exception, HttpStatusCode.InternalServerError)
+                    is CancellationException -> Unit
                     else -> sendErrorCode(call, exception as Exception, HttpStatusCode.InternalServerError)
                 }
                 throw e
@@ -293,7 +304,7 @@ class HttpServer(private val applicationContext: Context) {
 
         val getEventsLimit = this.applicationContext.configuration.eventSearchChunkSize.value.toInt()
 
-        embeddedServer(Netty, configuration.port.value.toInt()) {
+        embeddedServer(Netty, configuration.port.value.toInt(), configure = { responseWriteTimeoutSeconds = -1 }) {
 
             install(Compression)
             install(Timeouts) {
@@ -342,7 +353,7 @@ class HttpServer(private val applicationContext: Context) {
                     val probe = call.parameters["probe"]?.toBoolean() ?: false
                     handleRequest(
                         call, context, "get single message",
-                        notModifiedCacheControl, probe, false, call.parameters.toMap()
+                        rarelyModifiedCacheControl, probe, false, call.parameters.toMap()
                     ) {
                         MessageWithMetadata(messageCache.getOrPut(call.parameters["id"]!!)).let {
                             MessageMapper.convertToHttpMessage(it)
@@ -418,6 +429,20 @@ class HttpServer(private val applicationContext: Context) {
                         val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
                         val message = messageCache.getOrPut(call.parameters["id"]!!)
                         filterPredicate.apply(MessageWithMetadata(message))
+                    }
+                }
+
+                get("/messageIds") {
+                    val queryParametersMap = call.request.queryParameters.toMap()
+                    handleRequest(call, context, "message ids", null, false, false, queryParametersMap) {
+                        val request = SseMessageSearchRequest(
+                            queryParametersMap,
+                            messageFiltersPredicateFactory.getEmptyPredicate(),
+                            TimeRelation.BEFORE
+                        ).also {
+                            it.checkIdsRequest()
+                        }
+                        searchMessagesHandler.getIds(request)
                     }
                 }
             }

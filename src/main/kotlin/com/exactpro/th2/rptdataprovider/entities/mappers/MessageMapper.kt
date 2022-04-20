@@ -40,7 +40,7 @@ object MessageMapper {
 
     private suspend fun getBodyMessage(messageWithMetadata: MessageWithMetadata): BodyHttpMessage? {
         return with(messageWithMetadata) {
-            val body = message.messageBody?.let {
+            val body = message.parsedMessageGroup?.let {
                 it.zip(filteredBody).map { (msg, filtered) ->
                     HttpBodyWrapper.from(msg, filtered)
                 }
@@ -56,29 +56,40 @@ object MessageMapper {
         }
     }
 
-    suspend fun convertToGrpcMessageData(messageWithMetadata: MessageWithMetadata): MessageData {
-        return with(messageWithMetadata) {
+    //FIXME: migrate to grpc interface 1.0.0+
+    //FIXME: return raw message body
+    fun convertToGrpcMessageData(messageWithMetadata: MessageWithMetadata): List<MessageData> {
+        return messageWithMetadata.message.parsedMessageGroup?.map { groupElement ->
+            MessageData.newBuilder()
+                .setMessageId(groupElement.id)
+                .setTimestamp(groupElement.message.metadata.timestamp)
+//                .setBodyBase64(messageWithMetadata.message.rawMessageBody.let {
+//                    Base64.getEncoder().encodeToString(it)
+//                })
+                .setMessageType(groupElement.messageType)
+                .setMessage(groupElement.message)
+                .build()
+        } ?: listOf(messageWithMetadata.message.let { message ->
             MessageData.newBuilder()
                 .setMessageId(message.id.convertToProto())
                 .setTimestamp(message.timestamp.toTimestamp())
-                .setBodyBase64(message.rawMessageBody?.let { Base64.getEncoder().encodeToString(it.toByteArray()) })
-                .setBody(jacksonMapper.writeValueAsString(getBodyMessage(messageWithMetadata)))
+//                .setBodyBase64(message.rawMessageBody.let { Base64.getEncoder().encodeToString(it) })
                 .build()
-        }
+        })
     }
 
     suspend fun convertToHttpMessage(messageWithMetadata: MessageWithMetadata): HttpMessage {
         return with(messageWithMetadata) {
             val httpMessage = HttpMessage(
                 timestamp = message.timestamp,
-                messageType = messageWithMetadata.message.messageBody
+                messageType = messageWithMetadata.message.parsedMessageGroup
                     ?.joinToString("/") { it.messageType } ?: messageWithMetadata.message.imageType ?: "",
                 direction = message.direction,
                 sessionId = message.sessionId,
                 attachedEventIds = message.attachedEventIds,
                 messageId = message.id.toString(),
                 body = getBodyMessage(messageWithMetadata),
-                bodyBase64 = message.rawMessageBody?.let { Base64.getEncoder().encodeToString(it.toByteArray()) }
+                bodyBase64 = message.rawMessageBody.let { Base64.getEncoder().encodeToString(it) }
             )
             httpMessage
         }

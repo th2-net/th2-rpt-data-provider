@@ -17,23 +17,22 @@
 package com.exactpro.th2.rptdataprovider.handlers
 
 import com.exactpro.cradle.Direction
-import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepObject
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.launch
 import mu.KotlinLogging
 
 data class StreamName(val name: String, val direction: Direction) {
+    private val fullName = "$name:$direction"
+
     override fun toString(): String {
-        return "$name:$direction"
+        return fullName
     }
 }
 
 abstract class PipelineComponent(
-    val startId: StoredMessageId?,
     val context: Context,
     val searchRequest: SseMessageSearchRequest,
     val externalScope: CoroutineScope,
@@ -57,14 +56,11 @@ abstract class PipelineComponent(
 
 
     protected suspend fun sendToChannel(message: PipelineStepObject) {
-        logger.trace { message.lastProcessedId }
         messageFlow.send(message)
     }
-    
+
 
     suspend fun pollMessage(): PipelineStepObject {
-        val res =  messageFlow.receive()
-        logger.trace { res.lastProcessedId }
-        return res
+        return messageFlow.receive()
     }
 }

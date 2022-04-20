@@ -19,20 +19,25 @@ package com.exactpro.th2.rptdataprovider.handlers.messages
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
+import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import kotlinx.coroutines.*
+import mu.KotlinLogging
+import java.util.concurrent.atomic.AtomicLong
+import kotlin.time.ExperimentalTime
+import kotlin.time.measureTimedValue
 
-@InternalCoroutinesApi
 class MessageFilter(
     context: Context,
     searchRequest: SseMessageSearchRequest,
     streamName: StreamName?,
     externalScope: CoroutineScope,
     previousComponent: PipelineComponent?,
-    messageFlowCapacity: Int
+    messageFlowCapacity: Int,
+    private val pipelineStatus: PipelineStatus
 ) : PipelineComponent(
-    previousComponent?.startId,
     context,
     searchRequest,
     externalScope,
@@ -43,6 +48,7 @@ class MessageFilter(
 
     private val sendEmptyDelay: Long = context.configuration.sendEmptyDelay.value.toLong()
     private var lastScannedObject: PipelineStepObject? = null
+    private val id = COUNTER.incrementAndGet()
 
 
     init {
@@ -52,13 +58,18 @@ class MessageFilter(
     }
 
 
-    constructor(pipelineComponent: MessageDecoder, messageFlowCapacity: Int) : this(
+    constructor(
+        pipelineComponent: MessageBatchUnpacker,
+        messageFlowCapacity: Int,
+        pipelineStatus: PipelineStatus
+    ) : this(
         pipelineComponent.context,
         pipelineComponent.searchRequest,
         pipelineComponent.streamName,
         pipelineComponent.externalScope,
         pipelineComponent,
-        messageFlowCapacity
+        messageFlowCapacity,
+        pipelineStatus
     )
 
     private fun updateState(parsedMessage: PipelineParsedMessage) {
@@ -67,41 +78,61 @@ class MessageFilter(
     }
 
 
-    private suspend fun applyFilter(parsedMessage: Message): MessageWithMetadata {
+    private fun applyFilter(parsedMessage: Message): MessageWithMetadata {
         return MessageWithMetadata(parsedMessage).apply {
             finalFiltered = searchRequest.filterPredicate.apply(this)
         }
     }
 
 
-    private suspend fun emptySender(parentScope: CoroutineScope) {
-        while (parentScope.isActive) {
-            lastScannedObject?.let {
-                sendToChannel(EmptyPipelineObject(it))
-                delay(sendEmptyDelay)
-            }
-        }
-    }
-
-
+    @OptIn(ExperimentalTime::class)
     override suspend fun processMessage() {
         coroutineScope {
-            launch { emptySender(this) }
             while (isActive) {
                 val parsedMessage = previousComponent!!.pollMessage()
+
                 if (parsedMessage is PipelineParsedMessage) {
 
-                    updateState(parsedMessage)
+                    pipelineStatus.filterStart(streamName.toString())
+                    val timeStart = System.currentTimeMillis()
+                    val filtered = measureTimedValue {
+                        pipelineStatus.countFilteredTotal(streamName.toString())
+                        updateState(parsedMessage)
 
-                    val filtered = applyFilter(parsedMessage.payload)
+                        applyFilter(parsedMessage.payload)
+                    }.also {
+                        logger.trace { "message filtering took ${it.duration.inMilliseconds}ms (stream=$streamName sequence=${parsedMessage.payload.id.index})" }
+                    }.value
+
+                    pipelineStatus.filterEnd(streamName.toString())
+
+                    parsedMessage.also {
+                        it.info.startFilter = timeStart
+                        it.info.endFilter = System.currentTimeMillis()
+                        StreamWriter.setFilter(it.info)
+                    }
 
                     if (filtered.finalFiltered) {
-                        sendToChannel(PipelineFilteredMessage(parsedMessage, filtered))
+                        sendToChannel(
+                            PipelineFilteredMessage(
+                                parsedMessage,
+                                filtered
+                            )
+                        )
+                        pipelineStatus.countFilterAccepted(streamName.toString())
+                    } else {
+                        pipelineStatus.countFilterDiscarded(streamName.toString())
                     }
+                    pipelineStatus.filterSendDownstream(streamName.toString())
                 } else {
                     sendToChannel(parsedMessage)
                 }
             }
         }
+    }
+
+    companion object {
+        val logger = KotlinLogging.logger {}
+        private val COUNTER = AtomicLong()
     }
 }

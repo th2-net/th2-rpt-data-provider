@@ -16,191 +16,196 @@
 
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
-import com.exactpro.th2.common.grpc.MessageBatch
-import com.exactpro.th2.common.grpc.MessageID
-import com.exactpro.th2.common.grpc.RawMessageBatch
+import com.exactpro.th2.common.grpc.MessageGroupBatch
+import com.exactpro.th2.common.message.direction
+import com.exactpro.th2.common.message.sequence
+import com.exactpro.th2.common.message.sessionAlias
 import com.exactpro.th2.common.schema.message.MessageListener
 import com.exactpro.th2.common.schema.message.MessageRouter
-import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
-import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
-import com.exactpro.th2.rptdataprovider.logMetrics
+import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
+import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
+import com.exactpro.th2.rptdataprovider.logTime
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
 import mu.KotlinLogging
-import org.apache.commons.lang3.exception.ExceptionUtils
-import java.io.IOException
+import java.lang.IllegalArgumentException
+import java.lang.IllegalStateException
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ConcurrentSkipListSet
 import java.util.concurrent.Executors
+import kotlin.system.measureTimeMillis
 
 class RabbitMqService(
-    private val configuration: Configuration,
-    private val messageRouterParsedBatch: MessageRouter<MessageBatch>,
-    private val messageRouterRawBatch: MessageRouter<RawMessageBatch>
+    configuration: Configuration,
+    messageRouterParsedBatch: MessageRouter<MessageGroupBatch>,
+    private val messageRouterRawBatch: MessageRouter<MessageGroupBatch>
 ) {
 
     companion object {
         val logger = KotlinLogging.logger { }
-
-        private val rabbitMqBatchParseMetrics: Metrics = Metrics("rabbit_mq_batch_parse", "rabbitMqBatchParse")
-
     }
 
-    private val mqDispatcherPoolSize = configuration.cradleDispatcherPoolSize.value.toInt()
-    private val mqDispatcher = Executors.newFixedThreadPool(mqDispatcherPoolSize).asCoroutineDispatcher()
-
-    private val rabbitBatchMergeBuffer = configuration.rabbitBatchMergeBuffer.value.toInt()
-    private val decodeMessageConsumerCount = configuration.decodeMessageConsumerCount.value.toInt()
-
-    private val messageBatchBuffer = Channel<List<BatchRequest>>(rabbitBatchMergeBuffer)
+    private val toCodecAttributeName = "to_codec"
 
     private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
+    private val pendingRequests = ConcurrentHashMap<CodecRequestId, PendingCodecBatchRequest>()
 
-    private val decodeRequests = ConcurrentHashMap<MessageID, ConcurrentSkipListSet<MessageRequest>>()
+    private val usePinAttributes = configuration.codecUsePinAttributes.value.toBoolean()
 
-    private val receiveChannel = messageRouterParsedBatch.subscribeAll(
-        MessageListener { _, decodedBatch ->
-            decodedBatch.messagesList.groupBy { it.metadata.id.sequence }.forEach { (_, messages) ->
+    private val maximumPendingRequests = configuration.codecPendingBatchLimit.value.toInt()
 
-                val messageId = messages.first().metadata.id.run {
-                    when (subsequenceCount) {
-                        0 -> this
-                        else -> toBuilder().clearSubsequence().build()
-                    }
-                }
-
-                decodeRequests.remove(messageId)?.let { match ->
-                    match.forEach {
-                        CoroutineScope(mqDispatcher).launch {
-                            it.sendMessage(messages.map { BodyWrapper(it) })
-                        }
-                    }
-                }
-            }
-            logger.trace { "${decodeRequests.size} decode requests remaining" }
-        },
-        "from_codec"
+    private val mqRequestSenderScope = CoroutineScope(
+        Executors.newFixedThreadPool(configuration.codecRequestThreadPool.value.toInt()).asCoroutineDispatcher()
     )
 
-    @ObsoleteCoroutinesApi
-    @ExperimentalCoroutinesApi
-    @InternalCoroutinesApi
-    private val messageDecoder = GlobalScope.launch {
-        repeat(decodeMessageConsumerCount) {
-            launch {
-                decodeMessage()
-            }
-        }
-    }
+    private val mqCallbackScope = CoroutineScope(
+        Executors.newFixedThreadPool(configuration.codecCallbackThreadPool.value.toInt()).asCoroutineDispatcher()
+    )
 
-    private fun mergeBatches(messages: List<MessageRequest>): RawMessageBatch {
-        return RawMessageBatch.newBuilder().addAllMessages(
-            messages.map { it.rawMessage }
-        ).build()
-    }
+    private val mqSubscribeScope = CoroutineScope(
+        Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+    )
 
-    private fun getRequestDebugInfo(batches: List<MessageRequest>): String {
+    private val codecLatency = PipelineStatus.codecLatency
 
-        val session = batches.first().id.connectionId.sessionAlias
-        val firstSeqNum = batches.first().id.sequence
-        val lastSeqNum = batches.last().id.sequence
-        val count = batches.size
+    @Suppress("unused")
+    private val receiveChannel = mqSubscribeScope.launch {
+        messageRouterParsedBatch.subscribeAll(
+            MessageListener { _, decodedBatch ->
+                mqCallbackScope.launch {
 
-        return "(session=$session firstSeqNum=$firstSeqNum lastSeqNum=$lastSeqNum count=$count)"
-    }
+                    val response = MessageGroupBatchWrapper(decodedBatch)
 
+                    logger.trace { "codec response with hash ${response.responseHash} has been received" }
 
-    @ExperimentalCoroutinesApi
-    @ObsoleteCoroutinesApi
-    @InternalCoroutinesApi
-    private suspend fun decodeMessage() {
-        coroutineScope {
-            while (true) {
-                val batches = messageBatchBuffer.receive().filter { it.context.isActive }
-
-                if (batches.isEmpty()) continue
-
-                val requests = batches.flatMap { it.requests }.filterNotNull()
-                val requestDebugInfo = getRequestDebugInfo(requests)
-                val requestsMaps = requests.groupBy { it.id }
-
-                try {
-                    logMetrics(rabbitMqBatchParseMetrics) {
-
-                        val batch = mergeBatches(requests)
-                        sendMessageBatchToRabbit(batch, requestsMaps)
-
-                        withTimeout(responseTimeout) {
-                            requests.map { async { it.get() } }.awaitAll()
-                                .also { logger.trace { "codec response received $requestDebugInfo" } }
-                        }
+                    pendingRequests.remove(response.requestId)?.let {
+                        codecLatency.gaugeDec(listOf(it.streamName))
+                        codecLatency.setDuration(it.startTimestamp.toDouble(), listOf(it.streamName))
+                        it.completableDeferred.complete(response)
                     }
-                } catch (e: Exception) {
-                    withContext(NonCancellable) {
-                        when (e) {
-                            is TimeoutCancellationException ->
-                                logger.error { "unable to parse messages $requestDebugInfo - timed out after $responseTimeout milliseconds" }
-                            else -> {
-                                logger.error(e) { "exception when send message $requestDebugInfo" }
-                                val rootCause = ExceptionUtils.getRootCause(e)
-                                requests.forEach { request -> request.let { it.exception = rootCause } }
+                        ?: logger.trace {
+                            val firstSequence =
+                                decodedBatch.groupsList.firstOrNull()?.messagesList?.firstOrNull()?.sequence
+                            val lastSequence =
+                                decodedBatch.groupsList?.lastOrNull()?.messagesList?.lastOrNull()?.sequence
+                            val stream =
+                                "${decodedBatch.groupsList.firstOrNull()?.messagesList?.firstOrNull()?.message?.sessionAlias}:${decodedBatch.groupsList.firstOrNull()?.messagesList?.firstOrNull()?.message?.direction.toString()}"
+                            "codec response with hash ${response.responseHash} has no matching requests (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} requestId=${response.requestId})"
+                        }
+                }
+            },
+
+            "from_codec"
+        )
+    }
+
+    suspend fun sendToCodec(request: CodecBatchRequest): CodecBatchResponse {
+
+        logger.trace { "Send batch before cycle ${request.requestId} with id to codec" }
+
+        while (pendingRequests.keys.size > maximumPendingRequests) {
+            delay(100)
+        }
+
+        logger.trace { "Send batch ${request.requestId} with id to codec" }
+
+        return pendingRequests.computeIfAbsent(request.requestId) {
+            val pendingRequest = request.toPending()
+
+            logger.trace { "Get pending request for batch ${request.requestId}" }
+
+            // launch timeout handler coroutine
+            mqCallbackScope.launch {
+                measureTimeMillis {
+                    delay(responseTimeout)
+
+                    pendingRequest.completableDeferred.let {
+                        if (pendingRequests[request.requestId]?.completableDeferred === pendingRequest.completableDeferred) {
+
+                            pendingRequests.remove(request.requestId)
+                            it.complete(null)
+
+                            codecLatency.gaugeDec(listOf(request.streamName))
+                            codecLatency.setDuration(
+                                pendingRequest.startTimestamp.toDouble(),
+                                listOf(request.streamName)
+                            )
+
+                            logger.warn {
+                                val firstSequence =
+                                    request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sequence
+                                val lastSequence =
+                                    request.protobufRawMessageBatch.groupsList.last()?.messagesList?.last()?.rawMessage?.sequence
+                                val stream =
+                                    "${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sessionAlias}:${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.direction.toString()}"
+
+                                "codec request timed out after $responseTimeout ms (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} hash=${request.requestHash}) requestId=${request.requestId}"
                             }
                         }
-
-                        requests.onEach { request ->
-                            request.let { decodeRequests.remove(it.id) }
-                        }.forEach {
-                            try {
-                                it.sendMessage(null)
-                            } catch (e: CancellationException) {
-                                logger.error { "cancelled channel from message: '${it.rawMessage.metadata?.id}'" }
-                            }
-                        }
                     }
-                }
-            }
-        }
-    }
-
-    suspend fun decodeBatch(batchRequest: List<BatchRequest>) {
-        messageBatchBuffer.send(batchRequest)
-    }
-
-    private suspend fun sendMessageBatchToRabbit(
-        batch: RawMessageBatch,
-        requests: Map<MessageID, List<MessageRequest>>
-    ) {
-        withContext(mqDispatcher) {
-
-            var alreadyRequested = true
-
-            requests.forEach {
-                decodeRequests.computeIfAbsent(it.key) {
-                    ConcurrentSkipListSet<MessageRequest>().also { alreadyRequested = false }
-                }.addAll(it.value)
+                }.also { logger.debug { "${request.requestId} mqCallbackScope ${it}ms" } }
             }
 
-            val firstId = batch.messagesList?.first()?.metadata?.id
-            val requestDebugInfo = let {
-                val session = firstId?.connectionId?.sessionAlias
-                val direction = firstId?.direction?.name
-                val firstSeqNum = firstId?.sequence
-                val lastSeqNum = batch.messagesList?.last()?.metadata?.id?.sequence
-                val count = batch.messagesCount
+            logger.trace { "Check timeout callback for batch ${request.requestId}" }
 
-                "(session=$session direction=$direction firstSeqNum=$firstSeqNum lastSeqNum=$lastSeqNum count=$count)"
+            logger.trace { "Check mqRequestSenderScope alive ${mqRequestSenderScope.isActive}" }
+
+            mqRequestSenderScope.launch {
+
+                logger.trace { "Launch sendAll coroutine ${request.requestId}" }
+
+                measureTimeMillis {
+                    try {
+                        val sendAllTime = measureTimeMillis {
+                            if (usePinAttributes) {
+                                val sessionAlias =
+                                    request.protobufRawMessageBatch.groupsList
+                                        .first().messagesList
+                                        .first().rawMessage.metadata.id.connectionId.sessionAlias
+
+                                logger.trace { "Session aliases for batch ${request.requestId}, alias $sessionAlias" }
+
+                                codecLatency.gaugeInc(listOf(request.streamName))
+
+                                logger.trace { "Start sendAll method for batch ${request.requestId}" }
+
+                                measureTimeMillis {
+                                    messageRouterRawBatch.sendAll(
+                                        request.protobufRawMessageBatch,
+                                        sessionAlias,
+                                        toCodecAttributeName
+                                    )
+                                }.also { logger.debug { "messageRouterRawBatch ${request.requestId} sendAll ${it}ms" } }
+                            } else {
+                                measureTimeMillis {
+                                    messageRouterRawBatch.sendAll(request.protobufRawMessageBatch, toCodecAttributeName)
+                                }.also { logger.debug { "messageRouterRawBatch ${request.requestId} sendAll ${it}ms" } }
+                            }
+
+                            logger.trace {
+                                val firstSequence =
+                                    request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sequence
+                                val lastSequence =
+                                    request.protobufRawMessageBatch.groupsList.last()?.messagesList?.last()?.rawMessage?.sequence
+                                val stream =
+                                    "${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sessionAlias}:${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.direction.toString()}"
+
+
+                                "codec request with hash ${request.requestHash} has been sent (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} hash=${request.requestHash}) requestId=${request.requestId})"
+                            }
+                            logger.debug { "codec request with hash ${request.requestHash.hashCode()} has been sent" }
+                        }
+                        StreamWriter.setSendToCodecTime(sendAllTime)
+                    } catch (e: Exception) {
+                        if (pendingRequests[request.requestId]?.completableDeferred === pendingRequest.completableDeferred) {
+                            pendingRequest.completableDeferred.complete(null)
+                            pendingRequests.remove(request.requestId)
+                        }
+                        logger.error(e) { "Unexpected exception while trying to send a codec request" }
+                    }
+                }.also { logger.info { "${request.requestId} mqRequestSenderScope ${it}ms" } }
             }
 
-            if (!alreadyRequested) {
-                try {
-                    messageRouterRawBatch.sendAll(batch, firstId?.connectionId?.sessionAlias)
-                    logger.trace { "codec request published $requestDebugInfo" }
-                } catch (e: IOException) {
-                    logger.error(e) { "cannot send message $requestDebugInfo" }
-                }
-            }
-        }
+            pendingRequest
+        }.toResponse()
     }
 }
-
