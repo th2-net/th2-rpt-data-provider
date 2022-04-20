@@ -46,7 +46,7 @@ dependencies {
     implementation 'org.slf4j:slf4j-api'
     implementation 'org.slf4j:slf4j-log4j12'
 
-    implementation 'com.exactpro.th2:common:3.31.0a-old_cradle_policy-2194465131-SNAPSHOT'
+    implementation 'com.exactpro.th2:common:3.31.0a-old_cradle_policy-2195817717-SNAPSHOT'
 
     implementation group: 'net.jpountz.lz4', name: 'lz4', version: '1.3.0'
 
