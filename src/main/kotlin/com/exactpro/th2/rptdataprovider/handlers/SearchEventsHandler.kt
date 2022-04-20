@@ -125,16 +125,15 @@ class SearchEventsHandler(private val context: Context) {
         wrappers: List<StoredTestEventWrapper>,
         request: SseEventSearchRequest
     ): List<BaseEventEntity> {
-        return wrappers.groupBy { it.isBatch }.flatMap { entry ->
-            if (entry.key) {
-                entry.value.map { it.asBatch() }
-                    .map { it to it.testEvents }
-                    .flatMap { (batch, events) ->
-                        events.map { event -> event to eventProducer.fromStoredEvent(event, batch) }
-                    }
+        return wrappers.flatMap { entry ->
+            if (entry.isBatch) {
+                val batch = entry.asBatch()
+                batch.testEvents.map { event ->
+                    event to eventProducer.fromStoredEvent(event, batch)
+                }
             } else {
-                entry.value.map { it.asSingle() }
-                    .map { it to eventProducer.fromStoredEvent(it, null) }
+                val single = entry.asSingle()
+                listOf(single to eventProducer.fromStoredEvent(single, null))
             }
         }.let { eventTreesNodes ->
             eventProducer.fromEventsProcessed(eventTreesNodes, request)
@@ -153,7 +152,8 @@ class SearchEventsHandler(private val context: Context) {
             flow {
                 val eventsCollection =
                     getEventsSuspend(request.parentEvent, timestampFrom, timestampTo)
-                        .asSequence().chunked(eventSearchChunkSize)
+                        .asSequence()
+                        .chunked(eventSearchChunkSize)
                 for (event in eventsCollection)
                     emit(event)
             }
@@ -161,10 +161,11 @@ class SearchEventsHandler(private val context: Context) {
                     async(parentContext) {
                         prepareEvents(wrappers, request)
                             .let { events ->
-                                if (request.searchDirection == AFTER)
-                                    events.sortedBy { it.startTimestamp }
-                                else
-                                    events.sortedByDescending { it.startTimestamp }
+                                if (request.searchDirection == AFTER) {
+                                    events
+                                } else {
+                                    events.reversed()
+                                }
                             }.also { parentContext.ensureActive() }
                     }
                 }.buffer(BUFFERED)
