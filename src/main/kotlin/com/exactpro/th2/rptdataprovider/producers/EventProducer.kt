@@ -274,6 +274,9 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
             body = storedEvent.content.let {
                 try {
                     val data = String(it).takeUnless(String::isEmpty) ?: "{}"
+
+                    //FIXME: Delete later it's slowdown
+
                     mapper.readTree(data)
                     data
                 } catch (e: Exception) {
