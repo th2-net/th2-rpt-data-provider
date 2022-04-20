@@ -293,7 +293,7 @@ class HttpServer(private val applicationContext: Context) {
 
         val getEventsLimit = this.applicationContext.configuration.eventSearchChunkSize.value.toInt()
 
-        embeddedServer(Netty, configuration.port.value.toInt()) {
+        embeddedServer(Netty, configuration.port.value.toInt(), configure = { responseWriteTimeoutSeconds = -1 }) {
 
             install(Compression)
             install(Timeouts) {
