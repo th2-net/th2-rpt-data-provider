@@ -37,7 +37,7 @@ abstract class AbstractDecoderService(configuration: Configuration) {
         Executors.newFixedThreadPool(configuration.codecRequestThreadPool.value.toInt()).asCoroutineDispatcher()
     )
 
-    protected val callbackScope = CoroutineScope(
+    private val callbackScope = CoroutineScope(
         Executors.newFixedThreadPool(configuration.codecCallbackThreadPool.value.toInt()).asCoroutineDispatcher()
     )
 
