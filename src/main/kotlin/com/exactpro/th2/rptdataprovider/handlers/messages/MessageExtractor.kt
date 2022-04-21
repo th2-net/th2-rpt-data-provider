@@ -191,7 +191,7 @@ class MessageExtractor(
                         val lastMessage = if (order == Order.DIRECT) batch.messages.last() else batch.messages.first()
 
                         logger.trace {
-                            "batch ${batch.id.index} of stream $streamName has been trimmed (targetTimestamp=${request.startTimestamp} targetId=${resumeFromId?.sequence}) - ${trimmedMessages.size} of ${batch.messages.size} messages left (firstId=${firstMessage.id.index} firstTimestamp=${firstMessage.timestamp} lastId=${lastMessage.id.index} lastTimestamp=${lastMessage.timestamp})"
+                            "batch ${batch.id.index} of stream $streamName has been trimmed (targetStartTimestamp=${request.startTimestamp} targetEndTimestamp=${request.endTimestamp} targetId=${resumeFromId?.sequence}) - ${trimmedMessages.size} of ${batch.messages.size} messages left (firstId=${firstMessage.id.index} firstTimestamp=${firstMessage.timestamp} lastId=${lastMessage.id.index} lastTimestamp=${lastMessage.timestamp})"
                         }
 
                         pipelineStatus.fetchedEnd(streamName.toString())
