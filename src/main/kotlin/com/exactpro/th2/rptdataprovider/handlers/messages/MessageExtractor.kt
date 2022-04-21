@@ -132,9 +132,9 @@ class MessageExtractor(
                                 }
                             }
                             if (order == Order.DIRECT) {
-                                request.endTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
+                                request.endTimestamp?.let { builder.timestampTo().isLessThan(it) }
                             } else {
-                                request.endTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
+                                request.endTimestamp?.let { builder.timestampFrom().isGreaterThan(it) }
                             }
                         }.build()
                 )
@@ -217,7 +217,7 @@ class MessageExtractor(
 
                             }
                         } catch (e: NoSuchElementException) {
-//                        logger.debug { "skipping batch ${batch.id.index} of stream $streamName - no messages left after trimming" }
+                            logger.trace { "skipping batch ${batch.id.index} of stream $streamName - no messages left after trimming" }
                             pipelineStatus.countSkippedBatches(streamName.toString())
                         }
                         pipelineStatus.fetchedSendDownstream(streamName.toString())
