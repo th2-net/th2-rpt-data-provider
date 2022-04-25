@@ -73,6 +73,11 @@ dependencies {
 
     implementation 'io.grpc:grpc-protobuf'
     implementation 'com.google.protobuf:protobuf-java-util'
+
+    testImplementation 'io.mockk:mockk:1.9.3'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.7.0'
+
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.7.0'
 }
 
 jar {
@@ -103,6 +108,9 @@ docker {
     copySpec.from(tarTree("$buildDir/distributions/${applicationName}.tar"))
 }
 
+test {
+    useJUnitPlatform()
+}
 
 compileKotlin {
     kotlinOptions.jvmTarget = "11"
