@@ -21,6 +21,7 @@ import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
+import com.exactpro.cradle.testevents.StoredTestEventWithContent
 import com.exactpro.th2.common.grpc.ConnectionID
 import com.exactpro.th2.common.grpc.MessageID
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -179,4 +180,8 @@ fun StoredMessageId.convertToProto(): MessageID {
         .setDirection(cradleDirectionToGrpc(direction))
         .setConnectionId(ConnectionID.newBuilder().setSessionAlias(streamName))
         .build()
+}
+
+fun StoredTestEventWithContent.messageIdsNotNull(): Collection<StoredMessageId> {
+    return this.messageIds ?: emptyList()
 }

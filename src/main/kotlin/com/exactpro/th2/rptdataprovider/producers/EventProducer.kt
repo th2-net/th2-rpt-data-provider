@@ -25,6 +25,7 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType.
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
+import com.exactpro.th2.rptdataprovider.messageIdsNotNull
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.tryToGetTestEvents
@@ -91,7 +92,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
 
         return fromStoredEvent(storedEvent, batch).let {
             setBody(storedEvent, it).apply {
-                it.attachedMessageIds = storedEvent.messageIds.map(Any::toString).toSet()
+                it.attachedMessageIds = storedEvent.messageIdsNotNull().map(Any::toString).toSet()
             }
         }
     }
@@ -107,7 +108,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
             .filterNotNull()
             .map {
                 setBody(it, fromStoredEvent(it, null)).apply {
-                    attachedMessageIds = it.messageIds.map(Any::toString).toSet()
+                    attachedMessageIds = it.messageIdsNotNull().map(Any::toString).toSet()
                 }
             }
             .toList()
@@ -135,7 +136,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
             ) {
                 it.map { (content, event) ->
                     event.apply {
-                        attachedMessageIds = content.messageIds.map(Any::toString).toSet()
+                        attachedMessageIds = content.messageIdsNotNull().map(Any::toString).toSet()
                     }
                 }
             } else {
