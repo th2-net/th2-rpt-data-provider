@@ -73,9 +73,10 @@ class MessageExtractor(
     private var lastTimestamp: Instant? = null
 
     init {
-        messageExtractorBufferSize.set(messageFlowCapacity.toDouble())
+        messageExtractorBufferSize
+            .labels(*listOf(streamName.toString()).toTypedArray())
+            .set(messageFlowCapacity.toDouble())
         externalScope.launch {
-            messageExtractorBufferSize.set(messageFlowCapacity.toDouble())
             try {
                 processMessage()
             } catch (e: CancellationException) {
@@ -95,7 +96,6 @@ class MessageExtractor(
                     messageExtractorBufferState
                         .labels(*listOf(streamName.toString()).toTypedArray())
                         .set(bufferState.toDouble())
-                    messageExtractorBufferState.set(bufferState.toDouble())
                     //FIXME: replace delay-based stream updates with synchronous updates from iterator
                     lastTimestamp?.also {
                         sendToChannel(

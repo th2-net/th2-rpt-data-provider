@@ -70,7 +70,9 @@ class MessageBatchDecoder(
     }
 
     init {
-        decoderBufferSize.set(messageFlowCapacity.toDouble())
+        decoderBufferSize
+            .labels(*listOf(streamName.toString()).toTypedArray())
+            .set(messageFlowCapacity.toDouble())
         externalScope.launch {
             while (isActive) {
                 decoderBufferState

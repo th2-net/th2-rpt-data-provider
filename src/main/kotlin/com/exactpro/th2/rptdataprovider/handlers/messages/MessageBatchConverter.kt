@@ -40,7 +40,9 @@ class MessageBatchConverter(
     messageFlowCapacity
 ) {
     init {
-        batchConverterBufferSize.set(messageFlowCapacity.toDouble())
+        batchConverterBufferSize
+            .labels(*listOf(streamName.toString()).toTypedArray())
+            .set(messageFlowCapacity.toDouble())
         externalScope.launch {
             while (isActive) {
                 batchConverterBufferState

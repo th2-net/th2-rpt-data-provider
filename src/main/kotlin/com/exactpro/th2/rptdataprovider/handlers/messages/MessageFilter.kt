@@ -50,7 +50,9 @@ class MessageFilter(
     private var lastScannedObject: PipelineStepObject? = null
 
     init {
-        messageFilterBufferSize.set(messageFlowCapacity.toDouble())
+        messageFilterBufferSize
+            .labels(*listOf(streamName.toString()).toTypedArray())
+            .set(messageFlowCapacity.toDouble())
         externalScope.launch {
             processMessage()
         }

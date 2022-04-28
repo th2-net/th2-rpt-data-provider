@@ -120,7 +120,9 @@ class StreamMerger(
     private var resultCountLimit = searchRequest.resultCountLimit
 
     init {
-        mergerBufferSize.set(messageFlowCapacity.toDouble())
+        mergerBufferSize
+            .labels(*listOf(streamName.toString()).toTypedArray())
+            .set(messageFlowCapacity.toDouble())
         externalScope.launch {
             processMessage()
         }

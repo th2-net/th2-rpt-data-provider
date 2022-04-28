@@ -54,7 +54,9 @@ class MessageBatchUnpacker(
     )
 
     init {
-        unpackerBufferSize.set(messageFlowCapacity.toDouble())
+        unpackerBufferSize
+            .labels(*listOf(streamName.toString()).toTypedArray())
+            .set(messageFlowCapacity.toDouble())
         externalScope.launch {
             while (isActive) {
                 unpackerBufferState
