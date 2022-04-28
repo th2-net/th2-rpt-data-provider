@@ -22,7 +22,11 @@ import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepObject
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.count
+import kotlinx.coroutines.flow.consumeAsFlow
+import kotlinx.coroutines.flow.count
 import mu.KotlinLogging
+import java.util.concurrent.atomic.AtomicLong
 
 data class StreamName(val name: String, val direction: Direction) {
     private val fullName = "$name:$direction"
@@ -40,6 +44,7 @@ abstract class PipelineComponent(
     val previousComponent: PipelineComponent? = null,
     messageFlowCapacity: Int
 ) {
+    var bufferState: AtomicLong = AtomicLong()
 
     companion object {
         private val logger = KotlinLogging.logger { }
@@ -56,11 +61,13 @@ abstract class PipelineComponent(
 
 
     protected suspend fun sendToChannel(message: PipelineStepObject) {
+        bufferState.incrementAndGet()
         messageFlow.send(message)
     }
 
 
     suspend fun pollMessage(): PipelineStepObject {
+        bufferState.decrementAndGet()
         return messageFlow.receive()
     }
 }

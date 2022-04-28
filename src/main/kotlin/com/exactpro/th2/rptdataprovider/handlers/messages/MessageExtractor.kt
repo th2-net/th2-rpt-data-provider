@@ -21,6 +21,7 @@ import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
@@ -31,6 +32,8 @@ import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
+import io.prometheus.client.Counter
+import io.prometheus.client.Gauge
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.time.Instant
@@ -50,6 +53,16 @@ class MessageExtractor(
 
     companion object {
         private val logger = KotlinLogging.logger { }
+        private val messageExtractorBufferSize =
+            Gauge.build("th2_message_extractor_buffer_size", "Extractor buffer size")
+                .labelNames(*listOf("stream").toTypedArray())
+                .register()
+        private val messageExtractorBufferState = Gauge.build(
+            "th2_message_extractor_buffer_state",
+            "The state of the message extractor's buffer"
+        )
+            .labelNames(*listOf("stream").toTypedArray())
+            .register()
     }
 
     private val sendEmptyDelay = context.configuration.sendEmptyDelay.value.toLong()
@@ -60,7 +73,9 @@ class MessageExtractor(
     private var lastTimestamp: Instant? = null
 
     init {
+        messageExtractorBufferSize.set(messageFlowCapacity.toDouble())
         externalScope.launch {
+            messageExtractorBufferSize.set(messageFlowCapacity.toDouble())
             try {
                 processMessage()
             } catch (e: CancellationException) {
@@ -77,7 +92,10 @@ class MessageExtractor(
         coroutineScope {
             launch {
                 while (this@coroutineScope.isActive) {
-
+                    messageExtractorBufferState
+                        .labels(*listOf(streamName.toString()).toTypedArray())
+                        .set(bufferState.toDouble())
+                    messageExtractorBufferState.set(bufferState.toDouble())
                     //FIXME: replace delay-based stream updates with synchronous updates from iterator
                     lastTimestamp?.also {
                         sendToChannel(

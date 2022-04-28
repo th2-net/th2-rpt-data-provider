@@ -13,6 +13,7 @@ import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchResponse
+import io.prometheus.client.Gauge
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.isActive
@@ -54,11 +55,28 @@ class MessageBatchDecoder(
 
     companion object {
         private val logger = KotlinLogging.logger { }
+        private val decoderBufferSize = Gauge.build(
+            "th2_message_batch_decoder_buffer_size",
+            "Batch decoder buffer size"
+        )
+            .labelNames(*listOf("stream").toTypedArray())
+            .register()
+        private val decoderBufferState = Gauge.build(
+            "th2_message_batch_decoder_buffer_state",
+            "Batch decoder buffer state"
+        )
+            .labelNames(*listOf("stream").toTypedArray())
+            .register()
     }
 
     init {
+        decoderBufferSize.set(messageFlowCapacity.toDouble())
         externalScope.launch {
             while (isActive) {
+                decoderBufferState
+                    .labels(*listOf(streamName.toString()).toTypedArray())
+                    .set(bufferState.toDouble())
+
                 processMessage()
             }
         }

@@ -29,6 +29,7 @@ import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
+import io.prometheus.client.Gauge
 import io.prometheus.client.Histogram
 import kotlinx.coroutines.*
 import mu.KotlinLogging
@@ -48,6 +49,18 @@ class StreamMerger(
 
     companion object {
         private val logger = KotlinLogging.logger { }
+        private val mergerBufferSize = Gauge.build(
+            "th2_stream_merger_buffer_size",
+            "Stream merger buffer size"
+        )
+            .labelNames(*listOf("stream").toTypedArray())
+            .register()
+        private val mergerBufferState = Gauge.build(
+            "th2_stream_merger_buffer_state",
+            "Stream merger buffer state"
+        )
+            .labelNames(*listOf("stream").toTypedArray())
+            .register()
     }
 
     private class StreamHolder(val messageStream: PipelineComponent) {
@@ -107,6 +120,7 @@ class StreamMerger(
     private var resultCountLimit = searchRequest.resultCountLimit
 
     init {
+        mergerBufferSize.set(messageFlowCapacity.toDouble())
         externalScope.launch {
             processMessage()
         }
@@ -175,6 +189,9 @@ class StreamMerger(
             messageStreams.forEach { it.init() }
 
             do {
+                mergerBufferState
+                    .labels(*listOf(streamName.toString()).toTypedArray())
+                    .set(bufferState.toDouble())
                 val nextMessage = measureTimedValue {
                     getNextMessage()
                 }.let {

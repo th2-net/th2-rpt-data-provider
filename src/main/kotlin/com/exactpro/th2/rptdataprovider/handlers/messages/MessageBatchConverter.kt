@@ -6,6 +6,7 @@ import com.exactpro.th2.common.grpc.MessageGroupBatch
 import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.common.message.sequence
 import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineCodecRequest
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
@@ -16,6 +17,7 @@ import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchRequest
+import io.prometheus.client.Gauge
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -38,8 +40,12 @@ class MessageBatchConverter(
     messageFlowCapacity
 ) {
     init {
+        batchConverterBufferSize.set(messageFlowCapacity.toDouble())
         externalScope.launch {
             while (isActive) {
+                batchConverterBufferState
+                    .labels(*listOf(streamName.toString()).toTypedArray())
+                    .set(bufferState.toDouble())
                 processMessage()
             }
         }
@@ -47,6 +53,14 @@ class MessageBatchConverter(
 
     companion object {
         val logger = KotlinLogging.logger { }
+        val batchConverterBufferSize: Gauge =
+            Gauge.build("th2_message_bath_converter_buffer_size", "Batch converter buffer size ")
+                .labelNames(*listOf("stream").toTypedArray())
+                .register()
+        val batchConverterBufferState: Gauge =
+            Gauge.build("th2_message_bath_converter_buffer_size_state", "Batch converter buffer state")
+                .labelNames(*listOf("stream").toTypedArray())
+                .register()
     }
 
     constructor(

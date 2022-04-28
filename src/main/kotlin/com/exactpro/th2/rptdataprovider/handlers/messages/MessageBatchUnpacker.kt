@@ -15,6 +15,7 @@ import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
+import io.prometheus.client.Gauge
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -53,8 +54,12 @@ class MessageBatchUnpacker(
     )
 
     init {
+        unpackerBufferSize.set(messageFlowCapacity.toDouble())
         externalScope.launch {
             while (isActive) {
+                unpackerBufferState
+                    .labels(*listOf(streamName.toString()).toTypedArray())
+                    .set(bufferState.toDouble())
                 processMessage()
             }
         }
@@ -62,6 +67,18 @@ class MessageBatchUnpacker(
 
     companion object {
         val logger = KotlinLogging.logger { }
+        val unpackerBufferSize = Gauge.build(
+            "th2_message_batch_unpacker_buffer_size",
+            "Batch unpacker buffer size"
+        )
+            .labelNames(*listOf("stream").toTypedArray())
+            .register()
+        val unpackerBufferState = Gauge.build(
+            "th2_message_batch_unpacker_buffer_state",
+            "Batch unpacker buffer state"
+        )
+            .labelNames(*listOf("stream").toTypedArray())
+            .register()
     }
 
 
