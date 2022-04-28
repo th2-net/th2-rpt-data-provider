@@ -52,20 +52,6 @@ class SearchMessagesHandler(private val applicationContext: Context) {
                 .register()
     }
 
-    private val pipelineInfoSendDelay = applicationContext.configuration.pipelineInfoSendDelay.value.toLong()
-    private val sendPipelineStatus = applicationContext.configuration.sendPipelineStatus.value.toBoolean()
-
-    private suspend fun sendPipelineStatus(
-        pipelineStatus: PipelineStatus,
-        writer: StreamWriter,
-        coroutineScope: CoroutineScope,
-        lastMessageIdCounter: AtomicLong
-    ) {
-        while (coroutineScope.isActive) {
-            writer.write(pipelineStatus.getSnapshot(), lastMessageIdCounter)
-            delay(pipelineInfoSendDelay)
-        }
-    }
 
     @OptIn(ExperimentalTime::class, ExperimentalCoroutinesApi::class)
     suspend fun searchMessagesSse(request: SseMessageSearchRequest, writer: StreamWriter) {
@@ -80,12 +66,6 @@ class SearchMessagesHandler(private val applicationContext: Context) {
 
             flow {
                 streamMerger = ChainBuilder(applicationContext, request, chainScope, pipelineStatus).buildChain()
-
-                if (sendPipelineStatus) {
-                    launch {
-                        sendPipelineStatus(pipelineStatus, writer, chainScope, lastMessageIdCounter)
-                    }
-                }
 
                 do {
                     val message = measureTimedValue {
