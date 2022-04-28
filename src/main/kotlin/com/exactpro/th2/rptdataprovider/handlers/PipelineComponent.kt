@@ -61,13 +61,16 @@ abstract class PipelineComponent(
 
 
     protected suspend fun sendToChannel(message: PipelineStepObject) {
-        bufferState.incrementAndGet()
-        messageFlow.send(message)
+        messageFlow.send(message).also {
+            bufferState.incrementAndGet()
+        }
     }
 
 
     suspend fun pollMessage(): PipelineStepObject {
-        bufferState.decrementAndGet()
         return messageFlow.receive()
+            .also {
+                bufferState.decrementAndGet()
+            }
     }
 }
