@@ -64,10 +64,6 @@ class CustomConfigurationClass {
 
     val eventSearchChunkSize: Int = 64
 
-    val sendPipelineStatus = false
-
-    val pipelineInfoSendDelay = 2000
-
     val useStrictMode = false
 
     val serverType: ServerType = ServerType.HTTP
@@ -188,12 +184,6 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
 
     val eventSearchChunkSize: Variable =
         Variable("eventSearchChunkSize", customConfiguration.eventSearchChunkSize.toString(), "64")
-
-    val sendPipelineStatus: Variable =
-        Variable("sendPipelineStatus", customConfiguration.sendPipelineStatus.toString(), "false")
-
-    val pipelineInfoSendDelay: Variable =
-        Variable("pipelineInfoSendDelay", customConfiguration.pipelineInfoSendDelay.toString(), "2000")
 
     val useStrictMode: Variable =
         Variable("useStrictMode", customConfiguration.useStrictMode.toString(), "false")

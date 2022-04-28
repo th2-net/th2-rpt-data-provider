@@ -231,8 +231,6 @@ spec:
 
     eventSearchChunkSize: 64 // the size of event chunks during sse search and the maximum size of the batch of messages upon request getEvents
 
-    sendPipelineStatus: false // enable profiling
-
     grpcThreadPoolSize: 20 // thread pool size for grpc requests
 
     useStrictMode: false // if true throw an exception when bad messages are received from the codec otherwise return messages with null body and type
