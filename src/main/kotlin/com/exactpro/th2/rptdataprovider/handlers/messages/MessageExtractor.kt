@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
-import com.exactpro.cradle.Direction
 import com.exactpro.cradle.Order
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageFilterBuilder
@@ -32,11 +31,14 @@ import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
-import com.exactpro.th2.rptdataprovider.minInstant
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import mu.KotlinLogging
 import java.time.Instant
-import java.util.*
 
 
 class MessageExtractor(
