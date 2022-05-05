@@ -31,10 +31,14 @@ import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import mu.KotlinLogging
 import java.time.Instant
-import java.util.*
 
 
 class MessageExtractor(
@@ -156,35 +160,37 @@ class MessageExtractor(
                                 batch.messagesReverse
                             }
                         }
-                            // trim messages if resumeFromId is present
-                            .dropWhile {
+                            .let {
+                                // trim messages if resumeFromId is present
                                 resumeFromId?.sequence?.let { start ->
-                                    if (order == Order.DIRECT) {
-                                        it.index < start
-                                    } else {
-                                        it.index > start
+                                    it.dropWhile {
+                                        if (order == Order.DIRECT) {
+                                            it.index < start
+                                        } else {
+                                            it.index > start
+                                        }
                                     }
-                                } ?: false
-                            }
+                                } ?:
+                                //trim messages that do not strictly match time filter
+                                it.dropWhile {
+                                    request.startTimestamp?.let { startTimestamp ->
+                                        if (order == Order.DIRECT) {
+                                            it.timestamp.isBefore(startTimestamp)
+                                        } else {
+                                            it.timestamp.isAfter(startTimestamp)
+                                        }
+                                    } ?: false
+                                }
+                                    .dropLastWhile {
+                                        request.endTimestamp?.let { endTimestamp ->
+                                            if (order == Order.DIRECT) {
+                                                it.timestamp.isAfterOrEqual(endTimestamp)
+                                            } else {
+                                                it.timestamp.isBeforeOrEqual(endTimestamp)
+                                            }
+                                        } ?: false
+                                    }
 
-                            //trim messages that do not strictly match time filter
-                            .dropWhile {
-                                request.startTimestamp?.let { startTimestamp ->
-                                    if (order == Order.DIRECT) {
-                                        it.timestamp.isBefore(startTimestamp)
-                                    } else {
-                                        it.timestamp.isAfter(startTimestamp)
-                                    }
-                                } ?: false
-                            }
-                            .dropLastWhile {
-                                request.endTimestamp?.let { endTimestamp ->
-                                    if (order == Order.DIRECT) {
-                                        it.timestamp.isAfterOrEqual(endTimestamp)
-                                    } else {
-                                        it.timestamp.isBeforeOrEqual(endTimestamp)
-                                    }
-                                } ?: false
                             }
 
                         val firstMessage = if (order == Order.DIRECT) batch.messages.first() else batch.messages.last()
