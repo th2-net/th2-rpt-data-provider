@@ -24,7 +24,6 @@ import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
-import com.exactpro.th2.rptdataprovider.handlers.PipelineStatusSnapshot
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.grpc.stub.StreamObserver
 import io.prometheus.client.Histogram
@@ -102,8 +101,6 @@ interface StreamWriter {
 
     suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong)
 
-    suspend fun write(status: PipelineStatusSnapshot, counter: AtomicLong)
-
     suspend fun closeWriter()
 }
 
@@ -127,12 +124,6 @@ class HttpWriter(private val writer: Writer, private val jacksonMapper: ObjectMa
         writer.flush()
     }
 
-    override suspend fun write(status: PipelineStatusSnapshot, counter: AtomicLong) {
-        eventWrite(SseEvent.build(jacksonMapper, status, counter))
-        logger.debug {
-            jacksonMapper.writeValueAsString(status)
-        }
-    }
 
     override suspend fun write(event: EventTreeNode, counter: AtomicLong) {
         eventWrite(SseEvent.build(jacksonMapper, event, counter))
@@ -272,12 +263,6 @@ class GrpcWriter(
             )
 
             counter.incrementAndGet()
-        }
-    }
-
-    override suspend fun write(status: PipelineStatusSnapshot, counter: AtomicLong) {
-        logger.debug {
-            jacksonMapper.writeValueAsString(status)
         }
     }
 

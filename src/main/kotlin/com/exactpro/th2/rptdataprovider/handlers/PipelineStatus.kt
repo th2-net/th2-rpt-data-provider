@@ -22,73 +22,32 @@ import com.fasterxml.jackson.annotation.JsonIgnore
 import io.prometheus.client.Counter
 import java.util.concurrent.atomic.AtomicLong
 
-data class PipelineStatusSnapshot(
-    val startTime: Long,
-    val processingTime: Long,
-    val merged: Long,
-    val returned: Long,
-    val counters: Map<String, PipelineStreamCounters>
-)
-
-data class PipelineStreamCounters(
-    @JsonIgnore
-    val fetched: AtomicLong = AtomicLong(0),
-    val fetchedBytes: AtomicLong = AtomicLong(0),
-    val fetchedBatches: AtomicLong = AtomicLong(0),
-    val skipped: AtomicLong = AtomicLong(0),
-    val skippedBatches: AtomicLong = AtomicLong(0),
-    val parsePrepared: AtomicLong = AtomicLong(0),
-    val parseRequested: AtomicLong = AtomicLong(0),
-    val parseReceivedTotal: AtomicLong = AtomicLong(0),
-    val parseReceivedFailed: AtomicLong = AtomicLong(0),
-    val filterTotal: AtomicLong = AtomicLong(0),
-    val filterDiscarded: AtomicLong = AtomicLong(0),
-    val filterAccepted: AtomicLong = AtomicLong(0),
-
-    val fetchedStart: AtomicLong = AtomicLong(0),
-    val fetchedEnd: AtomicLong = AtomicLong(0),
-    val fetchedSendDownstream: AtomicLong = AtomicLong(0),
-
-    val convertStart: AtomicLong = AtomicLong(0),
-    val convertEnd: AtomicLong = AtomicLong(0),
-    val convertSendDownstream: AtomicLong = AtomicLong(0),
-
-    val decodeStart: AtomicLong = AtomicLong(0),
-    val decodeEnd: AtomicLong = AtomicLong(0),
-    val decodeSendDownstream: AtomicLong = AtomicLong(0),
-
-    val unpackStart: AtomicLong = AtomicLong(0),
-    val unpackEnd: AtomicLong = AtomicLong(0),
-    val unpackSendDownstream: AtomicLong = AtomicLong(0),
-
-    val filterStart: AtomicLong = AtomicLong(0),
-    val filterEnd: AtomicLong = AtomicLong(0),
-    val filterSendDownstream: AtomicLong = AtomicLong(0)
-)
-
 class PipelineStatus(context: Context) {
 
     private val processingStartTimestamp: Long = System.currentTimeMillis()
-    private val sendPipelineStatus = context.configuration.sendPipelineStatus.value.toBoolean()
-
-    private val streams: MutableMap<String, PipelineStreamCounters> = mutableMapOf()
-
-    var merged: AtomicLong = AtomicLong(0)
-    var sended: AtomicLong = AtomicLong(0)
 
     companion object {
-        private val fetched = Counter.build("fetched", "Count fetched").labelNames("stream").labelNames("stream").register()
+        private val fetched =
+            Counter.build("fetched", "Count fetched").labelNames("stream").labelNames("stream").register()
         private val fetchedBytes = Counter.build("fetchedBytes", "Count fetchedBytes").labelNames("stream").register()
-        private val fetchedBatches = Counter.build("fetchedBatches", "Count fetchedBatches").labelNames("stream").register()
+        private val fetchedBatches =
+            Counter.build("fetchedBatches", "Count fetchedBatches").labelNames("stream").register()
         private val skipped = Counter.build("skipped", "Count skipped").labelNames("stream").register()
-        private val skippedBatches = Counter.build("skippedBatches", "Count skippedBatches").labelNames("stream").register()
-        private val parsePrepared = Counter.build("parsePrepared", "Count parsePrepared").labelNames("stream").register()
-        private val parseRequested = Counter.build("parseRequested", "Count parseRequested").labelNames("stream").register()
-        private val parseReceivedTotal = Counter.build("parseReceivedTotal", "Count parseReceivedTotal").labelNames("stream").register()
-        private val parseReceivedFailed = Counter.build("parseReceivedFailed", "Count parseReceivedFailed").labelNames("stream").register()
+        private val skippedBatches =
+            Counter.build("skippedBatches", "Count skippedBatches").labelNames("stream").register()
+        private val parsePrepared =
+            Counter.build("parsePrepared", "Count parsePrepared").labelNames("stream").register()
+        private val parseRequested =
+            Counter.build("parseRequested", "Count parseRequested").labelNames("stream").register()
+        private val parseReceivedTotal =
+            Counter.build("parseReceivedTotal", "Count parseReceivedTotal").labelNames("stream").register()
+        private val parseReceivedFailed =
+            Counter.build("parseReceivedFailed", "Count parseReceivedFailed").labelNames("stream").register()
         private val filterTotal = Counter.build("filterTotal", "Count filterTotal").labelNames("stream").register()
-        private val filterDiscarded = Counter.build("filterDiscarded", "Count filterDiscarded").labelNames("stream").register()
-        private val filterAccepted = Counter.build("filterAccepted", "Count filterAccepted").labelNames("stream").register()
+        private val filterDiscarded =
+            Counter.build("filterDiscarded", "Count filterDiscarded").labelNames("stream").register()
+        private val filterAccepted =
+            Counter.build("filterAccepted", "Count filterAccepted").labelNames("stream").register()
 
         private val fetchedStart = Counter.build("fetchedStart", "Count fetchedStart").labelNames("stream").register()
         private val fetchedEnd = Counter.build("fetchedEnd", "Count fetchedEnd").labelNames("stream").register()
@@ -131,204 +90,132 @@ class PipelineStatus(context: Context) {
     }
 
     fun addStreams(streams: List<String>) {
-        if (sendPipelineStatus) {
-            for (streamName in streams) {
-                this.streams[streamName] = PipelineStreamCounters()
-                metrics.forEach {
-                    it.labels(streamName)
-                }
-                codecLatency.labels(streamName)
+        for (streamName in streams) {
+            metrics.forEach {
+                it.labels(streamName)
             }
-            mergedMetric.labels(processingStartTimestamp.toString())
-            sentMetric.labels(processingStartTimestamp.toString())
+            codecLatency.labels(streamName)
         }
+        mergedMetric.labels(processingStartTimestamp.toString())
+        sentMetric.labels(processingStartTimestamp.toString())
     }
 
     fun fetchedStart(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         fetchedStart.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.fetchedStart?.addAndGet(count)
     }
 
     fun fetchedEnd(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         fetchedEnd.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.fetchedEnd?.addAndGet(count)
     }
 
     fun fetchedSendDownstream(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         fetchedSendDownstream.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.fetchedSendDownstream?.addAndGet(count)
     }
 
     fun convertStart(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         convertStart.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.convertStart?.addAndGet(count)
     }
 
     fun convertEnd(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         convertEnd.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.convertEnd?.addAndGet(count)
     }
 
     fun convertSendDownstream(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         convertSendDownstream.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.convertSendDownstream?.addAndGet(count)
     }
 
     fun decodeStart(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         decodeStart.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.decodeStart?.addAndGet(count)
     }
 
 
     fun decodeEnd(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         decodeEnd.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.decodeEnd?.addAndGet(count)
     }
 
     fun decodeSendDownstream(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         decodeSendDownstream.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.decodeSendDownstream?.addAndGet(count)
     }
 
     fun unpackStart(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         unpackStart.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.unpackStart?.addAndGet(count)
     }
 
 
     fun unpackEnd(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         unpackEnd.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.unpackEnd?.addAndGet(count)
     }
 
     fun unpackSendDownstream(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         unpackSendDownstream.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.unpackSendDownstream?.addAndGet(count)
     }
 
     fun filterStart(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         filterStart.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.filterStart?.addAndGet(count)
     }
 
     fun filterEnd(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         filterEnd.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.filterEnd?.addAndGet(count)
     }
 
     fun filterSendDownstream(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         filterSendDownstream.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.filterSendDownstream?.addAndGet(count)
     }
 
     fun countParsePrepared(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         parsePrepared.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.parsePrepared?.addAndGet(count)
     }
 
     fun countParseRequested(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         parseRequested.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.parseRequested?.addAndGet(count)
     }
 
     fun countParseReceivedTotal(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         parseReceivedTotal.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.parseReceivedTotal?.addAndGet(count)
     }
 
 
     fun countParseReceivedFailed(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         parseReceivedFailed.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.parseReceivedFailed?.addAndGet(count)
     }
 
     fun countFetchedMessages(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         fetched.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.fetched?.addAndGet(count)
     }
 
     fun countFetchedBytes(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         fetchedBytes.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.fetchedBytes?.addAndGet(count)
     }
 
     fun countFetchedBatches(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         fetchedBatches.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.fetchedBatches?.addAndGet(count)
     }
 
     fun countSkippedMessages(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         skipped.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.skipped?.addAndGet(count)
     }
 
     fun countSkippedBatches(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         skippedBatches.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.skippedBatches?.addAndGet(count)
     }
 
     fun countFilterAccepted(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         filterAccepted.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.filterAccepted?.addAndGet(count)
     }
 
     fun countFilterDiscarded(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         filterDiscarded.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.filterDiscarded?.addAndGet(count)
     }
 
     fun countFilteredTotal(streamName: String, count: Long = 1) {
-        if (!sendPipelineStatus) return
         filterTotal.labels(streamName).inc(count.toDouble())
-        this.streams[streamName]?.filterTotal?.addAndGet(count)
     }
 
     fun countMerged() {
-        if (!sendPipelineStatus) return
         mergedMetric.labels(processingStartTimestamp.toString()).inc()
-        this.merged.incrementAndGet()
     }
 
     fun countSend() {
-        if (!sendPipelineStatus) return
         sentMetric.labels(processingStartTimestamp.toString()).inc()
-        this.sended.incrementAndGet()
     }
-
-    fun getSnapshot(): PipelineStatusSnapshot {
-        return PipelineStatusSnapshot(
-            processingStartTimestamp,
-            System.currentTimeMillis() - processingStartTimestamp,
-            merged.get(),
-            sended.get(),
-            streams
-        )
-    }
-
 }

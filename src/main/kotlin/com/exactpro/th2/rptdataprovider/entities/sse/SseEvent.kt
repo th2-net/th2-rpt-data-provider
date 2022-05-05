@@ -21,7 +21,6 @@ import com.exactpro.th2.rptdataprovider.asStringSuspend
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineKeepAlive
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.responses.*
-import com.exactpro.th2.rptdataprovider.handlers.PipelineStatusSnapshot
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.ktor.util.*
@@ -112,13 +111,6 @@ data class ExceptionInfo(val exceptionName: String, val exceptionCause: String)
 
 data class SseEvent(val data: String = "empty data", val event: EventType? = null, val metadata: String? = null) {
     companion object {
-        suspend fun build(jacksonMapper: ObjectMapper, status: PipelineStatusSnapshot, counter: AtomicLong): SseEvent {
-            return SseEvent(
-                jacksonMapper.asStringSuspend(status),
-                EventType.PIPELINE_STATUS,
-                counter.incrementAndGet().toString()
-            )
-        }
 
         suspend fun build(jacksonMapper: ObjectMapper, event: EventTreeNode, counter: AtomicLong): SseEvent {
             return SseEvent(

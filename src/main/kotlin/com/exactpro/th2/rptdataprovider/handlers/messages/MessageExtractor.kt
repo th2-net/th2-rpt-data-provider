@@ -134,9 +134,9 @@ class MessageExtractor(
                                 }
                             }
                             if (order == Order.DIRECT) {
-                                request.endTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
+                                request.endTimestamp?.let { builder.timestampTo().isLessThan(it) }
                             } else {
-                                request.endTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
+                                request.endTimestamp?.let { builder.timestampFrom().isGreaterThan(it) }
                             }
                         }.build()
                 )
@@ -195,7 +195,7 @@ class MessageExtractor(
                         val lastMessage = if (order == Order.DIRECT) batch.messages.last() else batch.messages.first()
 
                         logger.trace {
-                            "batch ${batch.id.index} of stream $streamName has been trimmed (targetTimestamp=${request.startTimestamp} targetId=${resumeFromId?.sequence}) - ${trimmedMessages.size} of ${batch.messages.size} messages left (firstId=${firstMessage.id.index} firstTimestamp=${firstMessage.timestamp} lastId=${lastMessage.id.index} lastTimestamp=${lastMessage.timestamp})"
+                            "batch ${batch.id.index} of stream $streamName has been trimmed (targetStartTimestamp=${request.startTimestamp} targetEndTimestamp=${request.endTimestamp} targetId=${resumeFromId?.sequence}) - ${trimmedMessages.size} of ${batch.messages.size} messages left (firstId=${firstMessage.id.index} firstTimestamp=${firstMessage.timestamp} lastId=${lastMessage.id.index} lastTimestamp=${lastMessage.timestamp})"
                         }
 
                         pipelineStatus.fetchedEnd(streamName.toString())
@@ -221,7 +221,7 @@ class MessageExtractor(
 
                             }
                         } catch (e: NoSuchElementException) {
-//                        logger.debug { "skipping batch ${batch.id.index} of stream $streamName - no messages left after trimming" }
+                            logger.trace { "skipping batch ${batch.id.index} of stream $streamName - no messages left after trimming" }
                             pipelineStatus.countSkippedBatches(streamName.toString())
                         }
                         pipelineStatus.fetchedSendDownstream(streamName.toString())
