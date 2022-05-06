@@ -155,6 +155,7 @@ class SearchMessagesHandler(private val applicationContext: Context) {
                     if (it is PipelineRawBatch && listPair.size < 2) {
                         val trimmedMessages = it.storedBatchWrapper.trimmedMessages
                         for (trimmedMessage in trimmedMessages) {
+                            if (trimmedMessage == message) continue
                             if (listPair.size == 2) break
                             listPair.add(Pair(trimmedMessage.id, it.streamEmpty))
                         }
