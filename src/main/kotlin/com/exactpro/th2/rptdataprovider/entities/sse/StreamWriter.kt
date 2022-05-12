@@ -111,19 +111,20 @@ class HttpWriter(private val writer: Writer, private val jacksonMapper: ObjectMa
     val logger = KotlinLogging.logger { }
 
     fun eventWrite(event: SseEvent) {
+        val builder = StringBuilder()
         if (event.event != null) {
-            writer.write("event: ${event.event}\n")
+            builder.append("event: ").append(event.event).append("\n")
         }
 
         for (dataLine in event.data.lines()) {
-            writer.write("data: $dataLine\n")
+            builder.append("data: ").append(dataLine).append("\n")
         }
 
         if (event.metadata != null) {
-            writer.write("id: ${event.metadata}\n")
+            builder.append("id: ").append(event.metadata).append("\n")
         }
 
-        writer.write("\n")
+        writer.write(builder.append("\n").toString())
         writer.flush()
     }
 
