@@ -26,7 +26,8 @@ jobs:
       if: steps.check_changes.outputs.gradle_properties == 'false'
       with:
         script: |
-            core.setFailed('Version hasn't been changed! Increment the version in "gradle.properties"')
+          echo "Version hasn't been changed! Increment the version in 'gradle.properties'"
+          exit 1
     - name: Simulate build
       run: echo "BUILD SIMULATION"
       
