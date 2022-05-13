@@ -5,6 +5,7 @@ on:
     branches-ignore:
       - master
       - version-*
+      - TH2-3678
 #     paths:
 #    - gradle.properties
 #    - package_info.json
