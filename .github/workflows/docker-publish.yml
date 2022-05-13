@@ -6,8 +6,8 @@ on:
     - master
     - version-*
     - TH2-3678
-    paths:
-    - gradle.properties
+#     paths:
+#     - gradle.properties
 
 jobs:
   build:
