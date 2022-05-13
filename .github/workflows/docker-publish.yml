@@ -21,13 +21,11 @@ jobs:
         filters: |
           gradle_properties:
             - 'gradle.properties'
-    - uses: actions/github-script@v6
-      name: Check version change
+    - name: Check version change
       if: steps.check_changes.outputs.gradle_properties == 'false'
-      with:
-        script: |
-          echo "Version hasn't been changed! Increment the version in 'gradle.properties'"
-          exit 1
+      run: |
+        echo "Version hasn't been changed! Increment the version in 'gradle.properties'"
+        exit 1
     - name: Simulate build
       run: echo "BUILD SIMULATION"
       
