@@ -37,17 +37,7 @@ class AttachedMessageFilter private constructor(
             return AttachedMessageFilter(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
-                messageIds = filterRequest.getValues()
-                    ?.map {
-                        setOf(it)
-                    }
-                    ?.reduce { set, element ->
-                        if (filterRequest.isConjunct()) {
-                            set intersect element
-                        } else {
-                            set union element
-                        }
-                    }
+                messageIds = filterRequest.getValues()?.toSet()
                     ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
             )
         }
@@ -71,8 +61,14 @@ class AttachedMessageFilter private constructor(
 
 
     override fun match(element: BaseEventEntity): Boolean {
-        val attachedContainsMessageId = element.attachedMessageIds.any { this.messageIds.contains(it) }
-        return negative.xor(attachedContainsMessageId)
+        val predicate: (String) -> Boolean = {
+            messageIds.contains(it)
+        }
+
+        return negative.xor(
+            if (conjunct) element.attachedMessageIds.all(predicate)
+            else element.attachedMessageIds.any(predicate)
+        )
     }
 
     override fun getInfo(): FilterInfo {
