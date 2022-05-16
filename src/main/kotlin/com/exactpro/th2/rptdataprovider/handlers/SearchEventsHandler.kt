@@ -341,7 +341,9 @@ class SearchEventsHandler(private val context: Context) {
                     lastScannedObject.update(event, scanCnt)
                     processedEventCount.inc()
                 }
-                .filter { request.filterPredicate.apply(it) }
+                .filter {
+                    request.filterPredicate.apply(it)
+                }
                 .let {
                     if (parentEventCounter.limitForParent != null) {
                         it.filter { event -> parentEventCounter.checkCountAndGet(event) != null }
