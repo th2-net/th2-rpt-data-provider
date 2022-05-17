@@ -117,9 +117,6 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
         events: List<Pair<StoredTestEventWithContent, BaseEventEntity>>,
         request: SseEventSearchRequest
     ): List<BaseEventEntity> {
-        if (request.metadataOnly) {
-            return events.map { (_, event) -> event }
-        }
 
         return events.let {
             if (request.filterPredicate.getSpecialTypes().contains(NEED_BODY)) {
