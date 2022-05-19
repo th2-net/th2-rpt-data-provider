@@ -45,8 +45,11 @@ class MessageProducer(
     suspend fun fromId(id: StoredMessageId): Message {
 
         return cradle.getMessageSuspend(id)?.let { stored ->
-
-            val rawMessage = RawMessage.parseFrom(stored.content)
+            val rawMessage: RawMessage = if (stored.content == null) {
+                logger.error("Received stored message has no content. StoredMessageId: $id")
+                RawMessage.newBuilder().build()
+            } else
+                RawMessage.parseFrom(stored.content)
             var content: MessageGroupBatch? = null
             measureTimeMillis {
                 content = MessageGroupBatch
