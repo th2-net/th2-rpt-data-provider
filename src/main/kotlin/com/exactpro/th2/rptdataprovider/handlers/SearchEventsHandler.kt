@@ -329,13 +329,17 @@ class SearchEventsHandler(private val context: Context) {
                 }.let { eventFlow ->
                     if (request.metadataOnly) {
                         eventFlow.collect {
-                            coroutineContext.ensureActive()
-                            writer.write(it.convertToEventTreeNode(), lastEventId)
+                            if (it.id != request.parentEvent) {
+                                coroutineContext.ensureActive()
+                                writer.write(it.convertToEventTreeNode(), lastEventId)
+                            }
                         }
                     } else {
                         eventFlow.collect {
-                            coroutineContext.ensureActive()
-                            writer.write(it.convertToEvent(), lastEventId)
+                            if (it.id != request.parentEvent) {
+                                coroutineContext.ensureActive()
+                                writer.write(it.convertToEvent(), lastEventId)
+                            }
                         }
                     }
                 }
