@@ -148,3 +148,4 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
         }
     }
 }
+
