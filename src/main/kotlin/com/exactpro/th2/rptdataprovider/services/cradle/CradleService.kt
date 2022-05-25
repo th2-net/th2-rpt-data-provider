@@ -29,7 +29,6 @@ import com.exactpro.th2.rptdataprovider.convertToString
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.logTime
-import com.google.gson.Gson
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.channels.Channel
