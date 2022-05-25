@@ -119,7 +119,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
     ): List<BaseEventEntity> {
 
         return events.let {
-            if (request.filterPredicate.getSpecialTypes().contains(NEED_BODY)) {
+            if (!request.metadataOnly || request.filterPredicate.getSpecialTypes().contains(NEED_BODY)) {
                 it.map { (content, event) ->
                     content to setBody(content, event)
                 }
