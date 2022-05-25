@@ -19,9 +19,12 @@ package com.exactpro.th2.rptdataprovider
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageFilter
 import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.cradle.testevents.BatchedStoredTestEvent
 import com.exactpro.cradle.testevents.BatchedStoredTestEventMetadata
+import com.exactpro.cradle.testevents.StoredTestEventBatch
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
+import com.exactpro.cradle.testevents.StoredTestEventWrapper
 import com.exactpro.th2.common.grpc.ConnectionID
 import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
@@ -164,18 +167,18 @@ fun Instant.isAfterOrEqual(other: Instant): Boolean {
 }
 
 
-fun StoredTestEventMetadata.tryToGetTestEvents(parentEventId: StoredTestEventId? = null): Collection<BatchedStoredTestEventMetadata>? {
+fun StoredTestEventBatch.tryToGetTestEvents(parentEventId: StoredTestEventId? = null): Collection<BatchedStoredTestEvent> {
     return try {
-        this.batchMetadata?.testEvents?.let { events ->
+        this.testEvents?.let { events ->
             if (parentEventId != null) {
                 events.filter { it.parentId == parentEventId }
             } else {
                 events
             }
-        }
+        }?: emptyList()
     } catch (e: IOException) {
         logger.error(e) { }
-        null
+        emptyList()
     }
 }
 

@@ -20,7 +20,7 @@ package com.exactpro.th2.rptdataprovider.handlers
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.TimeRelation.AFTER
 import com.exactpro.cradle.testevents.StoredTestEventWrapper
-import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
@@ -29,8 +29,6 @@ import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
-import com.exactpro.th2.rptdataprovider.maxInstant
-import com.exactpro.th2.rptdataprovider.minInstant
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import io.prometheus.client.Counter
@@ -128,7 +126,7 @@ class SearchEventsHandler(private val context: Context) {
         return wrappers.flatMap { entry ->
             if (entry.isBatch) {
                 val batch = entry.asBatch()
-                batch.testEvents.map { event ->
+                batch.tryToGetTestEvents(request.parentEvent?.eventId).map { event ->
                     event to eventProducer.fromStoredEvent(event, batch)
                 }
             } else {
@@ -329,17 +327,13 @@ class SearchEventsHandler(private val context: Context) {
                 }.let { eventFlow ->
                     if (request.metadataOnly) {
                         eventFlow.collect {
-                            if (it.id != request.parentEvent) {
-                                coroutineContext.ensureActive()
-                                writer.write(it.convertToEventTreeNode(), lastEventId)
-                            }
+                            coroutineContext.ensureActive()
+                            writer.write(it.convertToEventTreeNode(), lastEventId)
                         }
                     } else {
                         eventFlow.collect {
-                            if (it.id != request.parentEvent) {
-                                coroutineContext.ensureActive()
-                                writer.write(it.convertToEvent(), lastEventId)
-                            }
+                            coroutineContext.ensureActive()
+                            writer.write(it.convertToEvent(), lastEventId)
                         }
                     }
                 }
