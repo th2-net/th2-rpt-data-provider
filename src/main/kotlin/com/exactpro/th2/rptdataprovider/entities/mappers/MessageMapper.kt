@@ -18,8 +18,8 @@ package com.exactpro.th2.rptdataprovider.entities.mappers
 
 import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.message.toTimestamp
-import com.exactpro.th2.dataprovider.grpc.MessageBodyWrapper
-import com.exactpro.th2.dataprovider.grpc.MessageData
+import com.exactpro.th2.dataprovider.grpc.MessageGroupItem
+import com.exactpro.th2.dataprovider.grpc.MessageGroupResponse
 import com.exactpro.th2.rptdataprovider.convertToProto
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.FilteredMessageWrapper
@@ -31,16 +31,16 @@ import java.util.*
 object MessageMapper {
 
 
-    private fun wrapSubMessage(message: BodyWrapper, matched: Boolean): MessageBodyWrapper {
-        return MessageBodyWrapper.newBuilder()
+    private fun wrapSubMessage(message: BodyWrapper, matched: Boolean): MessageGroupItem  {
+        return MessageGroupItem.newBuilder()
             .setMessage(message.message)
             .setMatch(matched)
             .build()
     }
 
-    private fun wrapSubMessages(filteredMessageWrapper: FilteredMessageWrapper): List<MessageBodyWrapper> {
+    private fun wrapSubMessages(filteredMessageWrapper: FilteredMessageWrapper): List<MessageGroupItem> {
         return with(filteredMessageWrapper) {
-            message.messageBody?.let { subMessages ->
+            message.parsedMessageGroup?.let { subMessages ->
                 (subMessages zip filteredBody).map { (subMessage, matched) ->
                     wrapSubMessage(subMessage, matched)
                 }
@@ -48,14 +48,15 @@ object MessageMapper {
         }
     }
 
-    suspend fun convertToGrpcMessageData(filteredMessageWrapper: FilteredMessageWrapper): MessageData {
+
+    suspend fun convertToGrpcMessageData(filteredMessageWrapper: FilteredMessageWrapper): MessageGroupResponse  {
         return with(filteredMessageWrapper) {
-            MessageData.newBuilder()
+            MessageGroupResponse.newBuilder()
                 .setMessageId(message.id.convertToProto())
                 .setTimestamp(message.timestamp.toTimestamp())
                 .setBodyRaw(message.rawMessageBody)
-                .addAllAttachedEventIds(message.attachedEventIds.map { EventID.newBuilder().setId(it).build() })
-                .addAllMessages(wrapSubMessages(filteredMessageWrapper))
+                .addAllAttachedEventId(message.attachedEventIds.map { EventID.newBuilder().setId(it).build() })
+                .addAllMessageItem(wrapSubMessages(filteredMessageWrapper))
                 .build()
         }
     }
@@ -69,8 +70,8 @@ object MessageMapper {
                 direction = providerDirectionToCradle(message.direction),
                 sequence = message.id.index.toString(),
                 attachedEventIds = message.attachedEventIds,
-                rawMessageBase64 = message.rawMessageBody?.let { Base64.getEncoder().encodeToString(it.toByteArray()) },
-                parsedMessages = message.messageBody?.let {
+                rawMessageBase64 = message.rawMessageBody.let { Base64.getEncoder().encodeToString(it.toByteArray()) },
+                parsedMessages = message.parsedMessageGroup?.let {
                     it.zip(filteredBody).map { (msg, filtered) ->
                         HttpBodyWrapper.from(msg, filtered)
                     }
@@ -80,3 +81,4 @@ object MessageMapper {
         }
     }
 }
+
