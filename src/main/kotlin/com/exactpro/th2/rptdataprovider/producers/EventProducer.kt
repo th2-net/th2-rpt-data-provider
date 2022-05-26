@@ -91,7 +91,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
 
         return fromStoredEvent(storedEvent, batch).let {
             setBody(storedEvent, it).apply {
-                it.attachedMessageIds = storedEvent.messageIds.map(Any::toString).toSet()
+                it.attachedMessageIds = storedEvent.messageIds?.map(Any::toString)?.toSet() ?: emptySet()
             }
         }
     }
@@ -107,7 +107,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
             .filterNotNull()
             .map {
                 setBody(it, fromStoredEvent(it, null)).apply {
-                    attachedMessageIds = it.messageIds.map(Any::toString).toSet()
+                    attachedMessageIds = it.messageIds?.map(Any::toString)?.toSet() ?: emptySet()
                 }
             }
             .toList()
@@ -117,12 +117,9 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
         events: List<Pair<StoredTestEventWithContent, BaseEventEntity>>,
         request: SseEventSearchRequest
     ): List<BaseEventEntity> {
-        if (request.metadataOnly) {
-            return events.map { (_, event) -> event }
-        }
 
         return events.let {
-            if (request.filterPredicate.getSpecialTypes().contains(NEED_BODY)) {
+            if (!request.metadataOnly || request.filterPredicate.getSpecialTypes().contains(NEED_BODY)) {
                 it.map { (content, event) ->
                     content to setBody(content, event)
                 }
@@ -135,32 +132,13 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
             ) {
                 it.map { (content, event) ->
                     event.apply {
-                        attachedMessageIds = content.messageIds.map(Any::toString).toSet()
+                        attachedMessageIds = content.messageIds?.map(Any::toString)?.toSet() ?: emptySet()
                     }
                 }
             } else {
                 it.map { (_, event) -> event }
             }
         }
-    }
-
-
-    fun fromEventMetadata(
-        storedEvent: StoredTestEventMetadata,
-        batch: StoredTestEventMetadata?
-    ): BaseEventEntity {
-        return BaseEventEntity(
-            storedEvent,
-            ProviderEventId(batch?.id, storedEvent.id),
-            batch?.id,
-            storedEvent.parentId?.let { parentId ->
-                if (batch?.tryToGetTestEvents()?.firstOrNull { it.id == parentId } != null) {
-                    ProviderEventId(batch?.id, parentId)
-                } else {
-                    ProviderEventId(null, parentId)
-                }
-            }
-        )
     }
 
 
@@ -182,6 +160,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
         )
     }
 
+
     private fun setBody(
         storedEvent: StoredTestEventWithContent,
         baseEvent: BaseEventEntity
@@ -190,6 +169,9 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
             body = storedEvent.content.let {
                 try {
                     val data = String(it).takeUnless(String::isEmpty) ?: "{}"
+
+                    //FIXME: Delete later it's slowdown
+
                     mapper.readTree(data)
                     data
                 } catch (e: Exception) {

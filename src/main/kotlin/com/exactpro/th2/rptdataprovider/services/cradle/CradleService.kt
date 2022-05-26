@@ -18,7 +18,6 @@
 package com.exactpro.th2.rptdataprovider.services.cradle
 
 import com.exactpro.cradle.CradleManager
-
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.cradle.messages.StoredMessageFilter
@@ -50,12 +49,6 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
         private val getMessageAsyncMetric: Metrics = Metrics("get_message_async", "getMessageAsync")
         private val getTestEventsAsyncMetric: Metrics = Metrics("get_test_events_async", "getTestEventsAsync")
         private val getTestEventAsyncMetric: Metrics = Metrics("get_test_event_async", "getTestEventAsync")
-        private val getTestCompletedEventAsyncMetric: Metrics =
-            Metrics("get_completed_test_event_async", "getCompleteTestEventsAsync")
-        private val getTestEventIdsByMessageIdAsyncMetric: Metrics =
-            Metrics("get_test_event_ids_by_message_id_async", "getTestEventIdsByMessageIdAsync")
-        private val getMessageIdsByTestEventIdAsyncMetric: Metrics =
-            Metrics("get_message_ids_by_test_event_id_async", "getMessageIdsByTestEventIdAsync")
         private val getStreamsMetric: Metrics =
             Metrics("get_streams", "getStreams")
     }
@@ -64,7 +57,6 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
     private val cradleDispatcherPoolSize = configuration.cradleDispatcherPoolSize.value.toInt()
 
     private val storage = cradleManager.storage
-
 
     // FIXME: Change thread name patter to something easily identifiable in the logs
     private val cradleDispatcher = Executors.newFixedThreadPool(cradleDispatcherPoolSize).asCoroutineDispatcher()
@@ -116,11 +108,8 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
         }
     }
 
-    suspend fun getEventsSuspend(
-        parentId: StoredTestEventId,
-        from: Instant,
-        to: Instant
-    ): Iterable<StoredTestEventWrapper> {
+
+    suspend fun getEventsSuspend(parentId: StoredTestEventId, from: Instant, to: Instant): Iterable<StoredTestEventWrapper> {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
                 logTime("Get events parent: $parentId from: $from to: $to") {
@@ -150,3 +139,4 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
         }
     }
 }
+

@@ -18,6 +18,7 @@ package com.exactpro.th2.rptdataprovider.entities.internal
 
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
+import com.exactpro.th2.rptdataprovider.entities.responses.StoredMessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchRequest
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchResponse
 import java.time.Instant
@@ -100,7 +101,7 @@ data class PipelineRawBatch(
     override val streamEmpty: Boolean,
     override val lastProcessedId: StoredMessageId?,
     override val lastScannedTime: Instant,
-    val storedBatchWrapper: MessageBatchWrapper,
+    val storedBatchWrapper: StoredMessageBatchWrapper,
     override val info: PipelineStepsInfo = PipelineStepsInfo()
 ) : PipelineStepObject
 

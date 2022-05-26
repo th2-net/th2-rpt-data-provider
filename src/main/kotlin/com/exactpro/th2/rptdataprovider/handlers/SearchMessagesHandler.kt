@@ -52,20 +52,6 @@ class SearchMessagesHandler(private val applicationContext: Context) {
                 .register()
     }
 
-    private val pipelineInfoSendDelay = applicationContext.configuration.pipelineInfoSendDelay.value.toLong()
-    private val sendPipelineStatus = applicationContext.configuration.sendPipelineStatus.value.toBoolean()
-
-    private suspend fun sendPipelineStatus(
-        pipelineStatus: PipelineStatus,
-        writer: StreamWriter,
-        coroutineScope: CoroutineScope,
-        lastMessageIdCounter: AtomicLong
-    ) {
-        while (coroutineScope.isActive) {
-            writer.write(pipelineStatus.getSnapshot(), lastMessageIdCounter)
-            delay(pipelineInfoSendDelay)
-        }
-    }
 
     @OptIn(ExperimentalTime::class, ExperimentalCoroutinesApi::class)
     suspend fun searchMessagesSse(request: SseMessageSearchRequest, writer: StreamWriter) {
@@ -80,12 +66,6 @@ class SearchMessagesHandler(private val applicationContext: Context) {
 
             flow {
                 streamMerger = ChainBuilder(applicationContext, request, chainScope, pipelineStatus).buildChain()
-
-                if (sendPipelineStatus) {
-                    launch {
-                        sendPipelineStatus(pipelineStatus, writer, chainScope, lastMessageIdCounter)
-                    }
-                }
 
                 do {
                     val message = measureTimedValue {
@@ -171,23 +151,25 @@ class SearchMessagesHandler(private val applicationContext: Context) {
                     if (it is PipelineRawBatch && listPair.size < 2) {
                         val trimmedMessages = it.storedBatchWrapper.trimmedMessages
                         for (trimmedMessage in trimmedMessages) {
+                            if (trimmedMessage.id == message?.id) continue
                             if (listPair.size == 2) break
                             listPair.add(Pair(trimmedMessage.id, it.streamEmpty))
                         }
                     } else if (listPair.size < 2 && it.streamEmpty) {
-                        listPair.add(Pair(null, it.streamEmpty))
+                        val name = messageExtractor.streamName!!
+                        listPair.add(Pair(StoredMessageId(name.name, name.direction, -1), it.streamEmpty))
                     }
                 }
             } while (listPair.size < 2)
 
             listPair.first().let {
                 streamInfoMap
-                    .getValue(TimeRelation.BEFORE)
+                    .getValue(TimeRelation.AFTER)
                     .add(MessageStreamPointer(messageExtractor.streamName!!, it.first != null, it.second, it.first))
             }
             listPair.last().let {
                 streamInfoMap
-                    .getValue(TimeRelation.AFTER)
+                    .getValue(TimeRelation.BEFORE)
                     .add(MessageStreamPointer(messageExtractor.streamName!!, it.first != null, it.second, it.first))
             }
         }

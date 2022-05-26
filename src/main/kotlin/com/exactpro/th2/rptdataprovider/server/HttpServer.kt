@@ -18,9 +18,7 @@ package com.exactpro.th2.rptdataprovider.server
 
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.utils.CradleIdException
-import com.exactpro.th2.rptdataprovider.Context
-import com.exactpro.th2.rptdataprovider.Metrics
-import com.exactpro.th2.rptdataprovider.asStringSuspend
+import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.CodecResponseException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
@@ -32,7 +30,6 @@ import com.exactpro.th2.rptdataprovider.entities.sse.EventType
 import com.exactpro.th2.rptdataprovider.entities.sse.HttpWriter
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
-import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import io.ktor.application.*
 import io.ktor.features.*
@@ -267,8 +264,6 @@ class HttpServer(private val applicationContext: Context) {
                     )
                     coroutineContext.cancelChildren()
                 }.join()
-            } catch (e: CancellationException) {
-                throw e
             } catch (e: Exception) {
                 when (val exception = e.rootCause ?: e) {
                     is InvalidRequestException -> sendErrorCode(call, exception, HttpStatusCode.BadRequest)
@@ -278,6 +273,7 @@ class HttpServer(private val applicationContext: Context) {
                     is ChannelClosedException -> sendErrorCode(call, exception, HttpStatusCode.RequestTimeout)
                     is CradleIdException -> sendErrorCodeOrEmptyJson(probe, call, e, HttpStatusCode.InternalServerError)
                     is CodecResponseException -> sendErrorCode(call, exception, HttpStatusCode.InternalServerError)
+                    is CancellationException -> Unit
                     else -> sendErrorCode(call, exception as Exception, HttpStatusCode.InternalServerError)
                 }
                 throw e
@@ -308,7 +304,7 @@ class HttpServer(private val applicationContext: Context) {
 
         val getEventsLimit = this.applicationContext.configuration.eventSearchChunkSize.value.toInt()
 
-        embeddedServer(Netty, configuration.port.value.toInt()) {
+        embeddedServer(Netty, configuration.port.value.toInt(), configure = { responseWriteTimeoutSeconds = -1 }) {
 
             install(Compression)
             install(Timeouts) {
@@ -357,7 +353,7 @@ class HttpServer(private val applicationContext: Context) {
                     val probe = call.parameters["probe"]?.toBoolean() ?: false
                     handleRequest(
                         call, context, "get single message",
-                        notModifiedCacheControl, probe, false, call.parameters.toMap()
+                        rarelyModifiedCacheControl, probe, false, call.parameters.toMap()
                     ) {
                         MessageWithMetadata(messageCache.getOrPut(call.parameters["id"]!!)).let {
                             MessageMapper.convertToHttpMessage(it)
@@ -441,7 +437,8 @@ class HttpServer(private val applicationContext: Context) {
                     handleRequest(call, context, "message ids", null, false, false, queryParametersMap) {
                         val request = SseMessageSearchRequest(
                             queryParametersMap,
-                            messageFiltersPredicateFactory.getEmptyPredicate()
+                            messageFiltersPredicateFactory.getEmptyPredicate(),
+                            TimeRelation.BEFORE
                         ).also {
                             it.checkIdsRequest()
                         }

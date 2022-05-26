@@ -48,10 +48,7 @@ class MessageFilter(
     messageFlowCapacity
 ) {
 
-    private val sendEmptyDelay: Long = context.configuration.sendEmptyDelay.value.toLong()
     private var lastScannedObject: PipelineStepObject? = null
-    private val id = COUNTER.incrementAndGet()
-
 
     init {
         externalScope.launch {
@@ -135,6 +132,5 @@ class MessageFilter(
 
     companion object {
         val logger = KotlinLogging.logger {}
-        private val COUNTER = AtomicLong()
     }
 }

@@ -17,7 +17,6 @@
 package com.exactpro.th2.rptdataprovider.entities.responses
 
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.th2.common.grpc.ConnectionID
 import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.grpc.MessageID
@@ -85,7 +84,6 @@ data class MessageStreamPointer(
                 lastId?.let {
                     logger.trace { "stream $messageStream - lastElement is ${it.index}" }
                     it.convertToProto()
-
                 } ?: let {
                     // set sequence to a negative value if stream has not started to avoid mistaking it for the default value
                     // FIXME change interface to make that case explicit

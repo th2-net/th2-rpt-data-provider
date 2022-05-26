@@ -10,6 +10,8 @@ import com.exactpro.th2.rptdataprovider.entities.internal.PipelineCodecRequest
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
 import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
@@ -74,15 +76,17 @@ class MessageBatchConverter(
 
             val timeStart = System.currentTimeMillis()
 
-            logger.trace { "received raw batch (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.fullBatch.id})" }
+            logger.trace { "received raw batch (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.batchId})" }
 
             val filteredMessages = pipelineMessage.storedBatchWrapper.trimmedMessages
                 .map {
+                    val messageWrapper = MessageWrapper(it, RawMessage.parseFrom(it.content))
+
                     MessageGroup.newBuilder().addMessages(
                         AnyMessage.newBuilder()
-                            .setRawMessage(RawMessage.parseFrom(it.content))
+                            .setRawMessage(messageWrapper.rawMessage)
                             .build()
-                    ).build() to it
+                    ).build() to messageWrapper
                 }
                 .filter { (messages, _) ->
                     val message = messages.messagesList.firstOrNull()?.message
@@ -91,7 +95,7 @@ class MessageBatchConverter(
                     ((included.isNullOrEmpty() || included.contains(protocol))
                             && (excluded.isNullOrEmpty() || !excluded.contains(protocol)))
                         .also {
-                            logger.trace { "message ${message?.sequence} has protocol $protocol (matchesProtocolFilter=${it}) (stream=${streamName.toString()} batchId=${pipelineMessage.storedBatchWrapper.fullBatch.id})" }
+                            logger.trace { "message ${message?.sequence} has protocol $protocol (matchesProtocolFilter=${it}) (stream=${streamName.toString()} batchId=${pipelineMessage.storedBatchWrapper.batchId})" }
                         }
                 }
 
@@ -100,7 +104,7 @@ class MessageBatchConverter(
                 pipelineMessage.streamEmpty,
                 pipelineMessage.lastProcessedId,
                 pipelineMessage.lastScannedTime,
-                pipelineMessage.storedBatchWrapper.copy(trimmedMessages = filteredMessages.map { it.second }),
+                MessageBatchWrapper(pipelineMessage.storedBatchWrapper.batchId, filteredMessages.map { it.second }),
                 CodecBatchRequest(
                     MessageGroupBatch
                         .newBuilder()
@@ -122,9 +126,9 @@ class MessageBatchConverter(
 
             if (codecRequest.codecRequest.protobufRawMessageBatch.groupsCount > 0) {
                 sendToChannel(codecRequest)
-                logger.trace { "converted batch is sent downstream (stream=${streamName.toString()} id=${codecRequest.storedBatchWrapper.fullBatch.id} requestHash=${codecRequest.codecRequest.requestHash})" }
+                logger.trace { "converted batch is sent downstream (stream=${streamName.toString()} id=${codecRequest.storedBatchWrapper.batchId} requestHash=${codecRequest.codecRequest.requestHash})" }
             } else {
-                logger.trace { "converted batch is discarded because it has no messages (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.fullBatch.id})" }
+                logger.trace { "converted batch is discarded because it has no messages (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.batchId})" }
             }
 
             pipelineStatus.convertSendDownstream(

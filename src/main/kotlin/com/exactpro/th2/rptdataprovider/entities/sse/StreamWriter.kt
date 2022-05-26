@@ -17,14 +17,12 @@
 package com.exactpro.th2.rptdataprovider.entities.sse
 
 import com.exactpro.th2.dataprovider.grpc.*
-import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineFilteredMessage
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepsInfo
 import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageStreamPointer
-import com.exactpro.th2.rptdataprovider.handlers.PipelineStatusSnapshot
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.grpc.stub.StreamObserver
 import io.prometheus.client.Histogram
@@ -32,7 +30,6 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import mu.KotlinLogging
 import java.io.Writer
-import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.roundToInt
 import kotlin.system.measureTimeMillis
@@ -104,8 +101,6 @@ interface StreamWriter {
 
     suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong)
 
-    suspend fun write(status: PipelineStatusSnapshot, counter: AtomicLong)
-
     suspend fun closeWriter()
 }
 
@@ -113,28 +108,23 @@ class HttpWriter(private val writer: Writer, private val jacksonMapper: ObjectMa
     val logger = KotlinLogging.logger { }
 
     fun eventWrite(event: SseEvent) {
+        val builder = StringBuilder()
         if (event.event != null) {
-            writer.write("event: ${event.event}\n")
+            builder.append("event: ").append(event.event).append("\n")
         }
 
         for (dataLine in event.data.lines()) {
-            writer.write("data: $dataLine\n")
+            builder.append("data: ").append(dataLine).append("\n")
         }
 
         if (event.metadata != null) {
-            writer.write("id: ${event.metadata}\n")
+            builder.append("id: ").append(event.metadata).append("\n")
         }
 
-        writer.write("\n")
+        writer.write(builder.append("\n").toString())
         writer.flush()
     }
 
-    override suspend fun write(status: PipelineStatusSnapshot, counter: AtomicLong) {
-        eventWrite(SseEvent.build(jacksonMapper, status, counter))
-        logger.debug {
-            jacksonMapper.writeValueAsString(status)
-        }
-    }
 
     override suspend fun write(event: EventTreeNode, counter: AtomicLong) {
         eventWrite(SseEvent.build(jacksonMapper, event, counter))
@@ -227,13 +217,6 @@ abstract class GrpcWriter<T>(
 
     override suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong) {}
 
-    override suspend fun write(status: PipelineStatusSnapshot, counter: AtomicLong) {
-        logger.debug {
-            jacksonMapper.writeValueAsString(status)
-        }
-    }
-
-
     override suspend fun closeWriter() {
         responses.close()
         logger.debug { "grpc writer has been closed" }
@@ -325,7 +308,6 @@ class EventGrpcWriter(
     override suspend fun write(message: PipelineFilteredMessage, counter: AtomicLong) {
         TODO("Not yet implemented")
     }
-
 
     override suspend fun write(event: Event, lastEventId: AtomicLong) {
         val result = CompletableDeferred<EventSearchResponse>()
