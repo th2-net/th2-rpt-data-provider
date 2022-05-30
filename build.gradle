@@ -48,7 +48,6 @@ dependencies {
     implementation 'org.slf4j:slf4j-api'
     implementation 'org.slf4j:slf4j-log4j12'
 
-//    implementation 'com.exactpro.th2:common:3.38.0-TH2-3578-2300290805-SNAPSHOT'
     implementation 'com.exactpro.th2:common:3.31.0'
 
     implementation group: 'net.jpountz.lz4', name: 'lz4', version: '1.3.0'
