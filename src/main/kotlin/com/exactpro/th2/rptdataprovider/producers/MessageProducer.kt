@@ -24,6 +24,7 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundExc
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.CodecBatchRequest
 import com.exactpro.th2.rptdataprovider.services.AbstractDecoderService
+import mu.KotlinLogging
 
 class MessageProducer(
     private val cradle: CradleService,
@@ -32,6 +33,8 @@ class MessageProducer(
     suspend fun fromId(id: StoredMessageId): Message {
 
         return cradle.getMessageSuspend(id)?.let { stored ->
+
+            LOGGER.info { "Stored message received from cradle: ${stored.id}" }
 
             val decoded = rabbitMqService.sendToCodec(
                 CodecBatchRequest(
@@ -62,4 +65,9 @@ class MessageProducer(
         }
             ?: throw CradleMessageNotFoundException("message '${id}' does not exist in cradle")
     }
+
+    companion object {
+        private val LOGGER = KotlinLogging.logger {}
+    }
+
 }
