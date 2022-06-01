@@ -57,10 +57,9 @@ class MessageCache(configuration: Configuration, private val messageProducer: Me
 
     @InternalCoroutinesApi
     suspend fun getOrPut(id: String): Message {
-        logger.info { "MessageCache::getOrPut($id)" }
         return cache.get(id)
             ?: messageProducer.fromId(StoredMessageId.fromString(id)).also {
-                logger.info { "Message cache miss for id=$id" }
+                logger.debug { "Message cache miss for id=$id" }
 
                 val type = it.parsedMessageGroup?.get(0)?.messageType
 

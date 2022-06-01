@@ -128,6 +128,7 @@ class HttpServer(private val applicationContext: Context) {
 
     @InternalAPI
     private suspend fun sendErrorCode(call: ApplicationCall, e: Exception, code: HttpStatusCode) {
+        logger.debug { "sendErrorCode(). Exception = $e, HttpStatusCode = ${code.value})" }
         withContext(NonCancellable) {
             call.respondText(e.rootCause?.message ?: e.toString(), ContentType.Text.Plain, code)
         }
@@ -260,9 +261,12 @@ class HttpServer(private val applicationContext: Context) {
                         checkContext(context)
                     }
                     cacheControl?.let { call.response.cacheControl(it) }
+                    val responseText = jacksonMapper.asStringSuspend(calledFun.invoke())
+                    logger.trace { "RestAPI response: $responseText" }
                     call.respondText(
-                        jacksonMapper.asStringSuspend(calledFun.invoke()),
-                        ContentType.Application.Json
+                        responseText,
+                        ContentType.Application.Json,
+                        HttpStatusCode.OK
                     )
                     coroutineContext.cancelChildren()
                 }.join()
@@ -353,7 +357,6 @@ class HttpServer(private val applicationContext: Context) {
                 }
 
                 get("/message/{id}") {
-                    logger.info { "Requested message: ${call.parameters["id"]}" }
                     val probe = call.parameters["probe"]?.toBoolean() ?: false
                     handleRequest(
                         call, context, "get single message",
