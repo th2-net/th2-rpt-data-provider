@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+ * Copyright 2022-2022 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  ******************************************************************************/
 
-package com.exactpro.th2.rptdataprovider.entities.filters.events
+package com.exactpro.th2.rptdataprovider.entities.filters.messages
 
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.Filter
@@ -22,44 +22,45 @@ import com.exactpro.th2.rptdataprovider.entities.filters.FilterRequest
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
-import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
+import com.exactpro.th2.rptdataprovider.entities.internal.FilteredMessageWrapper
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
-class EventTypeFilter(
-    private var type: List<String>,
-    override var negative: Boolean = false,
-    override var conjunct: Boolean = false
-) : Filter<BaseEventEntity> {
+
+class GenericMessageTextFilter(
+    private var values: List<String>, override var negative: Boolean = false, override var conjunct: Boolean = false
+) : Filter<FilteredMessageWrapper> {
 
     companion object {
-        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<BaseEventEntity> {
-            return EventTypeFilter(
+        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<FilteredMessageWrapper> {
+            return GenericMessageTextFilter(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
-                type = filterRequest.getValues()
+                values = filterRequest.getValues()
                     ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
             )
         }
 
-        val filterInfo = FilterInfo(
-            "type",
-            "matches events by one of the specified types",
-            mutableListOf<Parameter>().apply {
+        val filterInfo =
+            FilterInfo("message_generic", "matches messages by bodyBinary, body or type", mutableListOf<Parameter>().apply {
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("conjunct", FilterParameterType.BOOLEAN, false, null))
-                add(Parameter("values", FilterParameterType.STRING_LIST, null, "Send message, ..."))
-            }
-        )
+                add(Parameter("values", FilterParameterType.STRING_LIST, null, "NewOrderSingle, ..."))
+            })
     }
 
-    override fun match(element: BaseEventEntity): Boolean {
-        val predicate: (String) -> Boolean = { item ->
-            element.eventType.toLowerCase().contains(item.toLowerCase())
-        }
-        return negative.xor(if (conjunct) type.all(predicate) else type.any(predicate))
+    private val typeFilter = MessageTypeFilter(type = values, conjunct = conjunct)
+    private val bodyBinaryFilter = MessageBodyBinaryFilter(bodyBinary = values, conjunct = conjunct)
+    private val bodyFilter = MessageBodyFilter(body = values, conjunct = conjunct)
+
+    override fun match(element: FilteredMessageWrapper): Boolean {
+        return negative.xor(
+            typeFilter.match(element) || bodyBinaryFilter.match(element) || bodyFilter.match(element)
+        )
     }
 
     override fun getInfo(): FilterInfo {
         return filterInfo
     }
+
 }
+

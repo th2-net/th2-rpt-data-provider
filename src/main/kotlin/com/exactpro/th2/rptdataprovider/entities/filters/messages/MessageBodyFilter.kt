@@ -28,7 +28,7 @@ import com.exactpro.th2.rptdataprovider.entities.internal.FilteredMessageWrapper
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.google.protobuf.util.JsonFormat
 
-class MessageBodyFilter private constructor(
+class MessageBodyFilter(
     private var body: List<String>,
     override var negative: Boolean = false,
     override var conjunct: Boolean = false

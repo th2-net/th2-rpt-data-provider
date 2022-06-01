@@ -26,10 +26,7 @@ import com.exactpro.th2.rptdataprovider.cache.MessageCache
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.entities.filters.PredicateFactory
 import com.exactpro.th2.rptdataprovider.entities.filters.events.*
-import com.exactpro.th2.rptdataprovider.entities.filters.messages.AttachedEventFilters
-import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyBinaryFilter
-import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyFilter
-import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageTypeFilter
+import com.exactpro.th2.rptdataprovider.entities.filters.messages.*
 import com.exactpro.th2.rptdataprovider.entities.internal.FilteredMessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.handlers.SearchEventsHandler
@@ -96,7 +93,8 @@ class Context(
             EventTypeFilter.filterInfo to EventTypeFilter.Companion::build,
             EventNameFilter.filterInfo to EventNameFilter.Companion::build,
             EventBodyFilter.filterInfo to EventBodyFilter.Companion::build,
-            EventStatusFilter.filterInfo to EventStatusFilter.Companion::build
+            EventStatusFilter.filterInfo to EventStatusFilter.Companion::build,
+            GenericEventTextFilter.filterInfo to GenericEventTextFilter.Companion::build
         ), cradleService
     ),
 
@@ -105,7 +103,8 @@ class Context(
             AttachedEventFilters.filterInfo to AttachedEventFilters.Companion::build,
             MessageTypeFilter.filterInfo to MessageTypeFilter.Companion::build,
             MessageBodyFilter.filterInfo to MessageBodyFilter.Companion::build,
-            MessageBodyBinaryFilter.filterInfo to MessageBodyBinaryFilter.Companion::build
+            MessageBodyBinaryFilter.filterInfo to MessageBodyBinaryFilter.Companion::build,
+            GenericMessageTextFilter.filterInfo to GenericMessageTextFilter.Companion::build
         ), cradleService
     ),
 
