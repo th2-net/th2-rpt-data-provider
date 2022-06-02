@@ -27,7 +27,7 @@ import com.exactpro.th2.rptdataprovider.entities.internal.FilteredMessageWrapper
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import mu.KotlinLogging
 
-class MessageBodyBinaryFilter private constructor(
+class MessageBodyBinaryFilter(
     private var bodyBinary: List<String>,
     override var negative: Boolean = false,
     override var conjunct: Boolean = false

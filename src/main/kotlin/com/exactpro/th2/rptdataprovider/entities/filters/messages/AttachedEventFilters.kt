@@ -28,7 +28,7 @@ import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import mu.KotlinLogging
 
-class AttachedEventFilters private constructor(
+class AttachedEventFilters(
     private var messagesFromAttachedId: Set<String>,
     override var negative: Boolean = false,
     override var conjunct: Boolean = false
