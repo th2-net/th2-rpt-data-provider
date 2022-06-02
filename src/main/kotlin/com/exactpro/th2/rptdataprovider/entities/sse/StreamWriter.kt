@@ -16,111 +16,326 @@
 
 package com.exactpro.th2.rptdataprovider.entities.sse
 
-import com.exactpro.th2.dataprovider.grpc.StreamResponse
-import com.exactpro.th2.dataprovider.grpc.StreamsInfo
-import com.exactpro.th2.rptdataprovider.entities.internal.FilteredMessageWrapper
+import com.exactpro.th2.dataprovider.grpc.*
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineFilteredMessage
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepsInfo
 import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
-import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
-import com.exactpro.th2.rptdataprovider.eventWrite
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageStreamPointer
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.grpc.stub.StreamObserver
+import io.prometheus.client.Histogram
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
+import mu.KotlinLogging
 import java.io.Writer
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.math.roundToInt
+import kotlin.system.measureTimeMillis
+import kotlin.time.ExperimentalTime
+import kotlin.time.measureTimedValue
 
 
 interface StreamWriter {
 
+    companion object {
+        val metric = Histogram.build(
+            "th2_message_pipeline_seconds", "Time of message search pipeline steps"
+        ).buckets(.005, .01, .025, .05, .075, .1, .25, .5, .75, 1.0, 2.5, 5.0, 7.5, 10.0, 25.0, 50.0, 75.0)
+            .labelNames("step_name")
+            .register()
+
+
+        fun setExtract(info: PipelineStepsInfo) {
+            metric.labels("extract").observe(info.extractTime().toDouble() / 1000)
+        }
+
+        fun setConvert(info: PipelineStepsInfo) {
+            metric.labels("convert").observe(info.convertTime().toDouble() / 1000)
+        }
+
+        fun setDecodeCodec(info: PipelineStepsInfo) {
+            metric.labels("decode_codec").observe(info.decodeCodecResponse().toDouble() / 1000)
+        }
+
+        fun setDecodeAll(info: PipelineStepsInfo) {
+            metric.labels("decode_all").observe(info.decodeTimeAll().toDouble() / 1000)
+        }
+
+        fun setSendToCodecTime(sendingTime: Long) {
+            metric.labels("send_to_codec").observe(sendingTime.toDouble() / 1000)
+        }
+
+        fun setFilter(info: PipelineStepsInfo) {
+            metric.labels("filter").observe(info.filterTime().toDouble() / 1000)
+        }
+
+        fun setBuildMessage(info: PipelineStepsInfo) {
+            metric.labels("build_message").observe(info.buildMessage.toDouble() / 1000)
+        }
+
+        fun setSerializing(info: PipelineStepsInfo) {
+            metric.labels("serializing").observe(info.serializingTime.toDouble() / 1000)
+        }
+
+        fun setMerging(time: Long) {
+            metric.labels("merging").observe(time.toDouble() / 1000)
+        }
+
+        fun setSendingTime(sendingTime: Long) {
+            metric.labels("sending").observe(sendingTime.toDouble() / 1000)
+        }
+
+    }
+
     suspend fun write(event: EventTreeNode, counter: AtomicLong)
 
-    suspend fun write(filteredMessage: FilteredMessageWrapper, counter: AtomicLong)
+    suspend fun write(message: PipelineFilteredMessage, counter: AtomicLong)
 
     suspend fun write(event: Event, lastEventId: AtomicLong)
 
-    suspend fun write(streamInfo: List<StreamInfo>)
+    suspend fun write(streamInfo: List<MessageStreamPointer>)
+
+    suspend fun write(streamInfo: com.exactpro.th2.rptdataprovider.entities.responses.EventStreamPointer)
 
     suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong)
 
     suspend fun closeWriter()
 }
 
-class SseWriter(private val writer: Writer, private val jacksonMapper: ObjectMapper) : StreamWriter {
+class HttpWriter(private val writer: Writer, private val jacksonMapper: ObjectMapper) : StreamWriter {
+    val logger = KotlinLogging.logger { }
 
-    override suspend fun write(event: EventTreeNode, counter: AtomicLong) {
-        writer.eventWrite(SseEvent.build(jacksonMapper, event, counter))
+    fun eventWrite(event: SseEvent) {
+        val builder = StringBuilder()
+        if (event.event != null) {
+            builder.append("event: ").append(event.event).append("\n")
+        }
+
+        for (dataLine in event.data.lines()) {
+            builder.append("data: ").append(dataLine).append("\n")
+        }
+
+        if (event.metadata != null) {
+            builder.append("id: ").append(event.metadata).append("\n")
+        }
+
+        writer.write(builder.append("\n").toString())
+        writer.flush()
     }
 
-    override suspend fun write(filteredMessage: FilteredMessageWrapper, counter: AtomicLong) {
-        writer.eventWrite(SseEvent.build(jacksonMapper, MessageMapper.convertToHttpMessage(filteredMessage), counter))
+
+    override suspend fun write(event: EventTreeNode, counter: AtomicLong) {
+        eventWrite(SseEvent.build(jacksonMapper, event, counter))
+    }
+
+    @OptIn(ExperimentalTime::class)
+    override suspend fun write(message: PipelineFilteredMessage, counter: AtomicLong) {
+        val convertedMessage = measureTimedValue {
+            MessageMapper.convertToHttpMessage(message.payload)
+        }
+        message.info.serializingTime = convertedMessage.duration.toLongMilliseconds()
+        StreamWriter.setSerializing(message.info)
+
+        val sendingTime = measureTimeMillis {
+            eventWrite(SseEvent.build(jacksonMapper, convertedMessage.value, counter))
+        }
+
+        StreamWriter.setSendingTime(sendingTime)
     }
 
     override suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong) {
-        writer.eventWrite(SseEvent.build(jacksonMapper, lastScannedObjectInfo, counter))
+        eventWrite(SseEvent.build(jacksonMapper, lastScannedObjectInfo, counter))
     }
 
-    override suspend fun write(streamInfo: List<StreamInfo>) {
-        writer.eventWrite(SseEvent.build(jacksonMapper, streamInfo))
+    override suspend fun write(streamInfo: List<MessageStreamPointer>) {
+        eventWrite(SseEvent.build(jacksonMapper, streamInfo))
+    }
+
+    override suspend fun write(streamInfo: com.exactpro.th2.rptdataprovider.entities.responses.EventStreamPointer) {
+        eventWrite(SseEvent.build(jacksonMapper, streamInfo))
     }
 
     override suspend fun write(event: Event, lastEventId: AtomicLong) {
-        writer.eventWrite(SseEvent.build(jacksonMapper, event, lastEventId))
+        eventWrite(SseEvent.build(jacksonMapper, event, lastEventId))
     }
 
+    @Suppress("BlockingMethodInNonBlockingContext")
     override suspend fun closeWriter() {
         writer.close()
+        logger.debug { "http sse writer has been closed" }
     }
 }
 
-class GrpcWriter(private val writer: StreamObserver<StreamResponse>) : StreamWriter {
+
+@OptIn(ExperimentalTime::class)
+abstract class GrpcWriter<T>(
+    responseBufferCapacity: Int,
+    private val writer: StreamObserver<T>,
+    private val jacksonMapper: ObjectMapper,
+    val writerPool: CoroutineScope
+) : StreamWriter {
+    //FIXME: List<StreamResponse> is a temporary solution to send messages group without merging the content
+
+    // yes, channel of deferred responses is required, since the order is critical
+    val responses = Channel<Deferred<T>>(responseBufferCapacity)
+
+    companion object {
+//        private const val poolSize = 5
+
+        private val logger = KotlinLogging.logger { }
+//
+//        val handler = CoroutineExceptionHandler { _, exception ->
+//            logger.error(exception) { "GRPC send error" }
+//        }
+//
+//        private val writerPool = CoroutineScope(
+//            Executors.newFixedThreadPool(poolSize).asCoroutineDispatcher() + handler
+//        )
+    }
+
+
+    init {
+        writerPool.launch {
+            for (response in responses) {
+                val awaited = measureTimedValue {
+                    response.await()
+                }
+
+                val sendDuration = measureTimeMillis {
+                    writer.onNext(awaited.value)
+                }
+
+                StreamWriter.setSendingTime(sendDuration)
+
+                logger.trace { "awaited response for ${awaited.duration.inMilliseconds.roundToInt()}ms, sent in ${sendDuration}ms" }
+            }
+        }
+    }
+
+    override suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong) {}
+
+    override suspend fun closeWriter() {
+        responses.close()
+        logger.debug { "grpc writer has been closed" }
+    }
+}
+
+class MessageGrpcWriter(
+    responseBufferCapacity: Int,
+    private val writer: StreamObserver<MessageSearchResponse>,
+    private val jacksonMapper: ObjectMapper,
+    private val scope: CoroutineScope
+) : GrpcWriter<MessageSearchResponse>(responseBufferCapacity, writer, jacksonMapper, scope) {
     override suspend fun write(event: EventTreeNode, counter: AtomicLong) {
-        writer.onNext(
-            StreamResponse.newBuilder()
-                .setEventMetadata(event.convertToGrpcEventMetadata())
-                .build()
-        )
-        counter.incrementAndGet()
+        TODO("Not yet implemented")
     }
 
+    @OptIn(ExperimentalTime::class)
+    override suspend fun write(message: PipelineFilteredMessage, counter: AtomicLong) {
+        val result = CompletableDeferred<MessageSearchResponse>()
+        responses.send(result)
 
-    override suspend fun write(filteredMessage: FilteredMessageWrapper, counter: AtomicLong) {
-        writer.onNext(
-            StreamResponse.newBuilder()
-                .setMessage(MessageMapper.convertToGrpcMessageData(filteredMessage))
-                .build()
-        )
-        counter.incrementAndGet()
-    }
+        writerPool.launch {
+            result.complete(
+                let {
+                    val convertedMessage = measureTimedValue {
+                        MessageSearchResponse.newBuilder().setMessage(
+                            MessageMapper.convertToGrpcMessageData(message.payload)
+                        ).build()
+                    }
+                    message.info.serializingTime = convertedMessage.duration.toLongMilliseconds()
+                    StreamWriter.setSerializing(message.info)
 
-    override suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong) {
-        writer.onNext(
-            StreamResponse.newBuilder()
-                .setLastScannedObject(lastScannedObjectInfo.convertToGrpc())
-                .build()
-        )
-        counter.incrementAndGet()
+                    convertedMessage.value
+                }
+            )
+            counter.incrementAndGet()
+        }
     }
 
     override suspend fun write(event: Event, lastEventId: AtomicLong) {
-        writer.onNext(
-            StreamResponse.newBuilder()
-                .setEvent(event.convertToGrpcEventData())
-                .build()
-        )
-        lastEventId.incrementAndGet()
+        TODO("Not yet implemented")
     }
 
-    override suspend fun write(streamInfo: List<StreamInfo>) {
-        writer.onNext(
-            StreamResponse.newBuilder().setStreamInfo(
-                StreamsInfo.newBuilder().addAllStreams(
-                    streamInfo.map { it.convertToProto() }
+
+    override suspend fun write(streamInfo: List<MessageStreamPointer>) {
+        val result = CompletableDeferred<MessageSearchResponse>()
+
+        responses.send(result)
+
+        writerPool.launch {
+            result.complete(
+                MessageSearchResponse.newBuilder().setMessageStreamPointers(
+                    MessageStreamPointers.newBuilder().addAllMessageStreamPointer(
+                        streamInfo.map { it.convertToProto() }
+                    ).build()
                 ).build()
-            ).build()
-        )
+
+            )
+        }
     }
 
-    override suspend fun closeWriter() {
-        writer.onCompleted()
+    override suspend fun write(streamInfo: com.exactpro.th2.rptdataprovider.entities.responses.EventStreamPointer) {
+        TODO("Not yet implemented")
+    }
+}
+
+class EventGrpcWriter(
+    responseBufferCapacity: Int,
+    private val writer: StreamObserver<EventSearchResponse>,
+    private val jacksonMapper: ObjectMapper,
+    private val scope: CoroutineScope
+) : GrpcWriter<EventSearchResponse>(responseBufferCapacity, writer, jacksonMapper, scope) {
+
+    override suspend fun write(event: EventTreeNode, counter: AtomicLong) {
+        val result = CompletableDeferred<EventSearchResponse>()
+        responses.send(result)
+
+        writerPool.launch {
+            result.complete(
+                EventSearchResponse.newBuilder().setEventMetadata(
+                    event.convertToGrpcEventMetadata()
+                ).build()
+            )
+            counter.incrementAndGet()
+        }
+    }
+
+    override suspend fun write(message: PipelineFilteredMessage, counter: AtomicLong) {
+        TODO("Not yet implemented")
+    }
+
+    override suspend fun write(event: Event, lastEventId: AtomicLong) {
+        val result = CompletableDeferred<EventSearchResponse>()
+        responses.send(result)
+
+        writerPool.launch {
+            result.complete(
+                EventSearchResponse.newBuilder().setEvent(
+                    event.convertToGrpcEventData()
+                ).build()
+            )
+
+            lastEventId.incrementAndGet()
+        }
+    }
+
+    override suspend fun write(streamInfo: List<MessageStreamPointer>) {
+        TODO("Not yet implemented")
+    }
+
+    override suspend fun write(streamInfo: com.exactpro.th2.rptdataprovider.entities.responses.EventStreamPointer) {
+        val result = CompletableDeferred<EventSearchResponse>()
+        responses.send(result)
+
+        writerPool.launch {
+            result.complete(
+                EventSearchResponse.newBuilder().setEventStreamPointer(
+                    streamInfo.convertToProto()
+                ).build()
+            )
+        }
     }
 }

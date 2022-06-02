@@ -17,30 +17,93 @@
 package com.exactpro.th2.rptdataprovider.entities.responses
 
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.dataprovider.grpc.Stream
+import com.exactpro.th2.common.grpc.ConnectionID
+import com.exactpro.th2.common.grpc.EventID
+import com.exactpro.th2.common.grpc.MessageID
+import com.exactpro.th2.common.util.toCradleDirection
+import com.exactpro.th2.dataprovider.grpc.EventStreamPointer
+import com.exactpro.th2.dataprovider.grpc.MessageStream
+import com.exactpro.th2.dataprovider.grpc.MessageStreamPointer
 import com.exactpro.th2.rptdataprovider.convertToProto
 import com.exactpro.th2.rptdataprovider.cradleDirectionToGrpc
-import com.exactpro.th2.rptdataprovider.handlers.StreamName
+import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
+import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
 import com.fasterxml.jackson.annotation.JsonIgnore
-import com.fasterxml.jackson.annotation.JsonProperty
-import com.fasterxml.jackson.annotation.JsonUnwrapped
+import mu.KotlinLogging
 
-data class StreamInfo(
-    @JsonUnwrapped
-    val stream: StreamName,
-    @JsonIgnore
-    val lastElement: StoredMessageId? = null
+
+data class EventStreamPointer(
+    val hasStarted: Boolean,
+    val hasEnded: Boolean,
+    val lastId: ProviderEventId? = null
 ) {
+    companion object {
+        val logger = KotlinLogging.logger { }
+    }
 
-    @JsonProperty("lastId")
-    val lastId = lastElement?.toString()
-
-    fun convertToProto(): Stream {
-        return Stream.newBuilder()
-            .setDirection(cradleDirectionToGrpc(stream.direction))
-            .setSession(stream.session)
+    fun convertToProto(): EventStreamPointer {
+        return EventStreamPointer.newBuilder()
+            .setHasEnded(hasEnded)
+            .setHasStarted(hasStarted)
             .also { builder ->
-                lastElement?.let { builder.setLastId(it.convertToProto()) }
+                lastId?.let { builder.setLastId(EventID.newBuilder().setId(it.toString())) }
             }.build()
+    }
+}
+
+
+data class MessageStreamPointer(
+    @JsonIgnore
+    val messageStream: StreamName,
+    val hasStarted: Boolean,
+    val hasEnded: Boolean,
+    @JsonIgnore
+    val lastMessageId: StoredMessageId? = null
+) {
+    
+    val lastId = lastMessageId?.toString()
+
+    companion object {
+        val logger = KotlinLogging.logger { }
+    }
+
+    constructor(lastId: MessageID, messageStream: StreamName, hasStarted: Boolean, hasEnded: Boolean) : this(
+        lastMessageId = StoredMessageId(
+            lastId.connectionId.sessionAlias,
+            lastId.direction.toCradleDirection(),
+            lastId.sequence
+        ),
+        messageStream = messageStream,
+        hasStarted = hasStarted,
+        hasEnded = hasEnded
+    )
+
+    fun convertToProto(): MessageStreamPointer {
+        return MessageStreamPointer.newBuilder()
+            .setMessageStream(
+                MessageStream.newBuilder()
+                    .setDirection(cradleDirectionToGrpc(messageStream.direction))
+                    .setName(messageStream.name)
+            )
+            .setHasStarted(hasStarted)
+            .setHasEnded(hasEnded)
+            .setLastId(
+                lastMessageId?.let {
+                    logger.trace { "stream $messageStream - lastElement is ${it.index}" }
+                    it.convertToProto()
+                } ?: let {
+                    // set sequence to a negative value if stream has not started to avoid mistaking it for the default value
+                    // FIXME change interface to make that case explicit
+                    logger.trace { "lastElement is null - StreamInfo should be build as if the stream $messageStream has no messages" }
+
+                    MessageID
+                        .newBuilder()
+                        .setSequence(-1)
+                        .setDirection(cradleDirectionToGrpc(messageStream.direction))
+                        .setConnectionId(ConnectionID.newBuilder().setSessionAlias(messageStream.name).build())
+                        .build()
+                }
+            )
+            .build()
     }
 }

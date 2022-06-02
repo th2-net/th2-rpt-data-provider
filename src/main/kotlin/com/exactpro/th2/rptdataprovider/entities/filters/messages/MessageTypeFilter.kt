@@ -62,7 +62,7 @@ class MessageTypeFilter(
     }
 
     override fun match(element: FilteredMessageWrapper): Boolean {
-        return element.message.messageBody?.let { messageBody ->
+        return element.message.parsedMessageGroup?.let { messageBody ->
             messageBody.forEachIndexed { index, bodyWrapper ->
                 predicate(bodyWrapper).also {
                     element.filteredBody[index] = element.filteredBody[index] && it

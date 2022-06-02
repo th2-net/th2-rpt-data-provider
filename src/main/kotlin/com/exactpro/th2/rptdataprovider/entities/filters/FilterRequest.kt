@@ -51,19 +51,14 @@ data class GrpcFilter(val filterName: String, val filter: Filter) : FilterReques
     }
 
     override fun isNegative(): Boolean {
-        return if (filter.hasNegative()) {
-            filter.negative.value
-        } else {
-            false
-        }
+        return filter.negative
     }
 
     override fun isConjunct(): Boolean {
-        // FIXME: temporary fix for the old grpc interface (0.4.0)
-        return false
+        return filter.conjunct
     }
 
     override fun getValues(): List<String>? {
-        return filter.valuesList
+        return filter.valueList
     }
 }
