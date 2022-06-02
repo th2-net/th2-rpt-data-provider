@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2022 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,10 @@
 
 package com.exactpro.th2.rptdataprovider
 
-
 import com.exactpro.cradle.CradleManager
-import com.exactpro.th2.common.grpc.MessageBatch
-import com.exactpro.th2.common.grpc.MessageGroup
 import com.exactpro.th2.common.grpc.MessageGroupBatch
-import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.schema.grpc.configuration.GrpcConfiguration
+import com.exactpro.th2.common.schema.grpc.router.GrpcRouter
 import com.exactpro.th2.common.schema.message.MessageRouter
 import com.exactpro.th2.rptdataprovider.cache.EventCache
 import com.exactpro.th2.rptdataprovider.cache.MessageCache
@@ -44,12 +41,14 @@ import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
 import com.exactpro.th2.rptdataprovider.server.ServerType
+import com.exactpro.th2.rptdataprovider.services.AbstractDecoderService
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
+import com.exactpro.th2.rptdataprovider.services.grpc.GrpcService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import io.ktor.http.*
+import io.ktor.http.CacheControl
 
 @Suppress("MemberVisibilityCanBePrivate")
 class Context(
@@ -68,6 +67,7 @@ class Context(
     val messageRouterRawBatch: MessageRouter<MessageGroupBatch>,
 
     val messageRouterParsedBatch: MessageRouter<MessageGroupBatch>,
+    grpcRouter: GrpcRouter,
     val grpcConfig: GrpcConfiguration,
 
     val cradleService: CradleService = CradleService(
@@ -75,11 +75,18 @@ class Context(
         cradleManager
     ),
 
-    val rabbitMqService: RabbitMqService = RabbitMqService(
-        configuration,
-        messageRouterParsedBatch,
-        messageRouterRawBatch
-    ),
+    val decoderService: AbstractDecoderService = if (configuration.codecUseGrpc.value.toBoolean()) {
+        GrpcService(
+            configuration,
+            grpcRouter
+        )
+    } else {
+        RabbitMqService(
+            configuration,
+            messageRouterParsedBatch,
+            messageRouterRawBatch
+        )
+    },
 
     val eventProducer: EventProducer = EventProducer(cradleService, jacksonMapper),
 
@@ -87,7 +94,7 @@ class Context(
 
     val messageProducer: MessageProducer = MessageProducer(
         cradleService,
-        rabbitMqService
+        decoderService
     ),
 
     val messageCache: MessageCache = MessageCache(configuration, messageProducer),

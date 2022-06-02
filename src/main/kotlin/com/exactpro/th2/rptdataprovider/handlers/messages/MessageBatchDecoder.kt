@@ -1,18 +1,15 @@
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
-import com.exactpro.th2.common.grpc.MessageGroupBatch
-import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineCodecRequest
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineDecodedBatch
-import com.exactpro.th2.rptdataprovider.entities.internal.ProtoProtocolInfo
 import com.exactpro.th2.rptdataprovider.entities.internal.ProtoProtocolInfo.getProtocolField
 import com.exactpro.th2.rptdataprovider.entities.internal.ProtoProtocolInfo.isImage
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
-import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchResponse
+import com.exactpro.th2.rptdataprovider.services.CodecBatchResponse
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.isActive
@@ -49,8 +46,6 @@ class MessageBatchDecoder(
         messageFlowCapacity,
         pipelineStatus
     )
-
-
 
     companion object {
         private val logger = KotlinLogging.logger { }
@@ -93,7 +88,7 @@ class MessageBatchDecoder(
                     pipelineMessage.also {
                         it.info.startParseMessage = System.currentTimeMillis()
                     },
-                    context.rabbitMqService.sendToCodec(pipelineMessage.codecRequest),
+                    context.decoderService.sendToCodec(pipelineMessage.codecRequest),
                     protocol
                 )
                 pipelineStatus.decodeEnd(

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2022 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  ******************************************************************************/
+
 package com.exactpro.th2.rptdataprovider
 
 import com.exactpro.th2.common.metrics.liveness
@@ -25,8 +26,8 @@ import com.exactpro.th2.rptdataprovider.server.HttpServer
 import com.exactpro.th2.rptdataprovider.server.ServerType
 import com.exactpro.th2.rptdataprovider.server.ServerType.GRPC
 import com.exactpro.th2.rptdataprovider.server.ServerType.HTTP
-import io.ktor.server.engine.*
-import io.ktor.util.*
+import io.ktor.server.engine.EngineAPI
+import io.ktor.util.InternalAPI
 import kotlinx.atomicfu.locks.ReentrantLock
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -62,25 +63,18 @@ class Main {
         val configuration =
             Configuration(configurationFactory.getCustomConfiguration(CustomConfigurationClass::class.java))
 
-
         context = Context(
             configuration,
-
             serverType = ServerType.valueOf(configuration.serverType.value),
-
             cradleManager = configurationFactory.cradleManager.also {
                 resources += AutoCloseable { it.dispose() }
             },
-            messageRouterRawBatch = configurationFactory.messageRouterMessageGroupBatch.also {
-                resources += it
-            },
-            messageRouterParsedBatch = configurationFactory.messageRouterMessageGroupBatch.also {
-                resources += it
-            },
+            messageRouterRawBatch = configurationFactory.messageRouterMessageGroupBatch.also { resources += it },
+            messageRouterParsedBatch = configurationFactory.messageRouterMessageGroupBatch.also { resources += it },
+            grpcRouter = configurationFactory.grpcRouter.also { resources += it },
             grpcConfig = configurationFactory.grpcConfiguration
         )
     }
-
 
     @InternalCoroutinesApi
     @ExperimentalCoroutinesApi

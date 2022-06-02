@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2022 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,16 +26,16 @@ import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.entities.internal.ProtoProtocolInfo.getProtocolField
 import com.exactpro.th2.rptdataprovider.entities.internal.ProtoProtocolInfo.isImage
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
+import com.exactpro.th2.rptdataprovider.services.AbstractDecoderService
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
-import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchRequest
-import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
+import com.exactpro.th2.rptdataprovider.services.CodecBatchRequest
 import mu.KotlinLogging
 import kotlin.system.measureTimeMillis
 
 class MessageProducer(
     private val cradle: CradleService,
-    private val rabbitMqService: RabbitMqService
+    private val decoderService: AbstractDecoderService
 ) {
 
     companion object {
@@ -70,7 +70,7 @@ class MessageProducer(
             measureTimeMillis {
                 val protocol = getProtocolField(content!!)
                 val decoded = if (!isImage(protocol)) {
-                    rabbitMqService.sendToCodec(
+                    decoderService.sendToCodec(
                         CodecBatchRequest(content!!, "single_request")
                     )
                         .protobufParsedMessageBatch
@@ -90,4 +90,3 @@ class MessageProducer(
             ?: throw CradleMessageNotFoundException("message '${id}' does not exist in cradle")
     }
 }
-

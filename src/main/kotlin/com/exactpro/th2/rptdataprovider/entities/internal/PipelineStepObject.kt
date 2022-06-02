@@ -1,5 +1,5 @@
 ﻿/*******************************************************************************
- * Copyright 2021-2021 Exactpro (Exactpro Systems Limited)
+ * Copyright 2021-2022 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@ package com.exactpro.th2.rptdataprovider.entities.internal
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.entities.responses.StoredMessageBatchWrapper
-import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchRequest
-import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchResponse
+import com.exactpro.th2.rptdataprovider.services.CodecBatchRequest
+import com.exactpro.th2.rptdataprovider.services.CodecBatchResponse
 import java.time.Instant
 import kotlin.math.max
 

@@ -15,7 +15,7 @@ import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
-import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchRequest
+import com.exactpro.th2.rptdataprovider.services.CodecBatchRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch

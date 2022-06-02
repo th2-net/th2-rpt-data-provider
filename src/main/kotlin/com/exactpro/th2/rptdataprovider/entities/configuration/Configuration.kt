@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2022 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -53,6 +53,7 @@ class CustomConfigurationClass {
     val codecCallbackThreadPool: Int = 4
     val codecRequestThreadPool: Int = 1
     val codecUsePinAttributes: Boolean = true
+    val codecUseGrpc: Boolean = false
 
     val grpcWriterMessageBuffer: Int = 100
 
@@ -196,4 +197,7 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
 
     val grpcThreadPoolSize: Variable =
         Variable("grpcThreadPoolSize", customConfiguration.grpcThreadPoolSize.toString(), "20")
+
+    val codecUseGrpc: Variable =
+        Variable("codecUseGrpc", customConfiguration.codecUseGrpc.toString(), "false")
 }
