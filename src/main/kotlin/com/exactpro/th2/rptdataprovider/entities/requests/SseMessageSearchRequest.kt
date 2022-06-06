@@ -171,13 +171,10 @@ data class SseMessageSearchRequest(
 
         val mapStreams = stream.associateWith { mutableListOf<MessageStreamPointer>() }
         resumeFromIdsList.forEach { mapStreams[it.messageStream]?.add(it) }
-        mapStreams.forEach {
-            val messageDirectionList = it.value.map { streamPointer -> streamPointer.messageStream.direction }
 
-            if (!messageDirectionList.containsAll(Direction.values().toList())) {
-                throw InvalidRequestException("ResumeId was not passed for the stream: ${it.key}")
-            } else if (messageDirectionList.size > 2) {
-                throw InvalidRequestException("Stream ${it.key} has more than two id")
+        mapStreams.forEach { (streamName, ids) ->
+            if (ids.isEmpty() || ids.size > 1) {
+                throw InvalidRequestException("One id must be passed for a stream '${streamName}'. Passed id is: '${ids.map { it.messageStream }}'")
             }
         }
     }
