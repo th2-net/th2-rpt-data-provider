@@ -116,9 +116,9 @@ class StreamMerger(
     private fun timestampInRange(pipelineStepObject: PipelineStepObject): Boolean {
         return pipelineStepObject.lastScannedTime.let { timestamp ->
             if (searchRequest.searchDirection == TimeRelation.AFTER) {
-                searchRequest.endTimestamp == null || (timestamp.isBeforeOrEqual(searchRequest.endTimestamp))
+                searchRequest.endTimestamp == null || timestamp.isBeforeOrEqual(searchRequest.endTimestamp)
             } else {
-                searchRequest.endTimestamp == null || (timestamp.isAfterOrEqual(searchRequest.endTimestamp))
+                searchRequest.endTimestamp == null || timestamp.isAfterOrEqual(searchRequest.endTimestamp)
             }
         }
     }
@@ -262,6 +262,7 @@ class StreamMerger(
             }
         }
     }
+
 
     fun getStreamsInfo(): List<MessageStreamPointer> {
         return messageStreams.map {

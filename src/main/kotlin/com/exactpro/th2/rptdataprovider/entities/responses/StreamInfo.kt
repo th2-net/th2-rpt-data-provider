@@ -31,7 +31,6 @@ import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
 import com.fasterxml.jackson.annotation.JsonIgnore
 import mu.KotlinLogging
 
-
 data class EventStreamPointer(
     val hasStarted: Boolean,
     val hasEnded: Boolean,
@@ -60,8 +59,16 @@ data class MessageStreamPointer(
     @JsonIgnore
     val lastMessageId: StoredMessageId? = null
 ) {
-    
-    val lastId = lastMessageId?.toString()
+
+    @JsonIgnore
+    private val lastMessage = lastMessageId ?: let {
+        // set sequence to a negative value if stream has not started to avoid mistaking it for the default value
+        // FIXME change interface to make that case explicit
+        logger.trace { "lastElement is null - StreamInfo should be build as if the stream $messageStream has no messages" }
+        StoredMessageId(messageStream.name, messageStream.direction, -1)
+    }
+
+    val lastId = lastMessage.toString()
 
     companion object {
         val logger = KotlinLogging.logger { }
@@ -88,20 +95,10 @@ data class MessageStreamPointer(
             .setHasStarted(hasStarted)
             .setHasEnded(hasEnded)
             .setLastId(
-                lastMessageId?.let {
+
+                lastMessage.let {
                     logger.trace { "stream $messageStream - lastElement is ${it.index}" }
                     it.convertToProto()
-                } ?: let {
-                    // set sequence to a negative value if stream has not started to avoid mistaking it for the default value
-                    // FIXME change interface to make that case explicit
-                    logger.trace { "lastElement is null - StreamInfo should be build as if the stream $messageStream has no messages" }
-
-                    MessageID
-                        .newBuilder()
-                        .setSequence(-1)
-                        .setDirection(cradleDirectionToGrpc(messageStream.direction))
-                        .setConnectionId(ConnectionID.newBuilder().setSessionAlias(messageStream.name).build())
-                        .build()
                 }
             )
             .build()
