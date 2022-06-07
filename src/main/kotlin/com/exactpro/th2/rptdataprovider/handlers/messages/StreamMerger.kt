@@ -61,11 +61,12 @@ class StreamMerger(
                 .register()
         }
 
-        private val streamName = messageStream.streamName.toString()
+        private val streamName = messageStream.streamName?.toString()
         private val labelMetric = pullFromStream.labels(streamName)
 
         var currentElement: PipelineStepObject? = null
             private set
+
         var previousElement: PipelineStepObject? = null
             private set
 
@@ -100,6 +101,24 @@ class StreamMerger(
                 it.value
             }
         }
+
+        private fun needSearchResumeId(): Boolean {
+            return currentElement?.let {
+                it is EmptyPipelineObject && !it.streamEmpty
+            } ?: true
+        }
+
+        suspend fun getStreamInfo(): StreamInfo {
+            while (needSearchResumeId()) {
+                pop()
+            }
+            val streamName = messageStream.streamName!!
+            return if (currentElement != null && currentElement!!.streamEmpty) {
+                StreamInfo(streamName, null)
+            } else {
+                StreamInfo(streamName, currentElement?.lastProcessedId)
+            }
+        }
     }
 
     private val messageStreams = pipelineStreams.map { StreamHolder(it) }
@@ -115,9 +134,9 @@ class StreamMerger(
     private fun timestampInRange(pipelineStepObject: PipelineStepObject): Boolean {
         return pipelineStepObject.lastScannedTime.let { timestamp ->
             if (searchRequest.searchDirection == TimeRelation.AFTER) {
-                searchRequest.endTimestamp == null || (timestamp.isBeforeOrEqual(searchRequest.endTimestamp))
+                searchRequest.endTimestamp == null || timestamp.isBeforeOrEqual(searchRequest.endTimestamp)
             } else {
-                searchRequest.endTimestamp == null || (timestamp.isAfterOrEqual(searchRequest.endTimestamp))
+                searchRequest.endTimestamp == null || timestamp.isAfterOrEqual(searchRequest.endTimestamp)
             }
         }
     }
@@ -266,18 +285,7 @@ class StreamMerger(
         }
     }
 
-    fun getStreamsInfo(): List<StreamInfo> {
-        return messageStreams.map {
-            val storedMessageId = if (it.currentElement != null && it.currentElement?.streamEmpty!!) {
-                StoredMessageId(it.messageStream.streamName?.name, it.messageStream.streamName!!.direction, -1)
-            } else {
-                it.currentElement?.lastProcessedId
-            }
-
-            StreamInfo(
-                it.messageStream.streamName!!,
-                storedMessageId
-            )
-        }
+    suspend fun getStreamsInfo(): List<StreamInfo> {
+        return messageStreams.map { it.getStreamInfo() }
     }
 }
