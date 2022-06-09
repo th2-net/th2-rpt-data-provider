@@ -16,11 +16,12 @@
 
 package handlers.messages
 
+
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.messages.MessageToStore
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageBatch
-import com.exactpro.cradle.messages.StoredMessageFilter
+import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
@@ -33,38 +34,75 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
-import kotlinx.coroutines.*
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.channels.Channel
-import org.junit.jupiter.api.Assertions.*
-import org.junit.jupiter.api.BeforeAll
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Assertions.assertArrayEquals
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
-import java.sql.Timestamp
-
-
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.Arguments
+import org.junit.jupiter.params.provider.MethodSource
 import java.time.Instant
 import java.time.temporal.ChronoUnit
-import java.time.temporal.TemporalUnit
-import java.util.Collections
-import java.util.Random
-import kotlin.math.min
+import java.util.concurrent.atomic.AtomicLong
+import kotlin.random.Random
+
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ExtractorTest {
-
-    private lateinit var context: Context
-    private lateinit var batch: StoredMessageBatch
 
     private val messagesInChunk = 10
     private val chunkCount = 3
     private val batchSize = messagesInChunk * chunkCount
 
-    private fun getMessage(streamName: String, timestamp: Instant): MessageToStore {
+    private val baseStreamName = "test_stream"
+    private val streamDirection = "first"
+    private val fullStreamName = "${baseStreamName}:${streamDirection}"
+    private val streamNameObject = StreamName(baseStreamName, Direction.byLabel(streamDirection))
+    private val direction = "next"
+
+    inner class BorderTestParameters(
+        val startTimestamp: Instant,
+        val endTimestamp: Instant,
+        val batchStartTimestamp: Instant,
+        val batchEndTimestamp: Instant,
+        val resultSize: Int,
+        val resultIndexes: List<Long>,
+        id: Long? = null
+    ) {
+        val resumeId = id?.let { StoredMessageId(streamNameObject.name, streamNameObject.direction, it) }
+    }
+
+    private fun getSearchRequest(
+        startTimestamp: Instant,
+        endTimestamp: Instant,
+        resumeId: StoredMessageId? = null
+    ): SseMessageSearchRequest {
+        val parameters = mutableMapOf(
+            "stream" to listOf(fullStreamName),
+            "direction" to listOf(direction),
+            "startTimestamp" to listOf(startTimestamp.toEpochMilli().toString()),
+            "endTimestamp" to listOf(endTimestamp.toEpochMilli().toString())
+        )
+        if (resumeId != null) {
+            parameters["messageId"] = listOf(resumeId.toString())
+        }
+        return SseMessageSearchRequest(parameters, FilterPredicate(emptyList()))
+    }
+
+    private fun getMessage(timestamp: Instant, globalIndex: AtomicLong? = null): MessageToStore {
         val msg = mockk<MessageToStore>()
 
         every { msg.timestamp } answers { timestamp }
-
-        every { msg.streamName } answers { streamName }
+        if (globalIndex != null) {
+            val index = globalIndex.getAndIncrement()
+            every { msg.index } answers { index }
+        }
+        every { msg.streamName } answers { fullStreamName }
         every { msg.direction } answers { Direction.FIRST }
         every { msg.getContent() } answers { byteArrayOf(1, 1, 1) }
         every { msg.metadata } answers { null }
@@ -72,32 +110,58 @@ class ExtractorTest {
         return msg
     }
 
-    private fun getMessages(streamName: String, startTimestamp: Instant, endTimestamp: Instant): List<MessageToStore> {
-        return mutableListOf<MessageToStore>().apply {
-            add(getMessage(streamName, startTimestamp))
-            repeat(messagesInChunk - 2) {
-                val diff = kotlin.random.Random.nextLong(
-                    startTimestamp.toEpochMilli() + 1000,
-                    endTimestamp.toEpochMilli() - 1000
-                )
-                add(getMessage(streamName, Instant.ofEpochMilli(diff)))
+    private fun mockContextWithCradleService(batch: StoredMessageBatch): Context {
+        val context: Context = mockk()
+
+        every { context.configuration.sendEmptyDelay.value } answers { "10" }
+        every { context.configuration.sendPipelineStatus.value } answers { "false" }
+
+        val cradle = mockk<CradleService>()
+
+        coEvery { cradle.getMessagesBatchesSuspend(any()) } answers {
+            runBlocking {
+                Channel<StoredMessageBatch>(1).also {
+                    GlobalScope.launch {
+                        it.send(batch)
+                        it.close()
+                    }
+                }
             }
-            add(getMessage(streamName, endTimestamp))
+        }
+
+        every { context.cradleService } answers { cradle }
+
+        return context
+    }
+
+    private fun getTimestampBetween(startTimestamp: Instant, endTimestamp: Instant): Instant {
+        val diff = Random.nextLong(startTimestamp.toEpochMilli() + 10, endTimestamp.toEpochMilli() - 10)
+        return Instant.ofEpochMilli(diff)
+    }
+
+    private fun getMessages(startTimestamp: Instant, endTimestamp: Instant): List<MessageToStore> {
+        return mutableListOf<MessageToStore>().apply {
+            add(getMessage(startTimestamp))
+
+            repeat(messagesInChunk - 2) {
+                add(getMessage(getTimestampBetween(startTimestamp, endTimestamp)))
+            }
+
+            add(getMessage(endTimestamp))
         }.let { list ->
             list.sortedBy { it.timestamp }
         }
     }
 
-    private fun getBatch(streamName: String): StoredMessageBatch {
+    private fun chunkedBatch(start: Instant): StoredMessageBatch {
         var index = 1L
-        var startTimestamp = Instant.parse("2022-04-21T10:00:00Z")
+        var startTimestamp = start
 
         return StoredMessageBatch().also { batch ->
             repeat(chunkCount) {
-
                 val endTimestamp = startTimestamp.plus(1, ChronoUnit.HOURS)
 
-                val messages = getMessages(streamName, startTimestamp, endTimestamp)
+                val messages = getMessages(startTimestamp, endTimestamp)
 
                 messages.forEach { msg ->
                     every { msg.index } answers { index++ }
@@ -108,45 +172,14 @@ class ExtractorTest {
         }
     }
 
-    @BeforeAll
-    fun prepareExtractor() {
-        context = mockk()
-        every { context.configuration.sendEmptyDelay.value } answers { "1000" }
-        every { context.configuration.sendPipelineStatus.value } answers { "false" }
-
-        val cradle = mockk<CradleService>()
-
-        coEvery { cradle.getMessagesBatchesSuspend(any()) } answers {
-            runBlocking {
-                Channel<StoredMessageBatch>(1).also {
-                    GlobalScope.launch {
-                        batch = getBatch("test_stream")
-                        it.send(batch)
-                        it.close()
-                    }
-                }
-            }
-        }
-
-        every { context.cradleService } answers { cradle }
-    }
-
-    private fun getSearchRequest(startTimestamp: Instant, endTimestamp: Instant): SseMessageSearchRequest {
-        val parameters = mapOf(
-            "stream" to listOf("test_stream:first"),
-            "direction" to listOf("next"),
-            "startTimestamp" to listOf(startTimestamp.toEpochMilli().toString()),
-            "endTimestamp" to listOf(endTimestamp.toEpochMilli().toString())
-        )
-        return SseMessageSearchRequest(parameters, FilterPredicate(emptyList()))
-    }
 
     @Test
     fun `extractByIntervals`() {
-
-        val streamName = StreamName("test_stream", Direction.FIRST)
-
         var startTimestamp = Instant.parse("2022-04-21T10:00:00Z")
+
+        val batch = chunkedBatch(startTimestamp)
+
+        val context = mockContextWithCradleService(batch)
 
         var count = 0
 
@@ -155,10 +188,7 @@ class ExtractorTest {
                 val endTimestamp = startTimestamp.plus(1, ChronoUnit.HOURS)
                 val request = getSearchRequest(startTimestamp, endTimestamp)
 
-                val extractor = MessageExtractor(
-                    context, request, streamName,
-                    this, 1, PipelineStatus(context)
-                )
+                val extractor = MessageExtractor(context, request, streamNameObject, this, 1, PipelineStatus(context))
 
                 var messages: Collection<StoredMessage> = emptyList()
 
@@ -188,5 +218,83 @@ class ExtractorTest {
             coroutineContext.cancelChildren()
             assertEquals(batchSize, count)
         }
+    }
+
+    private fun getOutOfStartBatch(startTimestamp: Instant, endTimestamp: Instant): StoredMessageBatch {
+        return StoredMessageBatch().also {
+            val index = AtomicLong(1L)
+
+            it.addMessage(getMessage(startTimestamp, index))
+
+            val pivot = getTimestampBetween(startTimestamp, endTimestamp)
+            it.addMessage(getMessage(pivot, index))
+
+            it.addMessage(getMessage(endTimestamp, index))
+        }
+    }
+
+    private fun testBorders(
+        startTimestamp: Instant,
+        endTimestamp: Instant,
+        batchStartTimestamp: Instant,
+        batchEndTimestamp: Instant,
+        resumeId: StoredMessageId? = null
+    ): List<StoredMessage> {
+
+        val batch = getOutOfStartBatch(batchStartTimestamp, batchEndTimestamp)
+        val context = mockContextWithCradleService(batch)
+
+        val resultMessages = mutableListOf<StoredMessage>()
+
+        runBlocking {
+            val request = getSearchRequest(startTimestamp, endTimestamp, resumeId)
+
+            val extractor = MessageExtractor(context, request, streamNameObject, this, 1, PipelineStatus(context))
+
+            do {
+                val message = extractor.pollMessage()
+                if (message is PipelineRawBatch) {
+                    resultMessages.addAll(message.storedBatchWrapper.trimmedMessages)
+                }
+            } while (!message.streamEmpty)
+
+            coroutineContext.cancelChildren()
+        }
+
+        return resultMessages
+    }
+
+
+    private fun provideExtractorCase(): Iterable<Arguments> {
+        val start = Instant.parse("2022-04-21T00:00:00Z")
+        val end = Instant.parse("2022-04-21T01:00:00Z")
+        return listOf(
+            BorderTestParameters(start, end, start, end, 2, listOf(1L, 2L)),
+            BorderTestParameters(start, end.plusMillis(1), start, end, 3, listOf(1L, 2L, 3L)),
+            BorderTestParameters(start.plusMillis(1), end, start, end, 1, listOf(2L)),
+            BorderTestParameters(start, end, start, end, 2, listOf(1L, 2L), id = 1),
+            BorderTestParameters(start, end, start, end, 1, listOf(2L), id = 2),
+            BorderTestParameters(start, end.plusMillis(1), start, end, 2, listOf(2L, 3L), id = 2)
+        ).map { Arguments { listOf(it).toTypedArray() } }
+    }
+
+
+    @ParameterizedTest
+    @MethodSource("provideExtractorCase")
+    fun `bordersTest`(testParameters: BorderTestParameters) {
+
+        val resultMessages = testBorders(
+            testParameters.startTimestamp,
+            testParameters.endTimestamp,
+            testParameters.batchStartTimestamp,
+            testParameters.batchEndTimestamp,
+            testParameters.resumeId
+        )
+
+        assertEquals(testParameters.resultSize, resultMessages.size)
+        assertArrayEquals(
+            testParameters.resultIndexes.toTypedArray(),
+            resultMessages.map { it.index }.toTypedArray()
+        )
     }
 }
