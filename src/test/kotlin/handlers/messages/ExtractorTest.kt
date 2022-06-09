@@ -114,7 +114,6 @@ class ExtractorTest {
         val context: Context = mockk()
 
         every { context.configuration.sendEmptyDelay.value } answers { "10" }
-        every { context.configuration.sendPipelineStatus.value } answers { "false" }
 
         val cradle = mockk<CradleService>()
 

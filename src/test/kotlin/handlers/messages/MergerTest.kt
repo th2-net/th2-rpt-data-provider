@@ -109,7 +109,6 @@ class MergerTest {
         val context: Context = mockk()
 
         every { context.configuration.sendEmptyDelay.value } answers { "1000" }
-        every { context.configuration.sendPipelineStatus.value } answers { "false" }
         every { context.keepAliveTimeout } answers { 200 }
 
         return context
