@@ -17,20 +17,21 @@
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.cradle.TimeRelation
-import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.rptdataprovider.Context
-import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidInitializationException
-import com.exactpro.th2.rptdataprovider.entities.internal.*
+import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineKeepAlive
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepObject
+import com.exactpro.th2.rptdataprovider.entities.internal.StreamEndObject
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
+import com.exactpro.th2.rptdataprovider.handlers.messages.helpers.MultipleStreamHolder
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
-import io.prometheus.client.Histogram
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
 import mu.KotlinLogging
 import java.time.Instant
 import kotlin.time.ExperimentalTime
@@ -50,83 +51,14 @@ class StreamMerger(
         private val logger = KotlinLogging.logger { }
     }
 
-    private class StreamHolder(val messageStream: PipelineComponent) {
+    private val messageStreams = MultipleStreamHolder(pipelineStreams)
 
-        companion object {
-            private val logger = KotlinLogging.logger { }
-            private val pullFromStream = Histogram.build(
-                "th2_stream_pull_time", "Time of stream pull"
-            ).buckets(.0001, .0005, .001, .005, .01)
-                .labelNames("stream")
-                .register()
-        }
-
-        private val streamName = messageStream.streamName?.toString()
-        private val labelMetric = pullFromStream.labels(streamName)
-
-        var currentElement: PipelineStepObject? = null
-            private set
-
-        var previousElement: PipelineStepObject? = null
-            private set
-
-        fun top(): PipelineStepObject {
-            return currentElement!!
-        }
-
-        suspend fun init() {
-            messageStream.pollMessage().let {
-                if (previousElement == null && currentElement == null) {
-                    currentElement = it
-                } else {
-                    throw InvalidInitializationException("StreamHolder ${messageStream.streamName} already initialized")
-                }
-            }
-        }
-
-        @OptIn(ExperimentalTime::class)
-        suspend fun pop(): PipelineStepObject {
-            return measureTimedValue {
-                messageStream.pollMessage().let { newElement ->
-                    val currentElementTemporary = currentElement
-
-                    currentElementTemporary?.also {
-                        previousElement = currentElement
-                        currentElement = newElement
-                    }
-                        ?: throw InvalidInitializationException("StreamHolder ${messageStream.streamName} need initialization")
-                }
-            }.let {
-                labelMetric.observe(it.duration.inSeconds)
-                it.value
-            }
-        }
-
-        private fun needSearchResumeId(): Boolean {
-            return currentElement?.let {
-                it is EmptyPipelineObject && !it.streamEmpty
-            } ?: true
-        }
-
-        suspend fun getStreamInfo(): StreamInfo {
-            while (needSearchResumeId()) {
-                pop()
-            }
-            val streamName = messageStream.streamName!!
-            return if (currentElement != null && currentElement!!.streamEmpty) {
-                StreamInfo(streamName, null)
-            } else {
-                StreamInfo(streamName, currentElement?.lastProcessedId)
-            }
-        }
-    }
-
-    private val messageStreams = pipelineStreams.map { StreamHolder(it) }
-    private var allStreamIsEmpty: Boolean = false
     private var resultCountLimit = searchRequest.resultCountLimit
 
+    private val processJob: Job
+
     init {
-        externalScope.launch {
+        processJob = externalScope.launch {
             processMessage()
         }
     }
@@ -141,7 +73,6 @@ class StreamMerger(
         }
     }
 
-
     private fun inTimeRange(pipelineStepObject: PipelineStepObject): Boolean {
         return if (pipelineStepObject !is EmptyPipelineObject) {
             timestampInRange(pipelineStepObject)
@@ -150,31 +81,10 @@ class StreamMerger(
         }
     }
 
-
-    private fun getLastScannedObject(): PipelineStepObject? {
-        return if (searchRequest.searchDirection == TimeRelation.AFTER) {
-            messageStreams
-                .maxBy { it.currentElement?.lastScannedTime ?: Instant.MIN }
-                ?.previousElement
-        } else {
-            messageStreams
-                .minBy { it.currentElement?.lastScannedTime ?: Instant.MIN }
-                ?.previousElement
-        }
-    }
-
-
-    private fun getScannedObjectCount(): Long {
-        return messageStreams
-            .map { it.messageStream.processedMessageCount }
-            .reduceRight { acc, value -> acc + value }
-    }
-
-
     private suspend fun keepAliveGenerator(coroutineScope: CoroutineScope) {
         while (coroutineScope.isActive) {
-            val scannedObjectCount = getScannedObjectCount()
-            val lastScannedObject = getLastScannedObject()
+            val scannedObjectCount = messageStreams.getScannedObjectCount()
+            val lastScannedObject = messageStreams.getLastScannedObject(searchRequest.searchDirection)
 
             if (lastScannedObject != null) {
                 sendToChannel(PipelineKeepAlive(lastScannedObject, scannedObjectCount))
@@ -189,9 +99,9 @@ class StreamMerger(
     override suspend fun processMessage() {
         coroutineScope {
 
-            launch { keepAliveGenerator(this@coroutineScope) }
+            val job = launch { keepAliveGenerator(this@coroutineScope) }
 
-            messageStreams.forEach { it.init() }
+            messageStreams.init()
 
             do {
                 val nextMessage = measureTimedValue {
@@ -220,60 +130,37 @@ class StreamMerger(
                         }
                     }
                 }
-            } while (!allStreamIsEmpty && (resultCountLimit?.let { it > 0 } != false) && inTimeRange)
+            } while (!messageStreams.isAllStreamEmpty() && (resultCountLimit?.let { it > 0 } != false) && inTimeRange)
 
             sendToChannel(StreamEndObject(false, null, Instant.ofEpochMilli(0)))
             logger.debug { "StreamEndObject has been sent" }
+            job.cancelAndJoin()
         }
     }
-
-    private fun isStreamEmpty(streamsEmpty: Boolean, messageStream: StreamHolder): Boolean {
-        return streamsEmpty && messageStream.top().streamEmpty && messageStream.top() is EmptyPipelineObject
-    }
-
-    private suspend fun selectMessage(comparator: (PipelineStepObject, PipelineStepObject) -> Boolean): PipelineStepObject {
-        return coroutineScope {
-            var resultElement: StreamHolder = messageStreams.first()
-            var streamsEmpty = true
-            for (messageStream in messageStreams) {
-                streamsEmpty = isStreamEmpty(streamsEmpty, messageStream)
-                if (comparator(messageStream.top(), resultElement.top())) {
-                    resultElement = messageStream
-                }
-            }
-            allStreamIsEmpty = streamsEmpty
-            resultElement.pop()
-        }
-    }
-
 
     private fun isLess(firstMessage: PipelineStepObject, secondMessage: PipelineStepObject): Boolean {
         return firstMessage.lastScannedTime.isBefore(secondMessage.lastScannedTime)
     }
 
-
     private fun isGreater(firstMessage: PipelineStepObject, secondMessage: PipelineStepObject): Boolean {
         return firstMessage.lastScannedTime.isAfter(secondMessage.lastScannedTime)
     }
-
 
     private suspend fun getNextMessage(): PipelineStepObject {
         return coroutineScope {
 
             val streams =
                 if (logger.isTraceEnabled)
-                    messageStreams.joinToString(", ") {
-                        "${it.top().lastProcessedId} - ${it.top().lastScannedTime}"
-                    }
+                    messageStreams.getLoggingStreamInfo()
                 else null
 
             let {
                 if (searchRequest.searchDirection == TimeRelation.AFTER) {
-                    selectMessage { new, old ->
+                    messageStreams.selectMessage { new, old ->
                         isLess(new, old)
                     }
                 } else {
-                    selectMessage { new, old ->
+                    messageStreams.selectMessage { new, old ->
                         isGreater(new, old)
                     }
                 }
@@ -286,6 +173,7 @@ class StreamMerger(
     }
 
     suspend fun getStreamsInfo(): List<StreamInfo> {
-        return messageStreams.map { it.getStreamInfo() }
+        processJob.join()
+        return messageStreams.getStreamsInfo()
     }
 }
