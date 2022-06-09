@@ -19,7 +19,6 @@ package handlers.messages
 
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.messages.MessageToStore
-import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
@@ -32,10 +31,11 @@ import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.handlers.messages.StreamMerger
 import io.mockk.every
 import io.mockk.mockk
-import kotlinx.coroutines.*
-import org.junit.jupiter.api.Assertions
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertArrayEquals
-import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
@@ -46,10 +46,6 @@ import java.util.concurrent.atomic.AtomicLong
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class MergerTest {
-
-    private val messagesInChunk = 10
-    private val chunkCount = 3
-    private val batchSize = messagesInChunk * chunkCount
 
     private val baseStreamName = "test_stream"
 
@@ -86,25 +82,7 @@ class MergerTest {
         }
         return SseMessageSearchRequest(parameters, FilterPredicate(emptyList()))
     }
-
-    private fun getMessage(
-        timestamp: Instant, fullStreamName: String, globalIndex: AtomicLong? = null
-    ): MessageToStore {
-        val msg = mockk<MessageToStore>()
-
-        every { msg.timestamp } answers { timestamp }
-        if (globalIndex != null) {
-            val index = globalIndex.getAndIncrement()
-            every { msg.index } answers { index }
-        }
-        every { msg.streamName } answers { fullStreamName }
-        every { msg.direction } answers { Direction.FIRST }
-        every { msg.getContent() } answers { byteArrayOf(1, 1, 1) }
-        every { msg.metadata } answers { null }
-
-        return msg
-    }
-
+    
     private fun mockContextWithCradleService(): Context {
         val context: Context = mockk()
 
