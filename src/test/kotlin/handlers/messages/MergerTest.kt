@@ -47,10 +47,6 @@ import java.util.concurrent.atomic.AtomicLong
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class MergerTest {
 
-    private val messagesInChunk = 10
-    private val chunkCount = 3
-    private val batchSize = messagesInChunk * chunkCount
-
     private val baseStreamName = "test_stream"
 
     private val streamDirection = listOf("first", "second")
@@ -86,25 +82,7 @@ class MergerTest {
         }
         return SseMessageSearchRequest(parameters, FilterPredicate(emptyList()))
     }
-
-    private fun getMessage(
-        timestamp: Instant, fullStreamName: String, globalIndex: AtomicLong? = null
-    ): MessageToStore {
-        val msg = mockk<MessageToStore>()
-
-        every { msg.timestamp } answers { timestamp }
-        if (globalIndex != null) {
-            val index = globalIndex.getAndIncrement()
-            every { msg.index } answers { index }
-        }
-        every { msg.streamName } answers { fullStreamName }
-        every { msg.direction } answers { Direction.FIRST }
-        every { msg.getContent() } answers { byteArrayOf(1, 1, 1) }
-        every { msg.metadata } answers { null }
-
-        return msg
-    }
-
+    
     private fun mockContextWithCradleService(): Context {
         val context: Context = mockk()
 
