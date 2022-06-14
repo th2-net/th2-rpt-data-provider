@@ -103,7 +103,7 @@ distTar {
 }
 
 test {
-    useJUnitPlatform()
+    useJUnitPlatform() 
 }
 
 dockerPrepare {
