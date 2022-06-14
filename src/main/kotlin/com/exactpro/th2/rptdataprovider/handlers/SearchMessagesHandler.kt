@@ -157,8 +157,7 @@ class SearchMessagesHandler(private val applicationContext: Context) {
                             listPair.add(Pair(trimmedMessage.id, it.streamEmpty))
                         }
                     } else if (listPair.size < 2 && it.streamEmpty) {
-                        val name = messageExtractor.streamName!!
-                        listPair.add(Pair(StoredMessageId(name.name, name.direction, -1), it.streamEmpty))
+                        listPair.add(Pair(null, it.streamEmpty))
                     }
                 }
             } while (listPair.size < 2)
