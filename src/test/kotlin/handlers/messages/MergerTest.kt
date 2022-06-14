@@ -239,10 +239,10 @@ class MergerTest {
                 }
             } while (message !is StreamEndObject)
 
-//            assertArrayEquals(
-//                testCase.streamInfo.map { it.lastId }.toTypedArray(),
-//                streamMerger.getStreamsInfo().map { it.lastId }.toTypedArray()
-//            )
+            assertArrayEquals(
+                testCase.streamInfo.map { it.lastId }.toTypedArray(),
+                streamMerger.getStreamsInfo().map { it.lastId }.toTypedArray()
+            )
             assertArrayEquals(
                 testCase.streamInfo.map { it.hasEnded }.toTypedArray(),
                 streamMerger.getStreamsInfo().map { it.hasEnded }.toTypedArray()

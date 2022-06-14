@@ -61,11 +61,15 @@ data class MessageStreamPointer(
 ) {
 
     @JsonIgnore
-    private val lastMessage = lastMessageId ?: let {
-        // set sequence to a negative value if stream has not started to avoid mistaking it for the default value
-        // FIXME change interface to make that case explicit
-        logger.trace { "lastElement is null - StreamInfo should be build as if the stream $messageStream has no messages" }
-        StoredMessageId(messageStream.name, messageStream.direction, -1)
+    private val lastMessage = let {
+        if (lastMessageId == null || hasEnded) {
+            // set sequence to a negative value if stream has not started to avoid mistaking it for the default value
+            // FIXME change interface to make that case explicit
+            logger.trace { "lastElement is null - StreamInfo should be build as if the stream $messageStream has no messages" }
+            StoredMessageId(messageStream.name, messageStream.direction, -1)
+        } else {
+            lastMessageId
+        }
     }
 
     val lastId = lastMessage.toString()

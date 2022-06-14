@@ -36,30 +36,32 @@ class MultipleStreamHolder(pipelineComponents: List<PipelineComponent>) {
         return streamsEmpty && messageStream.top().streamEmpty && messageStream.top() is EmptyPipelineObject
     }
 
-    suspend fun getLastScannedObject(direction: TimeRelation): PipelineStepObject? {
-        return mutex.withLock {
-            if (direction == TimeRelation.AFTER) {
-                messageStreams
-                    .maxBy { it.currentElement?.lastScannedTime ?: Instant.MIN }
-                    ?.previousElement
-            } else {
-                messageStreams
-                    .minBy { it.currentElement?.lastScannedTime ?: Instant.MIN }
-                    ?.previousElement
-            }
+    fun getLastScannedObject(direction: TimeRelation): PipelineStepObject? {
+        return if (direction == TimeRelation.AFTER) {
+            messageStreams
+                .maxBy { it.currentElement?.lastScannedTime ?: Instant.MIN }
+                ?.previousElement
+        } else {
+            messageStreams
+                .minBy { it.currentElement?.lastScannedTime ?: Instant.MIN }
+                ?.previousElement
+        }
+    }
+
+    fun getScannedObjectCount(): Long {
+        return messageStreams
+            .map { it.messageStream.processedMessageCount }
+            .reduceRight { acc, value -> acc + value }
+    }
+
+    fun getLoggingStreamInfo(): String {
+        return messageStreams.joinToString(", ") {
+            "${it.top().lastProcessedId} - ${it.top().lastScannedTime}"
         }
     }
 
     suspend fun init() {
         messageStreams.forEach { it.init() }
-    }
-
-    suspend fun getScannedObjectCount(): Long {
-        return mutex.withLock {
-            messageStreams
-                .map { it.messageStream.processedMessageCount }
-                .reduceRight { acc, value -> acc + value }
-        }
     }
 
     suspend fun getStreamsInfo(): List<MessageStreamPointer> {
@@ -87,14 +89,6 @@ class MultipleStreamHolder(pipelineComponents: List<PipelineComponent>) {
                 streamsEmpty = isStreamEmpty(streamsEmpty, stream)
             }
             streamsEmpty
-        }
-    }
-
-    suspend fun getLoggingStreamInfo(): String {
-        return mutex.withLock {
-            messageStreams.joinToString(", ") {
-                "${it.top().lastProcessedId} - ${it.top().lastScannedTime}"
-            }
         }
     }
 }
