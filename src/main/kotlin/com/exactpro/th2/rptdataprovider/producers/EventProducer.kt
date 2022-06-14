@@ -20,6 +20,7 @@ import com.exactpro.cradle.testevents.StoredTestEventBatch
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventWithContent
+import com.exactpro.cradle.testevents.StoredTestEventWrapper
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType.NEED_ATTACHED_MESSAGES
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType.NEED_BODY
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
@@ -73,6 +74,15 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
                 batchedEvents[eventId]
             }
         }
+    }
+
+    suspend fun getEventWrapper(id: ProviderEventId): StoredTestEventWrapper {
+        val event = cradle.getEventSuspend(id.batchId ?: id.eventId)
+        if (event == null) {
+            logger.error { "unable to find event '${id.eventId}'" }
+            throw CradleEventNotFoundException("${id.eventId} is not a valid id")
+        }
+        return event
     }
 
     suspend fun fromId(id: ProviderEventId): BaseEventEntity {

@@ -19,8 +19,6 @@ package com.exactpro.th2.rptdataprovider.handlers
 
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.TimeRelation.AFTER
-
-import com.exactpro.cradle.TimeRelation.BEFORE
 import com.exactpro.cradle.testevents.StoredTestEventWrapper
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.*
@@ -156,7 +154,7 @@ class SearchEventsHandler(private val context: Context) {
                 val eventsCollection =
                     getEventsSuspend(request.parentEvent, timestampFrom, timestampTo)
                         .asSequence()
-                        .chunked(eventSearchChunkSize)
+                        .chunked(eventSearchChunkSize).toList()
                 for (event in eventsCollection)
                     emit(event)
             }
@@ -222,13 +220,13 @@ class SearchEventsHandler(private val context: Context) {
     }
 
     private suspend fun dropByTimestampFilter(
-        request: SseEventSearchRequest, resumeFromEvent: BaseEventEntity
+        searchDirection: TimeRelation, startTimestamp: Instant
     ): (BaseEventEntity) -> Boolean {
         return { event: BaseEventEntity ->
-            if (request.searchDirection == AFTER) {
-                event.startTimestamp.isBeforeOrEqual(resumeFromEvent.startTimestamp)
+            if (searchDirection == AFTER) {
+                event.startTimestamp.isBeforeOrEqual(startTimestamp)
             } else {
-                event.startTimestamp.isAfterOrEqual(resumeFromEvent.startTimestamp)
+                event.startTimestamp.isAfterOrEqual(startTimestamp)
             }
         }
     }
@@ -237,18 +235,19 @@ class SearchEventsHandler(private val context: Context) {
     @ExperimentalCoroutinesApi
     private suspend fun dropBeforeResumeId(
         eventFlow: Flow<BaseEventEntity>,
-        request: SseEventSearchRequest,
-        resumeFromEvent: BaseEventEntity
+        searchDirection: TimeRelation,
+        resumeEvent: BaseEventEntity
     ): Flow<BaseEventEntity> {
         return flow {
-            val dropByTimestamp = dropByTimestampFilter(request, resumeFromEvent)
+            val dropByTimestamp = dropByTimestampFilter(searchDirection, resumeEvent.startTimestamp)
+
             val head = mutableListOf<BaseEventEntity>()
             var headIsDropped = false
             eventFlow.collect {
                 if (!headIsDropped) {
                     when {
-                        dropByTimestamp(it) && it.id != resumeFromEvent.id -> head.add(it)
-                        it.id == resumeFromEvent.id -> headIsDropped = true
+                        dropByTimestamp(it) && it.id != resumeEvent.id -> head.add(it)
+                        it.id == resumeEvent.id -> headIsDropped = true
                         else -> {
                             emitAll(head.asFlow())
                             emit(it)
@@ -262,6 +261,11 @@ class SearchEventsHandler(private val context: Context) {
         }
     }
 
+    private suspend fun getResumeTime(resumeId: ProviderEventId?, request: SseEventSearchRequest): Instant {
+        return resumeId?.let {
+            eventProducer.getEventWrapper(it).startTimestamp
+        } ?: request.startTimestamp!!
+    }
 
     @ExperimentalCoroutinesApi
     @FlowPreview
@@ -272,10 +276,12 @@ class SearchEventsHandler(private val context: Context) {
             val lastEventId = AtomicLong(0)
             val scanCnt = AtomicLong(0)
 
-            val resumeFromEvent = request.resumeFromId?.let {
+            val resumeEvent = request.resumeFromId?.let {
                 eventProducer.fromId(ProviderEventId(it))
             }
-            val startTimestamp = resumeFromEvent?.startTimestamp ?: request.startTimestamp!!
+
+            val startTimestamp = getResumeTime(resumeEvent?.id, request)
+
             val timeIntervals = getTimeIntervals(request, sseEventSearchStep, startTimestamp)
             val parentEventCounter = ParentEventCounter(request.limitForParent)
             val atomicBoolean = AtomicBoolean(false)
@@ -296,8 +302,8 @@ class SearchEventsHandler(private val context: Context) {
                 .map { it.await() }
                 .flatMapConcat { it.asFlow() }
                 .let { eventFlow: Flow<BaseEventEntity> ->
-                    if (resumeFromEvent != null) {
-                        dropBeforeResumeId(eventFlow, request, resumeFromEvent)
+                    if (resumeEvent?.id != null) {
+                        dropBeforeResumeId(eventFlow, request.searchDirection, resumeEvent)
                     } else {
                         eventFlow
                     }
