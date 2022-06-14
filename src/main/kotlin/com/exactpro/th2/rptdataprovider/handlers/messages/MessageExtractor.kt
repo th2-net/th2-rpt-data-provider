@@ -18,12 +18,15 @@ package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.cradle.Order
 import com.exactpro.cradle.TimeRelation
+import com.exactpro.cradle.messages.StoredMessage
+import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
+import com.exactpro.th2.rptdataprovider.entities.requests.StreamPointer
 import com.exactpro.th2.rptdataprovider.entities.responses.StoredMessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
@@ -63,6 +66,12 @@ class MessageExtractor(
     private var lastElement: StoredMessageId? = null
     private var lastTimestamp: Instant? = null
 
+    private val order = if (request.searchDirection == TimeRelation.AFTER) {
+        Order.DIRECT
+    } else {
+        Order.REVERSE
+    }
+
     init {
         externalScope.launch {
             try {
@@ -76,6 +85,51 @@ class MessageExtractor(
         }
     }
 
+    private fun getMessagesFromBatch(batch: StoredMessageBatch): Collection<StoredMessage> {
+        return if (order == Order.DIRECT) {
+            batch.messages
+        } else {
+            batch.messagesReverse
+        }
+    }
+
+    private fun trimMessagesListHead(
+        messages: Collection<StoredMessage>,
+        resumeFromId: StreamPointer?
+    ): List<StoredMessage> {
+        // trim messages if resumeFromId is present
+        return if (resumeFromId?.sequence != null) {
+            val start = resumeFromId.sequence
+            messages.dropWhile {
+                if (order == Order.DIRECT) {
+                    it.index < start
+                } else {
+                    it.index > start
+                }
+            }
+        } else {
+            //trim messages that do not strictly match time filter
+            messages.dropWhile {
+                request.startTimestamp?.let { startTimestamp ->
+                    if (order == Order.DIRECT) {
+                        it.timestamp.isBefore(startTimestamp)
+                    } else {
+                        it.timestamp.isAfter(startTimestamp)
+                    }
+                } ?: false
+            }
+        }
+    }
+
+    private fun trimMessagesListTail(message: StoredMessage): Boolean {
+        return request.endTimestamp?.let { endTimestamp ->
+            if (order == Order.DIRECT) {
+                message.timestamp.isAfterOrEqual(endTimestamp)
+            } else {
+                message.timestamp.isBeforeOrEqual(endTimestamp)
+            }
+        } ?: false
+    }
 
     override suspend fun processMessage() {
         coroutineScope {
@@ -84,11 +138,9 @@ class MessageExtractor(
 
                     //FIXME: replace delay-based stream updates with synchronous updates from iterator
                     lastTimestamp?.also {
-                        sendToChannel(
-                            EmptyPipelineObject(isStreamEmpty, lastElement, it).also { msg ->
-                                logger.trace { "Extractor has sent EmptyPipelineObject downstream: (lastProcessedId${msg.lastProcessedId} lastScannedTime=${msg.lastScannedTime} streamEmpty=${msg.streamEmpty} hash=${msg.hashCode()})" }
-                            }
-                        )
+                        sendToChannel(EmptyPipelineObject(isStreamEmpty, lastElement, it).also { msg ->
+                            logger.trace { "Extractor has sent EmptyPipelineObject downstream: (lastProcessedId${msg.lastProcessedId} lastScannedTime=${msg.lastScannedTime} streamEmpty=${msg.streamEmpty} hash=${msg.hashCode()})" }
+                        })
                     }
                     delay(sendEmptyDelay)
                 }
@@ -100,12 +152,6 @@ class MessageExtractor(
                 it.streamName == streamName.name && it.direction == streamName.direction
             }
 
-            val order = if (request.searchDirection == TimeRelation.AFTER) {
-                Order.DIRECT
-            } else {
-                Order.REVERSE
-            }
-
             logger.debug { "acquiring cradle iterator for stream $streamName" }
 
             resumeFromId?.let { logger.debug { "resume sequence for stream $streamName is set to ${it.sequence}" } }
@@ -113,10 +159,8 @@ class MessageExtractor(
 
             if (resumeFromId == null || resumeFromId.hasStarted) {
                 val cradleMessageIterable = context.cradleService.getMessagesBatchesSuspend(
-                    StoredMessageFilterBuilder()
-                        .streamName().isEqualTo(streamName.name)
-                        .direction().isEqualTo(streamName.direction)
-                        .order(order)
+                    StoredMessageFilterBuilder().streamName().isEqualTo(streamName.name).direction()
+                        .isEqualTo(streamName.direction).order(order)
 
                         // timestamps will be ignored if resumeFromId is present
                         .also { builder ->
@@ -145,52 +189,22 @@ class MessageExtractor(
 
                 logger.debug { "cradle iterator has been built for stream $streamName" }
 
+                var isLastMessageTrimmed = false
+
                 for (batch in cradleMessageIterable) {
-                    if (externalScope.isActive) {
+                    if (externalScope.isActive && !isLastMessageTrimmed) {
 
                         val timeStart = System.currentTimeMillis()
 
                         pipelineStatus.fetchedStart(streamName.toString())
                         logger.trace { "batch ${batch.id.index} of stream $streamName with ${batch.messageCount} messages (${batch.batchSize} bytes) has been extracted" }
 
-                        val trimmedMessages = let {
-                            if (order == Order.DIRECT) {
-                                batch.messages
-                            } else {
-                                batch.messagesReverse
-                            }
-                        }
-                            .let {
-                                // trim messages if resumeFromId is present
-                                resumeFromId?.sequence?.let { start ->
-                                    it.dropWhile {
-                                        if (order == Order.DIRECT) {
-                                            it.index < start
-                                        } else {
-                                            it.index > start
-                                        }
-                                    }
-                                } ?:
-                                //trim messages that do not strictly match time filter
-                                it.dropWhile {
-                                    request.startTimestamp?.let { startTimestamp ->
-                                        if (order == Order.DIRECT) {
-                                            it.timestamp.isBefore(startTimestamp)
-                                        } else {
-                                            it.timestamp.isAfter(startTimestamp)
-                                        }
-                                    } ?: false
+                        val trimmedMessages = getMessagesFromBatch(batch)
+                            .let { trimMessagesListHead(it, resumeFromId) }
+                            .dropLastWhile { message ->
+                                trimMessagesListTail(message).also {
+                                    isLastMessageTrimmed = isLastMessageTrimmed || it
                                 }
-                                    .dropLastWhile {
-                                        request.endTimestamp?.let { endTimestamp ->
-                                            if (order == Order.DIRECT) {
-                                                it.timestamp.isAfterOrEqual(endTimestamp)
-                                            } else {
-                                                it.timestamp.isBeforeOrEqual(endTimestamp)
-                                            }
-                                        } ?: false
-                                    }
-
                             }
 
                         val firstMessage = if (order == Order.DIRECT) batch.messages.first() else batch.messages.last()
@@ -204,18 +218,16 @@ class MessageExtractor(
 
                         try {
                             trimmedMessages.last().let { message ->
-                                sendToChannel(
-                                    PipelineRawBatch(
-                                        false,
-                                        message.id,
-                                        message.timestamp,
-                                        StoredMessageBatchWrapper(batch.id, trimmedMessages)
-                                    ).also {
-                                        it.info.startExtract = timeStart
-                                        it.info.endExtract = System.currentTimeMillis()
-                                        StreamWriter.setExtract(it.info)
-                                    }
-                                )
+                                sendToChannel(PipelineRawBatch(
+                                    false,
+                                    message.id,
+                                    message.timestamp,
+                                    StoredMessageBatchWrapper(batch.id, trimmedMessages)
+                                ).also {
+                                    it.info.startExtract = timeStart
+                                    it.info.endExtract = System.currentTimeMillis()
+                                    StreamWriter.setExtract(it.info)
+                                })
                                 lastElement = message.id
                                 lastTimestamp = message.timestamp
 
@@ -232,11 +244,10 @@ class MessageExtractor(
                         pipelineStatus.countFetchedBatches(streamName.toString())
                         pipelineStatus.countFetchedMessages(streamName.toString(), trimmedMessages.size.toLong())
                         pipelineStatus.countSkippedMessages(
-                            streamName.toString(),
-                            batch.messageCount - trimmedMessages.size.toLong()
+                            streamName.toString(), batch.messageCount - trimmedMessages.size.toLong()
                         )
                     } else {
-                        logger.trace { "exiting $streamName loop" }
+                        logger.debug { "Exiting $streamName loop. External scope active: '${externalScope.isActive}', LastMessageTrimmed: '$isLastMessageTrimmed'" }
                         break
                     }
                 }
