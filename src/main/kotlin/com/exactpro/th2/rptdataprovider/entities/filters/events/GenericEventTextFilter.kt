@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+ * Copyright 2022-2022 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,41 +25,42 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
-class EventTypeFilter(
-    private var type: List<String>,
-    override var negative: Boolean = false,
-    override var conjunct: Boolean = false
+
+class GenericEventTextFilter(
+    private var values: List<String>, override var negative: Boolean = false, override var conjunct: Boolean = false
 ) : Filter<BaseEventEntity> {
 
     companion object {
         suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<BaseEventEntity> {
-            return EventTypeFilter(
+            return GenericEventTextFilter(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
-                type = filterRequest.getValues()
+                values = filterRequest.getValues()
                     ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
             )
         }
 
-        val filterInfo = FilterInfo(
-            "type",
-            "matches events by one of the specified types",
-            mutableListOf<Parameter>().apply {
+        val filterInfo =
+            FilterInfo("event_generic", "matches events by name, body or type", mutableListOf<Parameter>().apply {
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("conjunct", FilterParameterType.BOOLEAN, false, null))
-                add(Parameter("values", FilterParameterType.STRING_LIST, null, "Send message, ..."))
-            }
-        )
+                add(Parameter("values", FilterParameterType.STRING_LIST, null, "NewOrderSingle, ..."))
+            })
     }
 
+    private val bodyFilter = EventBodyFilter(body = values, conjunct = conjunct)
+    private val nameFilter = EventNameFilter(name = values, conjunct = conjunct)
+    private val typeFilter = EventTypeFilter(type = values, conjunct = conjunct)
+
     override fun match(element: BaseEventEntity): Boolean {
-        val predicate: (String) -> Boolean = { item ->
-            element.eventType.toLowerCase().contains(item.toLowerCase())
-        }
-        return negative.xor(if (conjunct) type.all(predicate) else type.any(predicate))
+        return negative.xor(
+            typeFilter.match(element) || nameFilter.match(element) || bodyFilter.match(element)
+        )
     }
 
     override fun getInfo(): FilterInfo {
         return filterInfo
     }
+
 }
+

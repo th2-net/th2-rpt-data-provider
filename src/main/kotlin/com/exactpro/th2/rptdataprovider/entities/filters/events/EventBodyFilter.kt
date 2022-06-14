@@ -26,7 +26,7 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
-class EventBodyFilter private constructor(
+class EventBodyFilter(
     private var body: List<String>, override var negative: Boolean = false, override var conjunct: Boolean = false
 ) : Filter<BaseEventEntity> {
     companion object {

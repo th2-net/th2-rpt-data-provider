@@ -26,7 +26,7 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
-class AttachedMessageFilter private constructor(
+class AttachedMessageFilter(
     private var messageIds: Set<String>,
     override var negative: Boolean,
     override var conjunct: Boolean = false
