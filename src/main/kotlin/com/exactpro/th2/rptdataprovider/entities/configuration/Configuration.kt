@@ -54,6 +54,8 @@ class CustomConfigurationClass {
 
     val grpcThreadPoolSize: Int = 20
 
+    val eventSearchTimeOffset = 5000
+
     val cradleDispatcherPoolSize: Long = 1
 
     val sendEmptyDelay = 100
@@ -196,4 +198,7 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
 
     val grpcThreadPoolSize: Variable =
         Variable("grpcThreadPoolSize", customConfiguration.grpcThreadPoolSize.toString(), "20")
+
+    val eventSearchTimeOffset: Variable =
+        Variable("eventSearchTimeOffset", customConfiguration.eventSearchTimeOffset.toString(), "5000")
 }
