@@ -152,10 +152,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
     }
 
 
-    fun fromStoredEvent(
-        storedEvent: StoredTestEventWithContent,
-        batch: StoredTestEventBatch?
-    ): BaseEventEntity {
+    fun fromStoredEvent(storedEvent: StoredTestEventWithContent, batch: StoredTestEventBatch?): BaseEventEntity {
         return BaseEventEntity(
             StoredTestEventMetadata(storedEvent),
             ProviderEventId(batch?.id, storedEvent.id),
@@ -171,10 +168,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
     }
 
 
-    private fun setBody(
-        storedEvent: StoredTestEventWithContent,
-        baseEvent: BaseEventEntity
-    ): BaseEventEntity {
+    private fun setBody(storedEvent: StoredTestEventWithContent, baseEvent: BaseEventEntity): BaseEventEntity {
         return baseEvent.apply {
             body = storedEvent.content.let {
                 try {
