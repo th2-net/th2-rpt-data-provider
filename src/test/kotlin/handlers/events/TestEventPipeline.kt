@@ -62,7 +62,7 @@ class TestEventPipeline {
 
     data class EventsParameters(
         val startTimestamp: Instant,
-        val endTimestamp: Instant,
+        val endTimestamp: Instant?,
         val resumeId: ProviderEventId?,
         val events: List<List<EventData>>,
         val expectedResult: List<String>
@@ -80,14 +80,18 @@ class TestEventPipeline {
 
     private fun getSearchRequest(
         startTimestamp: Instant,
-        endTimestamp: Instant,
+        endTimestamp: Instant?,
         searchDirection: TimeRelation = TimeRelation.AFTER,
         resumeId: ProviderEventId? = null
     ): SseEventSearchRequest {
         val parameters = mutableMapOf(
-            "startTimestamp" to listOf(startTimestamp.toEpochMilli().toString()),
-            "endTimestamp" to listOf(endTimestamp.toEpochMilli().toString())
+            "startTimestamp" to listOf(startTimestamp.toEpochMilli().toString())
         )
+
+        if (endTimestamp != null) {
+            parameters["endTimestamp"] = listOf(endTimestamp.toEpochMilli().toString())
+        }
+
         if (resumeId != null) {
             parameters["resumeFromId"] = listOf(resumeId.toString())
         }
@@ -106,13 +110,12 @@ class TestEventPipeline {
         every { context.configuration.sseEventSearchStep.value } answers { "1000" }
         every { context.configuration.eventSearchChunkSize.value } answers { "1" }
         every { context.configuration.keepAliveTimeout.value } answers { "1" }
+        every { context.configuration.eventSearchTimeOffset.value } answers { "5000" }
 
         val cradle = mockk<CradleService>()
 
-        val start = slot<Instant>()
-        val end = slot<Instant>()
-        coEvery { cradle.getEventsSuspend(capture(start), capture(end)) } answers {
-            batches.filter { it.startTimestamp.isAfterOrEqual(start.captured) }
+        coEvery { cradle.getEventsSuspend(any(), any()) } answers {
+            batches
         }
 
         if (resumeId != null) {
@@ -202,6 +205,8 @@ class TestEventPipeline {
         val resumeId = testCase.resumeId
 
         val request = getSearchRequest(startTimestamp, endTimestamp, searchDirection, resumeId)
+        request.checkRequest()
+
         val batch = createBatch(testCase.events)
         val context = mockContextWithCradleService(batch, resumeId)
         val searchEvent = SearchEventsHandler(context)
@@ -214,8 +219,14 @@ class TestEventPipeline {
             coroutineContext.cancelChildren()
         }
 
+        val expectedResult = if (searchDirection == TimeRelation.AFTER) {
+            testCase.expectedResult
+        } else {
+            testCase.expectedResult.reversed()
+        }
+
         assertArrayEquals(
-            testCase.expectedResult.toTypedArray(),
+            expectedResult.toTypedArray(),
             resultEvents.map { it.id.eventId.toString() }.toTypedArray()
         )
     }
@@ -399,7 +410,7 @@ class TestEventPipeline {
             startTimestamp,
             null,
             events = listOf(eventsFromStartToEnd11),
-            expectedResult = getIdRange("1", 2, 11).reversed()
+            expectedResult = getIdRange("1", 2, 11)
         )
 
         baseTestCase(testData, TimeRelation.BEFORE)
@@ -413,7 +424,7 @@ class TestEventPipeline {
             changeTimestamp(startTimestamp, -1),
             null,
             events = listOf(eventsFromStartToEnd11),
-            expectedResult = getIdRange("1", 1, 11).reversed()
+            expectedResult = getIdRange("1", 1, 11)
         )
 
         baseTestCase(testData, TimeRelation.BEFORE)
@@ -427,7 +438,91 @@ class TestEventPipeline {
             startTimestamp,
             ProviderEventId(StoredTestEventId("1"), StoredTestEventId("1-10")),
             events = listOf(eventsFromStartToEnd11),
-            expectedResult = getIdRange("1", 2, 9).reversed()
+            expectedResult = getIdRange("1", 2, 9)
+        )
+
+        baseTestCase(testData, TimeRelation.BEFORE)
+    }
+
+    @Test
+    fun `testIntersectedBatchesResumeReverse`() {
+        val testData = EventsParameters(
+            changeTimestamp(startTimestamp, 100),
+            changeTimestamp(startTimestamp, -100),
+            ProviderEventId(StoredTestEventId("2"), StoredTestEventId("2-3")),
+            events = listOf(
+                createEvents("1", startTimestamp, changeTimestamp(startTimestamp, 5)),
+                createEvents(
+                    "2",
+                    changeTimestamp(startTimestamp, 3),
+                    changeTimestamp(startTimestamp, 8)
+                )
+            ),
+            expectedResult = getIdRange("1", 1, 6)
+                    + getIdRange("2", 1, 2)
+        )
+
+        baseTestCase(testData, TimeRelation.BEFORE)
+    }
+
+
+    @Test
+    fun `testTimestamp`() {
+        val testData = EventsParameters(
+            startTimestamp,
+            changeTimestamp(startTimestamp, 10),
+            null,
+            events = listOf(
+                createEvents(
+                    "1",
+                    changeTimestamp(startTimestamp, -2),
+                    changeTimestamp(startTimestamp, 2)
+                ),
+                createEvents(
+                    "2",
+                    changeTimestamp(startTimestamp, 2),
+                    changeTimestamp(startTimestamp, 8)
+                ),
+                createEvents(
+                    "3",
+                    changeTimestamp(startTimestamp, 8),
+                    changeTimestamp(startTimestamp, 11)
+                )
+            ),
+            expectedResult = getIdRange("1", 3, 5)
+                    + getIdRange("2", 1, 7)
+                    + getIdRange("3", 1, 2)
+        )
+
+        baseTestCase(testData)
+    }
+
+    @Test
+    fun `testTimestampReverse`() {
+        val testData = EventsParameters(
+            changeTimestamp(startTimestamp, 10),
+            startTimestamp,
+            null,
+            events = listOf(
+                createEvents(
+                    "1",
+                    changeTimestamp(startTimestamp, -2),
+                    changeTimestamp(startTimestamp, 2)
+                ),
+                createEvents(
+                    "2",
+                    changeTimestamp(startTimestamp, 2),
+                    changeTimestamp(startTimestamp, 8)
+                ),
+                createEvents(
+                    "3",
+                    changeTimestamp(startTimestamp, 8),
+                    changeTimestamp(startTimestamp, 11)
+                )
+            ),
+            expectedResult = getIdRange("1", 4, 5)
+                    + getIdRange("2", 1, 7)
+                    + getIdRange("3", 1, 3)
         )
 
         baseTestCase(testData, TimeRelation.BEFORE)
