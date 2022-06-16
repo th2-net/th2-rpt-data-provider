@@ -20,7 +20,6 @@ package com.exactpro.th2.rptdataprovider.handlers
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.TimeRelation.AFTER
 import com.exactpro.cradle.testevents.StoredTestEventWrapper
-import com.exactpro.th2.common.metrics.setGRPCReadiness
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
@@ -40,6 +39,7 @@ import mu.KotlinLogging
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.CoroutineContext
@@ -59,6 +59,7 @@ class SearchEventsHandler(private val context: Context) {
     private val sseEventSearchStep: Long = context.configuration.sseEventSearchStep.value.toLong()
     private val keepAliveTimeout: Long = context.configuration.keepAliveTimeout.value.toLong()
     private val eventSearchTimeOffset: Long = context.configuration.eventSearchTimeOffset.value.toLong()
+    private val oneDay = 1L
 
 
     private data class ParentEventCounter private constructor(
@@ -136,9 +137,9 @@ class SearchEventsHandler(private val context: Context) {
     }
 
 
-    private fun isAfterOrEqual(event: BaseEventEntity, timestamp: Instant, direction: TimeRelation): Boolean {
+    private fun isAfter(event: BaseEventEntity, timestamp: Instant, direction: TimeRelation): Boolean {
         return if (direction == AFTER) {
-            event.startTimestamp.isAfterOrEqual(timestamp)
+            event.startTimestamp.isAfter(timestamp)
         } else {
             event.startTimestamp.isBeforeOrEqual(timestamp)
         }
@@ -164,7 +165,7 @@ class SearchEventsHandler(private val context: Context) {
 
         val filteredEventEntities = orderedByDirection(baseEventEntities, request.searchDirection)
             .dropWhile { isBefore(it.second, start, request.searchDirection) }
-            .dropLastWhile { isAfterOrEqual(it.second, end, request.searchDirection) }
+            .dropLastWhile { isAfter(it.second, end, request.searchDirection) }
 
         return eventProducer.fromEventsProcessed(filteredEventEntities, request)
     }
@@ -253,7 +254,7 @@ class SearchEventsHandler(private val context: Context) {
                 yieldAll(
                     if (searchDirection == AFTER) {
                         val toTimestamp = minInstant(
-                            minInstant(currentTimestamp.plusSeconds(sseEventSearchStep), Instant.MAX),
+                            minInstant(currentTimestamp.plus(oneDay, ChronoUnit.DAYS), Instant.MAX),
                             endTimestamp ?: Instant.MAX
                         )
                         changeOfDayProcessing(currentTimestamp, toTimestamp)
