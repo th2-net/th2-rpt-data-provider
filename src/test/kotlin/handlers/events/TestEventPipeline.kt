@@ -110,11 +110,18 @@ class TestEventPipeline {
         every { context.configuration.sseEventSearchStep.value } answers { "1000" }
         every { context.configuration.eventSearchChunkSize.value } answers { "1" }
         every { context.configuration.keepAliveTimeout.value } answers { "1" }
-        every { context.configuration.eventSearchTimeOffset.value } answers { "5000" }
+        every { context.configuration.eventSearchTimeOffset.value } answers { "0" }
 
         val cradle = mockk<CradleService>()
 
         coEvery { cradle.getEventsSuspend(any(), any()) } answers {
+            val start = firstArg<Instant>()
+            val end = secondArg<Instant>()
+            batches.filter {
+                it.startTimestamp.isAfterOrEqual(start) && it.startTimestamp.isBeforeOrEqual(end)
+                        || it.endTimestamp.isAfterOrEqual(start) && it.endTimestamp.isBeforeOrEqual(end)
+
+            }
             batches
         }
 
