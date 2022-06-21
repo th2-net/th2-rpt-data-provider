@@ -18,10 +18,6 @@ package handlers.messages
 
 
 import com.exactpro.cradle.Direction
-<<<<<<< HEAD
-import com.exactpro.cradle.messages.MessageToStore
-=======
->>>>>>> 1e98c1b5... fix events search resume from id
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
@@ -33,14 +29,10 @@ import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.messages.StreamMerger
 import io.mockk.every
 import io.mockk.mockk
-<<<<<<< HEAD
-import kotlinx.coroutines.*
-=======
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
->>>>>>> 1e98c1b5... fix events search resume from id
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.params.ParameterizedTest

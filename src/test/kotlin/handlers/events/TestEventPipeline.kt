@@ -24,9 +24,7 @@ import com.exactpro.th2.rptdataprovider.entities.internal.Direction
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineFilteredMessage
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.responses.Event
-import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
-import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
+import com.exactpro.th2.rptdataprovider.entities.responses.*
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.SearchEventsHandler
@@ -42,6 +40,7 @@ import io.mockk.slot
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertArrayEquals
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import java.time.Instant
@@ -85,11 +84,11 @@ class TestEventPipeline {
         resumeId: ProviderEventId? = null
     ): SseEventSearchRequest {
         val parameters = mutableMapOf(
-            "startTimestamp" to listOf(startTimestamp.toEpochMilli().toString())
+            "startTimestamp" to listOf(startTimestamp.toString())
         )
 
         if (endTimestamp != null) {
-            parameters["endTimestamp"] = listOf(endTimestamp.toEpochMilli().toString())
+            parameters["endTimestamp"] = listOf(endTimestamp.toString())
         }
 
         if (resumeId != null) {
@@ -100,6 +99,7 @@ class TestEventPipeline {
             .copy(searchDirection = searchDirection)
     }
 
+
     private fun mockContextWithCradleService(
         batches: List<StoredTestEventWrapper>,
         resumeId: ProviderEventId?
@@ -107,7 +107,7 @@ class TestEventPipeline {
         val context: Context = mockk()
 
         every { context.configuration.sendEmptyDelay.value } answers { "10" }
-        every { context.configuration.sseEventSearchStep.value } answers { "1000" }
+        every { context.configuration.sseEventSearchStep.value } answers { "10" }
         every { context.configuration.eventSearchChunkSize.value } answers { "1" }
         every { context.configuration.keepAliveTimeout.value } answers { "1" }
         every { context.configuration.eventSearchTimeOffset.value } answers { "0" }
@@ -116,13 +116,9 @@ class TestEventPipeline {
 
         coEvery { cradle.getEventsSuspend(any(), any()) } answers {
             val start = firstArg<Instant>()
-            val end = secondArg<Instant>()
             batches.filter {
-                it.startTimestamp.isAfterOrEqual(start) && it.startTimestamp.isBeforeOrEqual(end)
-                        || it.endTimestamp.isAfterOrEqual(start) && it.endTimestamp.isBeforeOrEqual(end)
-
+                it.startTimestamp.isAfterOrEqual(start) || it.endTimestamp.isAfterOrEqual(start)
             }
-            batches
         }
 
         if (resumeId != null) {
@@ -134,6 +130,7 @@ class TestEventPipeline {
         every { context.eventProducer } answers { EventProducer(cradle, ObjectMapper()) }
         return context
     }
+
 
     private fun createBatch(batches: List<List<EventData>>): List<StoredTestEventWrapper> {
         return batches.map { events ->
@@ -151,7 +148,7 @@ class TestEventPipeline {
                             .name("name")
                             .parentId(it.parentId)
                             .startTimestamp(event.startTimestamp)
-                            .content(ByteArray(1))
+                            .content(ByteArray(0))
                             .endTimestamp(event.endTimestamp)
                             .build()
                     )
@@ -160,6 +157,7 @@ class TestEventPipeline {
             StoredTestEventWrapper(batch)
         }
     }
+
 
     private fun mockWriter(events: MutableList<EventTreeNode>): StreamWriter {
         return object : StreamWriter {
@@ -174,7 +172,10 @@ class TestEventPipeline {
             override suspend fun write(event: Event, lastEventId: AtomicLong) {
             }
 
-            override suspend fun write(streamInfo: List<StreamInfo>) {
+            override suspend fun write(streamInfo: List<MessageStreamPointer>) {
+            }
+
+            override suspend fun write(streamInfo: EventStreamPointer) {
             }
 
             override suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong) {
@@ -184,6 +185,7 @@ class TestEventPipeline {
             }
         }
     }
+
 
     private fun createEvents(batchId: String, startTimestamp: Instant, endTimestamp: Instant): List<EventData> {
         var start = startTimestamp
@@ -206,7 +208,11 @@ class TestEventPipeline {
     }
 
 
-    private fun baseTestCase(testCase: EventsParameters, searchDirection: TimeRelation = TimeRelation.AFTER) {
+    private fun baseTestCase(
+        testCase: EventsParameters,
+        searchDirection: TimeRelation = TimeRelation.AFTER,
+        intersects: Boolean = false
+    ) {
         val startTimestamp = testCase.startTimestamp
         val endTimestamp = testCase.endTimestamp
         val resumeId = testCase.resumeId
@@ -232,10 +238,17 @@ class TestEventPipeline {
             testCase.expectedResult.reversed()
         }
 
-        assertArrayEquals(
-            expectedResult.toTypedArray(),
-            resultEvents.map { it.id.eventId.toString() }.toTypedArray()
-        )
+        if (!intersects) {
+            assertArrayEquals(
+                expectedResult.toTypedArray(),
+                resultEvents.map { it.id.eventId.toString() }.toTypedArray()
+            )
+        } else {
+            assertEquals(
+                expectedResult.toSet(),
+                resultEvents.map { it.id.eventId.toString() }.toSet()
+            )
+        }
     }
 
 
@@ -252,9 +265,9 @@ class TestEventPipeline {
         baseTestCase(testData)
     }
 
+
     @Test
     fun `testStartIntervalEmpty`() {
-        val events = createEvents("1", startTimestamp, endTimestamp)
 
         val testData = EventsParameters(
             changeTimestamp(startTimestamp, -1),
@@ -281,6 +294,7 @@ class TestEventPipeline {
         baseTestCase(testData)
     }
 
+
     @Test
     fun `testTwoChunks`() {
         val testData = EventsParameters(
@@ -293,6 +307,7 @@ class TestEventPipeline {
 
         baseTestCase(testData)
     }
+
 
     @Test
     fun `testFullTimeRange`() {
@@ -328,6 +343,7 @@ class TestEventPipeline {
         baseTestCase(testData)
     }
 
+
     @Test
     fun `testIntersectedBatches`() {
         val testData = EventsParameters(
@@ -335,7 +351,11 @@ class TestEventPipeline {
             changeTimestamp(startTimestamp, 100),
             null,
             events = listOf(
-                createEvents("1", startTimestamp, startTimestamp.plus(5, ChronoUnit.MINUTES)),
+                createEvents(
+                    "1",
+                    startTimestamp,
+                    changeTimestamp(startTimestamp, 5)
+                ),
                 createEvents(
                     "2",
                     changeTimestamp(startTimestamp, 3),
@@ -345,8 +365,9 @@ class TestEventPipeline {
             expectedResult = getIdRange("1", 1, 6) + getIdRange("2", 1, 6)
         )
 
-        baseTestCase(testData)
+        baseTestCase(testData, intersects = true)
     }
+
 
     @Test
     fun `baseResumeTest`() {
@@ -407,8 +428,9 @@ class TestEventPipeline {
             expectedResult = getIdRange("1", 5, 6) + getIdRange("2", 1, 6)
         )
 
-        baseTestCase(testData)
+        baseTestCase(testData, intersects = true)
     }
+
 
     @Test
     fun `testReverseInterval`() {
@@ -451,6 +473,7 @@ class TestEventPipeline {
         baseTestCase(testData, TimeRelation.BEFORE)
     }
 
+
     @Test
     fun `testIntersectedBatchesResumeReverse`() {
         val testData = EventsParameters(
@@ -469,7 +492,7 @@ class TestEventPipeline {
                     + getIdRange("2", 1, 2)
         )
 
-        baseTestCase(testData, TimeRelation.BEFORE)
+        baseTestCase(testData, TimeRelation.BEFORE, intersects = true)
     }
 
 
@@ -503,6 +526,7 @@ class TestEventPipeline {
 
         baseTestCase(testData)
     }
+
 
     @Test
     fun `testTimestampReverse`() {

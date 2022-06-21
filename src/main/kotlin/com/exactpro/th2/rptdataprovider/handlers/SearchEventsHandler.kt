@@ -29,8 +29,6 @@ import com.exactpro.th2.rptdataprovider.entities.responses.EventStreamPointer
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedEventInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
-import com.exactpro.th2.rptdataprovider.isAfterOrEqual
-import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import io.prometheus.client.Counter
@@ -41,7 +39,6 @@ import mu.KotlinLogging
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneOffset
-import java.time.temporal.ChronoUnit
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -61,7 +58,6 @@ class SearchEventsHandler(private val context: Context) {
     private val eventProducer: EventProducer = context.eventProducer
     private val sseEventSearchStep: Long = context.configuration.sseEventSearchStep.value.toLong()
     private val keepAliveTimeout: Long = context.configuration.keepAliveTimeout.value.toLong()
-    private val oneDay = 1L
 
 
     private data class ParentEventCounter private constructor(
@@ -141,7 +137,7 @@ class SearchEventsHandler(private val context: Context) {
 
     private fun isAfter(event: BaseEventEntity, timestamp: Instant, direction: TimeRelation): Boolean {
         return if (direction == AFTER) {
-            event.startTimestamp.isAfter(timestamp)
+            event.startTimestamp.isAfterOrEqual(timestamp)
         } else {
             event.startTimestamp.isBeforeOrEqual(timestamp)
         }
@@ -256,7 +252,7 @@ class SearchEventsHandler(private val context: Context) {
                 yieldAll(
                     if (searchDirection == AFTER) {
                         val toTimestamp = minInstant(
-                            minInstant(currentTimestamp.plus(oneDay, ChronoUnit.DAYS), Instant.MAX),
+                            minInstant(currentTimestamp.plusSeconds(sseEventSearchStep), Instant.MAX),
                             endTimestamp ?: Instant.MAX
                         )
                         changeOfDayProcessing(currentTimestamp, toTimestamp)
@@ -422,4 +418,13 @@ class SearchEventsHandler(private val context: Context) {
                 }
         }
     }
+}
+
+
+fun main() {
+
+    println(Instant.parse("2022-06-21T23:59:59.000000000Z").toEpochMilli())
+    println(Instant.parse("2022-06-21T23:59:59.999999999Z").toEpochMilli())
+    println(Instant.parse("2022-06-22T00:00:00.000000000Z").toEpochMilli())
+
 }
