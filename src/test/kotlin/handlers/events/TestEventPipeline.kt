@@ -42,6 +42,7 @@ import io.mockk.slot
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertArrayEquals
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import java.time.Instant
@@ -107,7 +108,7 @@ class TestEventPipeline {
         val context: Context = mockk()
 
         every { context.configuration.sendEmptyDelay.value } answers { "10" }
-        every { context.configuration.sseEventSearchStep.value } answers { "1000" }
+        every { context.configuration.sseEventSearchStep.value } answers { "10" }
         every { context.configuration.eventSearchChunkSize.value } answers { "1" }
         every { context.configuration.keepAliveTimeout.value } answers { "1" }
         every { context.configuration.eventSearchTimeOffset.value } answers { "0" }
@@ -116,13 +117,9 @@ class TestEventPipeline {
 
         coEvery { cradle.getEventsSuspend(any(), any()) } answers {
             val start = firstArg<Instant>()
-            val end = secondArg<Instant>()
             batches.filter {
-                it.startTimestamp.isAfterOrEqual(start) && it.startTimestamp.isBeforeOrEqual(end)
-                        || it.endTimestamp.isAfterOrEqual(start) && it.endTimestamp.isBeforeOrEqual(end)
-
+                it.startTimestamp.isAfterOrEqual(start) || it.endTimestamp.isAfterOrEqual(start)
             }
-            batches
         }
 
         if (resumeId != null) {
@@ -206,7 +203,11 @@ class TestEventPipeline {
     }
 
 
-    private fun baseTestCase(testCase: EventsParameters, searchDirection: TimeRelation = TimeRelation.AFTER) {
+    private fun baseTestCase(
+        testCase: EventsParameters,
+        searchDirection: TimeRelation = TimeRelation.AFTER,
+        intersects: Boolean = false
+    ) {
         val startTimestamp = testCase.startTimestamp
         val endTimestamp = testCase.endTimestamp
         val resumeId = testCase.resumeId
@@ -232,10 +233,17 @@ class TestEventPipeline {
             testCase.expectedResult.reversed()
         }
 
-        assertArrayEquals(
-            expectedResult.toTypedArray(),
-            resultEvents.map { it.id.eventId.toString() }.toTypedArray()
-        )
+        if (!intersects) {
+            assertArrayEquals(
+                expectedResult.toTypedArray(),
+                resultEvents.map { it.id.eventId.toString() }.toTypedArray()
+            )
+        } else {
+            assertEquals(
+                expectedResult.toSet(),
+                resultEvents.map { it.id.eventId.toString() }.toSet()
+            )
+        }
     }
 
 
@@ -335,7 +343,11 @@ class TestEventPipeline {
             changeTimestamp(startTimestamp, 100),
             null,
             events = listOf(
-                createEvents("1", startTimestamp, startTimestamp.plus(5, ChronoUnit.MINUTES)),
+                createEvents(
+                    "1",
+                    startTimestamp,
+                    changeTimestamp(startTimestamp, 5)
+                ),
                 createEvents(
                     "2",
                     changeTimestamp(startTimestamp, 3),
@@ -345,7 +357,7 @@ class TestEventPipeline {
             expectedResult = getIdRange("1", 1, 6) + getIdRange("2", 1, 6)
         )
 
-        baseTestCase(testData)
+        baseTestCase(testData, intersects = true)
     }
 
     @Test
@@ -407,7 +419,7 @@ class TestEventPipeline {
             expectedResult = getIdRange("1", 5, 6) + getIdRange("2", 1, 6)
         )
 
-        baseTestCase(testData)
+        baseTestCase(testData, intersects = true)
     }
 
     @Test
@@ -469,7 +481,7 @@ class TestEventPipeline {
                     + getIdRange("2", 1, 2)
         )
 
-        baseTestCase(testData, TimeRelation.BEFORE)
+        baseTestCase(testData, TimeRelation.BEFORE, intersects = true)
     }
 
 
