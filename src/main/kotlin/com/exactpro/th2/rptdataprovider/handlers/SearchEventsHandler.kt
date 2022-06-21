@@ -58,7 +58,6 @@ class SearchEventsHandler(private val context: Context) {
     private val eventProducer: EventProducer = context.eventProducer
     private val sseEventSearchStep: Long = context.configuration.sseEventSearchStep.value.toLong()
     private val keepAliveTimeout: Long = context.configuration.keepAliveTimeout.value.toLong()
-    private val eventSearchTimeOffset: Long = context.configuration.eventSearchTimeOffset.value.toLong()
     private val oneDay = 1L
 
 
@@ -325,25 +324,6 @@ class SearchEventsHandler(private val context: Context) {
         } ?: request.startTimestamp!!
     }
 
-
-    private fun getStartTimestampWithOffset(timestamp: Instant, searchDirection: TimeRelation): Instant {
-        return if (searchDirection == AFTER) {
-            timestamp.minusMillis(eventSearchTimeOffset)
-        } else {
-            timestamp.plusMillis(eventSearchTimeOffset)
-        }
-    }
-
-
-    private fun getEndTimestampWithOffset(timestamp: Instant?, searchDirection: TimeRelation): Instant? {
-        return if (searchDirection == AFTER) {
-            timestamp?.plusMillis(eventSearchTimeOffset)
-        } else {
-            timestamp?.minusMillis(eventSearchTimeOffset)
-        }
-    }
-
-
     @ExperimentalCoroutinesApi
     @FlowPreview
     suspend fun searchEventsSse(request: SseEventSearchRequest, writer: StreamWriter) {
@@ -359,11 +339,7 @@ class SearchEventsHandler(private val context: Context) {
 
             val startTimestamp = getStartTimestamp(resumeEvent?.id, request)
 
-            val timeIntervals = getTimeIntervals(
-                getStartTimestampWithOffset(startTimestamp, request.searchDirection),
-                getEndTimestampWithOffset(request.endTimestamp, request.searchDirection),
-                request.searchDirection
-            )
+            val timeIntervals = getTimeIntervals(startTimestamp, request.endTimestamp, request.searchDirection)
 
             val parentEventCounter = ParentEventCounter(request.limitForParent)
 
