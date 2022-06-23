@@ -17,10 +17,12 @@
 
 package com.exactpro.th2.rptdataprovider.services.cradle
 
-import com.exactpro.cradle.*
+import com.exactpro.cradle.BookId
+import com.exactpro.cradle.CradleManager
+import com.exactpro.cradle.cassandra.CassandraStorageSettings
+import com.exactpro.cradle.messages.MessageFilter
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageBatch
-import com.exactpro.cradle.messages.MessageFilter
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.testevents.*
 import com.exactpro.th2.rptdataprovider.Metrics
@@ -137,7 +139,9 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
     suspend fun getBookIds(): List<BookId> {
         return logMetrics(getStreamsMetric) {
             logTime("getBookIds") {
-                storage.books.map { it.id }
+                storage.listBooks()
+                    .filter { it.schemaVersion == CassandraStorageSettings.SCHEMA_VERSION }
+                    .map { BookId(it.name) }
             }
         } ?: emptyList()
     }
