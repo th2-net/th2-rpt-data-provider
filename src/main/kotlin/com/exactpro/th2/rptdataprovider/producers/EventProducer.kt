@@ -23,6 +23,7 @@ import com.exactpro.cradle.testevents.StoredTestEventWithContent
 import com.exactpro.cradle.testevents.StoredTestEventWrapper
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType.NEED_ATTACHED_MESSAGES
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType.NEED_BODY
+import com.exactpro.th2.rptdataprovider.entities.internal.IntermediateEvent
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
@@ -124,14 +125,14 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
     }
 
     fun fromEventsProcessed(
-        events: List<Pair<StoredTestEventWithContent, BaseEventEntity>>,
+        events: Iterable<IntermediateEvent>,
         request: SseEventSearchRequest
     ): List<BaseEventEntity> {
 
         return events.let {
             if (!request.metadataOnly || request.filterPredicate.getSpecialTypes().contains(NEED_BODY)) {
                 it.map { (content, event) ->
-                    content to setBody(content, event)
+                    IntermediateEvent(content, setBody(content, event))
                 }
             } else {
                 it

@@ -112,6 +112,7 @@ class TestEventPipeline {
         every { context.configuration.eventSearchChunkSize.value } answers { "1" }
         every { context.configuration.keepAliveTimeout.value } answers { "1" }
         every { context.configuration.eventSearchTimeOffset.value } answers { "0" }
+        every { context.configuration.eventSearchGap.value } answers { "60" }
 
         val cradle = mockk<CradleService>()
 
