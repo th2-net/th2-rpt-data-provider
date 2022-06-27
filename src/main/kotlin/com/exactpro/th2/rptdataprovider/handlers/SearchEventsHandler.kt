@@ -21,6 +21,7 @@ import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.TimeRelation.AFTER
 import com.exactpro.cradle.testevents.StoredTestEventWrapper
 import com.exactpro.th2.rptdataprovider.*
+import com.exactpro.th2.rptdataprovider.entities.internal.IntermediateEvent
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
@@ -36,7 +37,9 @@ import kotlinx.coroutines.flow.*
 import mu.KotlinLogging
 import java.time.Instant
 import java.time.LocalTime
+import java.time.OffsetDateTime
 import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.CoroutineContext
@@ -55,6 +58,7 @@ class SearchEventsHandler(private val context: Context) {
     private val eventProducer: EventProducer = context.eventProducer
     private val sseEventSearchStep: Long = context.configuration.sseEventSearchStep.value.toLong()
     private val keepAliveTimeout: Long = context.configuration.keepAliveTimeout.value.toLong()
+    private val eventSearchGap: Long = context.configuration.eventSearchGap.value.toLong()
 
 
     private data class ParentEventCounter private constructor(
@@ -84,22 +88,17 @@ class SearchEventsHandler(private val context: Context) {
     }
 
 
-    private data class SearchInterval(val start: Instant, val end: Instant) {
-        fun getByDirection(direction: TimeRelation): Pair<Instant, Instant> {
-            return if (direction == AFTER) {
-                start to end
-            } else {
-                end to start
-            }
-        }
-    }
-
-
     private suspend fun keepAlive(writer: StreamWriter, info: LastScannedObjectInfo, counter: AtomicLong) {
         while (coroutineContext.isActive) {
             writer.write(info, counter)
             delay(keepAliveTimeout)
         }
+    }
+
+
+    private inner class SearchInterval(val start: Instant, val end: Instant, startWithGap: Instant? = null) {
+        val requestStart: Instant = startWithGap ?: start
+        val requestEnd: Instant = end
     }
 
 
@@ -114,29 +113,30 @@ class SearchEventsHandler(private val context: Context) {
                         listOf(StoredTestEventWrapper(it.asBatch()))
                     } ?: emptyList()
                 } else {
-                    cradle.getEventsSuspend(parentEvent.eventId, searchInterval.start, searchInterval.end)
+                    cradle.getEventsSuspend(parentEvent.eventId, searchInterval.requestStart, searchInterval.requestEnd)
                 }
             } else {
-                cradle.getEventsSuspend(searchInterval.start, searchInterval.end)
+                cradle.getEventsSuspend(searchInterval.requestStart, searchInterval.requestEnd)
             }
         }
     }
 
 
-    private fun isBefore(event: BaseEventEntity, instant: Instant, searchDirection: TimeRelation): Boolean {
+    private fun filterBelongsInterval(
+        events: List<IntermediateEvent>,
+        searchInterval: SearchInterval,
+        searchDirection: TimeRelation
+    ): List<IntermediateEvent> {
         return if (searchDirection == AFTER) {
-            event.startTimestamp.isBefore(instant)
+            events.filter {
+                it.baseEventEntity.startTimestamp.isAfterOrEqual(searchInterval.start)
+                        && it.baseEventEntity.startTimestamp.isBefore(searchInterval.end)
+            }
         } else {
-            event.startTimestamp.isAfter(instant)
-        }
-    }
-
-
-    private fun isAfter(event: BaseEventEntity, timestamp: Instant, direction: TimeRelation): Boolean {
-        return if (direction == AFTER) {
-            event.startTimestamp.isAfterOrEqual(timestamp)
-        } else {
-            event.startTimestamp.isBeforeOrEqual(timestamp)
+            events.filter {
+                it.baseEventEntity.startTimestamp.isAfter(searchInterval.start)
+                        && it.baseEventEntity.startTimestamp.isBeforeOrEqual(searchInterval.end)
+            }
         }
     }
 
@@ -149,18 +149,17 @@ class SearchEventsHandler(private val context: Context) {
         val baseEventEntities = if (wrapper.isBatch) {
             val batch = wrapper.asBatch()
             batch.tryToGetTestEvents(request.parentEvent?.eventId).map { event ->
-                event to eventProducer.fromStoredEvent(event, batch)
+                IntermediateEvent(event, eventProducer.fromStoredEvent(event, batch))
             }
         } else {
             val single = wrapper.asSingle()
-            listOf(single to eventProducer.fromStoredEvent(single, null))
+            listOf(IntermediateEvent(single, eventProducer.fromStoredEvent(single, null)))
         }
 
-        val (start, end) = searchInterval.getByDirection(request.searchDirection)
-
-        val filteredEventEntities = orderedByDirection(baseEventEntities, request.searchDirection)
-            .dropWhile { isBefore(it.second, start, request.searchDirection) }
-            .dropLastWhile { isAfter(it.second, end, request.searchDirection) }
+        val filteredEventEntities =
+            filterBelongsInterval(baseEventEntities, searchInterval, request.searchDirection).let {
+                orderedByDirection(it, request.searchDirection)
+            }
 
         return eventProducer.fromEventsProcessed(filteredEventEntities, request)
     }
@@ -211,17 +210,27 @@ class SearchEventsHandler(private val context: Context) {
     }
 
 
+    private fun getDayStart(instant: Instant): OffsetDateTime {
+        return instant
+            .atOffset(ZoneOffset.UTC)
+            .with(LocalTime.of(0, 0, 0, 0))
+    }
+
+
     private fun changeOfDayProcessing(from: Instant, to: Instant): Iterable<SearchInterval> {
+        val startCurrentDay = getDayStart(from)
+
+        val startWithGap = maxInstant(startCurrentDay.toInstant(), from.minusSeconds(eventSearchGap))
+
         return if (isDifferentDays(from, to)) {
-            val pivot = from
-                .atOffset(ZoneOffset.UTC)
+            val pivot = startCurrentDay
                 .plusDays(1)
-                .with(LocalTime.of(0, 0, 0, 0))
                 .toInstant()
 
-            listOf(SearchInterval(from, pivot.minusNanos(1)), SearchInterval(pivot, to))
+            listOf(SearchInterval(from, pivot.minusNanos(1), startWithGap), SearchInterval(pivot, to))
+
         } else {
-            listOf(SearchInterval(from, to))
+            listOf(SearchInterval(from, to, startWithGap))
         }
     }
 
@@ -249,7 +258,7 @@ class SearchEventsHandler(private val context: Context) {
                 yieldAll(
                     if (searchDirection == AFTER) {
                         val toTimestamp = minInstant(
-                            minInstant(currentTimestamp.plusSeconds(sseEventSearchStep), Instant.MAX),
+                            minInstant(currentTimestamp.plus(1, ChronoUnit.DAYS), Instant.MAX),
                             endTimestamp ?: Instant.MAX
                         )
                         changeOfDayProcessing(currentTimestamp, toTimestamp)
@@ -320,6 +329,16 @@ class SearchEventsHandler(private val context: Context) {
         } ?: request.startTimestamp!!
     }
 
+
+    private fun isBefore(event: BaseEventEntity, instant: Instant, searchDirection: TimeRelation): Boolean {
+        return if (searchDirection == AFTER) {
+            event.startTimestamp.isBefore(instant)
+        } else {
+            event.startTimestamp.isAfter(instant)
+        }
+    }
+
+
     @ExperimentalCoroutinesApi
     @FlowPreview
     suspend fun searchEventsSse(request: SseEventSearchRequest, writer: StreamWriter) {
@@ -335,7 +354,9 @@ class SearchEventsHandler(private val context: Context) {
 
             val startTimestamp = getStartTimestamp(resumeEvent?.id, request)
 
-            val timeIntervals = getTimeIntervals(startTimestamp, request.endTimestamp, request.searchDirection)
+            val timeIntervals = getTimeIntervals(
+                startTimestamp, request.endTimestamp, request.searchDirection
+            )
 
             val parentEventCounter = ParentEventCounter(request.limitForParent)
 
@@ -405,13 +426,4 @@ class SearchEventsHandler(private val context: Context) {
                 }
         }
     }
-}
-
-
-fun main() {
-
-    println(Instant.parse("2022-06-21T23:59:59.000000000Z").toEpochMilli())
-    println(Instant.parse("2022-06-21T23:59:59.999999999Z").toEpochMilli())
-    println(Instant.parse("2022-06-22T00:00:00.000000000Z").toEpochMilli())
-
 }

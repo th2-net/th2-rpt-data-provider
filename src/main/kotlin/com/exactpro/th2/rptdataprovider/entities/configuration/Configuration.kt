@@ -62,6 +62,8 @@ class CustomConfigurationClass {
 
     val eventSearchChunkSize: Int = 64
 
+    val eventSearchGap: Int = 60
+
     val useStrictMode = false
 
     val serverType: ServerType = ServerType.HTTP
@@ -201,4 +203,7 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
 
     val eventSearchTimeOffset: Variable =
         Variable("eventSearchTimeOffset", customConfiguration.eventSearchTimeOffset.toString(), "5000")
+
+    val eventSearchGap: Variable =
+        Variable("eventSearchGap", customConfiguration.eventSearchGap.toString(), "60")
 }
