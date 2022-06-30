@@ -25,6 +25,7 @@ import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.Message
 import com.exactpro.th2.rptdataprovider.entities.internal.ProtoProtocolInfo.getProtocolField
 import com.exactpro.th2.rptdataprovider.entities.internal.ProtoProtocolInfo.isImage
+import com.exactpro.th2.rptdataprovider.entities.mappers.ProtoMessageMapper
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleMessageNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
@@ -45,11 +46,7 @@ class MessageProducer(
     suspend fun fromId(id: StoredMessageId): Message {
 
         return cradle.getMessageSuspend(id)?.let { stored ->
-            val rawMessage: RawMessage = if (stored.content == null) {
-                logger.error("Received stored message has no content. StoredMessageId: $id")
-                RawMessage.newBuilder().build()
-            } else
-                RawMessage.parseFrom(stored.content)
+            val rawMessage: RawMessage = ProtoMessageMapper.storedMessageToRawProto(stored)
             var content: MessageGroupBatch? = null
             measureTimeMillis {
                 content = MessageGroupBatch

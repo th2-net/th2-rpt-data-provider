@@ -122,18 +122,15 @@ class SearchMessagesHandler(private val applicationContext: Context) {
 
         val pipelineStatus = PipelineStatus(context = applicationContext)
 
-        val streamNames = resultRequest.stream.flatMap { stream ->
-            Direction.values().map { stream.copy(direction = it) }
-        }
 
         val coroutineScope = CoroutineScope(coroutineContext + Job(coroutineContext[Job]))
-        pipelineStatus.addStreams(streamNames.map { it.toString() })
+        pipelineStatus.addStreams(resultRequest.stream.map { it.toString() })
 
         val streamInfoMap = mutableMapOf<TimeRelation, MutableList<MessageStreamPointer>>()
         streamInfoMap[TimeRelation.AFTER] = mutableListOf()
         streamInfoMap[TimeRelation.BEFORE] = mutableListOf()
 
-        val extractors = streamNames.map { streamName ->
+        val extractors = resultRequest.stream.map { streamName ->
             MessageExtractor(
                 applicationContext,
                 resultRequest,
