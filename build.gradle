@@ -51,15 +51,15 @@ dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-core'
     implementation 'com.fasterxml.jackson.module:jackson-module-kotlin'
 
-    implementation('com.exactpro.th2:common:4.0.0-th2-2150-books-pages-1530756720-SNAPSHOT') {
+    implementation('com.exactpro.th2:common:5.0.0-dev-version-5-2567706074-SNAPSHOT') {
         exclude group: 'com.fasterxml.jackson.core'
     }
 
     implementation group: 'net.jpountz.lz4', name: 'lz4', version: '1.3.0'
 
-    implementation 'com.exactpro.th2:cradle-core:4.0.0-TH2-2150-2496249472-SNAPSHOT'
+    implementation 'com.exactpro.th2:cradle-core:5.0.0-dev-version-5-2575170933-SNAPSHOT'
 
-    implementation('com.exactpro.th2:cradle-cassandra:4.0.0-TH2-2150-2496249472-SNAPSHOT') {
+    implementation('com.exactpro.th2:cradle-cassandra:5.0.0-dev-version-5-2575170933-SNAPSHOT') {
         exclude group: 'com.fasterxml.jackson.core'
     }
 
