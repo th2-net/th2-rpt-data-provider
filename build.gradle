@@ -49,8 +49,7 @@ dependencies {
 
     implementation 'com.fasterxml.jackson.core:jackson-core'
     implementation 'com.fasterxml.jackson.module:jackson-module-kotlin'
-
-
+    
     implementation group: 'net.jpountz.lz4', name: 'lz4', version: '1.3.0'
 
     implementation('com.exactpro.th2:common:5.0.0-dev-version-5-2567706074-SNAPSHOT') {
