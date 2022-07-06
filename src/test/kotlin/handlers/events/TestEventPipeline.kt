@@ -16,9 +16,10 @@
 
 package handlers.events
 
+import com.exactpro.cradle.Order
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.testevents.*
-import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.internal.Direction
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineFilteredMessage
@@ -30,8 +31,6 @@ import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.SearchEventsHandler
-import com.exactpro.th2.rptdataprovider.isAfterOrEqual
-import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -116,16 +115,20 @@ class TestEventPipeline {
 
         val cradle = mockk<CradleService>()
 
-        coEvery { cradle.getEventsSuspend(any(), any()) } answers {
+        coEvery { cradle.getEventsSuspend(any(), any(), any<Order>(), any()) } answers {
             val start = firstArg<Instant>()
+            val end = secondArg<Instant>()
+            val order = thirdArg<Order>()
             batches.filter {
-                it.startTimestamp.isAfterOrEqual(start) || it.endTimestamp.isAfterOrEqual(start)
+                maxInstant(it.startTimestamp, start).isBeforeOrEqual(minInstant(it.endTimestamp, end))
+            }.let {
+                if (order == Order.DIRECT) it else it.reversed()
             }
         }
 
         if (resumeId != null) {
             val batch = batches.find { it.asBatch().testEvents.map { it.id }.contains(resumeId.eventId) }
-            coEvery { cradle.getEventSuspend(any()) } answers { batch }
+            coEvery { cradle.getEventsSuspend(any()) } answers { batch }
         }
 
         every { context.cradleService } answers { cradle }
@@ -467,9 +470,9 @@ class TestEventPipeline {
     @Test
     fun `testIntersectedBatchesResumeReverse`() {
         val testData = EventsParameters(
-            changeTimestamp(startTimestamp, 100),
-            changeTimestamp(startTimestamp, -100),
-            ProviderEventId(StoredTestEventId("2"), StoredTestEventId("2-3")),
+            startTimestamp = changeTimestamp(startTimestamp, 100),
+            endTimestamp = changeTimestamp(startTimestamp, -100),
+            resumeId = ProviderEventId(StoredTestEventId("2"), StoredTestEventId("2-3")),
             events = listOf(
                 createEvents("1", startTimestamp, changeTimestamp(startTimestamp, 5)),
                 createEvents(
@@ -489,9 +492,9 @@ class TestEventPipeline {
     @Test
     fun `testTimestamp`() {
         val testData = EventsParameters(
-            startTimestamp,
-            changeTimestamp(startTimestamp, 10),
-            null,
+            startTimestamp = startTimestamp,
+            endTimestamp = changeTimestamp(startTimestamp, 10),
+            resumeId = null,
             events = listOf(
                 createEvents(
                     "1",
@@ -546,5 +549,37 @@ class TestEventPipeline {
         )
 
         baseTestCase(testData, TimeRelation.BEFORE)
+    }
+
+
+    @Test
+    fun `testTrimming`() {
+        val testData = EventsParameters(
+            startTimestamp,
+            changeTimestamp(startTimestamp, 10),
+            null,
+            events = listOf(
+                createEvents(
+                    "1",
+                    changeTimestamp(startTimestamp, -2),
+                    changeTimestamp(startTimestamp, 2)
+                ),
+                createEvents(
+                    "2",
+                    changeTimestamp(startTimestamp, -2),
+                    changeTimestamp(startTimestamp, 12)
+                ),
+                createEvents(
+                    "3",
+                    changeTimestamp(startTimestamp, 8),
+                    changeTimestamp(startTimestamp, 12)
+                )
+            ),
+            expectedResult = getIdRange("1", 3, 5)
+                    + getIdRange("2", 1, 15)
+                    + getIdRange("3", 1, 2)
+        )
+
+        baseTestCase(testData, TimeRelation.AFTER)
     }
 }
