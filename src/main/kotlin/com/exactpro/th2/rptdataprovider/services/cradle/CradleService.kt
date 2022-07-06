@@ -18,6 +18,7 @@
 package com.exactpro.th2.rptdataprovider.services.cradle
 
 import com.exactpro.cradle.CradleManager
+import com.exactpro.cradle.Order
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.cradle.messages.StoredMessageFilter
@@ -56,7 +57,9 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
 
     private val cradleDispatcherPoolSize = configuration.cradleDispatcherPoolSize.value.toInt()
 
-    private val storage = cradleManager.storage
+    private val storage = cradleManager.storage.also {
+        it.getTestEventsAsync(Instant.ofEpochMilli(1636110390000), Instant.ofEpochMilli(1636110420000), null, Order.REVERSE)
+    }
 
     // FIXME: Change thread name patter to something easily identifiable in the logs
     private val cradleDispatcher = Executors.newFixedThreadPool(cradleDispatcherPoolSize).asCoroutineDispatcher()
@@ -108,21 +111,32 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
         }
     }
 
-    suspend fun getEventsSuspend(from: Instant, to: Instant): Iterable<StoredTestEventWrapper> {
+    suspend fun getEventsSuspend(
+        from: Instant,
+        to: Instant,
+        order: Order = Order.DIRECT,
+        idFrom: StoredTestEventId? = null
+    ): Iterable<StoredTestEventWrapper> {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
                 logTime("Get events from: $from to: $to") {
-                    storage.getTestEventsAsync(from, to).await()
+                    storage.getTestEventsAsync(from, to, idFrom, order).await()
                 }
             } ?: listOf()
         }
     }
 
-    suspend fun getEventsSuspend(parentId: StoredTestEventId, from: Instant, to: Instant): Iterable<StoredTestEventWrapper> {
+    suspend fun getEventsSuspend(
+        from: Instant,
+        to: Instant,
+        parentId: StoredTestEventId,
+        idFrom: StoredTestEventId? = null,
+        order: Order = Order.DIRECT
+    ): Iterable<StoredTestEventWrapper> {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
                 logTime("Get events parent: $parentId from: $from to: $to") {
-                    storage.getTestEventsAsync(parentId, from, to).await()
+                    storage.getTestEventsAsync(from, to, idFrom, parentId).await()
                 }
             } ?: listOf()
         }

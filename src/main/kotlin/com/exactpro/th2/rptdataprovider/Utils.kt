@@ -17,6 +17,10 @@
 package com.exactpro.th2.rptdataprovider
 
 import com.exactpro.cradle.Direction
+import java.time.Instant
+import java.time.LocalTime
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
 
 fun cradleDirectionToGrpc(direction: Direction): com.exactpro.th2.common.grpc.Direction {
     return if (direction == Direction.FIRST)
@@ -30,4 +34,18 @@ fun grpcDirectionToCradle(direction: com.exactpro.th2.common.grpc.Direction): Di
         Direction.FIRST
     else
         Direction.SECOND
+}
+
+
+fun isDifferentDays(from: Instant, to: Instant): Boolean {
+    val fromDay = from.atOffset(ZoneOffset.UTC).dayOfYear
+    val toDay = to.atOffset(ZoneOffset.UTC).dayOfYear
+    return fromDay != toDay
+}
+
+
+fun getDayStart(instant: Instant): OffsetDateTime {
+    return instant
+        .atOffset(ZoneOffset.UTC)
+        .with(LocalTime.of(0, 0, 0, 0))
 }
