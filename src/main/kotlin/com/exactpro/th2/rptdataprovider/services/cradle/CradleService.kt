@@ -118,7 +118,7 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
                 logTime("Get events from: $from to: $to") {
-                    storage.getTestEventsAsync(from, to, idFrom, order).await()
+                    storage.getTestEventsAsync(from, to).await()
                 }
             } ?: listOf()
         }
@@ -134,7 +134,7 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
                 logTime("Get events parent: $parentId from: $from to: $to") {
-                    storage.getTestEventsAsync(from, to, idFrom, parentId).await()
+                    storage.getTestEventsAsync(parentId, from, to).await()
                 }
             } ?: listOf()
         }
