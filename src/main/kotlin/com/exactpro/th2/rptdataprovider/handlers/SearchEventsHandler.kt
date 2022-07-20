@@ -186,14 +186,14 @@ class SearchEventsHandler(private val context: Context) {
         }
 
         val filteredEventEntities = orderedByDirection(baseEventEntities, request.searchDirection).let {
-            if (lastBatch) trimLastBatch(it, searchInterval, request.searchDirection) else it
+            if (lastBatch) trimLastBatch(it.toList(), searchInterval, request.searchDirection) else it
         }
 
         return eventProducer.fromEventsProcessed(filteredEventEntities, request)
     }
 
 
-    private fun <T> orderedByDirection(iterable: List<T>, timeRelation: TimeRelation): List<T> {
+    private fun <T> orderedByDirection(iterable: Iterable<T>, timeRelation: TimeRelation): Iterable<T> {
         return if (timeRelation == AFTER) {
             iterable
         } else {
@@ -211,7 +211,11 @@ class SearchEventsHandler(private val context: Context) {
     ): Flow<Deferred<Iterable<BaseEventEntity>>> {
         return coroutineScope {
             flow {
-                val eventsCollection = getEventsSuspend(request, searchInterval).iterator()
+                val eventsCollection =
+                    orderedByDirection(
+                        getEventsSuspend(request, searchInterval).toList(),
+                        request.searchDirection
+                    ).iterator()
 
                 while (eventsCollection.hasNext()) {
                     val event = eventsCollection.next()

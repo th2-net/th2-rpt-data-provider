@@ -58,7 +58,7 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
     private val cradleDispatcherPoolSize = configuration.cradleDispatcherPoolSize.value.toInt()
 
     private val storage = cradleManager.storage.also {
-        it.getTestEventsAsync(Instant.ofEpochMilli(1636110390000), Instant.ofEpochMilli(1636110420000), null, Order.REVERSE)
+        it.getTestEventsAsync(Instant.ofEpochMilli(1636110390000), Instant.ofEpochMilli(1636110420000))
     }
 
     // FIXME: Change thread name patter to something easily identifiable in the logs
@@ -120,7 +120,7 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
                 logTime("Get events from: $from to: $to") {
-                    storage.getTestEventsAsync(from, to, idFrom, order).await()
+                    storage.getTestEventsAsync(from, to).await()
                 }
             } ?: listOf()
         }
@@ -136,7 +136,7 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
                 logTime("Get events parent: $parentId from: $from to: $to") {
-                    storage.getTestEventsAsync(from, to, idFrom, parentId).await()
+                    storage.getTestEventsAsync(parentId, from, to).await()
                 }
             } ?: listOf()
         }
