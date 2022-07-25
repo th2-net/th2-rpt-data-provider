@@ -20,11 +20,8 @@ package com.exactpro.th2.rptdataprovider.handlers
 import com.exactpro.cradle.Order
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.TimeRelation.AFTER
-import com.exactpro.cradle.testevents.BatchedStoredTestEvent
-import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventWithContent
 import com.exactpro.cradle.testevents.StoredTestEventWrapper
-import com.exactpro.th2.dataprovider.grpc.Events
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.internal.IntermediateEvent
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
@@ -34,6 +31,7 @@ import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedEventInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
+import com.exactpro.th2.rptdataprovider.services.cradle.CradleIteratorWrapper
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import io.prometheus.client.Counter
 import kotlinx.coroutines.*
@@ -41,9 +39,6 @@ import kotlinx.coroutines.channels.Channel.Factory.BUFFERED
 import kotlinx.coroutines.flow.*
 import mu.KotlinLogging
 import java.time.Instant
-import java.time.LocalTime
-import java.time.OffsetDateTime
-import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -186,14 +181,13 @@ class SearchEventsHandler(private val context: Context) {
         }
 
         val filteredEventEntities = orderedByDirection(baseEventEntities, request.searchDirection).let {
-            if (lastBatch) trimLastBatch(it.toList(), searchInterval, request.searchDirection) else it
+            if (lastBatch) trimLastBatch(it, searchInterval, request.searchDirection) else it
         }
-
         return eventProducer.fromEventsProcessed(filteredEventEntities, request)
     }
 
 
-    private fun <T> orderedByDirection(iterable: Iterable<T>, timeRelation: TimeRelation): Iterable<T> {
+    private fun <T> orderedByDirection(iterable: List<T>, timeRelation: TimeRelation): List<T> {
         return if (timeRelation == AFTER) {
             iterable
         } else {
@@ -211,11 +205,7 @@ class SearchEventsHandler(private val context: Context) {
     ): Flow<Deferred<Iterable<BaseEventEntity>>> {
         return coroutineScope {
             flow {
-                val eventsCollection =
-                    orderedByDirection(
-                        getEventsSuspend(request, searchInterval).toList(),
-                        request.searchDirection
-                    ).iterator()
+                val eventsCollection = CradleIteratorWrapper(getEventsSuspend(request, searchInterval).iterator())
 
                 while (eventsCollection.hasNext()) {
                     val event = eventsCollection.next()
