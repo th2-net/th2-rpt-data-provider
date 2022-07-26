@@ -51,7 +51,7 @@ dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-core'
     implementation 'com.fasterxml.jackson.module:jackson-module-kotlin'
 
-    implementation('com.exactpro.th2:common:5.0.0-dev-version-5-2739126971-SNAPSHOT') {
+    implementation('com.exactpro.th2:common:5.0.0-dev-version-5-2567706074-SNAPSHOT') {
         exclude group: 'com.fasterxml.jackson.core'
     }
 
