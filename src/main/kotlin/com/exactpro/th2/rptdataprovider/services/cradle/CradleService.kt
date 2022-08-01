@@ -57,9 +57,7 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
 
     private val cradleDispatcherPoolSize = configuration.cradleDispatcherPoolSize.value.toInt()
 
-    private val storage = cradleManager.storage.also {
-        it.getTestEventsAsync(Instant.ofEpochMilli(1636110390000), Instant.ofEpochMilli(1636110420000))
-    }
+    private val storage = cradleManager.storage
 
     // FIXME: Change thread name patter to something easily identifiable in the logs
     private val cradleDispatcher = Executors.newFixedThreadPool(cradleDispatcherPoolSize).asCoroutineDispatcher()
@@ -126,12 +124,32 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
         }
     }
 
+    suspend fun getEventsSuspend(idFrom: StoredTestEventId, to: Instant, order: Order = Order.DIRECT): Iterable<StoredTestEventWrapper> {
+        return withContext(cradleDispatcher) {
+            logMetrics(getTestEventsAsyncMetric) {
+                logTime("Get events from: $idFrom to: $to") {
+                    storage.getTestEventsAsync(idFrom, to, order).await()
+                }
+            } ?: listOf()
+        }
+    }
+
+//    suspend fun getEventsSuspend(from: Instant, to: Instant, order: Order = Order.DIRECT): Iterable<StoredTestEventWrapper> {
+//        return withContext(cradleDispatcher) {
+//            logMetrics(getTestEventsAsyncMetric) {
+//                logTime("Get events from: $from to: $to") {
+//                    storage.getTestEventsAsync(from, to, order).await()
+//                }
+//            } ?: listOf()
+//        }
+//    }
+
+
     suspend fun getEventsSuspend(
         from: Instant,
         to: Instant,
         parentId: StoredTestEventId,
-        idFrom: StoredTestEventId? = null,
-        order: Order = Order.DIRECT
+        idFrom: StoredTestEventId? = null
     ): Iterable<StoredTestEventWrapper> {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
