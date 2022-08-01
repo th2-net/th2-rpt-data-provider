@@ -263,21 +263,6 @@ class TestEventPipeline {
         baseTestCase(testData)
     }
 
-    @Test
-    fun `testStartIntervalEmpty`() {
-        val events = createEvents("1", startTimestamp, endTimestamp)
-
-        val testData = EventsParameters(
-            changeTimestamp(startTimestamp, -1),
-            startTimestamp,
-            null,
-            events = listOf(eventsFromStartToEnd11),
-            expectedResult = emptyList()
-        )
-
-        baseTestCase(testData)
-    }
-
 
     @Test
     fun `testStartInterval`() {
@@ -286,33 +271,7 @@ class TestEventPipeline {
             changeTimestamp(startTimestamp, 1),
             null,
             events = listOf(eventsFromStartToEnd11),
-            expectedResult = getIdRange("1", 1, 1)
-        )
-
-        baseTestCase(testData)
-    }
-
-    @Test
-    fun `testTwoChunks`() {
-        val testData = EventsParameters(
-            startTimestamp,
-            changeTimestamp(startTimestamp, 4),
-            null,
-            events = listOf(eventsFromStartToEnd11),
-            expectedResult = getIdRange("1", 1, 4)
-        )
-
-        baseTestCase(testData)
-    }
-
-    @Test
-    fun `testFullTimeRange`() {
-        val testData = EventsParameters(
-            startTimestamp,
-            endTimestamp,
-            null,
-            events = listOf(eventsFromStartToEnd11),
-            expectedResult = getIdRange("1", 1, 10)
+            expectedResult = getIdRange("1", 1, 11)
         )
 
         baseTestCase(testData)
@@ -432,7 +391,7 @@ class TestEventPipeline {
             startTimestamp,
             null,
             events = listOf(eventsFromStartToEnd11),
-            expectedResult = getIdRange("1", 2, 11)
+            expectedResult = getIdRange("1", 1, 11)
         )
 
         baseTestCase(testData, TimeRelation.BEFORE)
@@ -460,7 +419,7 @@ class TestEventPipeline {
             startTimestamp,
             ProviderEventId(StoredTestEventId("1"), StoredTestEventId("1-10")),
             events = listOf(eventsFromStartToEnd11),
-            expectedResult = getIdRange("1", 2, 9)
+            expectedResult = getIdRange("1", 1, 9)
         )
 
         baseTestCase(testData, TimeRelation.BEFORE)
@@ -513,7 +472,7 @@ class TestEventPipeline {
             ),
             expectedResult = getIdRange("1", 3, 5)
                     + getIdRange("2", 1, 7)
-                    + getIdRange("3", 1, 2)
+                    + getIdRange("3", 1, 4)
         )
 
         baseTestCase(testData)
@@ -542,7 +501,7 @@ class TestEventPipeline {
                     changeTimestamp(startTimestamp, 11)
                 )
             ),
-            expectedResult = getIdRange("1", 4, 5)
+            expectedResult = getIdRange("1", 1, 5)
                     + getIdRange("2", 1, 7)
                     + getIdRange("3", 1, 3)
         )
@@ -576,7 +535,7 @@ class TestEventPipeline {
             ),
             expectedResult = getIdRange("1", 3, 5)
                     + getIdRange("2", 1, 15)
-                    + getIdRange("3", 1, 2)
+                    + getIdRange("3", 1, 5)
         )
 
         baseTestCase(testData, TimeRelation.AFTER)
