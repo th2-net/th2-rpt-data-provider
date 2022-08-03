@@ -385,7 +385,7 @@ class SearchEventsHandler(private val context: Context) {
 
             val timeIntervals = getTimeIntervals(
                 startTimestamp, request, resumeId
-            ).toList()
+            )
 
             val parentEventCounter = ParentEventCounter(request.limitForParent)
 
