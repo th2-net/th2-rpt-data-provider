@@ -20,6 +20,7 @@ import com.exactpro.th2.common.grpc.Direction
 import com.exactpro.th2.common.grpc.MessageGroupBatch
 import com.exactpro.th2.common.grpc.MessageID
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Job
 
 
 data class CodecRequestId(private val ids: Set<BaseMessageId>) {
@@ -82,6 +83,8 @@ class PendingCodecBatchRequest(
     val streamName: String
 ) {
     val startTimestamp = System.currentTimeMillis()
+
+    var job: Job? = null
 
     fun toResponse(): CodecBatchResponse {
         return CodecBatchResponse(completableDeferred)

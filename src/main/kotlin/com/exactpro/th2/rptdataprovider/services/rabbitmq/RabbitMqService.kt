@@ -25,11 +25,8 @@ import com.exactpro.th2.common.schema.message.MessageRouter
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
-import com.exactpro.th2.rptdataprovider.logTime
 import kotlinx.coroutines.*
 import mu.KotlinLogging
-import java.lang.IllegalArgumentException
-import java.lang.IllegalStateException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import kotlin.system.measureTimeMillis
@@ -81,6 +78,7 @@ class RabbitMqService(
                         codecLatency.gaugeDec(listOf(it.streamName))
                         codecLatency.setDuration(it.startTimestamp.toDouble(), listOf(it.streamName))
                         it.completableDeferred.complete(response)
+                        it.job?.cancel()
                     }
                         ?: logger.trace {
                             val firstSequence =
@@ -95,6 +93,14 @@ class RabbitMqService(
             },
 
             "from_codec"
+        )
+    }
+
+    private data class TimeoutInfo(val firstSequence: Long?, val lastSequence: Long?, val stream: String) {
+        constructor(request: CodecBatchRequest) : this(
+            firstSequence = request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sequence,
+            lastSequence = request.protobufRawMessageBatch.groupsList.last()?.messagesList?.last()?.rawMessage?.sequence,
+            stream = "${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sessionAlias}:${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.direction.toString()}"
         )
     }
 
@@ -113,36 +119,37 @@ class RabbitMqService(
 
             logger.trace { "Get pending request for batch ${request.requestId}" }
 
+            val requestId = request.requestId
+            val streamName = request.streamName
+
+
+            val info = if (logger.isWarnEnabled) TimeoutInfo(request) else null
+
             // launch timeout handler coroutine
-            mqCallbackScope.launch {
+            val job = mqCallbackScope.launch {
                 measureTimeMillis {
                     delay(responseTimeout)
 
                     pendingRequest.completableDeferred.let {
                         if (pendingRequests[request.requestId]?.completableDeferred === pendingRequest.completableDeferred) {
 
-                            pendingRequests.remove(request.requestId)
+                            pendingRequests.remove(requestId)
                             it.complete(null)
 
-                            codecLatency.gaugeDec(listOf(request.streamName))
+                            codecLatency.gaugeDec(listOf(streamName))
                             codecLatency.setDuration(
                                 pendingRequest.startTimestamp.toDouble(),
-                                listOf(request.streamName)
+                                listOf(streamName)
                             )
 
                             logger.warn {
-                                val firstSequence =
-                                    request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sequence
-                                val lastSequence =
-                                    request.protobufRawMessageBatch.groupsList.last()?.messagesList?.last()?.rawMessage?.sequence
-                                val stream =
-                                    "${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sessionAlias}:${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.direction.toString()}"
-
-                                "codec request timed out after $responseTimeout ms (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} hash=${request.requestHash}) requestId=${request.requestId}"
+                                info?.let {
+                                    "codec request timed out after $responseTimeout ms (stream=${it.stream} firstId=${it.firstSequence} lastId=${it.lastSequence} hash=${request.requestHash}) requestId=${request.requestId}"
+                                }
                             }
                         }
                     }
-                }.also { logger.debug { "${request.requestId} mqCallbackScope ${it}ms" } }
+                }.also { logger.debug { "$requestId mqCallbackScope ${it}ms" } }
             }
 
             logger.trace { "Check timeout callback for batch ${request.requestId}" }
@@ -204,6 +211,8 @@ class RabbitMqService(
                     }
                 }.also { logger.info { "${request.requestId} mqRequestSenderScope ${it}ms" } }
             }
+
+            pendingRequest.job = job
 
             pendingRequest
         }.toResponse()
