@@ -30,8 +30,11 @@ import com.exactpro.th2.rptdataprovider.convertToString
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.logTime
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.future.await
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import mu.KotlinLogging
 import java.util.concurrent.Executors
@@ -50,8 +53,6 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
         private val getTestEventAsyncMetric: Metrics = Metrics("get_test_event_async", "getTestEventAsync")
         private val getStreamsMetric: Metrics =
             Metrics("get_streams", "getStreams")
-        private val getSoloMessageBatchMetric:Metrics =
-            Metrics("get_solo_message_batch_metric","getSoloMessageBatchMetric")
     }
 
 
@@ -62,25 +63,33 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
 
     private val cradleDispatcher = Executors.newFixedThreadPool(cradleDispatcherPoolSize).asCoroutineDispatcher()
 
-    suspend fun getMessagesSuspend(filter: MessageFilter): Iterable<StoredMessage> {
-        return withContext(cradleDispatcher) {
-            logMetrics(getMessagesAsyncMetric) {
-                logTime("getMessages (filter=${filter.convertToString()})") {
-                    storage.getMessagesAsync(filter).await().asIterable()
-                }
-            } ?: listOf()
-        }
-    }
+    //FIXME: change cradle api or wrap every blocking iterator the same way
+    suspend fun getMessagesBatchesSuspend(filter: MessageFilter): Channel<StoredMessageBatch> {
+        val iteratorScope = CoroutineScope(cradleDispatcher)
 
-    suspend fun getMessagesBatchesSuspend(filter: MessageFilter): Iterable<StoredMessageBatch> {
         return withContext(cradleDispatcher) {
-            logMetrics(getMessagesBatches) {
+            (logMetrics(getMessagesBatches) {
                 logTime("getMessagesBatches (filter=${filter.convertToString()})") {
                     storage.getMessageBatchesAsync(filter).await().asIterable()
                 }
-            } ?: listOf()
+            } ?: listOf())
+                .let { iterable ->
+                    Channel<StoredMessageBatch>(1)
+                        .also { channel ->
+                            iteratorScope.launch {
+                                iterable.forEach {
+                                    logger.trace { "message batch ${it.id} has been received from the iterator" }
+                                    channel.send(it)
+                                    logger.trace { "message batch ${it.id} has been sent to the channel" }
+                                }
+                                channel.close()
+                                logger.debug { "message batch channel for stream ${filter.sessionAlias}:${filter.direction} has been closed" }
+                            }
+                        }
+                }
         }
     }
+
 
     suspend fun getMessageSuspend(id: StoredMessageId): StoredMessage? {
         return withContext(cradleDispatcher) {

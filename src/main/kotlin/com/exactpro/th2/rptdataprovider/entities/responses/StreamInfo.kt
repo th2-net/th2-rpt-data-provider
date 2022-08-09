@@ -37,7 +37,7 @@ data class StreamInfo(val streamPointer: StreamName, @JsonIgnore val messageId: 
             streamPointer.bookId,
             streamPointer.name,
             streamPointer.direction,
-            Instant.ofEpochMilli(Long.MIN_VALUE),
+            Instant.ofEpochMilli(0),
             -1
         )
     }

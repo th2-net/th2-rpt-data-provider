@@ -17,7 +17,9 @@
 package handlers.messages
 
 
+import com.exactpro.cradle.BookId
 import com.exactpro.cradle.Direction
+import com.exactpro.cradle.PageId
 import com.exactpro.cradle.messages.MessageToStore
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageBatch
@@ -25,9 +27,9 @@ import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
+import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
-import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.handlers.messages.MessageExtractor
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
@@ -60,10 +62,11 @@ class ExtractorTest {
     private val batchSize = messagesInChunk * chunkCount
 
     private val baseStreamName = "test_stream"
-    private val streamDirection = "first"
+    private val streamDirection = "FIRST"
+
+    private val BOOK = BookId("")
     private val fullStreamName = "${baseStreamName}:${streamDirection}"
-    private val streamNameObject = StreamName(baseStreamName, Direction.byLabel(streamDirection))
-    private val direction = "next"
+    private val streamNameObject = StreamName(baseStreamName, Direction.valueOf(streamDirection), BookId(""))
 
     inner class BorderTestParameters(
         val startTimestamp: Instant,
@@ -74,7 +77,9 @@ class ExtractorTest {
         val resultIndexes: List<Long>,
         id: Long? = null
     ) {
-        val resumeId = id?.let { StoredMessageId(streamNameObject.name, streamNameObject.direction, it) }
+        val resumeId = id?.let {
+            StoredMessageId(BookId(""), streamNameObject.name, streamNameObject.direction, Instant.now(), it)
+        }
     }
 
     private fun getSearchRequest(
@@ -84,9 +89,10 @@ class ExtractorTest {
     ): SseMessageSearchRequest {
         val parameters = mutableMapOf(
             "stream" to listOf(fullStreamName),
-            "direction" to listOf(direction),
+            "direction" to listOf(streamDirection),
             "startTimestamp" to listOf(startTimestamp.toEpochMilli().toString()),
-            "endTimestamp" to listOf(endTimestamp.toEpochMilli().toString())
+            "endTimestamp" to listOf(endTimestamp.toEpochMilli().toString()),
+            "bookId" to listOf(BOOK.name)
         )
         if (resumeId != null) {
             parameters["messageId"] = listOf(resumeId.toString())
@@ -94,17 +100,27 @@ class ExtractorTest {
         return SseMessageSearchRequest(parameters, FilterPredicate(emptyList()))
     }
 
-    private fun getMessage(timestamp: Instant, globalIndex: AtomicLong? = null): MessageToStore {
-        val msg = mockk<MessageToStore>()
+    private fun getMessage(timestamp: Instant, globalIndex: AtomicLong? = null): StoredMessage {
+        val msg = mockk<StoredMessage>()
 
         every { msg.timestamp } answers { timestamp }
+        var index = 0L
         if (globalIndex != null) {
-            val index = globalIndex.getAndIncrement()
-            every { msg.index } answers { index }
+            index = globalIndex.getAndIncrement()
+            every { msg.sequence } answers { index }
         }
-        every { msg.streamName } answers { fullStreamName }
+        every { msg.sessionAlias } answers { fullStreamName }
         every { msg.direction } answers { Direction.FIRST }
         every { msg.getContent() } answers { byteArrayOf(1, 1, 1) }
+        every { msg.getId() } answers {
+            StoredMessageId(
+                BOOK,
+                baseStreamName,
+                Direction.valueOf(streamDirection),
+                timestamp,
+                index
+            )
+        }
         every { msg.metadata } answers { null }
 
         return msg
@@ -138,8 +154,8 @@ class ExtractorTest {
         return Instant.ofEpochMilli(diff)
     }
 
-    private fun getMessages(startTimestamp: Instant, endTimestamp: Instant): List<MessageToStore> {
-        return mutableListOf<MessageToStore>().apply {
+    private fun getMessages(startTimestamp: Instant, endTimestamp: Instant): List<StoredMessage> {
+        return mutableListOf<StoredMessage>().apply {
             add(getMessage(startTimestamp))
 
             repeat(messagesInChunk - 2) {
@@ -156,19 +172,20 @@ class ExtractorTest {
         var index = 1L
         var startTimestamp = start
 
-        return StoredMessageBatch().also { batch ->
-            repeat(chunkCount) {
-                val endTimestamp = startTimestamp.plus(1, ChronoUnit.HOURS)
+        val allMessages = mutableListOf<StoredMessage>()
+        repeat(chunkCount) {
+            val endTimestamp = startTimestamp.plus(1, ChronoUnit.HOURS)
 
-                val messages = getMessages(startTimestamp, endTimestamp)
+            val messages = getMessages(startTimestamp, endTimestamp)
 
-                messages.forEach { msg ->
-                    every { msg.index } answers { index++ }
-                    batch.addMessage(msg)
-                }
-                startTimestamp = endTimestamp.plusNanos(1)
+            messages.forEach { msg ->
+                every { msg.sequence } answers { index++ }
+                allMessages.add(msg)
             }
+            startTimestamp = endTimestamp.plusNanos(1)
         }
+
+        return StoredMessageBatch(allMessages, PageId(BookId("1"), "1"), Instant.now())
     }
 
 
@@ -220,16 +237,18 @@ class ExtractorTest {
     }
 
     private fun getOutOfStartBatch(startTimestamp: Instant, endTimestamp: Instant): StoredMessageBatch {
-        return StoredMessageBatch().also {
-            val index = AtomicLong(1L)
 
-            it.addMessage(getMessage(startTimestamp, index))
+        val allMessages = mutableListOf<StoredMessage>()
+        val index = AtomicLong(1L)
 
-            val pivot = getTimestampBetween(startTimestamp, endTimestamp)
-            it.addMessage(getMessage(pivot, index))
+        allMessages.add(getMessage(startTimestamp, index))
 
-            it.addMessage(getMessage(endTimestamp, index))
-        }
+        val pivot = getTimestampBetween(startTimestamp, endTimestamp)
+        allMessages.add(getMessage(pivot, index))
+
+        allMessages.add(getMessage(endTimestamp, index))
+
+        return StoredMessageBatch(allMessages, PageId(BookId("1"), "1"), Instant.now())
     }
 
     private fun testBorders(
@@ -293,7 +312,7 @@ class ExtractorTest {
         assertEquals(testParameters.resultSize, resultMessages.size)
         assertArrayEquals(
             testParameters.resultIndexes.toTypedArray(),
-            resultMessages.map { it.index }.toTypedArray()
+            resultMessages.map { it.sequence }.toTypedArray()
         )
     }
 }

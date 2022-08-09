@@ -23,7 +23,6 @@ import com.fasterxml.jackson.annotation.JsonRawValue
 import com.google.protobuf.util.JsonFormat
 import java.time.Instant
 
-
 class HttpBodyWrapper(
     val subsequenceId: List<Int>,
     val protocol: String,
@@ -72,6 +71,10 @@ data class BodyHttpMessage(
 ) : BodyHttpBase(metadata, fields)
 
 data class BodyHttpSubMessage(
+    @JsonProperty("metadata")
+    override var metadata: MutableMap<String, Any>?,
+    @JsonProperty("fields")
+    override var fields: MutableMap<String, Any>?,
     @JsonProperty("messageValue")
     var messageValue: MutableMap<String, Any>? = null
-)
+) : BodyHttpBase(metadata, fields)
