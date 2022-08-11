@@ -56,9 +56,9 @@ dependencies {
         exclude group: 'com.fasterxml.jackson.core'
     }
 
-    implementation 'com.exactpro.th2:cradle-core:5.0.0-dev-version-5-2567706074-SNAPSHOT'
+    implementation 'com.exactpro.th2:cradle-core:5.0.0-dev-version-5-2745586346-SNAPSHOT'
 
-    implementation('com.exactpro.th2:cradle-cassandra:5.0.0-dev-version-5-2575170933-SNAPSHOT') {
+    implementation('com.exactpro.th2:cradle-cassandra:5.0.0-dev-version-5-2745586346-SNAPSHOT') {
         exclude group: 'com.fasterxml.jackson.core'
     }
 
