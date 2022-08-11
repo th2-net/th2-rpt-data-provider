@@ -37,7 +37,8 @@ data class SseEventSearchRequest(
     val limitForParent: Long?,
     val metadataOnly: Boolean,
     val attachedMessages: Boolean,
-    val bookId: BookId
+    val bookId: BookId,
+    val scope: String
 ) {
     companion object {
         private fun asCradleTimeRelation(value: String): TimeRelation {
@@ -62,7 +63,10 @@ data class SseEventSearchRequest(
         metadataOnly = parameters["metadataOnly"]?.firstOrNull()?.toBoolean() ?: true,
         attachedMessages = parameters["attachedMessages"]?.firstOrNull()?.toBoolean() ?: false,
         bookId = parameters["bookId"]?.firstOrNull()?.let { BookId(it) }
-            ?: throw InvalidRequestException("'bookId' is required parameter and it must not be null")
+            ?: throw InvalidRequestException("'bookId' is required parameter and it must not be null"),
+
+        scope = parameters["scope"]?.firstOrNull()
+            ?: throw InvalidRequestException("'scope' is a required parameter and it must not be null")
     )
 
     constructor(request: EventSearchRequest, filterPredicate: FilterPredicate<BaseEventEntity>, bookId: BookId) : this(
@@ -100,7 +104,8 @@ data class SseEventSearchRequest(
             request.attachedMessages.value
         } else false,
 
-        bookId = bookId
+        bookId = bookId,
+        scope = ""
     )
 
     private fun checkEndTimestamp() {

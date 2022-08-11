@@ -114,6 +114,7 @@ class SearchEventsHandler(private val context: Context) {
                 .startTimestampFrom().isGreaterThanOrEqualTo(timestampFrom)
                 .startTimestampTo().isLessThan(timestampTo)
                 .order(order)
+                .scope(request.scope)
                 .bookId(request.bookId)
                 .build()
 
