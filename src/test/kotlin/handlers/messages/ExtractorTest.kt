@@ -110,6 +110,7 @@ class ExtractorTest {
             every { msg.sequence } answers { index }
         }
         every { msg.sessionAlias } answers { fullStreamName }
+        every { msg.protocol } answers { "protocol" }
         every { msg.direction } answers { Direction.FIRST }
         every { msg.getContent() } answers { byteArrayOf(1, 1, 1) }
         every { msg.getId() } answers {
