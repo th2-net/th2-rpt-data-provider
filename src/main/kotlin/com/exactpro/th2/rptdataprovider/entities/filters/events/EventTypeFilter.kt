@@ -57,7 +57,11 @@ class EventTypeFilter private constructor(
 
     override fun match(element: BaseEventEntity): Boolean {
         val predicate: (String) -> Boolean = { item ->
-            element.eventType.toLowerCase().contains(item.toLowerCase())
+            if (strict) {
+                element.eventType.toLowerCase().equals(item.toLowerCase(), ignoreCase = true)
+            } else {
+                element.eventType.toLowerCase().contains(item.toLowerCase())
+            }
         }
         return negative.xor(if (conjunct) type.all(predicate) else type.any(predicate))
     }
