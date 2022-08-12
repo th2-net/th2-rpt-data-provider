@@ -57,7 +57,11 @@ class EventNameFilter private constructor(
 
     override fun match(element: BaseEventEntity): Boolean {
         val predicate: (String) -> Boolean = { item ->
-            element.eventName.toLowerCase().contains(item.toLowerCase())
+            if (strict) {
+                element.eventName.equals(item, ignoreCase = true)
+            } else {
+                element.eventName.toLowerCase().contains(item.toLowerCase())
+            }
         }
         return negative.xor(if (conjunct) name.all(predicate) else name.any(predicate))
     }
