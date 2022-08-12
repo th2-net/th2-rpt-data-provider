@@ -31,7 +31,8 @@ import mu.KotlinLogging
 class AttachedEventFilters private constructor(
     private var messagesFromAttachedId: Set<String>,
     override var negative: Boolean = false,
-    override var conjunct: Boolean = false
+    override var conjunct: Boolean = false,
+    override var strict: Boolean = false
 ) : Filter<MessageWithMetadata> {
 
     companion object {
@@ -41,6 +42,7 @@ class AttachedEventFilters private constructor(
             return AttachedEventFilters(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
+                strict = filterRequest.isStrict(),
                 messagesFromAttachedId = filterRequest.getValues()
                     ?.map { filterValue ->
                         val id = ProviderEventId(filterValue)
@@ -72,6 +74,7 @@ class AttachedEventFilters private constructor(
             mutableListOf<Parameter>().apply {
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("conjunct", FilterParameterType.BOOLEAN, false, null))
+                add(Parameter("strict", FilterParameterType.BOOLEAN, false, null))
                 add(
                     Parameter(
                         "values",

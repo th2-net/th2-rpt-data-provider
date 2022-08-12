@@ -24,6 +24,7 @@ interface FilterRequest {
     fun getName(): String
     fun isNegative(): Boolean
     fun isConjunct(): Boolean
+    fun isStrict(): Boolean
     fun getValues(): List<String>?
 }
 
@@ -38,6 +39,10 @@ data class HttpFilter(val filterName: String, val requestMap: Map<String, List<S
 
     override fun isConjunct(): Boolean {
         return requestMap["$filterName-conjunct"]?.first()?.toBoolean() ?: false
+    }
+
+    override fun isStrict(): Boolean {
+        return requestMap["$filterName-strict"]?.first()?.toBoolean() ?: false
     }
 
     override fun getValues(): List<String>? {
@@ -61,6 +66,10 @@ data class GrpcFilter(val filterName: String, val filter: Filter) : FilterReques
     override fun isConjunct(): Boolean {
         // FIXME: temporary fix for the old grpc interface (0.4.0)
         return false
+    }
+
+    override fun isStrict(): Boolean {
+        TODO("Not yet implemented")
     }
 
     override fun getValues(): List<String>? {

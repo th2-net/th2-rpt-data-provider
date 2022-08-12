@@ -26,7 +26,10 @@ import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
 class EventStatusFilter private constructor(
-    private var status: Boolean, override var negative: Boolean = false, override var conjunct: Boolean = false
+    private var status: Boolean,
+    override var negative: Boolean = false,
+    override var conjunct: Boolean = false,
+    override var strict: Boolean = false
 ) : Filter<BaseEventEntity> {
     companion object {
         private const val failedStatus = "failed"

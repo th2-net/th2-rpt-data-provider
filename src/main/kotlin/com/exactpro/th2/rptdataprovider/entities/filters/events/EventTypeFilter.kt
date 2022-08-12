@@ -28,7 +28,8 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 class EventTypeFilter private constructor(
     private var type: List<String>,
     override var negative: Boolean = false,
-    override var conjunct: Boolean = false
+    override var conjunct: Boolean = false,
+    override var strict: Boolean = false
 ) : Filter<BaseEventEntity> {
 
     companion object {
@@ -36,6 +37,7 @@ class EventTypeFilter private constructor(
             return EventTypeFilter(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
+                strict = filterRequest.isStrict(),
                 type = filterRequest.getValues()
                     ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
             )
@@ -47,6 +49,7 @@ class EventTypeFilter private constructor(
             mutableListOf<Parameter>().apply {
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("conjunct", FilterParameterType.BOOLEAN, false, null))
+                add(Parameter("strict", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("values", FilterParameterType.STRING_LIST, null, "Send message, ..."))
             }
         )

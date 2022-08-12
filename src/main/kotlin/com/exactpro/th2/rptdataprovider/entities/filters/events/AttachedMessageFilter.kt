@@ -29,7 +29,8 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 class AttachedMessageFilter private constructor(
     private var messageIds: Set<String>,
     override var negative: Boolean,
-    override var conjunct: Boolean = false
+    override var conjunct: Boolean = false,
+    override var strict: Boolean = false
 ) : Filter<BaseEventEntity> {
 
     companion object {
@@ -38,6 +39,7 @@ class AttachedMessageFilter private constructor(
             return AttachedMessageFilter(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
+                strict = filterRequest.isStrict(),
                 messageIds = filterRequest.getValues()?.toSet()
                     ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
             )
@@ -49,6 +51,7 @@ class AttachedMessageFilter private constructor(
             mutableListOf<Parameter>().apply {
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("conjunct", FilterParameterType.BOOLEAN, false, null))
+                add(Parameter("strict", FilterParameterType.BOOLEAN, false, null))
                 add(
                     Parameter(
                         "values", FilterParameterType.STRING_LIST, null,
