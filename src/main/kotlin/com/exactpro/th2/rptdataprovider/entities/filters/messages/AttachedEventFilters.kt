@@ -89,7 +89,11 @@ class AttachedEventFilters private constructor(
     }
 
     override fun match(element: MessageWithMetadata): Boolean {
-        return negative.xor(messagesFromAttachedId.contains(element.message.messageId))
+        return if (strict) {
+            negative.xor(messagesFromAttachedId.contains(element.message.messageId))
+        } else {
+            negative.xor(messagesFromAttachedId.any { el -> el.contains(element.message.messageId) })
+        }
     }
 
     override fun getInfo(): FilterInfo {
