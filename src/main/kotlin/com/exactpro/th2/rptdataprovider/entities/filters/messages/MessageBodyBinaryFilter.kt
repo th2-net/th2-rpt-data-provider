@@ -63,7 +63,11 @@ class MessageBodyBinaryFilter private constructor(
     override fun match(element: MessageWithMetadata): Boolean {
         val predicate: (String) -> Boolean = { item ->
             element.message.rawMessageBody.let {
-                String(it).toLowerCase().contains(item.toLowerCase())
+                if (strict) {
+                    String(it).equals(item, ignoreCase = true)
+                } else {
+                    String(it).toLowerCase().contains(item.toLowerCase())
+                }
             }
         }
         return try {
