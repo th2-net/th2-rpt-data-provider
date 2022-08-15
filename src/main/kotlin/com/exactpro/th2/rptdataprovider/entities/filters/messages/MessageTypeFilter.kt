@@ -59,7 +59,11 @@ class MessageTypeFilter(
 
     private fun predicate(element: BodyWrapper): Boolean {
         val predicate: (String) -> Boolean = { item ->
-            element.messageType.toLowerCase().contains(item.toLowerCase())
+            if (strict) {
+                element.messageType.equals(item, ignoreCase = true)
+            } else {
+                element.messageType.toLowerCase().contains(item.toLowerCase())
+            }
         }
         return negative.xor(if (conjunct) type.all(predicate) else type.any(predicate))
     }
