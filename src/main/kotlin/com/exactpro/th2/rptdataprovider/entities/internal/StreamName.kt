@@ -25,7 +25,9 @@ data class StreamName(val name: String, val direction: Direction) {
     companion object {
         private val separator = ":"
         private fun check(value: List<String>) {
-            if (value.size != 2) {
+            val lastIsDirectionValue =
+                Direction.values().map { it.name.toLowerCase() }.contains(value.last().toLowerCase())
+            if (!(value.size >= 2 && lastIsDirectionValue)) {
                 throw InvalidRequestException("Incorrect message stream ${value}. Correct view is 'name:direction'")
             }
         }
@@ -33,7 +35,7 @@ data class StreamName(val name: String, val direction: Direction) {
         private fun getName(value: String): String {
             return value.split(separator).let {
                 check(it)
-                it.first()
+                value.substring(0, value.lastIndexOf(separator))
             }
         }
 
