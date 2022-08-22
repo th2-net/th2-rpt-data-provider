@@ -274,7 +274,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
                     messageIdWithoutSubsequence.connectionId.sessionAlias,
                     grpcDirectionToCradle(messageIdWithoutSubsequence.direction),
                     messageIdWithoutSubsequence.sequence
-                ).toString()
+                )
             ).let {
                 MessageMapper.convertToGrpcMessageData(FilteredMessageWrapper(it, request.subsequenceList))
             }
@@ -404,7 +404,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
                                 request.messageId.connectionId.sessionAlias,
                                 grpcDirectionToCradle(request.messageId.direction),
                                 request.messageId.sequence
-                            ).toString()
+                            )
                         )
                     )
                 )
