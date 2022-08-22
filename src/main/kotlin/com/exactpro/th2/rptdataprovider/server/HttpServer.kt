@@ -357,7 +357,7 @@ class HttpServer(private val applicationContext: Context) {
                         rarelyModifiedCacheControl, probe, false, call.parameters.toMap()
                     ) {
                         val id = MessageIdWithSubsequences.from(call.parameters["id"]!!)
-                        val message = messageCache.getOrPut(id.messageId.toString())
+                        val message = messageCache.getOrPut(id.messageId)
                         FilteredMessageWrapper(message, id.subsequences).let {
                             MessageMapper.convertToHttpMessage(it)
                         }
@@ -430,7 +430,8 @@ class HttpServer(private val applicationContext: Context) {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "match message", null, false, false, queryParametersMap) {
                         val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
-                        val message = messageCache.getOrPut(call.parameters["id"]!!)
+                        val id = MessageIdWithSubsequences.from(call.parameters["id"]!!)
+                        val message = messageCache.getOrPut(id.messageId)
                         filterPredicate.apply(FilteredMessageWrapper(message))
                     }
                 }

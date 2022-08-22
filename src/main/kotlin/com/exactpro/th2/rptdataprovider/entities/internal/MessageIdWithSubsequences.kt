@@ -23,11 +23,24 @@ data class MessageIdWithSubsequences(
     val subsequences: List<Int>
 ) {
     companion object {
+
         private const val MESSAGE_ID_SUB_ID_SEPARATOR = "."
+        private const val IDS_DELIMITER = ':'
 
         fun from(id: String): MessageIdWithSubsequences {
-            val idList = id.split(MESSAGE_ID_SUB_ID_SEPARATOR)
-            val storedId = StoredMessageId.fromString(idList.first())
+            val messageIndexStart = id.indexOfLast { it == IDS_DELIMITER }
+            val messageIndexSubstring = id.substring(messageIndexStart + 1, id.length)
+            val messageSequenceAndDirection = id.substring(0, messageIndexStart)
+
+            val idList = messageIndexSubstring.split(MESSAGE_ID_SUB_ID_SEPARATOR)
+
+            val messageId = buildString {
+                append(messageSequenceAndDirection)
+                append(IDS_DELIMITER)
+                append(idList.first())
+            }
+
+            val storedId = StoredMessageId.fromString(messageId)
 
             return MessageIdWithSubsequences(
                 messageId = storedId,

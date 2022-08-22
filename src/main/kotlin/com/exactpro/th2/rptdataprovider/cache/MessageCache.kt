@@ -57,7 +57,7 @@ class MessageCache(configuration: Configuration, private val messageProducer: Me
     }
 
     @InternalCoroutinesApi
-    suspend fun getOrPut(id: String): Message {
-        return messageProducer.fromId(StoredMessageId.fromString(id))
+    suspend fun getOrPut(id: StoredMessageId): Message {
+        return messageProducer.fromId(id)
     }
 }
