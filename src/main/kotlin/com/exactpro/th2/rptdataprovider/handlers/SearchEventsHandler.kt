@@ -121,7 +121,9 @@ class SearchEventsHandler(private val context: Context) {
 
     private suspend fun prepareEvents(
         wrappers: List<StoredTestEventWrapper>,
-        request: SseEventSearchRequest
+        request: SseEventSearchRequest,
+        timestampFrom: Instant,
+        timestampTo: Instant
     ): List<BaseEventEntity> {
         return wrappers.flatMap { entry ->
             if (entry.isBatch) {
@@ -134,7 +136,11 @@ class SearchEventsHandler(private val context: Context) {
                 listOf(single to eventProducer.fromStoredEvent(single, null))
             }
         }.let { eventTreesNodes ->
-            eventProducer.fromEventsProcessed(eventTreesNodes, request)
+            val filtered = eventTreesNodes.filter {
+                it.second.startTimestamp.isAfterOrEqual(timestampFrom)
+                        && it.second.startTimestamp.isBefore(timestampTo)
+            }
+            eventProducer.fromEventsProcessed(filtered, request)
         }
     }
 
@@ -157,7 +163,7 @@ class SearchEventsHandler(private val context: Context) {
             }
                 .map { wrappers ->
                     async(parentContext) {
-                        prepareEvents(wrappers, request)
+                        prepareEvents(wrappers, request, timestampFrom, timestampTo)
                             .let { events ->
                                 if (request.searchDirection == AFTER) {
                                     events
