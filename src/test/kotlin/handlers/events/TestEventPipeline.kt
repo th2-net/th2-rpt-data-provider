@@ -36,7 +36,6 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.slot
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertArrayEquals
@@ -114,7 +113,7 @@ class TestEventPipeline {
 
         val cradle = mockk<CradleService>()
 
-        coEvery { cradle.getEventsSuspend(any(), any(), any<Order>(), any()) } answers {
+        coEvery { cradle.getEventsSuspend(any<Instant>(), any<Instant>(), any<Order>()) } answers {
             val start = firstArg<Instant>()
             val end = secondArg<Instant>()
             val order = thirdArg<Order>()
@@ -124,6 +123,17 @@ class TestEventPipeline {
                 if (order == Order.DIRECT) it else it.reversed()
             }
         }
+
+        coEvery { cradle.getEventsSuspend(any<StoredTestEventId>(), any<Instant>(), any<Order>()) } answers {
+            val start = firstArg<StoredTestEventId>()
+            val end = secondArg<Instant>()
+            val order = thirdArg<Order>()
+
+            batches.let {
+                if (order == Order.DIRECT) it else it.reversed()
+            }.dropWhile { batch -> batch.id != start }
+        }
+
 
         if (resumeId != null) {
             val batch = batches.find { it.asBatch().testEvents.map { it.id }.contains(resumeId.eventId) }
@@ -263,21 +273,6 @@ class TestEventPipeline {
         baseTestCase(testData)
     }
 
-    @Test
-    fun `testStartIntervalEmpty`() {
-        val events = createEvents("1", startTimestamp, endTimestamp)
-
-        val testData = EventsParameters(
-            changeTimestamp(startTimestamp, -1),
-            startTimestamp,
-            null,
-            events = listOf(eventsFromStartToEnd11),
-            expectedResult = emptyList()
-        )
-
-        baseTestCase(testData)
-    }
-
 
     @Test
     fun `testStartInterval`() {
@@ -287,32 +282,6 @@ class TestEventPipeline {
             null,
             events = listOf(eventsFromStartToEnd11),
             expectedResult = getIdRange("1", 1, 1)
-        )
-
-        baseTestCase(testData)
-    }
-
-    @Test
-    fun `testTwoChunks`() {
-        val testData = EventsParameters(
-            startTimestamp,
-            changeTimestamp(startTimestamp, 4),
-            null,
-            events = listOf(eventsFromStartToEnd11),
-            expectedResult = getIdRange("1", 1, 4)
-        )
-
-        baseTestCase(testData)
-    }
-
-    @Test
-    fun `testFullTimeRange`() {
-        val testData = EventsParameters(
-            startTimestamp,
-            endTimestamp,
-            null,
-            events = listOf(eventsFromStartToEnd11),
-            expectedResult = getIdRange("1", 1, 10)
         )
 
         baseTestCase(testData)
@@ -575,7 +544,7 @@ class TestEventPipeline {
                 )
             ),
             expectedResult = getIdRange("1", 3, 5)
-                    + getIdRange("2", 1, 15)
+                    + getIdRange("2", 3, 12)
                     + getIdRange("3", 1, 2)
         )
 

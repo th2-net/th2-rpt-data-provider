@@ -111,32 +111,21 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
         }
     }
 
-    suspend fun getEventsSuspend(
-        from: Instant,
-        to: Instant,
-        order: Order = Order.DIRECT,
-        idFrom: StoredTestEventId? = null
-    ): Iterable<StoredTestEventWrapper> {
+    suspend fun getEventsSuspend(from: Instant, to: Instant, order: Order): Iterable<StoredTestEventWrapper> {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
                 logTime("Get events from: $from to: $to") {
-                    storage.getTestEventsAsync(from, to).await()
+                    storage.getTestEventsAsync(from, to, order).await()
                 }
             } ?: listOf()
         }
     }
 
-    suspend fun getEventsSuspend(
-        from: Instant,
-        to: Instant,
-        parentId: StoredTestEventId,
-        idFrom: StoredTestEventId? = null,
-        order: Order = Order.DIRECT
-    ): Iterable<StoredTestEventWrapper> {
+    suspend fun getEventsSuspend(idFrom: StoredTestEventId, to: Instant, order: Order): Iterable<StoredTestEventWrapper> {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
-                logTime("Get events parent: $parentId from: $from to: $to") {
-                    storage.getTestEventsAsync(parentId, from, to).await()
+                logTime("Get events idFrom: $idFrom to: $to") {
+                    storage.getTestEventsAsync(idFrom, to, order).await()
                 }
             } ?: listOf()
         }

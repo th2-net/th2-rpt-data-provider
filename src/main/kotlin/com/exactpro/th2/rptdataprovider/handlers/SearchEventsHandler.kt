@@ -30,6 +30,8 @@ import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedEventInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
+import com.exactpro.th2.rptdataprovider.handlers.events.SearchInterval
+import com.exactpro.th2.rptdataprovider.handlers.events.TimeIntervalGenerator
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleIteratorWrapper
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
@@ -39,11 +41,11 @@ import kotlinx.coroutines.channels.Channel.Factory.BUFFERED
 import kotlinx.coroutines.flow.*
 import mu.KotlinLogging
 import java.time.Instant
-import java.time.temporal.ChronoUnit
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.coroutineContext
+
 
 class SearchEventsHandler(private val context: Context) {
 
@@ -56,9 +58,7 @@ class SearchEventsHandler(private val context: Context) {
 
     private val cradle: CradleService = context.cradleService
     private val eventProducer: EventProducer = context.eventProducer
-    private val sseEventSearchStep: Long = context.configuration.sseEventSearchStep.value.toLong()
     private val keepAliveTimeout: Long = context.configuration.keepAliveTimeout.value.toLong()
-    private val eventSearchGap: Long = context.configuration.eventSearchGap.value.toLong()
 
 
     private data class ParentEventCounter private constructor(
@@ -96,17 +96,6 @@ class SearchEventsHandler(private val context: Context) {
     }
 
 
-    private data class SearchInterval(
-        val start: Instant,
-        val end: Instant,
-        val resumeId: ProviderEventId? = null,
-        private val startWithGap: Instant? = null
-    ) {
-        val requestStart: Instant = startWithGap ?: start
-        val requestEnd: Instant = end
-    }
-
-
     private fun getDirection(searchDirection: TimeRelation): Order {
         return if (searchDirection == AFTER) {
             Order.DIRECT
@@ -116,12 +105,20 @@ class SearchEventsHandler(private val context: Context) {
     }
 
 
+    private suspend fun getTestEvents(searchInterval: SearchInterval, order: Order): Iterable<StoredTestEventWrapper> {
+        return if (searchInterval.resumeId != null) {
+            cradle.getEventsSuspend(searchInterval.resumeId, searchInterval.endInterval, order)
+        } else {
+            cradle.getEventsSuspend(searchInterval.startInterval, searchInterval.endInterval, order)
+        }
+    }
+
+
     private suspend fun getEventsSuspend(
         request: SseEventSearchRequest,
         searchInterval: SearchInterval
     ): Iterable<StoredTestEventWrapper> {
         return coroutineScope {
-
             val parentEvent = request.parentEvent
             val order = getDirection(request.searchDirection)
 
@@ -129,61 +126,57 @@ class SearchEventsHandler(private val context: Context) {
                 if (parentEvent.batchId != null) {
                     cradle.getEventSuspend(parentEvent.batchId)?.let {
                         listOf(StoredTestEventWrapper(it.asBatch()))
-                    } ?: emptyList()
+                    }.orEmpty()
                 } else {
-                    cradle.getEventsSuspend(
-                        searchInterval.requestStart, searchInterval.requestEnd,
-                        parentEvent.eventId, searchInterval.resumeId?.eventId, order
-                    )
+                    // TODO filter { it.parentId == parentEvent.eventId }
+                    getTestEvents(searchInterval, order)
                 }
             } else {
-                cradle.getEventsSuspend(
-                    searchInterval.requestStart, searchInterval.requestEnd,
-                    order, searchInterval.resumeId?.eventId
-                )
+                getTestEvents(searchInterval, order)
             }
         }
     }
 
 
-    private fun trimLastBatch(
-        events: List<IntermediateEvent>,
-        searchInterval: SearchInterval,
-        direction: TimeRelation
-    ): List<IntermediateEvent> {
-        return if (direction == AFTER) {
-            events.dropLastWhile {
-                it.baseEventEntity.startTimestamp.isAfterOrEqual(searchInterval.end)
-            }
+    private fun isBefore(event: BaseEventEntity, instant: Instant, searchDirection: TimeRelation): Boolean {
+        return if (searchDirection == AFTER) {
+            event.startTimestamp.isBefore(instant)
         } else {
-            events.dropLastWhile {
-                it.baseEventEntity.startTimestamp.isBeforeOrEqual(searchInterval.start)
-            }
+            event.startTimestamp.isAfter(instant)
         }
     }
 
 
-    private fun prepareEvents(
-        wrapper: StoredTestEventWrapper,
-        request: SseEventSearchRequest,
-        searchInterval: SearchInterval,
-        lastBatch: Boolean
-    ): List<BaseEventEntity> {
+    private fun isAfterOrEqual(event: BaseEventEntity, timestamp: Instant?, direction: TimeRelation): Boolean {
+        if (timestamp == null) return false
 
-        val baseEventEntities = if (wrapper.isBatch) {
+        return if (direction == AFTER) {
+            event.startTimestamp.isAfterOrEqual(timestamp)
+        } else {
+            event.startTimestamp.isBeforeOrEqual(timestamp)
+        }
+    }
+
+
+    private fun createIntermediateEvents(
+        wrapper: StoredTestEventWrapper,
+        request: SseEventSearchRequest
+    ): List<IntermediateEvent> {
+        val parentEventId = request.parentEvent?.eventId
+
+        return if (wrapper.isBatch) {
             val batch = wrapper.asBatch()
-            batch.tryToGetTestEvents(request.parentEvent?.eventId).map { event ->
+            batch.tryToGetTestEvents(parentEventId).map { event ->
                 IntermediateEvent(event, eventProducer.fromStoredEvent(event, batch))
             }
         } else {
             val single = wrapper.asSingle()
-            listOf(IntermediateEvent(single, eventProducer.fromStoredEvent(single, null)))
+            if (parentEventId?.let { it == single.parentId } != false) {
+                listOf(IntermediateEvent(single, eventProducer.fromStoredEvent(single, null)))
+            } else {
+                emptyList()
+            }
         }
-
-        val filteredEventEntities = orderedByDirection(baseEventEntities, request.searchDirection).let {
-            if (lastBatch) trimLastBatch(it, searchInterval, request.searchDirection) else it
-        }
-        return eventProducer.fromEventsProcessed(filteredEventEntities, request)
     }
 
 
@@ -207,90 +200,27 @@ class SearchEventsHandler(private val context: Context) {
             flow {
                 val eventsCollection = CradleIteratorWrapper(getEventsSuspend(request, searchInterval).iterator())
 
-                while (eventsCollection.hasNext()) {
-                    val event = eventsCollection.next()
-
-                    if (eventsCollection.hasNext()) {
-                        emit(event to false)
-                    } else {
-                        emit(event to true)
-                    }
-                }
+                for (event in eventsCollection)
+                    emit(event)
             }
-                .map { (wrappers, lastBatch) ->
+                .map { wrappers ->
                     async(parentContext) {
-                        prepareEvents(wrappers, request, searchInterval, lastBatch).also {
+                        val baseEventEntities = createIntermediateEvents(wrappers, request)
+
+                        val filteredEventEntities = orderedByDirection(baseEventEntities, request.searchDirection)
+                            .dropWhile {
+                                isBefore(it.baseEventEntity, searchInterval.startRequest, request.searchDirection)
+                            }
+                            .dropLastWhile {
+                                isAfterOrEqual(it.baseEventEntity, searchInterval.endRequest, request.searchDirection)
+                            }
+
+                        eventProducer.fromEventsProcessed(filteredEventEntities, request).also {
                             parentContext.ensureActive()
                         }
                     }
                 }
                 .buffer(BUFFERED)
-        }
-    }
-
-
-    private fun changeOfDayProcessing(from: Instant, to: Instant): Iterable<SearchInterval> {
-        val startCurrentDay = getDayStart(from)
-
-        val startWithGap = maxInstant(startCurrentDay.toInstant(), from.minusSeconds(eventSearchGap))
-
-        return if (isDifferentDays(from, to)) {
-            val pivot = startCurrentDay
-                .plusDays(1)
-                .toInstant()
-
-            listOf(SearchInterval(from, pivot.minusNanos(1), null, startWithGap), SearchInterval(pivot, to))
-        } else {
-            listOf(SearchInterval(from, to, null, startWithGap))
-        }
-    }
-
-
-    private fun getComparator(searchDirection: TimeRelation, endTimestamp: Instant?): (Instant) -> Boolean {
-        return if (searchDirection == AFTER) {
-            { timestamp: Instant -> timestamp.isBefore(endTimestamp ?: Instant.MAX) }
-        } else {
-            { timestamp: Instant -> timestamp.isAfter(endTimestamp ?: Instant.MIN) }
-        }
-    }
-
-
-    private fun getTimeIntervals(
-        initTimestamp: Instant,
-        request: SseEventSearchRequest,
-        resumeId: ProviderEventId?
-    ): Sequence<SearchInterval> {
-
-        var currentTimestamp = initTimestamp
-
-        return sequence {
-            val comparator = getComparator(request.searchDirection, request.endTimestamp)
-            while (comparator.invoke(currentTimestamp)) {
-                val timeIntervals = if (request.searchDirection == AFTER) {
-                    val toTimestamp = minInstant(
-                        minInstant(currentTimestamp.plus(1, ChronoUnit.DAYS), Instant.MAX),
-                        request.endTimestamp ?: Instant.MAX
-                    )
-                    changeOfDayProcessing(currentTimestamp, toTimestamp).also {
-                        currentTimestamp = toTimestamp
-                    }
-                } else {
-                    val fromTimestamp = maxInstant(
-                        maxInstant(currentTimestamp.minus(1, ChronoUnit.DAYS), Instant.MIN),
-                        request.endTimestamp ?: Instant.MIN
-                    )
-                    changeOfDayProcessing(fromTimestamp, currentTimestamp)
-                        .reversed()
-                        .also { currentTimestamp = fromTimestamp }
-                }
-                yieldAll(timeIntervals)
-            }
-        }.mapIndexed { i, interval ->
-            if (i == 0) {
-                interval.copy(resumeId = resumeId)
-            } else {
-                interval
-            }
         }
     }
 
@@ -337,26 +267,6 @@ class SearchEventsHandler(private val context: Context) {
     }
 
 
-    private fun getStartTimestamp(event: StoredTestEventWrapper?, request: SseEventSearchRequest): Instant {
-        return event?.let {
-            if (request.searchDirection == AFTER) {
-                it.startTimestamp
-            } else {
-                it.endTimestamp
-            }
-        } ?: request.startTimestamp!!
-    }
-
-
-    private fun isBefore(event: BaseEventEntity, instant: Instant, searchDirection: TimeRelation): Boolean {
-        return if (searchDirection == AFTER) {
-            event.startTimestamp.isBefore(instant)
-        } else {
-            event.startTimestamp.isAfter(instant)
-        }
-    }
-
-
     private fun getEvent(event: StoredTestEventWrapper, providerEventId: ProviderEventId): StoredTestEventWithContent {
         return if (event.isBatch) {
             val batch = event.asBatch()
@@ -379,20 +289,16 @@ class SearchEventsHandler(private val context: Context) {
             val resumeId = request.resumeFromId?.let { ProviderEventId(it) }
             val eventWrapper = resumeId?.let { eventProducer.getEventWrapper(it) }
 
-            val startTimestamp = getStartTimestamp(eventWrapper, request)
-
             val resumeEvent = eventWrapper?.let { getEvent(it, resumeId) }
 
-            val timeIntervals = getTimeIntervals(
-                startTimestamp, request, resumeId
-            )
+            val timeIntervals = TimeIntervalGenerator(request, resumeId, resumeEvent)
 
             val parentEventCounter = ParentEventCounter(request.limitForParent)
 
             flow {
                 for (timestamp in timeIntervals) {
 
-                    lastScannedObject.update(timestamp.start)
+                    lastScannedObject.update(timestamp.startInterval)
 
                     getEventFlow(
                         request, timestamp, coroutineContext
@@ -407,9 +313,7 @@ class SearchEventsHandler(private val context: Context) {
                     if (resumeEvent != null) {
                         dropBeforeResumeId(eventFlow, request.searchDirection, resumeEvent.startTimestamp, resumeId)
                     } else {
-                        eventFlow.dropWhile { event ->
-                            isBefore(event, startTimestamp, request.searchDirection)
-                        }
+                        eventFlow
                     }
                 }
                 .onEach { event ->
