@@ -33,7 +33,7 @@ class MessageBodyFilter(
     override var negative: Boolean = false,
     override var conjunct: Boolean = false,
     override var strict: Boolean = false
-) : Filter<MessageWithMetadata> {
+) : Filter<FilteredMessageWrapper> {
 
     companion object {
         suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<FilteredMessageWrapper> {

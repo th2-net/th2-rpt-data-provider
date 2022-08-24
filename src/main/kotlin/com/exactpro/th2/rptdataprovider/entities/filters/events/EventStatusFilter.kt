@@ -25,7 +25,7 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
-class EventStatusFilter private constructor(
+class EventStatusFilter(
     private var status: Boolean,
     override var negative: Boolean = false,
     override var conjunct: Boolean = false,

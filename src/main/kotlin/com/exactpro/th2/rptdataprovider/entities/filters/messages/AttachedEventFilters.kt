@@ -33,7 +33,7 @@ class AttachedEventFilters(
     override var negative: Boolean = false,
     override var conjunct: Boolean = false,
     override var strict: Boolean = false
-    ) : Filter<MessageWithMetadata> {
+    ) : Filter<FilteredMessageWrapper> {
     companion object {
         private val logger = KotlinLogging.logger { }
 
@@ -88,7 +88,7 @@ class AttachedEventFilters(
     }
 
 
-    override fun match(element: MessageWithMetadata): Boolean {
+    override fun match(element: FilteredMessageWrapper): Boolean {
         return if (strict) {
             negative.xor(messagesFromAttachedId.contains(element.message.messageId))
         } else {

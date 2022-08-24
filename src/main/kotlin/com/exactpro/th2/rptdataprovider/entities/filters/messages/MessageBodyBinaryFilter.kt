@@ -32,7 +32,7 @@ class MessageBodyBinaryFilter(
     override var negative: Boolean = false,
     override var conjunct: Boolean = false,
     override var strict: Boolean = false
-) : Filter<MessageWithMetadata> {
+) : Filter<FilteredMessageWrapper> {
     companion object {
         private val logger = KotlinLogging.logger { }
 
@@ -61,7 +61,7 @@ class MessageBodyBinaryFilter(
 
     override fun match(element: FilteredMessageWrapper): Boolean {
         val predicate: (String) -> Boolean = { item ->
-            element.message.rawMessageBody.let {
+            element.message.rawMessageBody.toByteArray().let {
                 if (strict) {
                     String(it).equals(item, ignoreCase = true)
                 } else {

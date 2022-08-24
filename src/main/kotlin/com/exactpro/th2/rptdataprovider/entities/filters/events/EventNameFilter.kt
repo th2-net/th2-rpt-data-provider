@@ -25,7 +25,7 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
-class EventNameFilter private constructor(
+class EventNameFilter(
     private var name: List<String>,
     override var negative: Boolean = false,
     override var conjunct: Boolean = false,
