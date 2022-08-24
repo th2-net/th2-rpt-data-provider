@@ -16,33 +16,45 @@
 
 package com.exactpro.th2.rptdataprovider.entities.internal
 
-import com.exactpro.th2.common.grpc.MessageID
-
-interface DataWrapper<T> {
+interface FilteredDataWrapper<T> {
     val message: T
     var finalFiltered: Boolean
 }
 
-data class MessageWithMetadata(
+data class FilteredMessageWrapper(
     override val message: Message,
     val filteredBody: MutableList<Boolean> = mutableListOf(),
     override var finalFiltered: Boolean = true
-) : DataWrapper<Message> {
+) : FilteredDataWrapper<Message> {
 
     constructor(message: Message) : this(
         message = message,
         filteredBody = message.parsedMessageGroup?.let { List(it.size) { true } as MutableList } ?: mutableListOf()
     )
 
-    constructor(message: Message, id: MessageID) : this(message) {
+    constructor(message: Message, subsequences: List<Int>) : this(message) {
         message.parsedMessageGroup?.let { body ->
-            val messageIndexWithSubsequence = body.indexOfFirst { it.id == id }
+
+            if (subsequences.isEmpty())
+                return
+
+            for (i in 0 until filteredBody.size) {
+                filteredBody[i] = false
+            }
+
+            val messageIndexWithSubsequence = body.indexOfFirst {
+                it.id.subsequenceList == subsequences
+            }
+
             if (messageIndexWithSubsequence >= 0) {
-                for (i in 0 until filteredBody.size) {
-                    filteredBody[i] = false
-                }
                 filteredBody[messageIndexWithSubsequence] = true
             }
+        }
+    }
+
+    fun getMessagesWithMatches(): List<Pair<BodyWrapper, Boolean>>? {
+        return message.parsedMessageGroup?.let {
+            it zip filteredBody
         }
     }
 }

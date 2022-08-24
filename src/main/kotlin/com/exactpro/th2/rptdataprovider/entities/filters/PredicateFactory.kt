@@ -61,9 +61,9 @@ class PredicateFactory<T>(
     suspend fun build(filters: List<com.exactpro.th2.dataprovider.grpc.Filter>): FilterPredicate<T> {
         val filtersList = mutableListOf<Filter<T>>().apply {
             for (filter in filters) {
-                val constructor = containedFiltersInit[filter.name.filterName]
-                    ?: throw InvalidRequestException("Incorrect filter name '${filter.name.filterName}'")
-                add(constructor(GrpcFilter(filter.name.filterName, filter), cradleService))
+                val constructor = containedFiltersInit[filter.name.name]
+                    ?: throw InvalidRequestException("Incorrect filter name '${filter.name.name}'")
+                add(constructor(GrpcFilter(filter.name.name, filter), cradleService))
             }
         }
         return FilterPredicate(filtersList)

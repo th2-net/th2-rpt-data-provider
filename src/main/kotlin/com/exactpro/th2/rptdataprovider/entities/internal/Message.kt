@@ -19,6 +19,7 @@ package com.exactpro.th2.rptdataprovider.entities.internal
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
+import com.google.protobuf.ByteString
 import java.time.Instant
 
 
@@ -31,7 +32,7 @@ data class Message(
     val parsedMessageGroup: List<BodyWrapper>?,
 
     @Suppress("ArrayInDataClass")
-    val rawMessageBody: ByteArray,
+    val rawMessageBody: ByteString,
 
     var imageType: String?,
 
@@ -53,7 +54,7 @@ data class Message(
         timestamp = messageWrapper.timestamp,
         sessionId = messageWrapper.sessionId,
         attachedEventIds = events,
-        rawMessageBody = messageWrapper.rawMessage.body.toByteArray(),
+        rawMessageBody = messageWrapper.rawMessage.body,
         parsedMessageGroup = parsedMessageGroup,
         imageType = imageType
     )

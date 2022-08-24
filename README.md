@@ -20,14 +20,8 @@ Event object example:
   "isBatched": false,
   "eventName": "Send 'OrderMassCancelRequest' message",
   "eventType": "sendMessage",
-  "endTimestamp": {
-    "nano": 209824000,
-    "epochSecond": 1600819698
-  },
-  "startTimestamp": {
-    "nano": 209190000,
-    "epochSecond": 1600819698
-  },
+  "endTimestamp": "2021-10-14T15:00:02.244158000Z",
+  "startTimestamp": "2021-10-14T15:00:02.238700000Z",
   "parentEventId": "e196df51-fd30-11ea-9da8-ffa990115db7",
   "successful": true,
   "attachedMessageIds": [],
@@ -51,17 +45,21 @@ Message object example:
 ```
 {
   "type": "message",
-  "messageId": "fix01:first:1600854429908302153",
-  "timestamp": {
-    "nano": 334000000,
-    "epochSecond": 1600894596
-  },
-  "direction": "IN",
+  "id": "fix01:first:1600854429908302153",
+  "timestamp": "2021-10-14T13:31:35.477000000Z",
   "sessionId": "fix01",
-  "messageType": "OrderMassCancelReport",
-  "body": {}, // parsed data
-  "bodyBase64": "" // base64-encoded binary data
-  "attachedEventIds": []
+  "direction": "FIRST",
+  "sequence": "1600854429908302153",
+  "attachedEventIds": [],
+  "rawMessageBase64": "", // base64-encoded binary data
+  "parsedMessages": [
+    {
+      "match": true, // If true, then this sambessage was matched by a filter or, when requested by id with subsequence, it means that this subsequence was in the request
+      "id": "fix01:first:1600854429908302153.1", // sub message id (including subsequence after '.')
+      "message": {} // parsed sub message data
+    }
+   ] // parsed messages
+  
 }
 ```
 
@@ -80,7 +78,7 @@ Filters are formed as follows:
 
 ```
 As example:
-/search/sse/events/?startTimestamp=1605872487277&filters=name&filters=type&name-values=Checkpoint&type-values=session&type-negative=true
+/search/sse/events/?startTimestamp=2021-10-14T15:00:02.238700000Z&filters=name&filters=type&name-values=Checkpoint&type-values=session&type-negative=true
 ```
 
 `http://localhost:8080/filters/sse-messages` - get all names of sse message filters
@@ -120,13 +118,13 @@ As example:
 
 ##### SSE requests API
 `http://localhost:8080/search/sse/events` - create a sse channel of event metadata that matches the filter. Accepts following query parameters:
-- `startTimestamp` - number, unix timestamp in milliseconds - Sets the search starting point. **One of the 'startTimestamp' or 'resumeFromId' must not be null** 
+- `startTimestamp` - string, unix timestamp in a format ('2021-10-14T15:00:02.238700000Z') - Sets the search starting point. **One of the 'startTimestamp' or 'resumeFromId' must not be null** 
 - `resumeFromId` - text, last event id. In order to continue the execution of an interrupted sse request, you need to send exactly the same request with an indication of the element ID, from which to resume data transfer. Defaults to `null`. **One of the 'startTimestamp' or 'resumeFromId' must not be null**
 
 - `parentEvent` - text - Will match events with the specified parent element.
 - `searchDirection` - `next`/`previous` - Sets the lookup direction. Can be used for pagination. Defaults to `next`.
 - `resultCountLimit` - number - Sets the maximum amount of events to return. Defaults to `null (unlimited)`.
-- `endTimestamp` - number, unix timestamp in milliseconds - Sets the timestamp to which the search will be performed, starting with `startTimestamp`. When `searchDirection` is `previous`, `endTimestamp` must be less then `startTimestamp`. Defaults to `null` (the search is carried out endlessly into the past or the future).
+- `endTimestamp` - string, unix timestamp in a format ('2021-10-14T15:00:02.238700000Z') - Sets the timestamp to which the search will be performed, starting with `startTimestamp`. When `searchDirection` is `previous`, `endTimestamp` must be less then `startTimestamp`. Defaults to `null` (the search is carried out endlessly into the past or the future).
 - `limitForParent` - number - How many children for each parent do we want to request. Default `not limited`.
 - `metadataOnly` - boolean - Receive only metadata (`true`) or entire event (`false`) (without `attachedMessageIds`). Default `true`.
 - `attachedMessages`- boolean - If the `metadataOnly` is `false` additionally load `attachedMessageIds`. Default `false`.
@@ -141,10 +139,7 @@ Event metadata object example (in sse):
     "eventName": "Send 'OrderMassCancelRequest' message",
     "eventType": "sendMessage",
     "successful": true,
-    "startTimestamp": {
-        "nano": 209190000,
-        "epochSecond": 1600819698
-    },
+    "startTimestamp": "2021-10-14T15:00:02.238700000Z",
 }
 ```
 
@@ -154,17 +149,17 @@ Event metadata object example (in sse):
 - `type` - Will match the events which type contains one of the given substrings. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.  
 - `body` - Will match the events which body contains one of the given substrings. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.  
 - `status` - Will match the events which status equals that specified. Parameters: `value` - string, one of `failed` or `passed`. `negative` - boolean.
+- `event_generic` - Will match the events by  `name` or `body` or `type`. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.
 
 
 `http://localhost:8080/search/sse/messages` - create a sse channel of messages that matches the filter. Accepts following query parameters:
-- `startTimestamp` - number, unix timestamp in milliseconds - Sets the search starting point. **One of the 'startTimestamp' or 'resumeFromId' must not be null**
-- `resumeFromId` - text, last message id. In order to continue the execution of an interrupted sse request, you need to send exactly the same request with an indication of the element ID, from which to resume data transfer. Defaults to `null`. **One of the 'startTimestamp' or 'resumeFromId' must not be null**
+- `startTimestamp` - string, unix timestamp in a format ('2021-10-14T15:00:02.238700000Z') - Sets the search starting point. **`startTimestamp` must not be null or `resumeFromIds` must not be empty**
 
 - `stream` - text, accepts multiple values - Sets the stream ids to search in. Case-sensitive. **Required**. 
 - `searchDirection` - `next`/`previous` - Sets the lookup direction. Can be used for pagination. Defaults to `next`.
 - `resultCountLimit` - number - Sets the maximum amount of messages to return. Defaults to `null (unlimited)`.
-- `endTimestamp` - number, unix timestamp in milliseconds - Sets the timestamp to which the search will be performed, starting with `startTimestamp`. When `searchDirection` is `previous`, `endTimestamp` must be less then `startTimestamp`. Defaults to `null` (the search is carried out endlessly into the past or the future).
-- `messageId` - text, accepts multiple values - List of message IDs to restore search. If given, it has the highest priority and ignores `stream` (uses streams from ids), `startTimestamp` and `resumeFromId`. Defaults to `null`
+- `endTimestamp` - string, unix timestamp in a format ('2021-10-14T15:00:02.238700000Z') - Sets the timestamp to which the search will be performed, starting with `startTimestamp`. When `searchDirection` is `previous`, `endTimestamp` must be less then `startTimestamp`. Defaults to `null` (the search is carried out endlessly into the past or the future).
+- `resumeFromIds` - text, accepts multiple values - List of message IDs to restore search. If given, streams whose id were specified start with this id (not inclusive). Other streams start with `startTimestamp` (if specified) or calculate `startTimestamp` based on the passed id. Defaults to `null`
 - `attachedEvents`- boolean - If `true`, additionally load `attachedEventIds`. Default `false`.
 - `lookupLimitDays` - number - The number of days that will be viewed on the first request to get the one closest to the specified timestamp. Default `null` - not limited to the past and up to the present moment to the future.
 
@@ -174,6 +169,7 @@ Event metadata object example (in sse):
 - `type` - Will match the messages by their full type name. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.
 - `body` - Will match the messages by their parsed body. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.
 - `bodyBinary` - Will match the messages by their binary body. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.
+- `message_generic` - Will match the messages by `bodyBinary` or `body` or `type`. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.
 
 Elements in channel match the format sse: 
 ```
@@ -210,7 +206,8 @@ spec:
     enableCaching: true // enables proxy and client cache (Cache-control response headers)
     notModifiedObjectsLifetime: 3600 // max-age in seconds
     rarelyModifiedObjects: 500 // max-age in seconds
-              
+    maxMessagesLimit: 5000 // limits how many messages can be requested from cradle per query (it is recommended to set equal to the page size in the cradle)
+
     sseEventSearchStep: 200 // step size in seconds when requesting events 
     keepAliveTimeout: 5000 // timeout in milliseconds. keep_alive sending frequency
     cradleDispatcherPoolSize: 1 // number of threads in the cradle dispatcher

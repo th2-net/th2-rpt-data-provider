@@ -20,7 +20,7 @@ package com.exactpro.th2.rptdataprovider.handlers.messages.helpers
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepObject
-import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageStreamPointer
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -64,7 +64,7 @@ class MultipleStreamHolder(pipelineComponents: List<PipelineComponent>) {
         messageStreams.forEach { it.init() }
     }
 
-    suspend fun getStreamsInfo(): List<StreamInfo> {
+    suspend fun getStreamsInfo(): List<MessageStreamPointer> {
         return mutex.withLock {
             messageStreams.map { it.getStreamInfo() }
         }

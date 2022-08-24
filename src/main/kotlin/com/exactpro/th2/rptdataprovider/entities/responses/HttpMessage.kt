@@ -16,8 +16,9 @@
 
 package com.exactpro.th2.rptdataprovider.entities.responses
 
+import com.exactpro.cradle.Direction
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
-import com.exactpro.th2.rptdataprovider.entities.internal.Direction
+import com.exactpro.th2.rptdataprovider.grpcMessageIdToString
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.annotation.JsonRawValue
 import com.google.protobuf.util.JsonFormat
@@ -25,22 +26,18 @@ import java.time.Instant
 
 
 class HttpBodyWrapper(
-    val subsequenceId: List<Int>,
-    val protocol: String,
-    val messageType: String,
+    val match: Boolean,
+    val id: String,
     @JsonRawValue
-    val message: String,
-    val filtered: Boolean
+    val message: String
 ) {
 
     companion object {
-        suspend fun from(bodyWrapper: BodyWrapper, filtered: Boolean): HttpBodyWrapper {
+        suspend fun from(bodyWrapper: BodyWrapper, match: Boolean): HttpBodyWrapper {
             return HttpBodyWrapper(
-                bodyWrapper.id.subsequenceList,
-                bodyWrapper.protocol,
-                bodyWrapper.messageType,
-                JsonFormat.printer().print(bodyWrapper.message),
-                filtered
+                match,
+                grpcMessageIdToString(bodyWrapper.id),
+                JsonFormat.printer().print(bodyWrapper.message)
             )
         }
     }
@@ -49,29 +46,16 @@ class HttpBodyWrapper(
 
 data class HttpMessage(
     val type: String = "message",
+    val id: String,
+    @com.fasterxml.jackson.annotation.JsonFormat(
+        pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'Z'",
+        timezone = "UTC"
+    )
     val timestamp: Instant,
-    val messageType: String,
-    val direction: Direction?,
     val sessionId: String,
+    val direction: Direction?,
+    val sequence: String,
     val attachedEventIds: Set<String>,
-    val messageId: String,
-    var body: BodyHttpMessage?,
-    var bodyBase64: String?
-)
-
-abstract class BodyHttpBase(
-    open val metadata: MutableMap<String, Any>?,
-    open var fields: MutableMap<String, Any>?
-)
-
-data class BodyHttpMessage(
-    @JsonProperty("metadata")
-    override var metadata: MutableMap<String, Any>?,
-    @JsonProperty("fields")
-    override var fields: MutableMap<String, Any>?
-) : BodyHttpBase(metadata, fields)
-
-data class BodyHttpSubMessage(
-    @JsonProperty("messageValue")
-    var messageValue: MutableMap<String, Any>? = null
+    var rawMessageBase64: String?,
+    var parsedMessages: List<HttpBodyWrapper>?
 )

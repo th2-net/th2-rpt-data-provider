@@ -16,11 +16,9 @@
 
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
-import com.exactpro.cradle.Direction
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
-import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import kotlinx.coroutines.CoroutineScope
 
 class ChainBuilder(
@@ -30,7 +28,7 @@ class ChainBuilder(
     private val pipelineStatus: PipelineStatus
 ) {
     fun buildChain(): StreamMerger {
-        val streamNames = request.stream.flatMap { stream -> Direction.values().map { StreamName(stream, it) } }
+        val streamNames = request.stream
 
         pipelineStatus.addStreams(streamNames.map { it.toString() })
 

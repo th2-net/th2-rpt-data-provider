@@ -24,10 +24,10 @@ import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
-import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatchData
+import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
-import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.handlers.messages.MessageExtractor
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
@@ -85,8 +85,8 @@ class ExtractorTest {
         val parameters = mutableMapOf(
             "stream" to listOf(fullStreamName),
             "direction" to listOf(direction),
-            "startTimestamp" to listOf(startTimestamp.toEpochMilli().toString()),
-            "endTimestamp" to listOf(endTimestamp.toEpochMilli().toString())
+            "startTimestamp" to listOf(startTimestamp.toString()),
+            "endTimestamp" to listOf(endTimestamp.toString())
         )
         if (resumeId != null) {
             parameters["messageId"] = listOf(resumeId.toString())
@@ -134,7 +134,7 @@ class ExtractorTest {
     }
 
     private fun getTimestampBetween(startTimestamp: Instant, endTimestamp: Instant): Instant {
-        val diff = Random.nextLong(startTimestamp.toEpochMilli() + 10, endTimestamp.toEpochMilli() - 10)
+        val diff = Random.nextLong(startTimestamp.toEpochMilli() + 1, endTimestamp.toEpochMilli() - 1)
         return Instant.ofEpochMilli(diff)
     }
 
@@ -158,7 +158,7 @@ class ExtractorTest {
 
         return StoredMessageBatch().also { batch ->
             repeat(chunkCount) {
-                val endTimestamp = startTimestamp.plus(1, ChronoUnit.HOURS)
+                val endTimestamp = startTimestamp.plus(100, ChronoUnit.SECONDS)
 
                 val messages = getMessages(startTimestamp, endTimestamp)
 
@@ -184,7 +184,8 @@ class ExtractorTest {
 
         runBlocking {
             repeat(chunkCount + 1) {
-                val endTimestamp = startTimestamp.plus(1, ChronoUnit.HOURS)
+                val endTimestamp = startTimestamp.plus(100, ChronoUnit.SECONDS)
+                
                 val request = getSearchRequest(startTimestamp, endTimestamp)
 
                 val extractor = MessageExtractor(context, request, streamNameObject, this, 1, PipelineStatus(context))
@@ -193,7 +194,7 @@ class ExtractorTest {
 
                 while (true) {
                     val message = extractor.pollMessage()
-                    if (message is PipelineRawBatch)
+                    if (message is PipelineRawBatchData)
                         messages = message.storedBatchWrapper.trimmedMessages
                     if (message.streamEmpty) break
                 }
@@ -252,7 +253,7 @@ class ExtractorTest {
 
             do {
                 val message = extractor.pollMessage()
-                if (message is PipelineRawBatch) {
+                if (message is PipelineRawBatchData) {
                     resultMessages.addAll(message.storedBatchWrapper.trimmedMessages)
                 }
             } while (!message.streamEmpty)
@@ -266,7 +267,7 @@ class ExtractorTest {
 
     private fun provideExtractorCase(): Iterable<Arguments> {
         val start = Instant.parse("2022-04-21T00:00:00Z")
-        val end = Instant.parse("2022-04-21T01:00:00Z")
+        val end = start.plusSeconds(500)
         return listOf(
             BorderTestParameters(start, end, start, end, 2, listOf(1L, 2L)),
             BorderTestParameters(start, end.plusMillis(1), start, end, 3, listOf(1L, 2L, 3L)),

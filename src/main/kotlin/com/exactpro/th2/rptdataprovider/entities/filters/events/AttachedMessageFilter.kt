@@ -23,10 +23,11 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType.NEED_ATTACHED_MESSAGES
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
+import com.exactpro.th2.rptdataprovider.entities.internal.MessageIdWithSubsequences
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
-class AttachedMessageFilter private constructor(
+class AttachedMessageFilter(
     private var messageIds: Set<String>,
     override var negative: Boolean,
     override var conjunct: Boolean = false,
@@ -40,7 +41,9 @@ class AttachedMessageFilter private constructor(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
                 strict = filterRequest.isStrict(),
-                messageIds = filterRequest.getValues()?.toSet()
+                messageIds = filterRequest.getValues()
+                    ?.map { MessageIdWithSubsequences.from(it).messageId.toString() }
+                    ?.toSet()
                     ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
             )
         }

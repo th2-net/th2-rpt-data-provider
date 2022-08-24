@@ -18,8 +18,8 @@ package com.exactpro.th2.rptdataprovider.cache
 
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
-import com.exactpro.th2.rptdataprovider.entities.internal.NonCachedMessageTypes
 import com.exactpro.th2.rptdataprovider.entities.internal.Message
+import com.exactpro.th2.rptdataprovider.entities.internal.NonCachedMessageTypes
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
 import kotlinx.coroutines.InternalCoroutinesApi
 import mu.KotlinLogging
@@ -57,7 +57,7 @@ class MessageCache(configuration: Configuration, private val messageProducer: Me
     }
 
     @InternalCoroutinesApi
-    suspend fun getOrPut(id: String): Message {
-        return messageProducer.fromId(StoredMessageId.fromString(id))
+    suspend fun getOrPut(id: StoredMessageId): Message {
+        return messageProducer.fromId(id)
     }
 }

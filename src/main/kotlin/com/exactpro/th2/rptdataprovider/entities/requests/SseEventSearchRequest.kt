@@ -48,12 +48,12 @@ data class SseEventSearchRequest(
 
     constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<BaseEventEntity>) : this(
         filterPredicate = filterPredicate,
-        startTimestamp = parameters["startTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
+        startTimestamp = parameters["startTimestamp"]?.firstOrNull()?.let { Instant.parse(it) },
         parentEvent = parameters["parentEvent"]?.firstOrNull()?.let { ProviderEventId(it) },
         searchDirection = parameters["searchDirection"]?.firstOrNull()?.let {
             asCradleTimeRelation(it)
         } ?: TimeRelation.AFTER,
-        endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.ofEpochMilli(it.toLong()) },
+        endTimestamp = parameters["endTimestamp"]?.firstOrNull()?.let { Instant.parse(it) },
         resumeFromId = parameters["resumeFromId"]?.firstOrNull(),
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt(),
         limitForParent = parameters["limitForParent"]?.firstOrNull()?.toLong(),

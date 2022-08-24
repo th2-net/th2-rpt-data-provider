@@ -24,14 +24,14 @@ import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
-import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatchData
+import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.requests.StreamPointer
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageStreamPointer
 import com.exactpro.th2.rptdataprovider.entities.responses.StoredMessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
-import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import kotlinx.coroutines.CancellationException
@@ -95,11 +95,11 @@ class MessageExtractor(
 
     private fun trimMessagesListHead(
         messages: Collection<StoredMessage>,
-        resumeFromId: StreamPointer?
+        resumeFromId: MessageStreamPointer?
     ): List<StoredMessage> {
         // trim messages if resumeFromId is present
-        return if (resumeFromId?.sequence != null) {
-            val start = resumeFromId.sequence
+        return if (resumeFromId?.lastMessageId?.index != null) {
+            val start = resumeFromId.lastMessageId.index
             messages.dropWhile {
                 if (order == Order.DIRECT) {
                     it.index < start
@@ -149,12 +149,13 @@ class MessageExtractor(
             streamName!!
 
             val resumeFromId = request.resumeFromIdsList.firstOrNull {
-                it.streamName == streamName.name && it.direction == streamName.direction
+                it.messageStream.name == streamName.name
+                        && it.messageStream.direction == streamName.direction
             }
 
             logger.debug { "acquiring cradle iterator for stream $streamName" }
 
-            resumeFromId?.let { logger.debug { "resume sequence for stream $streamName is set to ${it.sequence}" } }
+            resumeFromId?.let { logger.debug { "resume sequence for stream $streamName is set to ${it.lastMessageId?.index}" } }
             request.startTimestamp?.let { logger.debug { "start timestamp for stream $streamName is set to $it" } }
 
             if (resumeFromId == null || resumeFromId.hasStarted) {
@@ -164,12 +165,13 @@ class MessageExtractor(
 
                         // timestamps will be ignored if resumeFromId is present
                         .also { builder ->
-                            if (resumeFromId != null) {
+                            if (resumeFromId?.lastMessageId != null) {
                                 builder.index().let {
+                                    val index = resumeFromId.lastMessageId.index
                                     if (order == Order.DIRECT) {
-                                        it.isGreaterThanOrEqualTo(resumeFromId.sequence)
+                                        it.isGreaterThanOrEqualTo(index)
                                     } else {
-                                        it.isLessThanOrEqualTo(resumeFromId.sequence)
+                                        it.isLessThanOrEqualTo(index)
                                     }
                                 }
                             } else {
@@ -211,23 +213,26 @@ class MessageExtractor(
                         val lastMessage = if (order == Order.DIRECT) batch.messages.last() else batch.messages.first()
 
                         logger.trace {
-                            "batch ${batch.id.index} of stream $streamName has been trimmed (targetStartTimestamp=${request.startTimestamp} targetEndTimestamp=${request.endTimestamp} targetId=${resumeFromId?.sequence}) - ${trimmedMessages.size} of ${batch.messages.size} messages left (firstId=${firstMessage.id.index} firstTimestamp=${firstMessage.timestamp} lastId=${lastMessage.id.index} lastTimestamp=${lastMessage.timestamp})"
+                            "batch ${batch.id.index} of stream $streamName has been trimmed (targetStartTimestamp=${request.startTimestamp} targetEndTimestamp=${request.endTimestamp} targetId=${resumeFromId?.lastMessageId?.index}) - ${trimmedMessages.size} of ${batch.messages.size} messages left (firstId=${firstMessage.id.index} firstTimestamp=${firstMessage.timestamp} lastId=${lastMessage.id.index} lastTimestamp=${lastMessage.timestamp})"
                         }
 
                         pipelineStatus.fetchedEnd(streamName.toString())
 
                         try {
                             trimmedMessages.last().let { message ->
-                                sendToChannel(PipelineRawBatch(
-                                    false,
-                                    message.id,
-                                    message.timestamp,
-                                    StoredMessageBatchWrapper(batch.id, trimmedMessages)
-                                ).also {
-                                    it.info.startExtract = timeStart
-                                    it.info.endExtract = System.currentTimeMillis()
-                                    StreamWriter.setExtract(it.info)
-                                })
+                                sendToChannel(
+                                    PipelineRawBatchData(
+                                        false,
+                                        message.id,
+                                        message.timestamp,
+                                        StoredMessageBatchWrapper(batch.id, trimmedMessages)
+                                    ).also {
+                                        it.info.startExtract = timeStart
+                                        it.info.endExtract = System.currentTimeMillis()
+                                        StreamWriter.setExtract(it.info)
+                                    }
+                                )
+
                                 lastElement = message.id
                                 lastTimestamp = message.timestamp
 

@@ -23,22 +23,21 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
-import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
+import com.exactpro.th2.rptdataprovider.entities.internal.FilteredMessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import mu.KotlinLogging
 
-class AttachedEventFilters private constructor(
+class AttachedEventFilters(
     private var messagesFromAttachedId: Set<String>,
     override var negative: Boolean = false,
     override var conjunct: Boolean = false,
     override var strict: Boolean = false
-) : Filter<MessageWithMetadata> {
-
+    ) : Filter<MessageWithMetadata> {
     companion object {
         private val logger = KotlinLogging.logger { }
 
-        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<MessageWithMetadata> {
+        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<FilteredMessageWrapper> {
             return AttachedEventFilters(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
@@ -55,7 +54,7 @@ class AttachedEventFilters private constructor(
                         (batch?.getTestEvent(id.eventId) ?: cradleService.getEventSuspend(id.eventId)
                             ?.asSingle())?.messageIds?.map(Any::toString)
                             ?.toSet()
-                            ?: emptySet<String>()
+                            ?: emptySet()
                     }
                     ?.reduce { set, element ->
                         if (filterRequest.isConjunct()) {
@@ -87,6 +86,7 @@ class AttachedEventFilters private constructor(
             FilterSpecialType.NEED_ATTACHED_EVENTS
         )
     }
+
 
     override fun match(element: MessageWithMetadata): Boolean {
         return if (strict) {

@@ -18,26 +18,16 @@ package com.exactpro.th2.rptdataprovider
 
 
 import com.exactpro.cradle.CradleManager
-import com.exactpro.th2.common.grpc.MessageBatch
-import com.exactpro.th2.common.grpc.MessageGroup
 import com.exactpro.th2.common.grpc.MessageGroupBatch
-import com.exactpro.th2.common.grpc.RawMessageBatch
 import com.exactpro.th2.common.schema.grpc.configuration.GrpcConfiguration
 import com.exactpro.th2.common.schema.message.MessageRouter
 import com.exactpro.th2.rptdataprovider.cache.EventCache
 import com.exactpro.th2.rptdataprovider.cache.MessageCache
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.entities.filters.PredicateFactory
-import com.exactpro.th2.rptdataprovider.entities.filters.events.AttachedMessageFilter
-import com.exactpro.th2.rptdataprovider.entities.filters.events.EventBodyFilter
-import com.exactpro.th2.rptdataprovider.entities.filters.events.EventNameFilter
-import com.exactpro.th2.rptdataprovider.entities.filters.events.EventStatusFilter
-import com.exactpro.th2.rptdataprovider.entities.filters.events.EventTypeFilter
-import com.exactpro.th2.rptdataprovider.entities.filters.messages.AttachedEventFilters
-import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyBinaryFilter
-import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyFilter
-import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageTypeFilter
-import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
+import com.exactpro.th2.rptdataprovider.entities.filters.events.*
+import com.exactpro.th2.rptdataprovider.entities.filters.messages.*
+import com.exactpro.th2.rptdataprovider.entities.internal.FilteredMessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.handlers.SearchEventsHandler
 import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
@@ -48,8 +38,11 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.SerializationFeature
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import io.ktor.http.*
+
 
 @Suppress("MemberVisibilityCanBePrivate")
 class Context(
@@ -62,7 +55,9 @@ class Context(
 
     val jacksonMapper: ObjectMapper = jacksonObjectMapper()
         .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
-        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES),
+        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+        .registerModule(JavaTimeModule())
+        .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false),
 
     val cradleManager: CradleManager,
     val messageRouterRawBatch: MessageRouter<MessageGroupBatch>,
@@ -98,16 +93,18 @@ class Context(
             EventTypeFilter.filterInfo to EventTypeFilter.Companion::build,
             EventNameFilter.filterInfo to EventNameFilter.Companion::build,
             EventBodyFilter.filterInfo to EventBodyFilter.Companion::build,
-            EventStatusFilter.filterInfo to EventStatusFilter.Companion::build
+            EventStatusFilter.filterInfo to EventStatusFilter.Companion::build,
+            GenericEventTextFilter.filterInfo to GenericEventTextFilter.Companion::build
         ), cradleService
     ),
 
-    val messageFiltersPredicateFactory: PredicateFactory<MessageWithMetadata> = PredicateFactory(
+    val filteredMessageFiltersPredicateFactory: PredicateFactory<FilteredMessageWrapper> = PredicateFactory(
         mapOf(
             AttachedEventFilters.filterInfo to AttachedEventFilters.Companion::build,
             MessageTypeFilter.filterInfo to MessageTypeFilter.Companion::build,
             MessageBodyFilter.filterInfo to MessageBodyFilter.Companion::build,
-            MessageBodyBinaryFilter.filterInfo to MessageBodyBinaryFilter.Companion::build
+            MessageBodyBinaryFilter.filterInfo to MessageBodyBinaryFilter.Companion::build,
+            GenericMessageTextFilter.filterInfo to GenericMessageTextFilter.Companion::build
         ), cradleService
     ),
 

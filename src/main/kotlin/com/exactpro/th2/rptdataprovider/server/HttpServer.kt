@@ -22,7 +22,8 @@ import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.CodecResponseException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
-import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
+import com.exactpro.th2.rptdataprovider.entities.internal.FilteredMessageWrapper
+import com.exactpro.th2.rptdataprovider.entities.internal.MessageIdWithSubsequences
 import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
@@ -300,7 +301,7 @@ class HttpServer(private val applicationContext: Context) {
         val searchMessagesHandler = this.applicationContext.searchMessagesHandler
 
         val eventFiltersPredicateFactory = this.applicationContext.eventFiltersPredicateFactory
-        val messageFiltersPredicateFactory = this.applicationContext.messageFiltersPredicateFactory
+        val messageFiltersPredicateFactory = this.applicationContext.filteredMessageFiltersPredicateFactory
 
         val getEventsLimit = this.applicationContext.configuration.eventSearchChunkSize.value.toInt()
 
@@ -355,7 +356,9 @@ class HttpServer(private val applicationContext: Context) {
                         call, context, "get single message",
                         rarelyModifiedCacheControl, probe, false, call.parameters.toMap()
                     ) {
-                        MessageWithMetadata(messageCache.getOrPut(call.parameters["id"]!!)).let {
+                        val id = MessageIdWithSubsequences.from(call.parameters["id"]!!)
+                        val message = messageCache.getOrPut(id.messageId)
+                        FilteredMessageWrapper(message, id.subsequences).let {
                             MessageMapper.convertToHttpMessage(it)
                         }
                     }
@@ -427,8 +430,9 @@ class HttpServer(private val applicationContext: Context) {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "match message", null, false, false, queryParametersMap) {
                         val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
-                        val message = messageCache.getOrPut(call.parameters["id"]!!)
-                        filterPredicate.apply(MessageWithMetadata(message))
+                        val id = MessageIdWithSubsequences.from(call.parameters["id"]!!)
+                        val message = messageCache.getOrPut(id.messageId)
+                        filterPredicate.apply(FilteredMessageWrapper(message))
                     }
                 }
 

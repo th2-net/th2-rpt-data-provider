@@ -16,103 +16,69 @@
 
 package com.exactpro.th2.rptdataprovider.entities.mappers
 
+import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.message.toTimestamp
-import com.exactpro.th2.dataprovider.grpc.MessageData
+import com.exactpro.th2.dataprovider.grpc.MessageGroupItem
+import com.exactpro.th2.dataprovider.grpc.MessageGroupResponse
 import com.exactpro.th2.rptdataprovider.convertToProto
-import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
-import com.exactpro.th2.rptdataprovider.entities.responses.BodyHttpMessage
-import com.exactpro.th2.rptdataprovider.entities.responses.BodyHttpSubMessage
+import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
+import com.exactpro.th2.rptdataprovider.entities.internal.FilteredMessageWrapper
 import com.exactpro.th2.rptdataprovider.entities.responses.HttpBodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.responses.HttpMessage
-import com.fasterxml.jackson.databind.DeserializationFeature
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.KotlinModule
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.exactpro.th2.rptdataprovider.providerDirectionToCradle
 import java.util.*
 
 object MessageMapper {
 
-    private val jacksonMapper: ObjectMapper = jacksonObjectMapper()
-        .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
-        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
-        .registerModule(KotlinModule())
 
+    private fun wrapSubMessage(message: BodyWrapper, matched: Boolean): MessageGroupItem  {
+        return MessageGroupItem.newBuilder()
+            .setMessage(message.message)
+            .setMatch(matched)
+            .build()
+    }
 
-    private suspend fun getBodyMessage(messageWithMetadata: MessageWithMetadata): BodyHttpMessage? {
-        return with(messageWithMetadata) {
-            val body = message.parsedMessageGroup?.let {
-                it.zip(filteredBody).map { (msg, filtered) ->
-                    HttpBodyWrapper.from(msg, filtered)
+    private fun wrapSubMessages(filteredMessageWrapper: FilteredMessageWrapper): List<MessageGroupItem> {
+        return with(filteredMessageWrapper) {
+            message.parsedMessageGroup?.let { subMessages ->
+                (subMessages zip filteredBody).map { (subMessage, matched) ->
+                    wrapSubMessage(subMessage, matched)
                 }
-            }
-            val convertedBody = if (body != null) {
-                if (body.size == 1) {
-                    jacksonMapper.readValue<BodyHttpMessage>(body[0].message, BodyHttpMessage::class.java)
-                } else {
-                    mergeFieldsHttp(body)
-                }
-            } else null
-            convertedBody
+            } ?: emptyList()
         }
     }
 
-    //FIXME: migrate to grpc interface 1.0.0+
-    //FIXME: return raw message body
-    fun convertToGrpcMessageData(messageWithMetadata: MessageWithMetadata): List<MessageData> {
-        return messageWithMetadata.message.parsedMessageGroup?.map { groupElement ->
-            MessageData.newBuilder()
-                .setMessageId(groupElement.id)
-                .setTimestamp(groupElement.message.metadata.timestamp)
-//                .setBodyBase64(messageWithMetadata.message.rawMessageBody.let {
-//                    Base64.getEncoder().encodeToString(it)
-//                })
-                .setMessageType(groupElement.messageType)
-                .setMessage(groupElement.message)
-                .build()
-        } ?: listOf(messageWithMetadata.message.let { message ->
-            MessageData.newBuilder()
+
+    suspend fun convertToGrpcMessageData(filteredMessageWrapper: FilteredMessageWrapper): MessageGroupResponse  {
+        return with(filteredMessageWrapper) {
+            MessageGroupResponse.newBuilder()
                 .setMessageId(message.id.convertToProto())
                 .setTimestamp(message.timestamp.toTimestamp())
-//                .setBodyBase64(message.rawMessageBody.let { Base64.getEncoder().encodeToString(it) })
+                .setBodyRaw(message.rawMessageBody)
+                .addAllAttachedEventId(message.attachedEventIds.map { EventID.newBuilder().setId(it).build() })
+                .addAllMessageItem(wrapSubMessages(filteredMessageWrapper))
                 .build()
-        })
+        }
     }
 
-    suspend fun convertToHttpMessage(messageWithMetadata: MessageWithMetadata): HttpMessage {
-        return with(messageWithMetadata) {
+    suspend fun convertToHttpMessage(filteredMessageWrapper: FilteredMessageWrapper): HttpMessage {
+        return with(filteredMessageWrapper) {
             val httpMessage = HttpMessage(
+                id = message.messageId,
                 timestamp = message.timestamp,
-                messageType = messageWithMetadata.message.parsedMessageGroup
-                    ?.joinToString("/") { it.messageType } ?: messageWithMetadata.message.imageType ?: "",
-                direction = message.direction,
                 sessionId = message.sessionId,
+                direction = providerDirectionToCradle(message.direction),
+                sequence = message.id.index.toString(),
                 attachedEventIds = message.attachedEventIds,
-                messageId = message.id.toString(),
-                body = getBodyMessage(messageWithMetadata),
-                bodyBase64 = message.rawMessageBody.let { Base64.getEncoder().encodeToString(it) }
+                rawMessageBase64 = message.rawMessageBody.let { Base64.getEncoder().encodeToString(it.toByteArray()) },
+                parsedMessages = message.parsedMessageGroup?.let {
+                    it.zip(filteredBody).map { (msg, filtered) ->
+                        HttpBodyWrapper.from(msg, filtered)
+                    }
+                }
             )
             httpMessage
         }
     }
-
-    private fun mergeFieldsHttp(body: List<HttpBodyWrapper>): BodyHttpMessage {
-        val res = jacksonMapper.readValue(body[0].message, BodyHttpMessage::class.java)
-        res.fields = emptyMap<String, Any>().toMutableMap()
-        body.map {
-            it.subsequenceId.joinToString("-") to it
-        }
-            .map {
-                "${it.second.messageType}-${it.first}" to jacksonMapper.readValue(
-                    it.second.message, BodyHttpMessage::class.java
-                )
-            }
-            .forEach {
-                res.fields?.set(
-                    it.first, BodyHttpSubMessage(
-                        mutableMapOf("fields" to (it.second.fields ?: mutableMapOf()))
-                    )
-                )
-            }
-        return res
-    }
 }
+

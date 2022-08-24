@@ -23,21 +23,20 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
-import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
+import com.exactpro.th2.rptdataprovider.entities.internal.FilteredMessageWrapper
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import mu.KotlinLogging
 
-class MessageBodyBinaryFilter private constructor(
+class MessageBodyBinaryFilter(
     private var bodyBinary: List<String>,
     override var negative: Boolean = false,
     override var conjunct: Boolean = false,
     override var strict: Boolean = false
 ) : Filter<MessageWithMetadata> {
-
     companion object {
         private val logger = KotlinLogging.logger { }
 
-        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<MessageWithMetadata> {
+        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<FilteredMessageWrapper> {
             return MessageBodyBinaryFilter(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
@@ -60,7 +59,7 @@ class MessageBodyBinaryFilter private constructor(
         )
     }
 
-    override fun match(element: MessageWithMetadata): Boolean {
+    override fun match(element: FilteredMessageWrapper): Boolean {
         val predicate: (String) -> Boolean = { item ->
             element.message.rawMessageBody.let {
                 if (strict) {

@@ -19,11 +19,15 @@ package com.exactpro.th2.rptdataprovider.handlers
 
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.TimeRelation.AFTER
+
+import com.exactpro.cradle.TimeRelation.BEFORE
 import com.exactpro.cradle.testevents.StoredTestEventWrapper
+import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
+import com.exactpro.th2.rptdataprovider.entities.responses.EventStreamPointer
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedEventInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
@@ -40,6 +44,7 @@ import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneOffset
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.coroutineContext
@@ -98,13 +103,13 @@ class SearchEventsHandler(private val context: Context) {
         }
     }
 
-
     private suspend fun getEventsSuspend(
         parentEvent: ProviderEventId?,
         timestampFrom: Instant,
         timestampTo: Instant
     ): Iterable<StoredTestEventWrapper> {
         return coroutineScope {
+
             if (parentEvent != null) {
                 if (parentEvent.batchId != null) {
                     cradle.getEventSuspend(parentEvent.batchId)?.let {
@@ -273,6 +278,7 @@ class SearchEventsHandler(private val context: Context) {
             val startTimestamp = resumeFromEvent?.startTimestamp ?: request.startTimestamp!!
             val timeIntervals = getTimeIntervals(request, sseEventSearchStep, startTimestamp)
             val parentEventCounter = ParentEventCounter(request.limitForParent)
+            val atomicBoolean = AtomicBoolean(false)
 
             flow {
                 for (timestamp in timeIntervals) {
@@ -285,6 +291,7 @@ class SearchEventsHandler(private val context: Context) {
 
                     if (request.parentEvent?.batchId != null) break
                 }
+                atomicBoolean.set(true)
             }
                 .map { it.await() }
                 .flatMapConcat { it.asFlow() }
@@ -323,6 +330,14 @@ class SearchEventsHandler(private val context: Context) {
                     }
                 }.onCompletion {
                     coroutineContext.cancelChildren()
+                    writer.write(
+                        EventStreamPointer(
+                            lastId = lastScannedObject.eventId,
+                            hasStarted = lastScannedObject.eventId != null,
+                            hasEnded = atomicBoolean.get()
+                        )
+
+                    )
                     it?.let { throwable -> throw throwable }
                 }.let { eventFlow ->
                     if (request.metadataOnly) {

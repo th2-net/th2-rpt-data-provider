@@ -24,8 +24,9 @@ import com.exactpro.th2.common.grpc.EventStatus.FAILED
 import com.exactpro.th2.common.grpc.EventStatus.SUCCESS
 import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.message.toTimestamp
-import com.exactpro.th2.dataprovider.grpc.EventData
+import com.exactpro.th2.dataprovider.grpc.EventResponse
 import com.exactpro.th2.rptdataprovider.cradleDirectionToGrpc
+import com.fasterxml.jackson.annotation.JsonFormat
 import com.fasterxml.jackson.annotation.JsonRawValue
 import com.google.protobuf.ByteString
 import java.time.Instant
@@ -37,7 +38,9 @@ data class Event(
     val isBatched: Boolean,
     val eventName: String,
     val eventType: String?,
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'Z'", timezone = "UTC")
     val endTimestamp: Instant?,
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'Z'", timezone = "UTC")
     val startTimestamp: Instant,
 
     val parentEventId: String?,
@@ -60,22 +63,20 @@ data class Event(
         }
     }
 
-    fun convertToGrpcEventData(): EventData {
-        return EventData.newBuilder()
+    fun convertToGrpcEventData(): EventResponse {
+        return EventResponse.newBuilder()
             .setEventId(EventID.newBuilder().setId(eventId))
             .setIsBatched(isBatched)
             .setEventName(eventName)
             .setStartTimestamp(startTimestamp.toTimestamp())
-            .setSuccessful(if (successful) SUCCESS else FAILED)
-            .addAllAttachedMessageIds(convertMessageIdToProto(attachedMessageIds))
-            .let { builder ->
+            .setStatus(if (successful) SUCCESS else FAILED)
+            .addAllAttachedMessageId(convertMessageIdToProto(attachedMessageIds))
+            .also { builder ->
                 batchId?.let { builder.setBatchId(EventID.newBuilder().setId(it)) }
                 eventType?.let { builder.setEventType(it) }
                 endTimestamp?.let { builder.setEndTimestamp(it.toTimestamp()) }
                 parentEventId?.let { builder.setParentEventId(EventID.newBuilder().setId(it)) }
-                attachedMessageIds?.let { builder.addAllAttachedMessageIds(convertMessageIdToProto(it)) }
                 body?.let { builder.setBody(ByteString.copyFrom(it.toByteArray())) }
-                builder
             }.build()
     }
 
@@ -99,6 +100,4 @@ data class Event(
         attachedMessageIds = messages,
         body = body
     )
-
-
 }

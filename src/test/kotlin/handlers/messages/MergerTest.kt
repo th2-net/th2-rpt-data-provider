@@ -19,23 +19,19 @@ package handlers.messages
 
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.messages.MessageToStore
-import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
-import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageStreamPointer
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
-import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.handlers.messages.StreamMerger
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.*
-import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Assertions.assertArrayEquals
-import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
@@ -64,7 +60,7 @@ class MergerTest {
         val endTimestamp: Instant,
         val messageList: List<List<PipelineStepObject>>,
         val limit: Int,
-        val streamInfo: List<StreamInfo>
+        val streamInfo: List<MessageStreamPointer>
     )
 
     private fun getSearchRequest(
@@ -73,8 +69,8 @@ class MergerTest {
         val parameters = mutableMapOf(
             "stream" to fullStreamName,
             "direction" to listOf(direction),
-            "startTimestamp" to listOf(startTimestamp.toEpochMilli().toString()),
-            "endTimestamp" to listOf(endTimestamp.toEpochMilli().toString()),
+            "startTimestamp" to listOf(startTimestamp.toString()),
+            "endTimestamp" to listOf(endTimestamp.toString()),
             "resultCountLimit" to listOf(resultCount.toString())
         )
         if (resumeId != null) {
@@ -82,7 +78,8 @@ class MergerTest {
         }
         return SseMessageSearchRequest(parameters, FilterPredicate(emptyList()))
     }
-    
+
+
     private fun mockContextWithCradleService(): Context {
         val context: Context = mockk()
 
@@ -147,7 +144,7 @@ class MergerTest {
     private fun getMessageGenerator(stream: StreamName, timestamp: MutableInstant): Sequence<PipelineFilteredMessage> {
         return sequence {
             var index = 1L
-            val payload = mockk<MessageWithMetadata>()
+            val payload = mockk<FilteredMessageWrapper>()
             while (true) {
                 val id = StoredMessageId(stream.name, stream.direction, index++)
                 yield(PipelineFilteredMessage(false, id, timestamp.getAndAdd(), PipelineStepsInfo(), payload))
@@ -195,8 +192,8 @@ class MergerTest {
                 getMessages(startTimestamp, 2, 3),
                 limit = 4,
                 streamInfo = listOf(
-                    StreamInfo(streamNameObjects[0], StoredMessageId.fromString("${fullStreamName[0]}:-1")),
-                    StreamInfo(streamNameObjects[1], StoredMessageId.fromString("${fullStreamName[1]}:3"))
+                    MessageStreamPointer(streamNameObjects[0], true, true, StoredMessageId.fromString("${fullStreamName[0]}:-1")),
+                    MessageStreamPointer(streamNameObjects[1], true, false, StoredMessageId.fromString("${fullStreamName[1]}:3"))
                 )
             ),
             StreamInfoCase(
@@ -205,8 +202,8 @@ class MergerTest {
                 getMessages(startTimestamp, 2, 4),
                 limit = 4,
                 streamInfo = listOf(
-                    StreamInfo(streamNameObjects[0], StoredMessageId.fromString("${fullStreamName[0]}:-1")),
-                    StreamInfo(streamNameObjects[1], StoredMessageId.fromString("${fullStreamName[1]}:3"))
+                    MessageStreamPointer(streamNameObjects[0], true, true, StoredMessageId.fromString("${fullStreamName[0]}:-1")),
+                    MessageStreamPointer(streamNameObjects[1], true, false, StoredMessageId.fromString("${fullStreamName[1]}:3"))
                 )
             ),
             StreamInfoCase(
@@ -215,8 +212,8 @@ class MergerTest {
                 getMessages(startTimestamp, 2, 4),
                 limit = 2,
                 streamInfo = listOf(
-                    StreamInfo(streamNameObjects[0], StoredMessageId.fromString("${fullStreamName[0]}:-1")),
-                    StreamInfo(streamNameObjects[1], StoredMessageId.fromString("${fullStreamName[1]}:1"))
+                    MessageStreamPointer(streamNameObjects[0], true, true, StoredMessageId.fromString("${fullStreamName[0]}:-1")),
+                    MessageStreamPointer(streamNameObjects[1], true, false, StoredMessageId.fromString("${fullStreamName[1]}:1"))
                 )
             )
         ).map { Arguments { listOf(it).toTypedArray() } }
@@ -245,8 +242,16 @@ class MergerTest {
             } while (message !is StreamEndObject)
 
             assertArrayEquals(
-                testCase.streamInfo.map { it.lastElement }.toTypedArray(),
-                streamMerger.getStreamsInfo().map { it.lastElement }.toTypedArray()
+                testCase.streamInfo.map { it.lastId }.toTypedArray(),
+                streamMerger.getStreamsInfo().map { it.lastId }.toTypedArray()
+            )
+            assertArrayEquals(
+                testCase.streamInfo.map { it.hasEnded }.toTypedArray(),
+                streamMerger.getStreamsInfo().map { it.hasEnded }.toTypedArray()
+            )
+            assertArrayEquals(
+                testCase.streamInfo.map { it.hasStarted }.toTypedArray(),
+                streamMerger.getStreamsInfo().map { it.hasStarted }.toTypedArray()
             )
             coroutineContext.cancelChildren()
         }

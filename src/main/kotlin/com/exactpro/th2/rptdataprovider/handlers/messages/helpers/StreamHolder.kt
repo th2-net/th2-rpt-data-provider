@@ -19,7 +19,7 @@ package com.exactpro.th2.rptdataprovider.handlers.messages.helpers
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidInitializationException
 import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepObject
-import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageStreamPointer
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import io.prometheus.client.Histogram
 import mu.KotlinLogging
@@ -84,15 +84,14 @@ class StreamHolder(val messageStream: PipelineComponent) {
         } ?: false
     }
 
-    suspend fun getStreamInfo(): StreamInfo {
+    suspend fun getStreamInfo(): MessageStreamPointer {
         while (isNeedSearchResumeId()) {
             pop()
         }
-        val streamName = messageStream.streamName!!
-        return if (currentElement != null && currentElement!!.streamEmpty) {
-            StreamInfo(streamName, null)
-        } else {
-            StreamInfo(streamName, currentElement?.lastProcessedId)
-        }
+
+        val streamEnded = currentElement?.streamEmpty ?: false
+        val lastId = currentElement?.lastProcessedId
+
+        return MessageStreamPointer(messageStream.streamName!!, lastId != null, streamEnded, lastId)
     }
 }

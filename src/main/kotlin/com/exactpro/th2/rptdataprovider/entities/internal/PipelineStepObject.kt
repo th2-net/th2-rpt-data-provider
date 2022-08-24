@@ -57,6 +57,7 @@ interface PipelineStepObject {
     val info: PipelineStepsInfo
 }
 
+
 data class StreamEndObject(
     override val streamEmpty: Boolean,
     override val lastProcessedId: StoredMessageId?,
@@ -65,8 +66,8 @@ data class StreamEndObject(
 ) : PipelineStepObject
 
 
-// FIXME: restore "data class" declaration
-class EmptyPipelineObject(
+
+data class EmptyPipelineObject(
     override val streamEmpty: Boolean,
     override val lastProcessedId: StoredMessageId?,
     override val lastScannedTime: Instant,
@@ -97,7 +98,7 @@ data class PipelineKeepAlive(
 }
 
 
-data class PipelineRawBatch(
+data class PipelineRawBatchData(
     override val streamEmpty: Boolean,
     override val lastProcessedId: StoredMessageId?,
     override val lastScannedTime: Instant,
@@ -157,15 +158,14 @@ data class PipelineParsedMessage(
     )
 }
 
-
 data class PipelineFilteredMessage(
     override val streamEmpty: Boolean,
     override val lastProcessedId: StoredMessageId?,
     override val lastScannedTime: Instant,
     override val info: PipelineStepsInfo,
-    val payload: MessageWithMetadata
+    val payload: FilteredMessageWrapper
 ) : PipelineStepObject {
-    constructor(pipelineStepObject: PipelineStepObject, payload: MessageWithMetadata) : this(
+    constructor(pipelineStepObject: PipelineStepObject, payload: FilteredMessageWrapper) : this(
         pipelineStepObject.streamEmpty,
         pipelineStepObject.lastProcessedId,
         pipelineStepObject.lastScannedTime,

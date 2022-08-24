@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 
 enum class EventType {
-    MESSAGE, EVENT, CLOSE, ERROR, KEEP_ALIVE, MESSAGE_IDS, PIPELINE_STATUS;
+    MESSAGE, EVENT, CLOSE, ERROR, KEEP_ALIVE, MESSAGE_IDS, EVENT_STREAM_POINTER;
 
     override fun toString(): String {
         return super.toString().toLowerCase()
@@ -48,8 +48,6 @@ abstract class LastScannedObjectInfo(
         instantTimestamp = lastTimestamp
     }
 
-    abstract fun convertToGrpc(): com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo
-
 }
 
 class LastScannedMessageInfo(
@@ -67,13 +65,6 @@ class LastScannedMessageInfo(
         scanCounter = pipelineStepObject.scannedObjectsCount
     )
 
-    override fun convertToGrpc(): com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo {
-        return com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo.newBuilder()
-            .setId(id)
-            .setTimestampMillis(timestamp)
-            .setScanCounter(scanCounter)
-            .build()
-    }
 }
 
 
@@ -93,13 +84,6 @@ class LastScannedEventInfo(
         scanCounter = scanCnt.incrementAndGet()
     }
 
-    override fun convertToGrpc(): com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo {
-        return com.exactpro.th2.dataprovider.grpc.LastScannedObjectInfo.newBuilder()
-            .setId(id)
-            .setTimestampMillis(timestamp)
-            .setScanCounter(scanCounter)
-            .build()
-    }
 }
 
 
@@ -127,6 +111,14 @@ data class SseEvent(val data: String = "empty data", val event: EventType? = nul
                 counter.incrementAndGet().toString()
             )
         }
+
+        suspend fun build(jacksonMapper: ObjectMapper, event: EventStreamPointer): SseEvent {
+            return SseEvent(
+                jacksonMapper.asStringSuspend(event),
+                EventType.EVENT_STREAM_POINTER
+            )
+        }
+
 
         suspend fun build(jacksonMapper: ObjectMapper, message: HttpMessage, counter: AtomicLong): SseEvent {
             return SseEvent(
@@ -156,11 +148,11 @@ data class SseEvent(val data: String = "empty data", val event: EventType? = nul
             )
         }
 
-        suspend fun build(jacksonMapper: ObjectMapper, streamsInfo: List<StreamInfo>): SseEvent {
+        suspend fun build(jacksonMapper: ObjectMapper, streamsInfo: List<MessageStreamPointer>): SseEvent {
             return SseEvent(
                 jacksonMapper.asStringSuspend(
                     mapOf(
-                        "messageIds" to streamsInfo.associate { it.stream.toString() to it.lastElement }
+                        "messageIds" to streamsInfo.associateBy { it.messageStream.toString() }
                     )
                 ),
                 event = EventType.MESSAGE_IDS

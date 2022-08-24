@@ -16,9 +16,8 @@
 
 package com.exactpro.th2.rptdataprovider.entities.filters.info
 
-import com.exactpro.th2.dataprovider.grpc.FilterInfo
+import com.exactpro.th2.dataprovider.grpc.FilterInfoResponse
 import com.exactpro.th2.dataprovider.grpc.FilterName
-import com.exactpro.th2.dataprovider.grpc.StringList
 import com.fasterxml.jackson.annotation.JsonFormat
 import com.fasterxml.jackson.annotation.JsonIgnore
 
@@ -59,15 +58,15 @@ data class Parameter(val name: String, val type: FilterParameterType, val defaul
                     .setValue(it as Boolean)
                 FilterParameterType.STRING -> com.google.protobuf.StringValue.newBuilder()
                     .setValue(it as String)
-                FilterParameterType.STRING_LIST -> StringList.newBuilder()
-                    .addAllListString(it as List<String>)
+                FilterParameterType.STRING_LIST -> com.google.protobuf.StringValue.newBuilder()
+                    .setValue(it as String)
             }.build()
             com.google.protobuf.Any.pack(message)
         }
     }
 
-    fun convertToProto(): com.exactpro.th2.dataprovider.grpc.Parameter {
-        return com.exactpro.th2.dataprovider.grpc.Parameter.newBuilder()
+    fun convertToProto(): com.exactpro.th2.dataprovider.grpc.FilterParameter  {
+        return com.exactpro.th2.dataprovider.grpc.FilterParameter.newBuilder()
             .setName(name)
             .setType(type.toProto())
             .also { builder ->
@@ -84,10 +83,10 @@ data class FilterInfo(
     @JsonIgnore
     val filterSpecialType: FilterSpecialType = FilterSpecialType.ORDINARY
 ) {
-    fun convertToProto(): FilterInfo {
-        return FilterInfo.newBuilder()
-            .setName(FilterName.newBuilder().setFilterName(name))
-            .addAllParameters(parameters.map { it.convertToProto() })
+    fun convertToProto(): FilterInfoResponse {
+        return FilterInfoResponse.newBuilder()
+            .setName(FilterName.newBuilder().setName(name))
+            .addAllParameter(parameters.map { it.convertToProto() })
             .also { builder ->
                 hint?.let { builder.setHint(it) }
             }.build()

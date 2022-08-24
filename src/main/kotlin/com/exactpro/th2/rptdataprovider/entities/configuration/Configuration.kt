@@ -20,19 +20,16 @@ import com.exactpro.th2.rptdataprovider.server.ServerType
 import mu.KotlinLogging
 
 class CustomConfigurationClass {
-    val hostname: String = "localhost"
-    val port: Int = 8080
+    var hostname: String = "localhost"
+    var port: Int = 8080
+    var responseTimeout: Int = 60000
+    var serverCacheTimeout: Int = 60000
+    var eventCacheSize: Int = 100
+    var messageCacheSize: Int = 100
+    var ioDispatcherThreadPoolSize: Int = 10
+    var codecResponseTimeout: Int = 6000
 
-    val responseTimeout: Int = 60000
-    val serverCacheTimeout: Int = 60000
-
-    val eventCacheSize: Int = 1
-    val messageCacheSize: Int = 1
-
-    val ioDispatcherThreadPoolSize: Int = 10
-
-    val checkRequestsAliveDelay: Long = 2000
-
+    var checkRequestsAliveDelay: Long = 2000
     val enableCaching: Boolean = true
     val notModifiedObjectsLifetime: Int = 3600
     val rarelyModifiedObjects: Int = 500
@@ -48,7 +45,6 @@ class CustomConfigurationClass {
     val messageFilterOutputMessageBuffer: Int = 100
     val messageMergerOutputMessageBuffer: Int = 10
 
-    val codecResponseTimeout: Int = 6000
     val codecPendingBatchLimit: Int = 16
     val codecCallbackThreadPool: Int = 4
     val codecRequestThreadPool: Int = 1
@@ -67,6 +63,10 @@ class CustomConfigurationClass {
     val useStrictMode = false
 
     val serverType: ServerType = ServerType.HTTP
+
+    override fun toString(): String {
+        return "CustomConfigurationClass(hostname='$hostname', port=$port, responseTimeout=$responseTimeout, serverCacheTimeout=$serverCacheTimeout, eventCacheSize=$eventCacheSize, messageCacheSize=$messageCacheSize, ioDispatcherThreadPoolSize=$ioDispatcherThreadPoolSize, codecResponseTimeout=$codecResponseTimeout, checkRequestsAliveDelay=$checkRequestsAliveDelay, enableCaching=$enableCaching, notModifiedObjectsLifetime=$notModifiedObjectsLifetime, rarelyModifiedObjects=$rarelyModifiedObjects, sseEventSearchStep=$sseEventSearchStep, keepAliveTimeout=$keepAliveTimeout, messageExtractorOutputBatchBuffer=$messageExtractorOutputBatchBuffer, messageConverterOutputBatchBuffer=$messageConverterOutputBatchBuffer, messageDecoderOutputBatchBuffer=$messageDecoderOutputBatchBuffer, messageUnpackerOutputMessageBuffer=$messageUnpackerOutputMessageBuffer, messageFilterOutputMessageBuffer=$messageFilterOutputMessageBuffer, messageMergerOutputMessageBuffer=$messageMergerOutputMessageBuffer, codecPendingBatchLimit=$codecPendingBatchLimit, codecCallbackThreadPool=$codecCallbackThreadPool, codecRequestThreadPool=$codecRequestThreadPool, codecUsePinAttributes=$codecUsePinAttributes, grpcWriterMessageBuffer=$grpcWriterMessageBuffer, grpcThreadPoolSize=$grpcThreadPoolSize, cradleDispatcherPoolSize=$cradleDispatcherPoolSize, sendEmptyDelay=$sendEmptyDelay, eventSearchChunkSize=$eventSearchChunkSize, useStrictMode=$useStrictMode, serverType=$serverType)"
+    }
 }
 
 class Configuration(customConfiguration: CustomConfigurationClass) {
@@ -91,7 +91,7 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
         Variable("eventCacheSize", customConfiguration.eventCacheSize.toString(), "1")
 
     val messageCacheSize: Variable =
-        Variable("messageCacheSize", customConfiguration.messageCacheSize.toString(), "1")
+        Variable("messageCacheSize", customConfiguration.messageCacheSize.toString(), "100000")
 
     val ioDispatcherThreadPoolSize: Variable =
         Variable("ioDispatcherThreadPoolSize", customConfiguration.ioDispatcherThreadPoolSize.let {
