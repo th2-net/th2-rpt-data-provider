@@ -126,7 +126,7 @@ class RabbitMqService(
 
                 delay(responseTimeout)
 
-                pendingRequest.completableDeferred.let {
+                pendingRequest.let {
                     if (pendingRequests[request.requestId]?.completableDeferred === pendingRequest.completableDeferred) {
 
                         pendingRequests.remove(request.requestId)
@@ -202,7 +202,9 @@ class RabbitMqService(
                         StreamWriter.setSendToCodecTime(sendAllTime)
                     } catch (e: Exception) {
                         if (pendingRequests[request.requestId]?.completableDeferred === pendingRequest.completableDeferred) {
-                            pendingRequest.completableDeferred.complete(null)
+
+                            pendingRequest.complete(null)
+
                             pendingRequests.remove(request.requestId)
                         }
                         logger.error(e) { "Unexpected exception while trying to send a codec request" }
