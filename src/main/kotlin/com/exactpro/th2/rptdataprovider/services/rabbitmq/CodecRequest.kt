@@ -21,6 +21,8 @@ import com.exactpro.th2.common.grpc.MessageGroupBatch
 import com.exactpro.th2.common.grpc.MessageID
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
+import mu.KotlinLogging
+import java.time.Instant
 
 
 data class CodecRequestId(private val ids: Set<BaseMessageId>) {
@@ -84,10 +86,31 @@ class PendingCodecBatchRequest(
 ) {
     val startTimestamp = System.currentTimeMillis()
 
-    var job: Job? = null
+    var timeoutHandler: Job? = null
+        set(value) {
+            if (field == null) {
+                field = value
+            } else {
+                throw IllegalArgumentException("Timeout handler already set")
+            }
+        }
+
+    fun complete(message: MessageGroupBatchWrapper): Boolean {
+        val isComplete = completableDeferred.complete(message)
+        timeoutHandler?.cancel()
+
+        val timeNow = System.currentTimeMillis()
+        logger.debug { "${message.requestId} mqCallbackScope ${timeNow - startTimestamp}ms" }
+
+        return isComplete
+    }
 
     fun toResponse(): CodecBatchResponse {
         return CodecBatchResponse(completableDeferred)
+    }
+
+    companion object {
+        private val logger = KotlinLogging.logger { }
     }
 }
 
