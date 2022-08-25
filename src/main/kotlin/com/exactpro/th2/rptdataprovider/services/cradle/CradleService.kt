@@ -124,7 +124,11 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
         }
     }
 
-    suspend fun getEventsSuspend(idFrom: StoredTestEventId, to: Instant, order: Order = Order.DIRECT): Iterable<StoredTestEventWrapper> {
+    suspend fun getEventsSuspend(
+        idFrom: StoredTestEventId,
+        to: Instant,
+        order: Order
+    ): Iterable<StoredTestEventWrapper> {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
                 logTime("Get events from: $idFrom to: $to") {
