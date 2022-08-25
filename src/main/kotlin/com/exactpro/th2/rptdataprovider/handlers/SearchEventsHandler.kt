@@ -128,8 +128,8 @@ class SearchEventsHandler(private val context: Context) {
                         listOf(StoredTestEventWrapper(it.asBatch()))
                     }.orEmpty()
                 } else {
-                    // TODO filter { it.parentId == parentEvent.eventId }
                     getTestEvents(searchInterval, order)
+                        .filter { it.parentId == parentEvent.eventId }
                 }
             } else {
                 getTestEvents(searchInterval, order)
