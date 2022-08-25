@@ -95,12 +95,14 @@ class PendingCodecBatchRequest(
             }
         }
 
-    fun complete(message: MessageGroupBatchWrapper): Boolean {
+    fun complete(message: MessageGroupBatchWrapper?): Boolean {
         val isComplete = completableDeferred.complete(message)
         timeoutHandler?.cancel()
 
-        val timeNow = System.currentTimeMillis()
-        logger.debug { "${message.requestId} mqCallbackScope ${timeNow - startTimestamp}ms" }
+        if (message != null) {
+            val timeNow = System.currentTimeMillis()
+            logger.debug { "${message.requestId} mqCallbackScope ${timeNow - startTimestamp}ms" }
+        }
 
         return isComplete
     }
