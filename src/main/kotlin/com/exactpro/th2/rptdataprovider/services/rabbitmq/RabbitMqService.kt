@@ -25,11 +25,8 @@ import com.exactpro.th2.common.schema.message.MessageRouter
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
-import com.exactpro.th2.rptdataprovider.logTime
 import kotlinx.coroutines.*
 import mu.KotlinLogging
-import java.lang.IllegalArgumentException
-import java.lang.IllegalStateException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import kotlin.system.measureTimeMillis
@@ -80,7 +77,8 @@ class RabbitMqService(
                     pendingRequests.remove(response.requestId)?.let {
                         codecLatency.gaugeDec(listOf(it.streamName))
                         codecLatency.setDuration(it.startTimestamp.toDouble(), listOf(it.streamName))
-                        it.completableDeferred.complete(response)
+
+                        it.complete(response)
                     }
                         ?: logger.trace {
                             val firstSequence =
@@ -95,6 +93,14 @@ class RabbitMqService(
             },
 
             "from_codec"
+        )
+    }
+
+    private data class TimeoutInfo(val firstSequence: Long?, val lastSequence: Long?, val stream: String) {
+        constructor(request: CodecBatchRequest) : this(
+            firstSequence = request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sequence,
+            lastSequence = request.protobufRawMessageBatch.groupsList.last()?.messagesList?.last()?.rawMessage?.sequence,
+            stream = "${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sessionAlias}:${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.direction.toString()}"
         )
     }
 
@@ -113,40 +119,39 @@ class RabbitMqService(
 
             logger.trace { "Get pending request for batch ${request.requestId}" }
 
+            val info = if (logger.isWarnEnabled) TimeoutInfo(request) else null
+
             // launch timeout handler coroutine
-            mqCallbackScope.launch {
-                measureTimeMillis {
-                    delay(responseTimeout)
+            val timeoutHandler = mqCallbackScope.launch {
 
-                    pendingRequest.completableDeferred.let {
-                        if (pendingRequests[request.requestId]?.completableDeferred === pendingRequest.completableDeferred) {
+                delay(responseTimeout)
 
-                            pendingRequests.remove(request.requestId)
-                            it.complete(null)
+                pendingRequest.let {
+                    if (pendingRequests[request.requestId]?.completableDeferred === pendingRequest.completableDeferred) {
 
-                            codecLatency.gaugeDec(listOf(request.streamName))
-                            codecLatency.setDuration(
-                                pendingRequest.startTimestamp.toDouble(),
-                                listOf(request.streamName)
-                            )
+                        pendingRequests.remove(request.requestId)
+                        it.complete(null)
 
-                            logger.warn {
-                                val firstSequence =
-                                    request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sequence
-                                val lastSequence =
-                                    request.protobufRawMessageBatch.groupsList.last()?.messagesList?.last()?.rawMessage?.sequence
-                                val stream =
-                                    "${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sessionAlias}:${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.direction.toString()}"
+                        codecLatency.gaugeDec(listOf(request.streamName))
+                        codecLatency.setDuration(
+                            pendingRequest.startTimestamp.toDouble(),
+                            listOf(request.streamName)
+                        )
 
-                                "codec request timed out after $responseTimeout ms (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} hash=${request.requestHash}) requestId=${request.requestId}"
+                        logger.warn {
+                            info?.let { timeout ->
+                                "codec request timed out after $responseTimeout ms (stream=${timeout.stream} firstId=${timeout.firstSequence} lastId=${timeout.lastSequence} hash=${request.requestHash}) requestId=${request.requestId}"
                             }
                         }
                     }
-                }.also { logger.debug { "${request.requestId} mqCallbackScope ${it}ms" } }
+                }
             }
 
-            logger.trace { "Check timeout callback for batch ${request.requestId}" }
+            // important! we must save link to timeoutHandler,
+            // because it allows us to cancel it when we get parsed message
+            pendingRequest.timeoutHandler = timeoutHandler
 
+            logger.trace { "Check timeout callback for batch ${request.requestId}" }
             logger.trace { "Check mqRequestSenderScope alive ${mqRequestSenderScope.isActive}" }
 
             mqRequestSenderScope.launch {
@@ -189,15 +194,17 @@ class RabbitMqService(
                                 val stream =
                                     "${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sessionAlias}:${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.direction.toString()}"
 
-
                                 "codec request with hash ${request.requestHash} has been sent (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} hash=${request.requestHash}) requestId=${request.requestId})"
                             }
                             logger.debug { "codec request with hash ${request.requestHash.hashCode()} has been sent" }
                         }
+
                         StreamWriter.setSendToCodecTime(sendAllTime)
                     } catch (e: Exception) {
                         if (pendingRequests[request.requestId]?.completableDeferred === pendingRequest.completableDeferred) {
-                            pendingRequest.completableDeferred.complete(null)
+
+                            pendingRequest.complete(null)
+
                             pendingRequests.remove(request.requestId)
                         }
                         logger.error(e) { "Unexpected exception while trying to send a codec request" }
