@@ -28,14 +28,15 @@ object ProtoMessageMapper {
             .setMetadata(
                 RawMessageMetadata.newBuilder()
                     .setId(storedMessage.id.convertToProto())
+                    .setProtocol(storedMessage.protocol)
+                    .putAllProperties(storedMessage.metadata.toMap())
                     .setTimestamp(storedMessage.timestamp.toTimestamp())
                     .setProtocol(storedMessage.protocol)
                     .build()
             ).also { builder ->
                 storedMessage.content?.let {
-                    logger.error { "Received stored message has no content. StoredMessageId: ${storedMessage.id}" }
                     builder.setBody(ByteString.copyFrom(it))
-                }
+                } ?: logger.error { "Received stored message has no content. StoredMessageId: ${storedMessage.id}" }
             }
             .build()
     }
