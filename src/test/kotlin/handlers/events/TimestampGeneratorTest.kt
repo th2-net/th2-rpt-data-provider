@@ -13,6 +13,7 @@ package handlers.events
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventWithContent
+import com.exactpro.cradle.testevents.StoredTestEventWrapper
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
@@ -68,8 +69,8 @@ class TimestampGeneratorTest {
     }
 
 
-    private fun mockEvent(startTimestamp: Instant, resumeId: ProviderEventId): StoredTestEventWithContent {
-        val event: StoredTestEventWithContent = mockk()
+    private fun mockEvent(startTimestamp: Instant, resumeId: ProviderEventId): StoredTestEventWrapper {
+        val event: StoredTestEventWrapper = mockk()
 
         every { event.startTimestamp } answers { startTimestamp }
 

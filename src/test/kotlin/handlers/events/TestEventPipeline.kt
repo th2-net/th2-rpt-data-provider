@@ -26,7 +26,8 @@ import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
-import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
+import com.exactpro.th2.rptdataprovider.entities.responses.EventStreamPointer
+import com.exactpro.th2.rptdataprovider.entities.responses.MessageStreamPointer
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.SearchEventsHandler
@@ -125,6 +126,28 @@ class TestEventPipeline {
             }
         }
 
+        coEvery { cradle.getEventsSuspend(any<StoredTestEventId>(), any<Instant>(), any<Order>()) } answers {
+            val start = firstArg<StoredTestEventId>()
+            val end = secondArg<Instant>()
+            val order = thirdArg<Order>()
+
+            batches.let {
+                if (order == Order.DIRECT) it else it.reversed()
+            }.dropWhile { batch -> batch.id != start }
+        }
+
+
+
+        coEvery { cradle.getEventsSuspend(any<Instant>(), any<StoredTestEventId>(), any<Order>()) } answers {
+            val start = firstArg<Instant>()
+            val end = secondArg<StoredTestEventId>()
+            val order = thirdArg<Order>()
+
+            batches.let {
+                if (order == Order.DIRECT) it else it.reversed()
+            }.dropWhile { batch -> batch.id != end }
+        }
+
         if (resumeId != null) {
             val batch = batches.find { it.asBatch().testEvents.map { it.id }.contains(resumeId.eventId) }
             coEvery { cradle.getEventsSuspend(any()) } answers { batch }
@@ -174,7 +197,10 @@ class TestEventPipeline {
             override suspend fun write(event: Event, lastEventId: AtomicLong) {
             }
 
-            override suspend fun write(streamInfo: List<StreamInfo>) {
+            override suspend fun write(streamInfo: List<MessageStreamPointer>) {
+            }
+
+            override suspend fun write(streamInfo: EventStreamPointer) {
             }
 
             override suspend fun write(lastScannedObjectInfo: LastScannedObjectInfo, counter: AtomicLong) {
