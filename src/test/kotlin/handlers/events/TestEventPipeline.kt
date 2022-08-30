@@ -135,6 +135,17 @@ class TestEventPipeline {
         }
 
 
+
+        coEvery { cradle.getEventsSuspend(any<Instant>(), any<StoredTestEventId>(), any<Order>()) } answers {
+            val start = firstArg<Instant>()
+            val end = secondArg<StoredTestEventId>()
+            val order = thirdArg<Order>()
+
+            batches.let {
+                if (order == Order.DIRECT) it else it.reversed()
+            }.dropWhile { batch -> batch.id != end }
+        }
+
         if (resumeId != null) {
             val batch = batches.find { it.asBatch().testEvents.map { it.id }.contains(resumeId.eventId) }
             coEvery { cradle.getEventSuspend(any()) } answers { batch }
