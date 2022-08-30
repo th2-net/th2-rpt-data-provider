@@ -62,13 +62,9 @@ class AttachedMessageFilter private constructor(
 
 
     override fun match(element: BaseEventEntity): Boolean {
-        val predicate: (String) -> Boolean = {
-            messageIds.contains(it)
-        }
-
         return negative.xor(
-            if (conjunct) element.attachedMessageIds.all(predicate)
-            else element.attachedMessageIds.any(predicate)
+            if (conjunct) element.attachedMessageIds.containsAll(messageIds)
+            else element.attachedMessageIds.any { messageIds.contains(it) }
         )
     }
 
