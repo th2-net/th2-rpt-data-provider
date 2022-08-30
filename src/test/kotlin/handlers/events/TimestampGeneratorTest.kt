@@ -10,21 +10,15 @@
 
 package handlers.events
 
-import com.exactpro.cradle.Order
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventWithContent
-import com.exactpro.cradle.testevents.StoredTestEventWrapper
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.handlers.events.SearchInterval
 import com.exactpro.th2.rptdataprovider.handlers.events.TimeIntervalGenerator
-import com.exactpro.th2.rptdataprovider.producers.EventProducer
-import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
-import com.fasterxml.jackson.databind.ObjectMapper
-import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.Assertions

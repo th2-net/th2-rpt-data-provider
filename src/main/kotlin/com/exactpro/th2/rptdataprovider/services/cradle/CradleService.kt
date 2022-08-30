@@ -112,13 +112,12 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
     suspend fun getEventsSuspend(
         from: Instant,
         to: Instant,
-        order: Order = Order.DIRECT,
-        idFrom: StoredTestEventId? = null
+        order: Order = Order.DIRECT
     ): Iterable<StoredTestEventWrapper> {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
-                logTime("Get events from: $from to: $to") {
-                    storage.getTestEventsAsync(from, to).await()
+                logTime("Get events from: $from to: $to order: $order") {
+                    storage.getTestEventsAsync(from, to, order).await()
                 }
             } ?: listOf()
         }
@@ -131,34 +130,23 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
     ): Iterable<StoredTestEventWrapper> {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
-                logTime("Get events from: $idFrom to: $to") {
+                logTime("Get events idFrom: $idFrom to: $to order: $order") {
                     storage.getTestEventsAsync(idFrom, to, order).await()
                 }
             } ?: listOf()
         }
     }
 
-//    suspend fun getEventsSuspend(from: Instant, to: Instant, order: Order = Order.DIRECT): Iterable<StoredTestEventWrapper> {
-//        return withContext(cradleDispatcher) {
-//            logMetrics(getTestEventsAsyncMetric) {
-//                logTime("Get events from: $from to: $to") {
-//                    storage.getTestEventsAsync(from, to, order).await()
-//                }
-//            } ?: listOf()
-//        }
-//    }
-
 
     suspend fun getEventsSuspend(
         from: Instant,
-        to: Instant,
-        parentId: StoredTestEventId,
-        idFrom: StoredTestEventId? = null
+        idTo: StoredTestEventId,
+        order: Order
     ): Iterable<StoredTestEventWrapper> {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
-                logTime("Get events parent: $parentId from: $from to: $to") {
-                    storage.getTestEventsAsync(parentId, from, to).await()
+                logTime("Get events from: $from toId: $idTo order: $order") {
+                    storage.getTestEventsAsyncToId(from, idTo, order).await()
                 }
             } ?: listOf()
         }

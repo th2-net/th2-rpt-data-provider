@@ -30,6 +30,7 @@ import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedEventInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
+import com.exactpro.th2.rptdataprovider.handlers.events.TimeIntervalGenerator
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleIteratorWrapper
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
@@ -112,6 +113,19 @@ class SearchEventsHandler(private val context: Context) {
             Order.DIRECT
         } else {
             Order.REVERSE
+        }
+    }
+
+
+    private suspend fun getTestEvents(searchInterval: SearchInterval, order: Order): Iterable<StoredTestEventWrapper> {
+        return if (searchInterval.resumeId != null) {
+            if (order == Order.DIRECT) {
+                cradle.getEventsSuspend(searchInterval.resumeId, searchInterval.endInterval, order)
+            } else {
+                cradle.getEventsSuspend(searchInterval.startInterval, searchInterval.resumeId, order)
+            }
+        } else {
+            cradle.getEventsSuspend(searchInterval.startInterval, searchInterval.endInterval, order)
         }
     }
 
@@ -359,9 +373,9 @@ class SearchEventsHandler(private val context: Context) {
 
             val resumeEvent = eventWrapper?.let { getEvent(it, resumeId) }
 
-            val timeIntervals = getTimeIntervals(startTimestamp, request, resumeId)
-
             val parentEventCounter = ParentEventCounter(request.limitForParent)
+
+            val timeIntervals = TimeIntervalGenerator(request, resumeId, eventWrapper)
 
             flow {
                 for (timestamp in timeIntervals) {

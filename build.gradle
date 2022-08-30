@@ -23,6 +23,7 @@ plugins {
 
 ext {
     dockerImageVersion = release_version
+
     cradleVersion       = '3.2.3-dev-version-3.2-2744866683-SNAPSHOT'
 }
 
@@ -89,13 +90,13 @@ dependencies {
 jar {
     manifest {
         attributes(
-            'Created-By': "${System.getProperty('java.version')} (${System.getProperty('java.vendor')})",
-            'Specification-Title': '',
-            'Specification-Vendor': 'Exactpro Systems LLC',
-            'Implementation-Title': project.archivesBaseName,
-            'Implementation-Vendor': 'Exactpro Systems LLC',
-            'Implementation-Vendor-Id': 'com.exactpro',
-            'Implementation-Version': project.version
+                'Created-By': "${System.getProperty('java.version')} (${System.getProperty('java.vendor')})",
+                'Specification-Title': '',
+                'Specification-Vendor': 'Exactpro Systems LLC',
+                'Implementation-Title': project.archivesBaseName,
+                'Implementation-Vendor': 'Exactpro Systems LLC',
+                'Implementation-Vendor-Id': 'com.exactpro',
+                'Implementation-Version': project.version
         )
     }
 }
