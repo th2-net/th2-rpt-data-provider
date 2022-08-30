@@ -11,7 +11,7 @@
 package com.exactpro.th2.rptdataprovider.handlers.events
 
 import com.exactpro.cradle.TimeRelation
-import com.exactpro.cradle.testevents.StoredTestEventWithContent
+import com.exactpro.cradle.testevents.StoredTestEventWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.getDayStart
@@ -25,10 +25,10 @@ import java.time.temporal.ChronoUnit
 class TimeIntervalGenerator(
     private val request: SseEventSearchRequest,
     private val resumeId: ProviderEventId?,
-    private val resumeEvent: StoredTestEventWithContent?
+    private val resumeEventBatchOrSingle: StoredTestEventWrapper?
 ) : Iterable<SearchInterval> {
 
-    private val initDatabaseRequestTimestamp = resumeEvent?.let {
+    private val initDatabaseRequestTimestamp = resumeEventBatchOrSingle?.let {
         if (request.searchDirection == TimeRelation.AFTER) {
             it.startTimestamp
         } else {
@@ -37,7 +37,7 @@ class TimeIntervalGenerator(
     } ?: request.startTimestamp!!
 
 
-    private val startTimestampRequest = request.startTimestamp ?: resumeEvent?.startTimestamp!!
+    private val startTimestampRequest = request.startTimestamp ?: resumeEventBatchOrSingle?.startTimestamp!!
 
 
     private val comparator = if (request.searchDirection == TimeRelation.AFTER) {

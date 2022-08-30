@@ -107,7 +107,11 @@ class SearchEventsHandler(private val context: Context) {
 
     private suspend fun getTestEvents(searchInterval: SearchInterval, order: Order): Iterable<StoredTestEventWrapper> {
         return if (searchInterval.resumeId != null) {
-            cradle.getEventsSuspend(searchInterval.resumeId, searchInterval.endInterval, order)
+            if (order == Order.DIRECT) {
+                cradle.getEventsSuspend(searchInterval.resumeId, searchInterval.endInterval, order)
+            } else {
+                cradle.getEventsSuspend(searchInterval.startInterval, searchInterval.resumeId, order)
+            }
         } else {
             cradle.getEventsSuspend(searchInterval.startInterval, searchInterval.endInterval, order)
         }
@@ -290,10 +294,9 @@ class SearchEventsHandler(private val context: Context) {
             val eventWrapper = resumeId?.let { eventProducer.getEventWrapper(it) }
 
             val resumeEvent = eventWrapper?.let { getEvent(it, resumeId) }
-
-            val timeIntervals = TimeIntervalGenerator(request, resumeId, resumeEvent)
-
             val parentEventCounter = ParentEventCounter(request.limitForParent)
+
+            val timeIntervals = TimeIntervalGenerator(request, resumeId, eventWrapper)
 
             flow {
                 for (timestamp in timeIntervals) {
