@@ -40,7 +40,6 @@ class AttachedMessageFilter(
             return AttachedMessageFilter(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
-                strict = filterRequest.isStrict(),
                 messageIds = filterRequest.getValues()
                     ?.map { MessageIdWithSubsequences.from(it).messageId.toString() }
                     ?.toSet()
@@ -54,7 +53,6 @@ class AttachedMessageFilter(
             mutableListOf<Parameter>().apply {
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("conjunct", FilterParameterType.BOOLEAN, false, null))
-                add(Parameter("strict", FilterParameterType.BOOLEAN, false, null))
                 add(
                     Parameter(
                         "values", FilterParameterType.STRING_LIST, null,
@@ -69,11 +67,7 @@ class AttachedMessageFilter(
 
     override fun match(element: BaseEventEntity): Boolean {
         val predicate: (String) -> Boolean = {
-            if (strict) {
-                messageIds.contains(it)
-            } else {
-                messageIds.any { el -> el.contains(it) }
-            }
+            element.attachedMessageIds.contains(it)
         }
 
         return negative.xor(

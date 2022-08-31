@@ -64,7 +64,7 @@ data class GrpcFilter(val filterName: String, val filter: Filter) : FilterReques
     }
 
     override fun isStrict(): Boolean {
-        TODO("Not yet implemented")
+        return false
     }
 
     override fun getValues(): List<String>? {

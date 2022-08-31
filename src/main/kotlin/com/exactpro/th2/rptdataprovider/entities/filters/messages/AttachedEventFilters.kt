@@ -41,7 +41,6 @@ class AttachedEventFilters(
             return AttachedEventFilters(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
-                strict = filterRequest.isStrict(),
                 messagesFromAttachedId = filterRequest.getValues()
                     ?.map { filterValue ->
                         val id = ProviderEventId(filterValue)
@@ -73,7 +72,6 @@ class AttachedEventFilters(
             mutableListOf<Parameter>().apply {
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("conjunct", FilterParameterType.BOOLEAN, false, null))
-                add(Parameter("strict", FilterParameterType.BOOLEAN, false, null))
                 add(
                     Parameter(
                         "values",
@@ -89,11 +87,7 @@ class AttachedEventFilters(
 
 
     override fun match(element: FilteredMessageWrapper): Boolean {
-        return if (strict) {
-            negative.xor(messagesFromAttachedId.contains(element.message.messageId))
-        } else {
-            negative.xor(messagesFromAttachedId.any { el -> el.contains(element.message.messageId) })
-        }
+        return negative.xor(messagesFromAttachedId.contains(element.message.messageId))
     }
 
     override fun getInfo(): FilterInfo {
