@@ -99,6 +99,7 @@ data class MessageStreamPointer(
             .setHasStarted(hasStarted)
             .setHasEnded(hasEnded)
             .setLastId(
+
                 lastMessage.let {
                     logger.trace { "stream $messageStream - lastElement is ${it.index}" }
                     it.convertToProto()

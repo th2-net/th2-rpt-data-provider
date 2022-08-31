@@ -30,8 +30,8 @@ import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.messages.helpers.MultipleStreamHolder
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
+import io.prometheus.client.Histogram
 import kotlinx.coroutines.*
-import kotlinx.coroutines.sync.Mutex
 import mu.KotlinLogging
 import java.time.Instant
 import kotlin.time.ExperimentalTime
@@ -53,7 +53,6 @@ class StreamMerger(
     }
 
     private val messageStreams = MultipleStreamHolder(pipelineStreams)
-
     private var resultCountLimit = searchRequest.resultCountLimit
 
     private val processJob: Job
@@ -173,6 +172,7 @@ class StreamMerger(
             }
         }
     }
+
 
     suspend fun getStreamsInfo(): List<MessageStreamPointer> {
         processJob.join()

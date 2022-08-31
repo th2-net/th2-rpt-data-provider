@@ -42,7 +42,6 @@ import java.util.concurrent.atomic.AtomicLong
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class MergerTest {
-
     private val baseStreamName = "test_stream"
 
     private val streamDirection = listOf("first", "second")
@@ -78,7 +77,6 @@ class MergerTest {
         }
         return SseMessageSearchRequest(parameters, FilterPredicate(emptyList()))
     }
-
 
     private fun mockContextWithCradleService(): Context {
         val context: Context = mockk()

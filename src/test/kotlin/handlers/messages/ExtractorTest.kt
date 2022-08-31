@@ -185,7 +185,6 @@ class ExtractorTest {
         runBlocking {
             repeat(chunkCount + 1) {
                 val endTimestamp = startTimestamp.plus(100, ChronoUnit.SECONDS)
-                
                 val request = getSearchRequest(startTimestamp, endTimestamp)
 
                 val extractor = MessageExtractor(context, request, streamNameObject, this, 1, PipelineStatus(context))
