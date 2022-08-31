@@ -77,8 +77,8 @@ class AttachedMessageFilter(
         }
 
         return negative.xor(
-            if (conjunct) element.attachedMessageIds.all(predicate)
-            else element.attachedMessageIds.any(predicate)
+            if (conjunct) messageIds.all(predicate)
+            else messageIds.any(predicate)
         )
     }
 
