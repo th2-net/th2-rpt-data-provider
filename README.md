@@ -75,6 +75,7 @@ Filters are formed as follows:
 - `value / values` - text, number, boolean, etc. - one / many values to match against a filter.
 - `negative` - boolean. - Negates the result of the filter. To retrieve data that does NOT match the specified filter. Defaults to `false`.
 - `conjunct` - boolean. - Used if the filter takes several values. If `true` then the element must match ALL given `values`. If `false` then element must match ANY of `values`. *Not used in filters with one possible value*. Defaults to `false`.
+- `strict` - boolean. - If `true` then data that is equal to given value is retrieved. If `false` then data whose substring is given value is retrieved. Defaults to `false`.
 
 ```
 As example:
@@ -145,11 +146,11 @@ Event metadata object example (in sse):
 
 [FILTERS](#filters-api):
 - `attachedMessageId` - Filters the events that are linked to the specified message id. Parameters: `values` - text, `negative` - boolean, `conjunct` - boolean.  
-- `name` - Will match the events which name contains one of the given substrings. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.  
-- `type` - Will match the events which type contains one of the given substrings. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.  
-- `body` - Will match the events which body contains one of the given substrings. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.  
-- `status` - Will match the events which status equals that specified. Parameters: `value` - string, one of `failed` or `passed`. `negative` - boolean.
-- `event_generic` - Will match the events by  `name` or `body` or `type`. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.
+- `name` - Will match the events which name contains one of the given substrings. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean, `strict` - boolean.
+- `type` - Will match the events which type contains one of the given substrings. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean, `strict` - boolean.
+- `body` - Will match the events which body contains one of the given substrings. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean, `strict` - boolean. 
+- `status` - Will match the events which status equals that specified. Parameters: `value` - string, one of `failed` or `passed`. `negative` - boolea, `strict` - boolean.
+- `event_generic` - Will match the events by  `name` or `body` or `type`. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean, `strict` - boolean.
 
 
 `http://localhost:8080/search/sse/messages` - create a sse channel of messages that matches the filter. Accepts following query parameters:
@@ -166,10 +167,10 @@ Event metadata object example (in sse):
 [FILTERS](#filters-api):
 
 - `attachedEventIds` - Filters the messages that are linked to the specified event id. Parameters: `values` - text, accepts multiple values, `negative` - boolean, `conjunct` - boolean. 
-- `type` - Will match the messages by their full type name. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.
-- `body` - Will match the messages by their parsed body. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.
-- `bodyBinary` - Will match the messages by their binary body. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.
-- `message_generic` - Will match the messages by `bodyBinary` or `body` or `type`. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean.
+- `type` - Will match the messages by their full type name. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean, `strict` - boolean.
+- `body` - Will match the messages by their parsed body. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean, `strict` - boolean.
+- `bodyBinary` - Will match the messages by their binary body. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean, `strict` - boolean.
+- `message_generic` - Will match the messages by `bodyBinary` or `body` or `type`. Parameters: `values` - text, accepts multiple values, case-insensitive, `negative` - boolean, `conjunct` - boolean, `strict` - boolean.
 
 Elements in channel match the format sse: 
 ```
