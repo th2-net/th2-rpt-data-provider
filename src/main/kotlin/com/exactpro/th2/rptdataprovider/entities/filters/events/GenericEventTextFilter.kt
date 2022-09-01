@@ -27,7 +27,10 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
 
 class GenericEventTextFilter(
-    private var values: List<String>, override var negative: Boolean = false, override var conjunct: Boolean = false
+    private var values: List<String>,
+    override var negative: Boolean = false,
+    override var conjunct: Boolean = false,
+    override var strict: Boolean = false
 ) : Filter<BaseEventEntity> {
 
     companion object {
@@ -35,6 +38,7 @@ class GenericEventTextFilter(
             return GenericEventTextFilter(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
+                strict = filterRequest.isStrict(),
                 values = filterRequest.getValues()
                     ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
             )
@@ -44,13 +48,14 @@ class GenericEventTextFilter(
             FilterInfo("event_generic", "matches events by name, body or type", mutableListOf<Parameter>().apply {
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("conjunct", FilterParameterType.BOOLEAN, false, null))
+                add(Parameter("strict", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("values", FilterParameterType.STRING_LIST, null, "NewOrderSingle, ..."))
             })
     }
 
-    private val bodyFilter = EventBodyFilter(body = values, conjunct = conjunct)
-    private val nameFilter = EventNameFilter(name = values, conjunct = conjunct)
-    private val typeFilter = EventTypeFilter(type = values, conjunct = conjunct)
+    private val bodyFilter = EventBodyFilter(body = values, conjunct = conjunct, strict = strict)
+    private val nameFilter = EventNameFilter(name = values, conjunct = conjunct, strict = strict)
+    private val typeFilter = EventTypeFilter(type = values, conjunct = conjunct, strict = strict)
 
     override fun match(element: BaseEventEntity): Boolean {
         return negative.xor(

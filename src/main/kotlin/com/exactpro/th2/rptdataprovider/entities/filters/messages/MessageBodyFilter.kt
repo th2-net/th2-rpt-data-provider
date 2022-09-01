@@ -31,7 +31,8 @@ import com.google.protobuf.util.JsonFormat
 class MessageBodyFilter(
     private var body: List<String>,
     override var negative: Boolean = false,
-    override var conjunct: Boolean = false
+    override var conjunct: Boolean = false,
+    override var strict: Boolean = false
 ) : Filter<FilteredMessageWrapper> {
 
     companion object {
@@ -39,6 +40,7 @@ class MessageBodyFilter(
             return MessageBodyFilter(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
+                strict = filterRequest.isStrict(),
                 body = filterRequest.getValues()
                     ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
             )
@@ -50,6 +52,7 @@ class MessageBodyFilter(
             mutableListOf<Parameter>().apply {
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("conjunct", FilterParameterType.BOOLEAN, false, null))
+                add(Parameter("strict", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("values", FilterParameterType.STRING_LIST, null, "FGW, ..."))
             },
             FilterSpecialType.NEED_JSON_BODY
@@ -58,8 +61,13 @@ class MessageBodyFilter(
 
     private fun predicate(element: BodyWrapper): Boolean {
         val predicate: (String) -> Boolean = { item ->
-            JsonFormat.printer().omittingInsignificantWhitespace().print(element.message).toLowerCase()
-                .contains(item.toLowerCase())
+            JsonFormat.printer().omittingInsignificantWhitespace().print(element.message).let {
+                if (strict) {
+                    it.equals(item, ignoreCase = true)
+                } else {
+                    it.toLowerCase().contains(item.toLowerCase())
+                }
+            }
         }
         return negative.xor(if (conjunct) body.all(predicate) else body.any(predicate))
     }

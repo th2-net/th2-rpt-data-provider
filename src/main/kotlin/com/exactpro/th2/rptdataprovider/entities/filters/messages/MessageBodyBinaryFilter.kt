@@ -30,9 +30,9 @@ import mu.KotlinLogging
 class MessageBodyBinaryFilter(
     private var bodyBinary: List<String>,
     override var negative: Boolean = false,
-    override var conjunct: Boolean = false
+    override var conjunct: Boolean = false,
+    override var strict: Boolean = false
 ) : Filter<FilteredMessageWrapper> {
-
     companion object {
         private val logger = KotlinLogging.logger { }
 
@@ -40,6 +40,7 @@ class MessageBodyBinaryFilter(
             return MessageBodyBinaryFilter(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
+                strict = filterRequest.isStrict(),
                 bodyBinary = filterRequest.getValues()
                     ?: throw InvalidRequestException("'${MessageBodyFilter.filterInfo.name}-values' cannot be empty")
             )
@@ -51,6 +52,7 @@ class MessageBodyBinaryFilter(
             mutableListOf<Parameter>().apply {
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("conjunct", FilterParameterType.BOOLEAN, false, null))
+                add(Parameter("strict", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("values", FilterParameterType.STRING_LIST, null, "FGW, ..."))
             },
             FilterSpecialType.NEED_BODY_BASE64
@@ -59,8 +61,12 @@ class MessageBodyBinaryFilter(
 
     override fun match(element: FilteredMessageWrapper): Boolean {
         val predicate: (String) -> Boolean = { item ->
-            element.message.rawMessageBody.let {
-                String(it.toByteArray()).toLowerCase().contains(item.toLowerCase())
+            element.message.rawMessageBody.toByteArray().let {
+                if (strict) {
+                    String(it).equals(item, ignoreCase = true)
+                } else {
+                    String(it).toLowerCase().contains(item.toLowerCase())
+                }
             }
         }
         return try {

@@ -31,9 +31,9 @@ import mu.KotlinLogging
 class AttachedEventFilters(
     private var messagesFromAttachedId: Set<String>,
     override var negative: Boolean = false,
-    override var conjunct: Boolean = false
-) : Filter<FilteredMessageWrapper> {
-
+    override var conjunct: Boolean = false,
+    override var strict: Boolean = false
+    ) : Filter<FilteredMessageWrapper> {
     companion object {
         private val logger = KotlinLogging.logger { }
 
@@ -84,6 +84,7 @@ class AttachedEventFilters(
             FilterSpecialType.NEED_ATTACHED_EVENTS
         )
     }
+
 
     override fun match(element: FilteredMessageWrapper): Boolean {
         return negative.xor(messagesFromAttachedId.contains(element.message.messageId))

@@ -22,6 +22,7 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 interface Filter<T> {
     val negative: Boolean
     val conjunct: Boolean
+    val strict: Boolean
     fun match(element: T): Boolean
     fun getInfo(): FilterInfo
 }
