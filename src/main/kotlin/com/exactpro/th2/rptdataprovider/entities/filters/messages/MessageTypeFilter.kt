@@ -29,7 +29,8 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 class MessageTypeFilter(
     private var type: List<String>,
     override var negative: Boolean = false,
-    override var conjunct: Boolean = false
+    override var conjunct: Boolean = false,
+    override var strict: Boolean = false
 ) : Filter<FilteredMessageWrapper> {
 
     companion object {
@@ -37,6 +38,7 @@ class MessageTypeFilter(
             return MessageTypeFilter(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
+                strict = filterRequest.isStrict(),
                 type = filterRequest.getValues()
                     ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
             )
@@ -48,6 +50,7 @@ class MessageTypeFilter(
             mutableListOf<Parameter>().apply {
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("conjunct", FilterParameterType.BOOLEAN, false, null))
+                add(Parameter("strict", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("values", FilterParameterType.STRING_LIST, null, "Heartbeat, ..."))
             }
         )
@@ -56,7 +59,11 @@ class MessageTypeFilter(
 
     private fun predicate(element: BodyWrapper): Boolean {
         val predicate: (String) -> Boolean = { item ->
-            element.messageType.toLowerCase().contains(item.toLowerCase())
+            if (strict) {
+                element.messageType.equals(item, ignoreCase = true)
+            } else {
+                element.messageType.toLowerCase().contains(item.toLowerCase())
+            }
         }
         return negative.xor(if (conjunct) type.all(predicate) else type.any(predicate))
     }

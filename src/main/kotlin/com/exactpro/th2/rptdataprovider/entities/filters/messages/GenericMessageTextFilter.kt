@@ -27,7 +27,10 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 
 
 class GenericMessageTextFilter(
-    private var values: List<String>, override var negative: Boolean = false, override var conjunct: Boolean = false
+    private var values: List<String>,
+    override var negative: Boolean = false,
+    override var conjunct: Boolean = false,
+    override var strict: Boolean = false
 ) : Filter<FilteredMessageWrapper> {
 
     companion object {
@@ -35,6 +38,7 @@ class GenericMessageTextFilter(
             return GenericMessageTextFilter(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
+                strict = filterRequest.isStrict(),
                 values = filterRequest.getValues()
                     ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
             )
@@ -44,13 +48,14 @@ class GenericMessageTextFilter(
             FilterInfo("message_generic", "matches messages by bodyBinary, body or type", mutableListOf<Parameter>().apply {
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("conjunct", FilterParameterType.BOOLEAN, false, null))
+                add(Parameter("strict", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("values", FilterParameterType.STRING_LIST, null, "NewOrderSingle, ..."))
             })
     }
 
-    private val typeFilter = MessageTypeFilter(type = values, conjunct = conjunct)
-    private val bodyBinaryFilter = MessageBodyBinaryFilter(bodyBinary = values, conjunct = conjunct)
-    private val bodyFilter = MessageBodyFilter(body = values, conjunct = conjunct)
+    private val typeFilter = MessageTypeFilter(type = values, conjunct = conjunct, strict = strict)
+    private val bodyBinaryFilter = MessageBodyBinaryFilter(bodyBinary = values, conjunct = conjunct, strict = strict)
+    private val bodyFilter = MessageBodyFilter(body = values, conjunct = conjunct, strict = strict)
 
     override fun match(element: FilteredMessageWrapper): Boolean {
         return negative.xor(

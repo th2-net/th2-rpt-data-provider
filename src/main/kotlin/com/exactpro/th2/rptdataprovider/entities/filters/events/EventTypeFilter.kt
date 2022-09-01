@@ -28,7 +28,8 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 class EventTypeFilter(
     private var type: List<String>,
     override var negative: Boolean = false,
-    override var conjunct: Boolean = false
+    override var conjunct: Boolean = false,
+    override var strict: Boolean = false
 ) : Filter<BaseEventEntity> {
 
     companion object {
@@ -36,6 +37,7 @@ class EventTypeFilter(
             return EventTypeFilter(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
+                strict = filterRequest.isStrict(),
                 type = filterRequest.getValues()
                     ?: throw InvalidRequestException("'${filterInfo.name}-values' cannot be empty")
             )
@@ -47,6 +49,7 @@ class EventTypeFilter(
             mutableListOf<Parameter>().apply {
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("conjunct", FilterParameterType.BOOLEAN, false, null))
+                add(Parameter("strict", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("values", FilterParameterType.STRING_LIST, null, "Send message, ..."))
             }
         )
@@ -54,7 +57,11 @@ class EventTypeFilter(
 
     override fun match(element: BaseEventEntity): Boolean {
         val predicate: (String) -> Boolean = { item ->
-            element.eventType.toLowerCase().contains(item.toLowerCase())
+            if (strict) {
+                element.eventType.equals(item, ignoreCase = true)
+            } else {
+                element.eventType.toLowerCase().contains(item.toLowerCase())
+            }
         }
         return negative.xor(if (conjunct) type.all(predicate) else type.any(predicate))
     }
