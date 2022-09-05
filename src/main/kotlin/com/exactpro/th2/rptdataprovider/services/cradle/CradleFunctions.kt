@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider.services.cradle
 
-import com.datastax.oss.driver.api.core.DriverTimeoutException
 import kotlinx.coroutines.delay
 import mu.KotlinLogging
 
@@ -29,7 +28,9 @@ suspend fun <T> databaseRequestRetry(dbRetryDelay: Long, request: suspend () -> 
         try {
             result = request.invoke()
             goodRequest = true
-        } catch (e: DriverTimeoutException) {
+
+// temporary fix - replace with timeout exception if possible
+        } catch (e: Exception) {
             logger.debug { "try to reconnect" }
             delay(dbRetryDelay)
         }
