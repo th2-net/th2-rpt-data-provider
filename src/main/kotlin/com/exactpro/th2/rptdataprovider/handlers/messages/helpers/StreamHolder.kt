@@ -26,6 +26,7 @@ import mu.KotlinLogging
 import kotlin.time.ExperimentalTime
 import kotlin.time.measureTimedValue
 
+
 class StreamHolder(val messageStream: PipelineComponent) {
 
     companion object {

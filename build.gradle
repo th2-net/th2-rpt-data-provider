@@ -16,21 +16,21 @@
 
 plugins {
     id 'java'
-    id 'org.jetbrains.kotlin.jvm' version '1.3.72'
+    id 'org.jetbrains.kotlin.jvm' version '1.5.31'
     id 'application'
     id 'com.palantir.docker' version '0.25.0'
 }
 
 ext {
     dockerImageVersion = release_version
-    cradleVersion       = '3.2.3-dev-version-3.2-2744866683-SNAPSHOT'
+
+    cradleVersion       = '3.2.3-dev-version-3.2-2998317806-SNAPSHOT'
 }
 
 group 'com.exactpro.th2'
 version release_version
 
 repositories {
-    mavenLocal()
     mavenCentral()
     maven {
         name 'Sonatype_snapshots'
@@ -89,13 +89,13 @@ dependencies {
 jar {
     manifest {
         attributes(
-            'Created-By': "${System.getProperty('java.version')} (${System.getProperty('java.vendor')})",
-            'Specification-Title': '',
-            'Specification-Vendor': 'Exactpro Systems LLC',
-            'Implementation-Title': project.archivesBaseName,
-            'Implementation-Vendor': 'Exactpro Systems LLC',
-            'Implementation-Vendor-Id': 'com.exactpro',
-            'Implementation-Version': project.version
+                'Created-By': "${System.getProperty('java.version')} (${System.getProperty('java.vendor')})",
+                'Specification-Title': '',
+                'Specification-Vendor': 'Exactpro Systems LLC',
+                'Implementation-Title': project.archivesBaseName,
+                'Implementation-Vendor': 'Exactpro Systems LLC',
+                'Implementation-Vendor-Id': 'com.exactpro',
+                'Implementation-Version': project.version
         )
     }
 }
