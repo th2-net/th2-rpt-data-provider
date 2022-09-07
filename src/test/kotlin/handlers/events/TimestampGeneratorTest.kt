@@ -50,11 +50,11 @@ class TimestampGeneratorTest {
         val parameters = mutableMapOf<String, List<String>>()
 
         if (startTimestamp != null) {
-            parameters["startTimestamp"] = listOf(startTimestamp.toEpochMilli().toString())
+            parameters["startTimestamp"] = listOf(startTimestamp.toString())
         }
 
         if (endTimestamp != null) {
-            parameters["endTimestamp"] = listOf(endTimestamp.toEpochMilli().toString())
+            parameters["endTimestamp"] = listOf(endTimestamp.toString())
         }
 
         if (resumeId != null) {
