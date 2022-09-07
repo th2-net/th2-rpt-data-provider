@@ -20,8 +20,10 @@ import com.exactpro.cradle.testevents.StoredTestEventBatch
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventMetadata
 import com.exactpro.cradle.testevents.StoredTestEventWithContent
+import com.exactpro.cradle.testevents.StoredTestEventWrapper
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType.NEED_ATTACHED_MESSAGES
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType.NEED_BODY
+import com.exactpro.th2.rptdataprovider.entities.internal.IntermediateEvent
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
@@ -75,6 +77,15 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
         }
     }
 
+    suspend fun getEventWrapper(id: ProviderEventId): StoredTestEventWrapper {
+        val event = cradle.getEventSuspend(id.batchId ?: id.eventId)
+        if (event == null) {
+            logger.error { "unable to find event '${id.eventId}'" }
+            throw CradleEventNotFoundException("${id.eventId} is not a valid id")
+        }
+        return event
+    }
+
     suspend fun fromId(id: ProviderEventId): BaseEventEntity {
         val batch = id.batchId?.let { cradle.getEventSuspend(it)?.asBatch() }
 
@@ -114,14 +125,13 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
     }
 
     fun fromEventsProcessed(
-        events: List<Pair<StoredTestEventWithContent, BaseEventEntity>>,
+        events: Iterable<IntermediateEvent>,
         request: SseEventSearchRequest
     ): List<BaseEventEntity> {
-
         return events.let {
             if (!request.metadataOnly || request.filterPredicate.getSpecialTypes().contains(NEED_BODY)) {
                 it.map { (content, event) ->
-                    content to setBody(content, event)
+                    IntermediateEvent(content, setBody(content, event))
                 }
             } else {
                 it
@@ -142,10 +152,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
     }
 
 
-    fun fromStoredEvent(
-        storedEvent: StoredTestEventWithContent,
-        batch: StoredTestEventBatch?
-    ): BaseEventEntity {
+    fun fromStoredEvent(storedEvent: StoredTestEventWithContent, batch: StoredTestEventBatch?): BaseEventEntity {
         return BaseEventEntity(
             StoredTestEventMetadata(storedEvent),
             ProviderEventId(batch?.id, storedEvent.id),
@@ -161,10 +168,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
     }
 
 
-    private fun setBody(
-        storedEvent: StoredTestEventWithContent,
-        baseEvent: BaseEventEntity
-    ): BaseEventEntity {
+    private fun setBody(storedEvent: StoredTestEventWithContent, baseEvent: BaseEventEntity): BaseEventEntity {
         return baseEvent.apply {
             body = storedEvent.content.let {
                 try {

@@ -23,6 +23,7 @@ plugins {
 
 ext {
     dockerImageVersion = release_version
+    cradleVersion = '3.1.3-TH2-4139-2955537585-SNAPSHOT'
 }
 
 group 'com.exactpro.th2'
@@ -50,9 +51,8 @@ dependencies {
 
     implementation group: 'net.jpountz.lz4', name: 'lz4', version: '1.3.0'
 
-    implementation 'com.exactpro.th2:cradle-core:3.1.3-TH2-3827-2782460110-SNAPSHOT'
-    implementation 'com.exactpro.th2:cradle-cassandra:3.1.3-TH2-3827-2782460110-SNAPSHOT'
-
+    implementation "com.exactpro.th2:cradle-core:${cradleVersion}"
+    implementation "com.exactpro.th2:cradle-cassandra:${cradleVersion}"
 
     implementation 'com.exactpro.th2:grpc-data-provider:0.1.4'
 
@@ -85,13 +85,13 @@ dependencies {
 jar {
     manifest {
         attributes(
-            'Created-By': "${System.getProperty('java.version')} (${System.getProperty('java.vendor')})",
-            'Specification-Title': '',
-            'Specification-Vendor': 'Exactpro Systems LLC',
-            'Implementation-Title': project.archivesBaseName,
-            'Implementation-Vendor': 'Exactpro Systems LLC',
-            'Implementation-Vendor-Id': 'com.exactpro',
-            'Implementation-Version': project.version
+                'Created-By': "${System.getProperty('java.version')} (${System.getProperty('java.vendor')})",
+                'Specification-Title': '',
+                'Specification-Vendor': 'Exactpro Systems LLC',
+                'Implementation-Title': project.archivesBaseName,
+                'Implementation-Vendor': 'Exactpro Systems LLC',
+                'Implementation-Vendor-Id': 'com.exactpro',
+                'Implementation-Version': project.version
         )
     }
 }

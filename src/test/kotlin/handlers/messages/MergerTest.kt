@@ -18,8 +18,6 @@ package handlers.messages
 
 
 import com.exactpro.cradle.Direction
-import com.exactpro.cradle.messages.MessageToStore
-import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
@@ -32,16 +30,16 @@ import com.exactpro.th2.rptdataprovider.handlers.StreamName
 import com.exactpro.th2.rptdataprovider.handlers.messages.StreamMerger
 import io.mockk.every
 import io.mockk.mockk
-import kotlinx.coroutines.*
-import org.junit.jupiter.api.Assertions
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertArrayEquals
-import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
 import java.time.Instant
-import java.util.concurrent.atomic.AtomicLong
 
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)

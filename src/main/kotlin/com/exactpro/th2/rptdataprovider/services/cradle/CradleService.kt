@@ -18,6 +18,7 @@
 package com.exactpro.th2.rptdataprovider.services.cradle
 
 import com.exactpro.cradle.CradleManager
+import com.exactpro.cradle.Order
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.cradle.messages.StoredMessageFilter
@@ -108,21 +109,40 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
         }
     }
 
-    suspend fun getEventsSuspend(from: Instant, to: Instant): Iterable<StoredTestEventWrapper> {
+    suspend fun getEventsSuspend(from: Instant, to: Instant, order: Order): Iterable<StoredTestEventWrapper> {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
-                logTime("Get events from: $from to: $to") {
-                    storage.getTestEventsAsync(from, to).await()
+                logTime("Get events from: $from to: $to order: $order") {
+                    storage.getTestEventsAsync(from, to, order).await()
                 }
             } ?: listOf()
         }
     }
 
-    suspend fun getEventsSuspend(parentId: StoredTestEventId, from: Instant, to: Instant): Iterable<StoredTestEventWrapper> {
+    suspend fun getEventsSuspend(
+        idFrom: StoredTestEventId,
+        to: Instant,
+        order: Order
+    ): Iterable<StoredTestEventWrapper> {
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
-                logTime("Get events parent: $parentId from: $from to: $to") {
-                    storage.getTestEventsAsync(parentId, from, to).await()
+                logTime("Get events idFrom: $idFrom to: $to order: $order") {
+                    storage.getTestEventsAsync(idFrom, to, order).await()
+                }
+            } ?: listOf()
+        }
+    }
+
+
+    suspend fun getEventsSuspend(
+        from: Instant,
+        idTo: StoredTestEventId,
+        order: Order
+    ): Iterable<StoredTestEventWrapper> {
+        return withContext(cradleDispatcher) {
+            logMetrics(getTestEventsAsyncMetric) {
+                logTime("Get events from: $from toId: $idTo order: $order") {
+                    storage.getTestEventsAsyncToId(from, idTo, order).await()
                 }
             } ?: listOf()
         }
