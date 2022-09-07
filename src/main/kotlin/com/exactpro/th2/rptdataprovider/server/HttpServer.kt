@@ -16,7 +16,10 @@
 
 package com.exactpro.th2.rptdataprovider.server
 
+import com.exactpro.cradle.Direction
+import com.exactpro.cradle.Order
 import com.exactpro.cradle.TimeRelation
+import com.exactpro.cradle.messages.StoredMessageFilterBuilder
 import com.exactpro.cradle.utils.CradleIdException
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
@@ -445,6 +448,60 @@ class HttpServer(private val applicationContext: Context) {
                         searchMessagesHandler.getIds(request)
                     }
                 }
+
+                get("/testSpeed") {
+                    GlobalScope.launch {
+
+                        val request = SseMessageSearchRequest(
+                            call.request.queryParameters.toMap(),
+                            messageFiltersPredicateFactory.getEmptyPredicate()
+                        )
+                        val (session, direction) = request.stream.first().let {
+                            val stream = it.split(":")
+                            val session = stream.first()
+                            val direction = Direction.byLabel(stream.last().toLowerCase())
+
+                            session to direction
+                        }
+
+                        val order = if (request.searchDirection == TimeRelation.AFTER) Order.DIRECT else Order.REVERSE
+
+                        var totalBatchesCount = 0L
+                        var totalMessagesCount = 0L
+                        var totalMessagesSize = 0L
+
+                        measureTimeMillis {
+                            val messages = cradleService.getMessagesBatchesSuspend(
+                                StoredMessageFilterBuilder()
+                                    .streamName().isEqualTo(session)
+                                    .direction().isEqualTo(direction)
+                                    .order(order)
+                                    .also { builder ->
+                                        if (order == Order.DIRECT) {
+                                            request.startTimestamp?.let {
+                                                builder.timestampFrom().isGreaterThanOrEqualTo(it)
+                                            }
+                                            request.endTimestamp?.let { builder.timestampTo().isLessThan(it) }
+                                        } else {
+                                            request.startTimestamp?.let {
+                                                builder.timestampTo().isLessThanOrEqualTo(it)
+                                            }
+                                            request.endTimestamp?.let { builder.timestampFrom().isGreaterThan(it) }
+                                        }
+                                    }.build()
+                            )
+
+                            for (message in messages) {
+                                totalBatchesCount++
+                                totalMessagesCount += message.messageCount
+                                totalMessagesSize += message.batchSize
+                            }
+                        }.also {
+                            logger.debug { "Test speed log. Request: ${call.request.queryParameters.toMap()}, time: ${it}ms, total_batches: ${totalBatchesCount}, total_messages: ${totalMessagesCount}, total_messages_size: ${totalMessagesSize}" }
+                        }
+                    }
+                }
+
             }
         }.start(false)
 
