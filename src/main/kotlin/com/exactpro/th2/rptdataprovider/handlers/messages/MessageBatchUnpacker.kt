@@ -131,7 +131,7 @@ class MessageBatchUnpacker(
 
         val requestsToResponse = messages.zip(responses)
 
-        sendBatchInfoEvent(messages, EventStatus.FAILED)
+        sendBatchInfoEvent(messages, EventStatus.SUCCESS)
 
         return if (!useStrictMode) {
             requestsToResponse.map { (rawMessage, response) ->
