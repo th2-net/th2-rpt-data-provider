@@ -99,7 +99,7 @@ class Main {
     @FlowPreview
     @EngineAPI
     @InternalAPI
-    fun run() {
+    suspend fun run() {
         logger.info { "Starting the box" }
 
         liveness = true
@@ -116,9 +116,11 @@ class Main {
     @FlowPreview
     @EngineAPI
     @InternalAPI
-    private fun startServer() {
+    private suspend fun startServer() {
 
         System.setProperty(IO_PARALLELISM_PROPERTY_NAME, context.configuration.ioDispatcherThreadPoolSize.value)
+
+        context.rabbitMqService.storeEvent(context.rootEvent)
 
         when (context.serverType) {
             HTTP -> {
@@ -179,7 +181,7 @@ class Main {
 @EngineAPI
 @InternalAPI
 @ExperimentalCoroutinesApi
-fun main(args: Array<String>) {
+suspend fun main(args: Array<String>) {
     try {
         Main(args).run()
     } catch (ex: Exception) {
