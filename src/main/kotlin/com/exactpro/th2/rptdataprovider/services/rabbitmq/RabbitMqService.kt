@@ -16,6 +16,9 @@
 
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
+import com.exactpro.th2.common.grpc.Event
+import com.exactpro.th2.common.grpc.EventBatch
+import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.grpc.MessageGroupBatch
 import com.exactpro.th2.common.message.direction
 import com.exactpro.th2.common.message.sequence
@@ -23,10 +26,12 @@ import com.exactpro.th2.common.message.sessionAlias
 import com.exactpro.th2.common.schema.message.MessageListener
 import com.exactpro.th2.common.schema.message.MessageRouter
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
+import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import kotlinx.coroutines.*
 import mu.KotlinLogging
+import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import kotlin.system.measureTimeMillis
@@ -34,7 +39,8 @@ import kotlin.system.measureTimeMillis
 class RabbitMqService(
     configuration: Configuration,
     messageRouterParsedBatch: MessageRouter<MessageGroupBatch>,
-    private val messageRouterRawBatch: MessageRouter<MessageGroupBatch>
+    private val messageRouterRawBatch: MessageRouter<MessageGroupBatch>,
+    private val eventRouter: MessageRouter<EventBatch>
 ) {
 
     companion object {
@@ -214,5 +220,27 @@ class RabbitMqService(
 
             pendingRequest
         }.toResponse()
+    }
+
+
+    suspend fun storeEvent(event: Event): EventID {
+        return withContext(Dispatchers.IO) {
+            try {
+                eventRouter.send(
+                    EventBatch
+                        .newBuilder()
+                        .addEvents(event)
+                        .build(),
+                    "publish",
+                    "event"
+                )
+                event.id
+            } catch (e: IOException) {
+                "Can not send event:  '${event.id}'".let {
+                    logger.error(e) { it }
+                    throw InvalidRequestException(it, e)
+                }
+            }
+        }
     }
 }

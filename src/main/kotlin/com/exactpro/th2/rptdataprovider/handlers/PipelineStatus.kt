@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider.handlers
 
+import com.exactpro.th2.common.grpc.Event
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.Metrics
 import com.fasterxml.jackson.annotation.JsonIgnore
@@ -66,7 +67,7 @@ data class PipelineStreamCounters(
     val filterSendDownstream: AtomicLong = AtomicLong(0)
 )
 
-class PipelineStatus(context: Context) {
+class PipelineStatus(context: Context, val requestEvent: Event? = null) {
 
     private val processingStartTimestamp: Long = System.currentTimeMillis()
     private val sendPipelineStatus = context.configuration.sendPipelineStatus.value.toBoolean()

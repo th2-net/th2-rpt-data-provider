@@ -15,11 +15,14 @@
  ******************************************************************************/
 package com.exactpro.th2.rptdataprovider
 
+import com.exactpro.th2.common.grpc.EventID
+import com.exactpro.th2.common.grpc.EventStatus
 import com.exactpro.th2.common.metrics.liveness
 import com.exactpro.th2.common.metrics.readiness
 import com.exactpro.th2.common.schema.factory.CommonFactory
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.entities.configuration.CustomConfigurationClass
+import com.exactpro.th2.rptdataprovider.producers.EventBuilder
 import com.exactpro.th2.rptdataprovider.server.GrpcServer
 import com.exactpro.th2.rptdataprovider.server.HttpServer
 import com.exactpro.th2.rptdataprovider.server.ServerType
@@ -62,7 +65,6 @@ class Main {
         val configuration =
             Configuration(configurationFactory.getCustomConfiguration(CustomConfigurationClass::class.java))
 
-
         context = Context(
             configuration,
 
@@ -77,7 +79,17 @@ class Main {
             messageRouterParsedBatch = configurationFactory.messageRouterMessageGroupBatch.also {
                 resources += it
             },
-            grpcConfig = configurationFactory.grpcConfiguration
+            eventRouter = configurationFactory.eventBatchRouter.also {
+                resources += it
+            },
+            grpcConfig = configurationFactory.grpcConfiguration,
+
+            rootEvent = EventBuilder()
+                .parentId(EventID.newBuilder().setId(configurationFactory.rootEventId).build())
+                .name("requests")
+                .status(EventStatus.SUCCESS)
+                .type("requests")
+                .build()
         )
     }
 

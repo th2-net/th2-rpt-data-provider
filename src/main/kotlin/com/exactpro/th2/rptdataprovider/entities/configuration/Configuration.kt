@@ -71,6 +71,8 @@ class CustomConfigurationClass {
     val useStrictMode = false
 
     val serverType: ServerType = ServerType.HTTP
+
+    val sendInformationEvents: Boolean = false
 }
 
 class Configuration(customConfiguration: CustomConfigurationClass) {
@@ -206,4 +208,8 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
 
     val grpcThreadPoolSize: Variable =
         Variable("grpcThreadPoolSize", customConfiguration.grpcThreadPoolSize.toString(), "20")
+
+    val sendInformationEvents: Variable =
+        Variable("sendInformationEvents", customConfiguration.sendInformationEvents.toString(), "false")
+
 }

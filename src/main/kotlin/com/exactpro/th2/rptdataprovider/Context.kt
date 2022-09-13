@@ -18,6 +18,8 @@ package com.exactpro.th2.rptdataprovider
 
 
 import com.exactpro.cradle.CradleManager
+import com.exactpro.th2.common.grpc.Event
+import com.exactpro.th2.common.grpc.EventBatch
 import com.exactpro.th2.common.grpc.MessageBatch
 import com.exactpro.th2.common.grpc.MessageGroup
 import com.exactpro.th2.common.grpc.MessageGroupBatch
@@ -41,6 +43,7 @@ import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.handlers.SearchEventsHandler
 import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
+import com.exactpro.th2.rptdataprovider.producers.EventBuilder
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
 import com.exactpro.th2.rptdataprovider.server.ServerType
@@ -68,6 +71,8 @@ class Context(
     val messageRouterRawBatch: MessageRouter<MessageGroupBatch>,
 
     val messageRouterParsedBatch: MessageRouter<MessageGroupBatch>,
+
+    val eventRouter: MessageRouter<EventBatch>,
     val grpcConfig: GrpcConfiguration,
 
     val cradleService: CradleService = CradleService(
@@ -78,7 +83,8 @@ class Context(
     val rabbitMqService: RabbitMqService = RabbitMqService(
         configuration,
         messageRouterParsedBatch,
-        messageRouterRawBatch
+        messageRouterRawBatch,
+        eventRouter
     ),
 
     val eventProducer: EventProducer = EventProducer(cradleService, jacksonMapper),
@@ -122,7 +128,9 @@ class Context(
 
     val cacheControlRarelyModified: CacheControl = configuration.rarelyModifiedObjects.value.toInt().let {
         cacheControlConfig(it, enableCaching)
-    }
+    },
+
+    val rootEvent: Event
 ) {
 
     val searchMessagesHandler: SearchMessagesHandler = SearchMessagesHandler(this)

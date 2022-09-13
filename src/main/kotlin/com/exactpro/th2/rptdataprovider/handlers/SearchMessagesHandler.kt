@@ -19,6 +19,8 @@ package com.exactpro.th2.rptdataprovider.handlers
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.th2.common.grpc.Event
+import com.exactpro.th2.common.grpc.EventStatus
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.mappers.TimeRelationMapper
@@ -29,6 +31,7 @@ import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.messages.ChainBuilder
 import com.exactpro.th2.rptdataprovider.handlers.messages.MessageExtractor
 import com.exactpro.th2.rptdataprovider.handlers.messages.StreamMerger
+import com.exactpro.th2.rptdataprovider.producers.EventBuilder
 import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collect
@@ -52,20 +55,22 @@ class SearchMessagesHandler(private val applicationContext: Context) {
                 .register()
     }
 
-    private val pipelineInfoSendDelay = applicationContext.configuration.pipelineInfoSendDelay.value.toLong()
-    private val sendPipelineStatus = applicationContext.configuration.sendPipelineStatus.value.toBoolean()
+    private val sendInformationEvents = applicationContext.configuration.sendInformationEvents.value.toBoolean()
 
-    private suspend fun sendPipelineStatus(
-        pipelineStatus: PipelineStatus,
-        writer: StreamWriter,
-        coroutineScope: CoroutineScope,
-        lastMessageIdCounter: AtomicLong
-    ) {
-        while (coroutineScope.isActive) {
-            writer.write(pipelineStatus.getSnapshot(), lastMessageIdCounter)
-            delay(pipelineInfoSendDelay)
-        }
+    private suspend fun createRequestEvent(request: SseMessageSearchRequest): Event {
+        val requestEvent = EventBuilder()
+            .name("request-${System.currentTimeMillis()}")
+            .parentId(applicationContext.rootEvent.id)
+            .status(EventStatus.SUCCESS)
+            .type("request event")
+            .data(applicationContext.jacksonMapper.writeValueAsBytes(request))
+            .build()
+
+        applicationContext.rabbitMqService.storeEvent(requestEvent)
+
+        return requestEvent
     }
+
 
     @OptIn(ExperimentalTime::class, ExperimentalCoroutinesApi::class)
     suspend fun searchMessagesSse(request: SseMessageSearchRequest, writer: StreamWriter) {
@@ -74,18 +79,15 @@ class SearchMessagesHandler(private val applicationContext: Context) {
             searchMessageRequests.inc()
 
             val lastMessageIdCounter = AtomicLong(0)
-            val pipelineStatus = PipelineStatus(context = applicationContext)
+
+            val requestEvent = if (sendInformationEvents) createRequestEvent(request) else null
+
+            val pipelineStatus = PipelineStatus(context = applicationContext, requestEvent = requestEvent)
             var streamMerger: StreamMerger? = null
             val chainScope = CoroutineScope(coroutineContext + Job(coroutineContext[Job]))
 
             flow {
                 streamMerger = ChainBuilder(applicationContext, request, chainScope, pipelineStatus).buildChain()
-
-                if (sendPipelineStatus) {
-                    launch {
-                        sendPipelineStatus(pipelineStatus, writer, chainScope, lastMessageIdCounter)
-                    }
-                }
 
                 do {
                     val message = measureTimedValue {

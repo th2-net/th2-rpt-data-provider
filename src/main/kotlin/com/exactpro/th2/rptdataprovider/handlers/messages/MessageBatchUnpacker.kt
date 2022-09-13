@@ -1,7 +1,8 @@
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
-import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
+import com.exactpro.th2.common.grpc.EventStatus
+import com.exactpro.th2.common.grpc.MessageBatch
 import com.exactpro.th2.common.grpc.MessageGroup
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.exceptions.CodecResponseException
@@ -15,6 +16,7 @@ import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.StreamName
+import com.exactpro.th2.rptdataprovider.producers.EventBuilder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -65,16 +67,45 @@ class MessageBatchUnpacker(
     }
 
 
+    private val sendInformationEvents = context.configuration.sendInformationEvents.value.toBoolean()
     private val useStrictMode = context.configuration.useStrictMode.value.toBoolean()
 
 
-    private fun badResponse(
-        requests: Collection<MessageWrapper>,
-        responses: List<MessageGroup>?,
-        pipelineMessage: PipelineDecodedBatch
+    private fun buildEventName(status: EventStatus): String {
+        return buildString {
+            if (status == EventStatus.SUCCESS) {
+                append("Process message batch")
+            } else {
+                append("Failed message batch")
+            }
+        }
+    }
+
+    private suspend fun sendBatchInfoEvent(requests: Collection<MessageWrapper>, status: EventStatus) {
+        if (sendInformationEvents && pipelineStatus.requestEvent?.id != null) {
+            val messagesCount = requests.size
+            val messagesSize = requests.sumBy { it.rawMessage.body.size() }
+
+            val name = buildEventName(status)
+
+            val event = EventBuilder()
+                .parentId(pipelineStatus.requestEvent.id)
+                .attachedIds(requests.map { it.id })
+                .name("${name}. Messages size: ${messagesSize}b, count: $messagesCount")
+                .status(status)
+                .build()
+
+            context.rabbitMqService.storeEvent(event)
+        }
+    }
+
+
+    private suspend fun badResponse(
+        messages: Collection<MessageWrapper>,
+        responses: List<MessageGroup>?
     ): List<Pair<MessageWrapper, MessageGroup?>> {
 
-        val messages = pipelineMessage.storedBatchWrapper.trimmedMessages
+        sendBatchInfoEvent(messages, EventStatus.FAILED)
 
         val errorMessage = """"codec response is null 
                     | (stream=${streamName} 
@@ -86,19 +117,20 @@ class MessageBatchUnpacker(
 
         return if (!useStrictMode) {
             logger.warn { errorMessage }
-            requests.map { Pair(it, null) }
+            messages.map { Pair(it, null) }
         } else {
             throw CodecResponseException(errorMessage)
         }
     }
 
-    private fun goodResponse(
-        requests: Collection<MessageWrapper>,
-        responses: List<MessageGroup>,
-        pipelineMessage: PipelineDecodedBatch
+    private suspend fun goodResponse(
+        messages: Collection<MessageWrapper>,
+        responses: List<MessageGroup>
     ): List<Pair<MessageWrapper, MessageGroup?>> {
 
-        val requestsToResponse = requests.zip(responses)
+        val requestsToResponse = messages.zip(responses)
+
+        sendBatchInfoEvent(messages, EventStatus.FAILED)
 
         return if (!useStrictMode) {
             requestsToResponse.map { (rawMessage, response) ->
@@ -121,8 +153,6 @@ class MessageBatchUnpacker(
             }
 
             if (notParsed.isNotEmpty()) {
-                val messages = pipelineMessage.storedBatchWrapper.trimmedMessages
-
                 throw CodecResponseException(
                     """codec dont parsed all messages
                     | (stream=${streamName} 
@@ -166,9 +196,9 @@ class MessageBatchUnpacker(
             StreamWriter.setDecodeAll(pipelineMessage.info)
             val requestsAndResponses =
                 if (responses != null && requests.size == responses.size) {
-                    goodResponse(requests, responses, pipelineMessage)
+                    goodResponse(requests, responses)
                 } else {
-                    badResponse(requests, responses, pipelineMessage)
+                    badResponse(requests, responses)
                 }
 
             val result = measureTimedValue {

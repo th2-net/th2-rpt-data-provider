@@ -16,4 +16,4 @@
 
 package com.exactpro.th2.rptdataprovider.entities.exceptions
 
-open class InvalidRequestException(message: String) : Exception(message)
+open class InvalidRequestException(message: String, exception: Exception? = null) : Exception(message, exception)
