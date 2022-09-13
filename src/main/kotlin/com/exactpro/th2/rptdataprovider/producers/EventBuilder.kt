@@ -42,10 +42,10 @@ class EventBuilder {
             .setEndTimestamp(Instant.now().toTimestamp())
             .setId(toEventID(generateUUID()))
             .setName(name)
-            .setType(type)
             .setStatus(status)
             .addAllAttachedMessageIds(attachedIds.map { it.convertToProto() })
             .also { builder ->
+                type?.let { builder.setType(it) }
                 parentEventID?.let { builder.setParentId(it) }
                 data?.let { builder.setBody(ByteString.copyFrom(it)) }
             }

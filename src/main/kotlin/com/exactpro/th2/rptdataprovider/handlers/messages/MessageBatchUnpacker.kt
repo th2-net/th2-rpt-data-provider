@@ -91,6 +91,7 @@ class MessageBatchUnpacker(
             val event = EventBuilder()
                 .parentId(pipelineStatus.requestEvent.id)
                 .attachedIds(requests.map { it.id })
+                .type("Batch information event")
                 .name("${name}. Messages size: ${messagesSize}b, count: $messagesCount")
                 .status(status)
                 .build()
