@@ -120,7 +120,11 @@ class Main {
 
         System.setProperty(IO_PARALLELISM_PROPERTY_NAME, context.configuration.ioDispatcherThreadPoolSize.value)
 
-        context.rabbitMqService.storeEvent(context.rootEvent)
+        val sendInformationEvents = context.configuration.sendInformationEvents.value.toBoolean()
+
+        if (sendInformationEvents) {
+            context.rabbitMqService.storeEvent(context.rootEvent)
+        }
 
         when (context.serverType) {
             HTTP -> {
