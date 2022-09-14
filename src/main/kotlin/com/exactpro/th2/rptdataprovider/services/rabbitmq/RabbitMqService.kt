@@ -209,7 +209,7 @@ class RabbitMqService(
                         }
                         logger.error(e) { "Unexpected exception while trying to send a codec request" }
                     }
-                }.also { logger.info { "${request.requestId} mqRequestSenderScope ${it}ms" } }
+                }.also { logger.debug { "${request.requestId} mqRequestSenderScope ${it}ms" } }
             }
 
             pendingRequest
