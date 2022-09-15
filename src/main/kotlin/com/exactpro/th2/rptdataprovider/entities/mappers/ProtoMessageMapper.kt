@@ -28,9 +28,13 @@ object ProtoMessageMapper {
             .setMetadata(
                 RawMessageMetadata.newBuilder()
                     .setId(storedMessage.id.convertToProto())
-                    .setProtocol(storedMessage.protocol)
                     .putAllProperties(storedMessage.metadata.toMap())
                     .setTimestamp(storedMessage.timestamp.toTimestamp())
+                    .also { builder ->
+                        storedMessage.protocol?.let {
+                            builder.setProtocol(storedMessage.protocol)
+                        }
+                    }
                     .build()
             ).also { builder ->
                 storedMessage.content?.let {
