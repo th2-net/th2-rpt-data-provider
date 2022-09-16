@@ -361,7 +361,7 @@ class HttpServer(private val applicationContext: Context) {
                     }
                 }
 
-                get("search/sse/messages") {
+                get("search/sse/messages/") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "search messages sse", null, false, true, queryParametersMap) {
                         suspend fun(streamWriter: StreamWriter) {
@@ -373,7 +373,7 @@ class HttpServer(private val applicationContext: Context) {
                     }
                 }
 
-                get("search/sse/events") {
+                get("search/sse/events/") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "search events sse", null, false, true, queryParametersMap) {
                         suspend fun(streamWriter: StreamWriter) {
@@ -432,7 +432,7 @@ class HttpServer(private val applicationContext: Context) {
                     }
                 }
 
-                get("/messageIds") {
+                get("/messageIds/") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(call, context, "message ids", null, false, false, queryParametersMap) {
                         val request = SseMessageSearchRequest(
