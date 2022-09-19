@@ -306,7 +306,7 @@ class HttpServer(private val applicationContext: Context) {
 
         embeddedServer(Netty, configuration.port.value.toInt(), configure = { responseWriteTimeoutSeconds = -1 }) {
 
-            install(Compression)
+//            install(Compression)
             install(Timeouts) {
                 requestTimeout = applicationContext.timeout
             }
