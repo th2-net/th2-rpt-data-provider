@@ -64,6 +64,18 @@ class MessageBatchConverter(
     private val included = searchRequest.includeProtocols
     private val excluded = searchRequest.excludeProtocols
 
+    private fun gerBatchInfo(pipelineMessage: PipelineRawBatch): String {
+        return buildString {
+            append("received raw batch (")
+            append("stream=${streamName.toString()} ")
+            append("id=${pipelineMessage.storedBatchWrapper.batchId} ")
+            pipelineMessage.storedBatchWrapper.trimmedMessages.let { messages ->
+                append("messagesCount=${messages.size} ")
+                append("messagesSize=${messages.sumOf { it.content.size }}b)")
+            }
+        }
+    }
+
     override suspend fun processMessage() {
         val pipelineMessage = previousComponent!!.pollMessage()
 
@@ -76,7 +88,7 @@ class MessageBatchConverter(
 
             val timeStart = System.currentTimeMillis()
 
-            logger.trace { "received raw batch (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.batchId})" }
+            logger.trace { gerBatchInfo(pipelineMessage) }
 
             val filteredMessages = pipelineMessage.storedBatchWrapper.trimmedMessages
                 .map {
