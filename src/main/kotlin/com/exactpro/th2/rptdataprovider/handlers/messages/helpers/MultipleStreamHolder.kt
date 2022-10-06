@@ -39,11 +39,11 @@ class MultipleStreamHolder(pipelineComponents: List<PipelineComponent>) {
     fun getLastScannedObject(direction: TimeRelation): PipelineStepObject? {
         return if (direction == TimeRelation.AFTER) {
             messageStreams
-                .maxByOrNull { it.currentElement?.lastScannedTime ?: Instant.MIN }
+                .maxBy { it.currentElement?.lastScannedTime ?: Instant.MIN }
                 ?.previousElement
         } else {
             messageStreams
-                .minByOrNull { it.currentElement?.lastScannedTime ?: Instant.MIN }
+                .minBy { it.currentElement?.lastScannedTime ?: Instant.MIN }
                 ?.previousElement
         }
     }
