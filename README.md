@@ -237,7 +237,7 @@ spec:
 
     serverType: HTTP // provider server type. Allows 'HTTP' and 'GRPC' (case sensetive).
 
-    codecUsePinAttributes: true // send raw message to specified codec (true) or send to all codecs (false) 
+    codecUsePinAttributes: true // send raw message to specified codec (true) or send to all codecs (false)     
 
   pins: // pins are used to communicate with codec components to parse message data
     - name: to_codec

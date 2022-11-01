@@ -196,4 +196,5 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
 
     val grpcThreadPoolSize: Variable =
         Variable("grpcThreadPoolSize", customConfiguration.grpcThreadPoolSize.toString(), "20")
+
 }

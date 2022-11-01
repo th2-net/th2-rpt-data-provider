@@ -8,10 +8,10 @@ object TimeRelationMapper {
         return if (timeRelation == TimeRelation.AFTER) "next" else "previous"
     }
 
-    fun fromHttpString(httpValue: String): TimeRelation {
-        if (httpValue == "next") return TimeRelation.AFTER
-        if (httpValue == "previous") return TimeRelation.BEFORE
+    fun fromHttpString(httpDirection: String): TimeRelation {
+        if (httpDirection == "next") return TimeRelation.AFTER
+        if (httpDirection == "previous") return TimeRelation.BEFORE
 
-        throw InvalidRequestException("'$this' is not a valid timeline direction. Use 'next' or 'previous'")
+        throw InvalidRequestException("'$httpDirection' is not a valid timeline direction. Use 'next' or 'previous'")
     }
 }
