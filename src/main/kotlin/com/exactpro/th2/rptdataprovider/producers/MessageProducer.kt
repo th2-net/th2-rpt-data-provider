@@ -46,7 +46,7 @@ class MessageProducer(
 
         return cradle.getMessageSuspend(id)?.let { stored ->
             val rawMessage: RawMessage = if (stored.content == null) {
-                logger.error("Received stored message has no content. StoredMessageId: $id")
+                logger.error("received stored message has no content. StoredMessageId: $id")
                 RawMessage.newBuilder().build()
             } else
                 RawMessage.parseFrom(stored.content)
