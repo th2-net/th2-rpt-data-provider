@@ -46,7 +46,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
             .map { it to cradle.getEventSuspend(it)?.asSingle() }
             .map { (eventId, storedEvent) ->
                 if (storedEvent == null) {
-                    logger.error { "unable to find event '$eventId'. It is not a valid id" }
+                    logger.error { "unable to find event '$eventId' - this id is invalid or the event is missing" }
                     null
                 } else {
                     storedEvent
@@ -60,7 +60,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
     ): List<StoredTestEventWithContent?> {
         val batchedEvents = cradle.getEventSuspend(batchId).let {
             if (it == null) {
-                logger.error { "unable to find event '$batchId'. It is not a valid id" }
+                logger.error { "unable to find batch '$batchId' - this id is invalid or the batch is missing" }
                 null
             } else {
                 it.asBatch().testEvents
@@ -69,7 +69,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
 
         return ids.map { it.eventId }.map { eventId ->
             if (batchedEvents.contains(eventId)) {
-                logger.error { "unable to find event '$eventId'. It is not a valid id" }
+                logger.error { "unable to find event '$eventId' - this id is invalid or the event is missing" }
                 null
             } else {
                 batchedEvents[eventId]
@@ -80,7 +80,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
     suspend fun getEventWrapper(id: ProviderEventId): StoredTestEventWrapper {
         val event = cradle.getEventSuspend(id.batchId ?: id.eventId)
         if (event == null) {
-            logger.error { "unable to find event '${id.eventId}'" }
+            logger.error { "unable to find event '${id.eventId}' - this id is invalid or the event is missing" }
             throw CradleEventNotFoundException("${id.eventId} is not a valid id")
         }
         return event
@@ -90,13 +90,13 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
         val batch = id.batchId?.let { cradle.getEventSuspend(it)?.asBatch() }
 
         if (id.batchId != null && batch == null) {
-            logger.error { "unable to find batch with id '${id.batchId}' referenced in event '${id.eventId}'- this is a bug" }
+            logger.error { "unable to find batch with id '${id.batchId}' referenced in event '${id.eventId}'- this is a rpt-data-provider bug" }
         }
 
         val storedEvent = batch?.getTestEvent(id.eventId) ?: cradle.getEventSuspend(id.eventId)?.asSingle()
 
         if (storedEvent == null) {
-            logger.error { "unable to find event '${id.eventId}'" }
+            logger.error { "unable to find event '${id.eventId}' - this id is invalid or the event is missing" }
             throw CradleEventNotFoundException("${id.eventId} is not a valid id")
         }
 

@@ -136,7 +136,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
         val context = io.grpc.Context.current()
 
         val handler = CoroutineExceptionHandler { _, exception ->
-            logger.error(exception) { "Coroutine context exception from the handleRequest method with $requestName" }
+            logger.error(exception) { "coroutine context exception from the handleRequest method with $requestName" }
         }
 
         CoroutineScope(grpcThreadPool + handler).launch {
