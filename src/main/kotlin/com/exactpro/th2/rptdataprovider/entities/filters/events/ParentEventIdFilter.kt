@@ -42,12 +42,12 @@ class ParentEventIdFilter private constructor(
         }
 
         val filterInfo = FilterInfo(
-            "parentEventIed",
+            "parentId",
             "matches events by one of the specified parent ids",
             mutableListOf<Parameter>().apply {
                 add(Parameter("negative", FilterParameterType.BOOLEAN, false, null))
                 add(Parameter("conjunct", FilterParameterType.BOOLEAN, false, null))
-                add(Parameter("values", FilterParameterType.STRING_LIST, null, "aae36f85-e638-482d-b996-b4bf710048b8, ..."))
+                add(Parameter("values", FilterParameterType.STRING_LIST, null, "arfq01fix01:second:1604492791034943949, ..."))
             }
         )
     }
