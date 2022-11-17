@@ -27,12 +27,17 @@ plugins {
 ext {
     dockerImageVersion = release_version
     cradleVersion = '3.1.3'
+    sharedDir       = file("${project.rootDir}/shared")
 }
 
 group 'com.exactpro.th2'
 version release_version
 
 repositories {
+    maven {
+        name 'MavenLocal'
+        url sharedDir
+    }
     mavenCentral()
     maven {
         name 'Sonatype_snapshots'
@@ -197,6 +202,10 @@ publishing {
         }
     }
     repositories {
+        maven {
+            name = 'local'
+            url = sharedDir
+        }
         //Nexus repo to publish from gitlab
         maven {
             name = 'nexus'
