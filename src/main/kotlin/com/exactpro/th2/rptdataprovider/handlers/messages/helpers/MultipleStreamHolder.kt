@@ -64,9 +64,12 @@ class MultipleStreamHolder(pipelineComponents: List<PipelineComponent>) {
         messageStreams.forEach { it.init() }
     }
 
-    suspend fun getStreamsInfo(): List<StreamInfo> {
+    /**
+     * @param sequenceFilter filters the sequence from pipeline object to get the correct resume ID
+     */
+    suspend fun getStreamsInfo(sequenceFilter: (current: Long, prev: Long) -> Boolean): List<StreamInfo> {
         return mutex.withLock {
-            messageStreams.map { it.getStreamInfo() }
+            messageStreams.map { it.getStreamInfo(sequenceFilter) }
         }
     }
 
