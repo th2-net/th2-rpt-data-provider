@@ -153,8 +153,7 @@ class MergerTest {
         }
     }
 
-    private fun addEmpty(batch: List<PipelineStepObject>): EmptyPipelineObject {
-        val last = batch.last()
+    private fun addEmpty(last: PipelineStepObject): EmptyPipelineObject {
         return EmptyPipelineObject(false, last.lastProcessedId, last.lastScannedTime)
     }
 
@@ -167,14 +166,14 @@ class MergerTest {
         val firstStream = mutableListOf<PipelineStepObject>().apply {
             for (msg in first) {
                 add(msg)
-                add(addEmpty(first))
+                add(addEmpty(msg))
             }
         }
 
         val secondStream = mutableListOf<PipelineStepObject>().apply {
             for (msg in second) {
                 add(msg)
-                add(addEmpty(second))
+                add(addEmpty(msg))
             }
         }
 
