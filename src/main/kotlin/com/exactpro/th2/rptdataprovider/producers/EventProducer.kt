@@ -81,7 +81,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
         val event = cradle.getEventSuspend(id.batchId ?: id.eventId)
         if (event == null) {
             logger.error { "unable to find event '${id.eventId}' - this id is invalid or the event is missing" }
-            throw CradleEventNotFoundException("${id.eventId} is not a valid id")
+            throw CradleEventNotFoundException(id.eventId.toString())
         }
         return event
     }
@@ -97,7 +97,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
 
         if (storedEvent == null) {
             logger.error { "unable to find event '${id.eventId}' - this id is invalid or the event is missing" }
-            throw CradleEventNotFoundException("${id.eventId} is not a valid id")
+            throw CradleEventNotFoundException(id.eventId.toString())
         }
 
         return fromStoredEvent(storedEvent, batch).let {
