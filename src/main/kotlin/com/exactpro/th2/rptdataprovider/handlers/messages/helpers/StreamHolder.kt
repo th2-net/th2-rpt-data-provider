@@ -17,7 +17,6 @@
 package com.exactpro.th2.rptdataprovider.handlers.messages.helpers
 
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidInitializationException
-import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepObject
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
@@ -78,21 +77,22 @@ class StreamHolder(val messageStream: PipelineComponent) {
         }
     }
 
-    private fun isNeedSearchResumeId(): Boolean {
+    private fun isNeedSearchResumeId(sequenceFilter: (current: Long, prev: Long) -> Boolean): Boolean {
         return currentElement?.let {
-            it is EmptyPipelineObject && !it.streamEmpty
+            !it.streamEmpty && !sequenceFilter(it.lastProcessedId?.sequence ?: 0, previousElement?.lastProcessedId?.sequence ?: 0)
         } ?: false
     }
 
-    suspend fun getStreamInfo(): StreamInfo {
-        while (isNeedSearchResumeId()) {
+    suspend fun getStreamInfo(sequenceFilter: (current: Long, prev: Long) -> Boolean): StreamInfo {
+        while (isNeedSearchResumeId(sequenceFilter)) {
             pop()
         }
-        val streamName = messageStream.streamName!!
-        return if (currentElement != null && currentElement!!.streamEmpty) {
+        val streamName = checkNotNull(messageStream.streamName) { "stream name is null" }
+        val stepObject = currentElement
+        return if (stepObject != null && stepObject.streamEmpty) {
             StreamInfo(streamName, null)
         } else {
-            StreamInfo(streamName, currentElement?.lastProcessedId)
+            StreamInfo(streamName, stepObject?.lastProcessedId)
         }
     }
 }

@@ -21,7 +21,7 @@ object ProtoProtocolInfo {
         return try {
             parsedRawMessage.rawMessage.metadata.getField(messageProtocolDescriptor).toString()
         } catch (e: Exception) {
-            logger.error(e) { "Field: '${messageProtocolDescriptor.name}' does not exist in message: $parsedRawMessage " }
+            logger.error(e) { "field: '${messageProtocolDescriptor.name}' does not exist in message: $parsedRawMessage " }
             null
         }
     }

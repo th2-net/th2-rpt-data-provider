@@ -36,7 +36,6 @@ fun grpcDirectionToCradle(direction: com.exactpro.th2.common.grpc.Direction): Di
         Direction.SECOND
 }
 
-
 fun isDifferentDays(from: Instant, to: Instant): Boolean {
     val fromDay = from.atOffset(ZoneOffset.UTC).dayOfYear
     val toDay = to.atOffset(ZoneOffset.UTC).dayOfYear

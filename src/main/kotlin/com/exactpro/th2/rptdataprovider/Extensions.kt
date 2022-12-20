@@ -22,6 +22,7 @@ import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.testevents.*
 import com.exactpro.th2.common.grpc.ConnectionID
 import com.exactpro.th2.common.grpc.MessageID
+import com.exactpro.th2.common.message.toTimestamp
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.prometheus.client.Gauge
 import io.prometheus.client.Histogram
@@ -168,7 +169,7 @@ fun StoredTestEventBatch.tryToGetTestEvents(parentEventId: StoredTestEventId? = 
             }
         }?: emptyList()
     } catch (e: IOException) {
-        logger.error(e) { }
+        logger.error(e) { "unexpected IO exception while trying to parse an event batch - contents were ignored" }
         emptyList()
     }
 }
@@ -179,5 +180,7 @@ fun StoredMessageId.convertToProto(): MessageID {
         .setSequence(this.sequence)
         .setDirection(cradleDirectionToGrpc(direction))
         .setConnectionId(ConnectionID.newBuilder().setSessionAlias(this.sessionAlias))
+        .setTimestamp(timestamp.toTimestamp())
+        .setBookName(bookId.name)
         .build()
 }

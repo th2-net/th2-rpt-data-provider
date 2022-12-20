@@ -191,13 +191,13 @@ class HttpServer(private val applicationContext: Context) {
                     } catch (e: InvalidRequestException) {
                         logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - invalid request" }
                     } catch (e: CradleObjectNotFoundException) {
-                        logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - missing cradle data" }
+                        logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - event or message is missing" }
                     } catch (e: CodecResponseException) {
-                        logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - codec parses messages incorrectly" }
+                        logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - codec was unable to decode a message" }
                     } catch (e: ClosedChannelException) {
-                        logger.info { "request '$requestName' with parameters '${stringParameters.value}' has been cancelled by a client" }
+                        logger.debug { "request '$requestName' with parameters '${stringParameters.value}' has been cancelled by a client" }
                     } catch (e: CradleIdException) {
-                        logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - unexpected cradle id exception" }
+                        logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - invalid id format" }
                     } catch (e: Exception) {
                         logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - unexpected exception" }
                     }

@@ -34,6 +34,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import mu.KotlinLogging
 import java.time.Instant
+import kotlin.coroutines.coroutineContext
 import kotlin.time.ExperimentalTime
 import kotlin.time.measureTimedValue
 
@@ -81,18 +82,21 @@ class StreamMerger(
         }
     }
 
-    private suspend fun keepAliveGenerator(coroutineScope: CoroutineScope) {
-        while (coroutineScope.isActive) {
+    private suspend fun keepAliveGenerator() {
+        while (coroutineContext.isActive) {
             val scannedObjectCount = messageStreams.getScannedObjectCount()
             val lastScannedObject = messageStreams.getLastScannedObject(searchRequest.searchDirection)
 
-            if (lastScannedObject != null) {
-                sendToChannel(PipelineKeepAlive(lastScannedObject, scannedObjectCount))
+            val keepAlive = if (lastScannedObject != null) {
+                PipelineKeepAlive(lastScannedObject, scannedObjectCount)
             } else {
-                sendToChannel(PipelineKeepAlive(false, null, Instant.ofEpochMilli(0), scannedObjectCount))
+                PipelineKeepAlive(false, null, Instant.ofEpochMilli(0), scannedObjectCount)
             }
+            logger.trace { "Emitting keep alive object $keepAlive" }
+            sendToChannel(keepAlive)
             delay(context.keepAliveTimeout)
         }
+        logger.debug { "Keep alive generation canceled" }
     }
 
 
@@ -100,7 +104,13 @@ class StreamMerger(
     override suspend fun processMessage() {
         coroutineScope {
 
-            val job = launch { keepAliveGenerator(this@coroutineScope) }
+            val job = launch {
+                try {
+                    keepAliveGenerator()
+                } catch (ex: Exception) {
+                    logger.debug(ex) { "keep alive exception handled" }
+                }
+            }
 
             messageStreams.init()
 
@@ -136,6 +146,7 @@ class StreamMerger(
             sendToChannel(StreamEndObject(false, null, Instant.ofEpochMilli(0)))
             logger.debug { "StreamEndObject has been sent" }
             job.cancelAndJoin()
+            logger.debug { "Merging is finished" }
         }
     }
 
@@ -174,7 +185,15 @@ class StreamMerger(
     }
 
     suspend fun getStreamsInfo(): List<StreamInfo> {
+        logger.info { "Getting streams info" }
         processJob.join()
-        return messageStreams.getStreamsInfo()
+        logger.debug { "Merge job is finished" }
+        return messageStreams.getStreamsInfo { current, prev ->
+            if (searchRequest.searchDirection == TimeRelation.AFTER) {
+                current > prev
+            } else {
+                current < prev
+            }
+        }
     }
 }

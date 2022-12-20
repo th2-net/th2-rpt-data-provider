@@ -58,11 +58,15 @@ class CustomConfigurationClass {
 
     val grpcThreadPoolSize: Int = 20
 
+    val eventSearchTimeOffset = 5000
+
     val cradleDispatcherPoolSize: Long = 1
 
     val sendEmptyDelay = 100
 
     val eventSearchChunkSize: Int = 64
+
+    val eventSearchGap: Int = 60
 
     val useStrictMode = false
 
@@ -197,4 +201,9 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
     val grpcThreadPoolSize: Variable =
         Variable("grpcThreadPoolSize", customConfiguration.grpcThreadPoolSize.toString(), "20")
 
+    val eventSearchTimeOffset: Variable =
+        Variable("eventSearchTimeOffset", customConfiguration.eventSearchTimeOffset.toString(), "5000")
+
+    val eventSearchGap: Variable =
+        Variable("eventSearchGap", customConfiguration.eventSearchGap.toString(), "60")
 }

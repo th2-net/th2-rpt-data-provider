@@ -140,7 +140,7 @@ class Main {
                 try {
                     resource.close()
                 } catch (e: Exception) {
-                    logger.error(e) { "Cannot close resource ${resource::class}" }
+                    logger.error(e) { "cannot close resource ${resource::class}" }
                 }
             }
             liveness = false
@@ -171,7 +171,7 @@ fun main(args: Array<String>) {
     try {
         Main(args).run()
     } catch (ex: Exception) {
-        logger.error(ex) { "Cannot start the box" }
+        logger.error(ex) { "cannot start the box" }
         exitProcess(1)
     }
 }

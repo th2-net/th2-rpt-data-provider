@@ -69,6 +69,7 @@ class SearchMessagesHandler(private val applicationContext: Context) {
                 streamMerger = ChainBuilder(applicationContext, request, chainScope, pipelineStatus).buildChain()
 
                 do {
+                    logger.trace { "Polling message from pipeline" }
                     val message = measureTimedValue {
                         streamMerger?.pollMessage()
                     }
