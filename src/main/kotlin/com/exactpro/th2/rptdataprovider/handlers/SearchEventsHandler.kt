@@ -293,7 +293,7 @@ class SearchEventsHandler(private val context: Context) {
                     lastScannedObject.update(timestamp.first)
 
                     getEventFlow(
-                        request, timestamp.first, timestamp.second, coroutineContext
+                        request, timestamp.first, timestamp.second, currentCoroutineContext()
                     ).collect { emit(it) }
 
                     if (request.parentEvent?.batchId != null) break
@@ -335,7 +335,7 @@ class SearchEventsHandler(private val context: Context) {
                         keepAlive(writer, lastScannedObject, lastEventId)
                     }
                 }.onCompletion {
-                    coroutineContext.cancelChildren()
+                    currentCoroutineContext().cancelChildren()
                     it?.let { throwable -> throw throwable }
                 }.let { eventFlow ->
                     if (request.metadataOnly) {
