@@ -84,7 +84,7 @@ class MessageProducer(
             message
         }
 
-            ?: throw CradleMessageNotFoundException("message '${id}' does not exist in cradle")
+            ?: throw CradleMessageNotFoundException(id.toString())
     }
 }
 

@@ -56,11 +56,16 @@ abstract class PipelineComponent(
 
 
     protected suspend fun sendToChannel(message: PipelineStepObject) {
+        logger.trace { "${this::class.simpleName} sending: $messageFlow" }
         messageFlow.send(message)
+        logger.trace { "${this::class.simpleName} sent ${message::class.simpleName}: $messageFlow" }
     }
 
 
     suspend fun pollMessage(): PipelineStepObject {
-        return messageFlow.receive()
+        logger.trace { "${this::class.simpleName} receiving: $messageFlow" }
+        return messageFlow.receive().also {
+            logger.trace { "${this::class.simpleName} received ${it::class.simpleName}: $messageFlow" }
+        }
     }
 }

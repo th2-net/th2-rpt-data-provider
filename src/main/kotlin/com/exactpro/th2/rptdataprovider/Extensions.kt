@@ -177,7 +177,7 @@ fun StoredTestEventBatch.tryToGetTestEvents(parentEventId: StoredTestEventId? = 
             }
         }?: emptyList()
     } catch (e: IOException) {
-        logger.error(e) { }
+        logger.error(e) { "unexpected IO exception while trying to parse an event batch - contents were ignored" }
         emptyList()
     }
 }
