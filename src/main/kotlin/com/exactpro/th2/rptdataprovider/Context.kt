@@ -39,13 +39,17 @@ import com.exactpro.th2.rptdataprovider.handlers.SearchEventsHandler
 import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
+import com.exactpro.th2.rptdataprovider.serialization.InstantBackwardCompatibilitySerializer
 import com.exactpro.th2.rptdataprovider.server.ServerType
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.module.SimpleModule
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import io.ktor.http.*
+import java.time.Instant
 
 @Suppress("MemberVisibilityCanBePrivate")
 class Context(
@@ -57,6 +61,10 @@ class Context(
     val cacheTimeout: Long = configuration.serverCacheTimeout.value.toLong(),
 
     val jacksonMapper: ObjectMapper = jacksonObjectMapper()
+        .registerModule(JavaTimeModule())
+        .registerModule(SimpleModule("backward_compatibility").apply {
+            addSerializer(Instant::class.java, InstantBackwardCompatibilitySerializer)
+        })
         .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
         .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES),
 
