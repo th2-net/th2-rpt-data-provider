@@ -63,6 +63,22 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
 
     private val cradleDispatcher = Executors.newFixedThreadPool(cradleDispatcherPoolSize).asCoroutineDispatcher()
 
+    // FIXME:
+    // It is not correct to create scope manually inside the suspend function
+    // If the function is going to launch extra coroutines it should accept a coroutine scope.
+    // Otherwise, the top-level scope will never know about exceptions inside that inner scope.
+    // How it should look:
+    //
+    // fun getMessagesBatchesSuspend(filter: MessageFilter, scope: CoroutineScope): Channel<StoredMessageBatch> {
+    //   val channel = Channel<StoredMessageBatch>(1)
+    //   scope.launch {
+    //      withContext(cradleDispatcher) {
+    //        // do all work here
+    //      }
+    //   }
+    //   return channel
+    // }
+    //
     //FIXME: change cradle api or wrap every blocking iterator the same way
     suspend fun getMessagesBatchesSuspend(filter: MessageFilter): Channel<StoredMessageBatch> {
         val iteratorScope = CoroutineScope(cradleDispatcher)
@@ -77,13 +93,20 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
                     Channel<StoredMessageBatch>(1)
                         .also { channel ->
                             iteratorScope.launch {
-                                iterable.forEach {
-                                    logger.trace { "message batch ${it.id} has been received from the iterator" }
-                                    channel.send(it)
-                                    logger.trace { "message batch ${it.id} has been sent to the channel" }
+                                var error: Throwable? = null
+                                try {
+                                    iterable.forEach {
+                                        logger.trace { "message batch ${it.id} has been received from the iterator" }
+                                        channel.send(it)
+                                        logger.trace { "message batch ${it.id} has been sent to the channel" }
+                                    }
+                                } catch (ex: Exception) {
+                                    logger.error(ex) { "cannot sent next batch to the channel" }
+                                    error = ex
+                                } finally {
+                                    channel.close(error)
+                                    logger.debug(error) { "message batch channel for stream ${filter.sessionAlias}:${filter.direction} has been closed" }
                                 }
-                                channel.close()
-                                logger.debug { "message batch channel for stream ${filter.sessionAlias}:${filter.direction} has been closed" }
                             }
                         }
                 }
