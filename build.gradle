@@ -23,7 +23,7 @@ plugins {
 
 ext {
     dockerImageVersion = release_version
-    cradleVersion       = '5.0.0-TH2-4564-3747532528-4039641-SNAPSHOT'
+    cradleVersion       = '5.0.0-TH2-4564-3747712198-51afe90-SNAPSHOT'
 }
 
 group 'com.exactpro.th2'
