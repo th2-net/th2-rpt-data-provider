@@ -310,6 +310,7 @@ class HttpServer(private val applicationContext: Context) {
             install(Timeouts) {
                 requestTimeout = applicationContext.timeout
             }
+            install(IgnoreTrailingSlash)
 
             routing {
 
