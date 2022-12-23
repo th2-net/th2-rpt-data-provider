@@ -92,27 +92,28 @@ class MessageExtractor(
         messages: Collection<StoredMessage>,
         resumeFromId: StreamPointer?
     ): List<StoredMessage> {
-        // trim messages if resumeFromId is present
-        return if (resumeFromId?.sequence != null) {
-            val start = resumeFromId.sequence
-            messages.dropWhile {
-                if (order == Order.DIRECT) {
-                    it.sequence < start
-                } else {
-                    it.sequence > start
-                }
-            }
-        } else {
-            //trim messages that do not strictly match time filter
-            messages.dropWhile {
-                request.startTimestamp?.let { startTimestamp ->
+        return messages.run {
+            // trim messages if resumeFromId is present
+            if (resumeFromId?.sequence != null) {
+                val start = resumeFromId.sequence
+                dropWhile {
                     if (order == Order.DIRECT) {
-                        it.timestamp.isBefore(startTimestamp)
+                        it.sequence < start
                     } else {
-                        it.timestamp.isAfter(startTimestamp)
+                        it.sequence > start
                     }
-                } ?: false
+                }
+            } else {
+                this // nothing to filter by sequence
             }
+        }.dropWhile { //trim messages that do not strictly match time filter
+            request.startTimestamp?.let { startTimestamp ->
+                if (order == Order.DIRECT) {
+                    it.timestamp.isBefore(startTimestamp)
+                } else {
+                    it.timestamp.isAfter(startTimestamp)
+                }
+            } ?: false
         }
     }
 
@@ -170,13 +171,14 @@ class MessageExtractor(
                                         it.isLessThanOrEqualTo(resumeFromId.sequence)
                                     }
                                 }
-                            } else {
-                                if (order == Order.DIRECT) {
-                                    request.startTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
-                                } else {
-                                    request.startTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
-                                }
                             }
+                            // always need to make sure that we send messages within the specified timestamp (in case the resume ID points to the past)
+                            if (order == Order.DIRECT) {
+                                request.startTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
+                            } else {
+                                request.startTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
+                            }
+
                             if (order == Order.DIRECT) {
                                 request.endTimestamp?.let { builder.timestampTo().isLessThan(it) }
                             } else {
