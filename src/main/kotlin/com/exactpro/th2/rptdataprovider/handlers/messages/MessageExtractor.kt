@@ -95,12 +95,12 @@ class MessageExtractor(
         return messages.run {
             // trim messages if resumeFromId is present
             if (resumeFromId?.sequence != null) {
-                val start = resumeFromId.sequence
+                val startSeq = resumeFromId.sequence
                 dropWhile {
                     if (order == Order.DIRECT) {
-                        it.sequence < start
+                        it.sequence < startSeq
                     } else {
-                        it.sequence > start
+                        it.sequence > startSeq
                     }
                 }
             } else {
@@ -175,13 +175,9 @@ class MessageExtractor(
                             // always need to make sure that we send messages within the specified timestamp (in case the resume ID points to the past)
                             if (order == Order.DIRECT) {
                                 request.startTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
-                            } else {
-                                request.startTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
-                            }
-
-                            if (order == Order.DIRECT) {
                                 request.endTimestamp?.let { builder.timestampTo().isLessThan(it) }
                             } else {
+                                request.startTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
                                 request.endTimestamp?.let { builder.timestampFrom().isGreaterThan(it) }
                             }
                         }.build()
@@ -199,8 +195,7 @@ class MessageExtractor(
                         pipelineStatus.fetchedStart(streamName.toString())
                         logger.trace { "batch ${batch.id.sequence} of stream $streamName with ${batch.messageCount} messages (${batch.batchSize} bytes) has been extracted" }
 
-                        val trimmedMessages = getMessagesFromBatch(batch)
-                            .let { trimMessagesListHead(it, resumeFromId) }
+                        val trimmedMessages = trimMessagesListHead(getMessagesFromBatch(batch), resumeFromId)
                             .dropLastWhile { message ->
                                 trimMessagesListTail(message).also {
                                     isLastMessageTrimmed = isLastMessageTrimmed || it

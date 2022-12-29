@@ -53,7 +53,7 @@ class SearchMessagesHandler(private val applicationContext: Context) {
     }
 
 
-    @OptIn(ExperimentalTime::class, ExperimentalCoroutinesApi::class)
+    @OptIn(ExperimentalTime::class)
     suspend fun searchMessagesSse(request: SseMessageSearchRequest, writer: StreamWriter) {
         withContext(coroutineContext) {
 
@@ -104,28 +104,37 @@ class SearchMessagesHandler(private val applicationContext: Context) {
         }
     }
 
-    @OptIn(ExperimentalTime::class, InternalCoroutinesApi::class)
     suspend fun getIds(request: SseMessageSearchRequest): Map<String, List<StreamInfo>> {
-
         searchMessageRequests.inc()
-
         val resumeId = request.resumeFromIdsList.firstOrNull()
-
-        val message = resumeId?.let {
-            applicationContext.cradleService.getMessageSuspend(
-                StoredMessageId(
-                    it.stream.bookId,
-                    it.stream.name,
-                    it.stream.direction,
-                    it.timestamp,
-                    it.sequence
-                )
+        val messageId = resumeId?.let {
+            StoredMessageId(
+                it.stream.bookId,
+                it.stream.name,
+                it.stream.direction,
+                it.timestamp,
+                it.sequence
             )
         }
-
-        val resultRequest = message?.let {
-            request.copy(startTimestamp = message.timestamp)
+        val resultRequest = resumeId?.let {
+            request.copy(startTimestamp = resumeId.timestamp)
         } ?: request
+
+        val before = getIds(resultRequest, messageId, TimeRelation.BEFORE)
+        val after = getIds(resultRequest, messageId, TimeRelation.AFTER)
+
+        return mapOf(
+            TimeRelationMapper.toHttp(TimeRelation.BEFORE) to before,
+            TimeRelationMapper.toHttp(TimeRelation.AFTER) to after,
+        )
+    }
+
+    private suspend fun getIds(
+        request: SseMessageSearchRequest,
+        messageId: StoredMessageId?,
+        searchDirection: TimeRelation
+    ): MutableList<StreamInfo> {
+        val resultRequest = request.copy(searchDirection = searchDirection)
 
         val pipelineStatus = PipelineStatus(context = applicationContext)
 
@@ -136,9 +145,7 @@ class SearchMessagesHandler(private val applicationContext: Context) {
         val coroutineScope = CoroutineScope(coroutineContext + Job(coroutineContext[Job]))
         pipelineStatus.addStreams(streamNames.map { it.toString() })
 
-        val streamInfoMap = mutableMapOf<TimeRelation, MutableList<StreamInfo>>()
-        streamInfoMap[TimeRelation.AFTER] = mutableListOf()
-        streamInfoMap[TimeRelation.BEFORE] = mutableListOf()
+        val streamInfoList = mutableListOf<StreamInfo>()
 
         val extractors = streamNames.map { streamName ->
             MessageExtractor(
@@ -156,31 +163,23 @@ class SearchMessagesHandler(private val applicationContext: Context) {
 
             do {
                 messageExtractor.pollMessage().let {
-                    if (it is PipelineRawBatch && listPair.size < 2) {
+                    if (it is PipelineRawBatch && listPair.isEmpty()) {
                         val trimmedMessages = it.storedBatchWrapper.trimmedMessages
                         for (trimmedMessage in trimmedMessages) {
-                            if (trimmedMessage.id == message?.id) continue
-                            if (listPair.size == 2) break
+                            if (trimmedMessage.id == messageId) continue
+                            if (listPair.isNotEmpty()) break
                             listPair.add(Pair(trimmedMessage.id, it.streamEmpty))
                         }
-                    } else if (listPair.size < 2 && it.streamEmpty) {
+                    } else if (listPair.isEmpty() && it.streamEmpty) {
                         listPair.add(Pair(null, it.streamEmpty))
                     }
                 }
-            } while (listPair.size < 2)
+            } while (listPair.isEmpty())
 
             listPair.first().let {
-                streamInfoMap
-                    .getValue(TimeRelation.AFTER)
-                    .add(StreamInfo(messageExtractor.streamName!!, it.first))
-            }
-            listPair.last().let {
-                streamInfoMap
-                    .getValue(TimeRelation.BEFORE)
-                    .add(StreamInfo(messageExtractor.streamName!!, it.first))
+                streamInfoList.add(StreamInfo(messageExtractor.streamName!!, it.first))
             }
         }
-
-        return streamInfoMap.entries.associate { TimeRelationMapper.toHttp(it.key) to it.value }
+        return streamInfoList
     }
 }
