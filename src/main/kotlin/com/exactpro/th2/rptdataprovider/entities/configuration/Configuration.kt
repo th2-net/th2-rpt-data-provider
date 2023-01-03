@@ -67,6 +67,8 @@ class CustomConfigurationClass {
     val useStrictMode = false
 
     val serverType: ServerType = ServerType.HTTP
+
+    val staticContentFolder: String? = null
 }
 
 class Configuration(customConfiguration: CustomConfigurationClass) {
@@ -197,4 +199,6 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
     val grpcThreadPoolSize: Variable =
         Variable("grpcThreadPoolSize", customConfiguration.grpcThreadPoolSize.toString(), "20")
 
+    val staticContentFolder: Variable =
+        Variable("staticContentFolder", customConfiguration.staticContentFolder, "")
 }

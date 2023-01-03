@@ -34,6 +34,7 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundExce
 import io.ktor.application.*
 import io.ktor.features.*
 import io.ktor.http.*
+import io.ktor.http.content.*
 import io.ktor.request.*
 import io.ktor.response.*
 import io.ktor.routing.*
@@ -43,6 +44,7 @@ import io.ktor.util.*
 import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
+import java.io.File
 import java.nio.channels.ClosedChannelException
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
@@ -304,6 +306,8 @@ class HttpServer(private val applicationContext: Context) {
 
         val getEventsLimit = this.applicationContext.configuration.eventSearchChunkSize.value.toInt()
 
+        val staticResource = configuration.staticContentFolder.value.takeIf(String::isNotBlank)
+
         embeddedServer(Netty, configuration.port.value.toInt(), configure = { responseWriteTimeoutSeconds = -1 }) {
 
             install(Compression)
@@ -313,136 +317,161 @@ class HttpServer(private val applicationContext: Context) {
 
             routing {
 
-                get("/event/{id}") {
-                    val probe = call.parameters["probe"]?.toBoolean() ?: false
-                    handleRequest(
-                        call, context, "get single event", notModifiedCacheControl, probe,
-                        false, call.parameters.toMap()
-                    ) {
-                        eventCache.getOrPut(call.parameters["id"]!!).convertToEvent()
-                    }
-                }
-
-                get("/events") {
-                    val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(
-                        call, context, "get single event", notModifiedCacheControl, false,
-                        false, queryParametersMap
-                    ) {
-                        val ids = queryParametersMap["ids"]
-                        when {
-                            ids.isNullOrEmpty() ->
-                                throw InvalidRequestException("Ids set must not be empty: $ids")
-                            ids.size > getEventsLimit ->
-                                throw InvalidRequestException("Too many id in request: ${ids.size}, max is: $getEventsLimit")
-                            else -> eventCache.getOrPutMany(ids.toSet()).map { it.convertToEvent() }
+                fun Route.configureRoutes() {
+                    get("/event/{id}") {
+                        val probe = call.parameters["probe"]?.toBoolean() ?: false
+                        handleRequest(
+                            call, context, "get single event", notModifiedCacheControl, probe,
+                            false, call.parameters.toMap()
+                        ) {
+                            eventCache.getOrPut(call.parameters["id"]!!).convertToEvent()
                         }
                     }
-                }
 
-                get("/messageStreams") {
-                    handleRequest(
-                        call, context, "get message streams", rarelyModifiedCacheControl,
-                        probe = false, useSse = false
-                    ) {
-                        cradleService.getMessageStreams()
-                    }
-                }
+                    get("/events") {
+                        val queryParametersMap = call.request.queryParameters.toMap()
+                        handleRequest(
+                            call, context, "get single event", notModifiedCacheControl, false,
+                            false, queryParametersMap
+                        ) {
+                            val ids = queryParametersMap["ids"]
+                            when {
+                                ids.isNullOrEmpty() ->
+                                    throw InvalidRequestException("Ids set must not be empty: $ids")
 
-                get("/message/{id}") {
-                    val probe = call.parameters["probe"]?.toBoolean() ?: false
-                    handleRequest(
-                        call, context, "get single message",
-                        rarelyModifiedCacheControl, probe, false, call.parameters.toMap()
-                    ) {
-                        MessageWithMetadata(messageCache.getOrPut(call.parameters["id"]!!)).let {
-                            MessageMapper.convertToHttpMessage(it)
+                                ids.size > getEventsLimit ->
+                                    throw InvalidRequestException("Too many id in request: ${ids.size}, max is: $getEventsLimit")
+
+                                else -> eventCache.getOrPutMany(ids.toSet()).map { it.convertToEvent() }
+                            }
                         }
                     }
-                }
 
-                get("search/sse/messages") {
-                    val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, context, "search messages sse", null, false, true, queryParametersMap) {
-                        suspend fun(streamWriter: StreamWriter) {
-                            val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
-                            val request = SseMessageSearchRequest(queryParametersMap, filterPredicate)
-                            request.checkRequest()
-                            searchMessagesHandler.searchMessagesSse(request, streamWriter)
+                    get("/messageStreams") {
+                        handleRequest(
+                            call, context, "get message streams", rarelyModifiedCacheControl,
+                            probe = false, useSse = false
+                        ) {
+                            cradleService.getMessageStreams()
                         }
                     }
-                }
 
-                get("search/sse/events") {
-                    val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, context, "search events sse", null, false, true, queryParametersMap) {
-                        suspend fun(streamWriter: StreamWriter) {
+                    get("/message/{id}") {
+                        val probe = call.parameters["probe"]?.toBoolean() ?: false
+                        handleRequest(
+                            call, context, "get single message",
+                            rarelyModifiedCacheControl, probe, false, call.parameters.toMap()
+                        ) {
+                            MessageWithMetadata(messageCache.getOrPut(call.parameters["id"]!!)).let {
+                                MessageMapper.convertToHttpMessage(it)
+                            }
+                        }
+                    }
+
+                    get("search/sse/messages") {
+                        val queryParametersMap = call.request.queryParameters.toMap()
+                        handleRequest(call, context, "search messages sse", null, false, true, queryParametersMap) {
+                            suspend fun(streamWriter: StreamWriter) {
+                                val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
+                                val request = SseMessageSearchRequest(queryParametersMap, filterPredicate)
+                                request.checkRequest()
+                                searchMessagesHandler.searchMessagesSse(request, streamWriter)
+                            }
+                        }
+                    }
+
+                    get("search/sse/events") {
+                        val queryParametersMap = call.request.queryParameters.toMap()
+                        handleRequest(call, context, "search events sse", null, false, true, queryParametersMap) {
+                            suspend fun(streamWriter: StreamWriter) {
+                                val filterPredicate = eventFiltersPredicateFactory.build(queryParametersMap)
+                                val request = SseEventSearchRequest(queryParametersMap, filterPredicate)
+                                request.checkRequest()
+
+                                searchEventsHandler.searchEventsSse(request, streamWriter)
+                            }
+                        }
+                    }
+
+                    get("filters/sse-messages") {
+                        val queryParametersMap = call.request.queryParameters.toMap()
+                        handleRequest(call, context, "get message filters", null, false, false, queryParametersMap) {
+                            messageFiltersPredicateFactory.getFiltersNames()
+                        }
+                    }
+
+                    get("filters/sse-events") {
+                        val queryParametersMap = call.request.queryParameters.toMap()
+                        handleRequest(call, context, "get event filters", null, false, false, queryParametersMap) {
+                            eventFiltersPredicateFactory.getFiltersNames()
+                        }
+                    }
+
+                    get("filters/sse-messages/{name}") {
+                        val queryParametersMap = call.request.queryParameters.toMap()
+                        handleRequest(call, context, "get message filters", null, false, false, queryParametersMap) {
+                            messageFiltersPredicateFactory.getFilterInfo(call.parameters["name"]!!)
+                        }
+                    }
+
+
+                    get("filters/sse-events/{name}") {
+                        val queryParametersMap = call.request.queryParameters.toMap()
+                        handleRequest(call, context, "get event filters", null, false, false, queryParametersMap) {
+                            eventFiltersPredicateFactory.getFilterInfo(call.parameters["name"]!!)
+                        }
+                    }
+
+                    get("match/event/{id}") {
+                        val queryParametersMap = call.request.queryParameters.toMap()
+                        handleRequest(call, context, "match event", null, false, false, queryParametersMap) {
                             val filterPredicate = eventFiltersPredicateFactory.build(queryParametersMap)
-                            val request = SseEventSearchRequest(queryParametersMap, filterPredicate)
-                            request.checkRequest()
+                            filterPredicate.apply(eventCache.getOrPut(call.parameters["id"]!!))
+                        }
+                    }
 
-                            searchEventsHandler.searchEventsSse(request, streamWriter)
+                    get("/match/message/{id}") {
+                        val queryParametersMap = call.request.queryParameters.toMap()
+                        handleRequest(call, context, "match message", null, false, false, queryParametersMap) {
+                            val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
+                            val message = messageCache.getOrPut(call.parameters["id"]!!)
+                            filterPredicate.apply(MessageWithMetadata(message))
+                        }
+                    }
+
+                    get("/messageIds") {
+                        val queryParametersMap = call.request.queryParameters.toMap()
+                        handleRequest(call, context, "message ids", null, false, false, queryParametersMap) {
+                            val request = SseMessageSearchRequest(
+                                queryParametersMap,
+                                messageFiltersPredicateFactory.getEmptyPredicate(),
+                                TimeRelation.BEFORE
+                            ).also {
+                                it.checkIdsRequest()
+                            }
+                            searchMessagesHandler.getIds(request)
                         }
                     }
                 }
 
-                get("filters/sse-messages") {
-                    val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, context, "get message filters", null, false, false, queryParametersMap) {
-                        messageFiltersPredicateFactory.getFiltersNames()
-                    }
-                }
+                // configure main routing
+                configureRoutes()
 
-                get("filters/sse-events") {
-                    val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, context, "get event filters", null, false, false, queryParametersMap) {
-                        eventFiltersPredicateFactory.getFiltersNames()
-                    }
-                }
-
-                get("filters/sse-messages/{name}") {
-                    val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, context, "get message filters", null, false, false, queryParametersMap) {
-                        messageFiltersPredicateFactory.getFilterInfo(call.parameters["name"]!!)
-                    }
-                }
-
-
-                get("filters/sse-events/{name}") {
-                    val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, context, "get event filters", null, false, false, queryParametersMap) {
-                        eventFiltersPredicateFactory.getFilterInfo(call.parameters["name"]!!)
-                    }
-                }
-
-                get("match/event/{id}") {
-                    val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, context, "match event", null, false, false, queryParametersMap) {
-                        val filterPredicate = eventFiltersPredicateFactory.build(queryParametersMap)
-                        filterPredicate.apply(eventCache.getOrPut(call.parameters["id"]!!))
-                    }
-                }
-
-                get("/match/message/{id}") {
-                    val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, context, "match message", null, false, false, queryParametersMap) {
-                        val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
-                        val message = messageCache.getOrPut(call.parameters["id"]!!)
-                        filterPredicate.apply(MessageWithMetadata(message))
-                    }
-                }
-
-                get("/messageIds") {
-                    val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, context, "message ids", null, false, false, queryParametersMap) {
-                        val request = SseMessageSearchRequest(
-                            queryParametersMap,
-                            messageFiltersPredicateFactory.getEmptyPredicate(),
-                            TimeRelation.BEFORE
-                        ).also {
-                            it.checkIdsRequest()
+                if (staticResource != null) {
+                    static {
+                        staticRootFolder = File(staticResource)
+                        files(".")
+                        static("report") {
+                            file("index.html")
+                            default("index.html")
+                            static("resources") {
+                                files("resources")
+                            }
                         }
-                        searchMessagesHandler.getIds(request)
+                    }
+                    // configure routing for report
+                    route("/backend") {
+                        configureRoutes()
                     }
                 }
             }
