@@ -272,6 +272,7 @@ class HttpServer(private val applicationContext: Context) {
                     is CradleObjectNotFoundException -> sendErrorCodeOrEmptyJson(
                         probe, call, exception, HttpStatusCode.NotFound
                     )
+
                     is ChannelClosedException -> sendErrorCode(call, exception, HttpStatusCode.RequestTimeout)
                     is CradleIdException -> sendErrorCodeOrEmptyJson(probe, call, e, HttpStatusCode.InternalServerError)
                     is CodecResponseException -> sendErrorCode(call, exception, HttpStatusCode.InternalServerError)
@@ -458,10 +459,11 @@ class HttpServer(private val applicationContext: Context) {
                 configureRoutes()
 
                 if (staticResource != null) {
+                    val staticPath = "report"
                     static {
                         staticRootFolder = File(staticResource)
                         files(".")
-                        static("report") {
+                        static(staticPath) {
                             files(".")
                             default("index.html")
                             static("resources") {
@@ -469,8 +471,13 @@ class HttpServer(private val applicationContext: Context) {
                             }
                         }
                     }
+                    val backendPath = "backend"
                     // configure routing for report
-                    route("/backend") {
+                    route("/$backendPath") {
+                        configureRoutes()
+                    }
+                    // because the request can go from report endpoint as well
+                    route("/$staticPath/$backendPath") {
                         configureRoutes()
                     }
                 }
