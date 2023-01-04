@@ -462,7 +462,7 @@ class HttpServer(private val applicationContext: Context) {
                         staticRootFolder = File(staticResource)
                         files(".")
                         static("report") {
-                            file("index.html")
+                            files(".")
                             default("index.html")
                             static("resources") {
                                 files("resources")
