@@ -35,6 +35,7 @@ class MessageFilter(
 ) : PipelineComponent(context, searchRequest, externalScope, streamName, previousComponent, messageFlowCapacity) {
 
     private val sendEmptyDelay: Long = context.configuration.sendEmptyDelay.value.toLong()
+    @Volatile
     private var lastScannedObject: PipelineStepObject? = null
 
 
@@ -76,8 +77,8 @@ class MessageFilter(
         while (parentScope.isActive) {
             lastScannedObject?.let {
                 sendToChannel(EmptyPipelineObject(it))
-                delay(sendEmptyDelay)
             }
+            delay(sendEmptyDelay)
         }
     }
 
