@@ -17,14 +17,11 @@
 package com.exactpro.th2.rptdataprovider.handlers
 
 
-import com.exactpro.cradle.BookId
 import com.exactpro.cradle.Order
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.TimeRelation.AFTER
 import com.exactpro.cradle.testevents.*
 import com.exactpro.th2.rptdataprovider.*
-import com.exactpro.cradle.filters.FilterForGreater
-import com.exactpro.cradle.filters.FilterForLess
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
@@ -134,13 +131,19 @@ class SearchEventsHandler(private val context: Context) {
 
     private fun prepareEvents(
         wrappers: List<StoredTestEvent>,
-        request: SseEventSearchRequest
+        request: SseEventSearchRequest,
+        timestampFrom: Instant,
+        timestampTo: Instant,
     ): List<BaseEventEntity> {
         return wrappers.flatMap { entry ->
             if (entry.isBatch) {
                 val batch = entry.asBatch()
-                batch.tryToGetTestEvents(request.parentEvent?.eventId).map { event ->
-                    event to eventProducer.fromStoredEvent(event, batch)
+                batch.tryToGetTestEvents(request.parentEvent?.eventId).mapNotNull { event ->
+                    if (event.startTimestamp < timestampFrom || event.startTimestamp >= timestampTo) {
+                        null
+                    } else {
+                        event to eventProducer.fromStoredEvent(event, batch)
+                    }
                 }
             } else {
                 val single = entry.asSingle()
@@ -170,7 +173,7 @@ class SearchEventsHandler(private val context: Context) {
             }
                 .map { wrappers ->
                     async(parentContext) {
-                        prepareEvents(wrappers, request)
+                        prepareEvents(wrappers, request, timestampFrom, timestampTo)
                             .let { events ->
                                 if (request.searchDirection == AFTER) {
                                     events
@@ -288,12 +291,12 @@ class SearchEventsHandler(private val context: Context) {
             val parentEventCounter = ParentEventCounter(request.limitForParent)
 
             flow {
-                for (timestamp in timeIntervals) {
+                for ((start, end) in timeIntervals) {
 
-                    lastScannedObject.update(timestamp.first)
+                    lastScannedObject.update(start)
 
                     getEventFlow(
-                        request, timestamp.first, timestamp.second, currentCoroutineContext()
+                        request, start, end, currentCoroutineContext()
                     ).collect { emit(it) }
 
                     if (request.parentEvent?.batchId != null) break
