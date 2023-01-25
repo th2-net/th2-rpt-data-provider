@@ -16,7 +16,7 @@
 
 package com.exactpro.th2.rptdataprovider.services.cradle
 
-open class CradleObjectNotFoundException(type: String, id: String) : Exception("unable to find $type with id '$id'")
+open class CradleObjectNotFoundException(type: String, id: String) : Exception("Unable to find $type with id '$id' - id is invalid or $type is missing from the database")
 
 class CradleEventNotFoundException(id: String) : CradleObjectNotFoundException("event", id)
 
