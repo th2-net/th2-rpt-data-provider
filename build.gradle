@@ -46,7 +46,6 @@ dependencies {
     api platform('com.exactpro.th2:bom:4.1.0')
 
     implementation 'org.slf4j:slf4j-api'
-//    implementation 'org.slf4j:slf4j-log4j12'
 
     implementation group: 'net.jpountz.lz4', name: 'lz4', version: '1.3.0'
 
