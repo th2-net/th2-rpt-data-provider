@@ -7,7 +7,6 @@ on:
       - version-*
     paths:
       - gradle.properties
-#    - package_info.json  
 
 jobs:
   build-job:
