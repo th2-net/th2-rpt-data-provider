@@ -9,7 +9,7 @@ on:
       - gradle.properties
 
 jobs:
-  build-job:
+  build:
     uses: th2-net/.github/.github/workflows/compound-java.yml@main
     with:
       build-target: 'Docker'

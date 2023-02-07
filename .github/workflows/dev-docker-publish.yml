@@ -10,7 +10,7 @@ on:
       - README.md
 
 jobs:
-  build-job:
+  build:
     uses: th2-net/.github/.github/workflows/compound-java-dev.yml@main
     with:
       build-target: 'Docker'
