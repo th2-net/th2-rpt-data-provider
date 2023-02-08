@@ -3,7 +3,7 @@ ARG Prelease_version=0.0.0
 COPY ./ .
 RUN gradle clean build dockerPrepare -Prelease_version=${Prelease_version}
 
-FROM adoptopenjdk/openjdk11:alpine
+FROM eclipse-temurin:11-alpine
 ENV CRADLE_INSTANCE_NAME=instance1 \
     CASSANDRA_DATA_CENTER=kos \
     CASSANDRA_HOST=cassandra \
