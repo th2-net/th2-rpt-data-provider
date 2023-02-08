@@ -1,9 +1,9 @@
-FROM gradle:7.5.1-jdk11 AS build
+FROM gradle:7.6-jdk11 AS build
 ARG Prelease_version=0.0.0
 COPY ./ .
 RUN gradle clean build dockerPrepare -Prelease_version=${Prelease_version}
 
-FROM eclipse-temurin:11-alpine
+FROM adoptopenjdk/openjdk11:alpine
 ENV CRADLE_INSTANCE_NAME=instance1 \
     CASSANDRA_DATA_CENTER=kos \
     CASSANDRA_HOST=cassandra \
