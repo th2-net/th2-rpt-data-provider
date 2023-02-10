@@ -16,14 +16,15 @@
 
 plugins {
     id 'java'
-    id 'org.jetbrains.kotlin.jvm' version '1.5.31'
+    id 'org.jetbrains.kotlin.jvm' version '1.6.21'
     id 'application'
     id 'com.palantir.docker' version '0.25.0'
+    id "org.owasp.dependencycheck" version "7.4.4"
 }
 
 ext {
     dockerImageVersion = release_version
-    cradleVersion = '3.1.3'
+    cradleVersion      = '3.1.3'
 }
 
 group 'com.exactpro.th2'
@@ -42,17 +43,16 @@ repositories {
 }
 
 dependencies {
-    api platform('com.exactpro.th2:bom:3.1.0-TH2-3093-1766515619-SNAPSHOT')
+    api platform('com.exactpro.th2:bom:4.1.0')
 
     implementation 'org.slf4j:slf4j-api'
-    implementation 'org.slf4j:slf4j-log4j12'
 
     implementation group: 'net.jpountz.lz4', name: 'lz4', version: '1.3.0'
 
     implementation 'com.fasterxml.jackson.core:jackson-core'
     implementation 'com.fasterxml.jackson.module:jackson-module-kotlin'
 
-    implementation('com.exactpro.th2:common:3.31.0') {
+    implementation('com.exactpro.th2:common:3.44.0') {
         exclude group: 'com.fasterxml.jackson.core'
     }
 
