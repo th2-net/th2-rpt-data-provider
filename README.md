@@ -270,3 +270,11 @@ spec:
         cpu: 50m
 
 ```
+
+# Changes:
+
+## 5.4.24
+
+### Added:
+
++ Custom serializer for `java.time.Instant` (backward compatibility with old jackson serialization)
