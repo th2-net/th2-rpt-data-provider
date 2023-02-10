@@ -35,6 +35,7 @@ import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageBodyFil
 import com.exactpro.th2.rptdataprovider.entities.filters.messages.MessageTypeFilter
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
+import com.exactpro.th2.rptdataprovider.entities.serialization.InstantBackwardCompatibilitySerializer
 import com.exactpro.th2.rptdataprovider.handlers.SearchEventsHandler
 import com.exactpro.th2.rptdataprovider.handlers.SearchMessagesHandler
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
@@ -44,8 +45,10 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.module.SimpleModule
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import io.ktor.http.*
+import java.time.Instant
 
 @Suppress("MemberVisibilityCanBePrivate")
 class Context(
@@ -58,7 +61,10 @@ class Context(
 
     val jacksonMapper: ObjectMapper = jacksonObjectMapper()
         .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
-        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES),
+        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+        .registerModule(SimpleModule("backward_compatibility").apply {
+            addSerializer(Instant::class.java, InstantBackwardCompatibilitySerializer)
+        }),
 
     val cradleManager: CradleManager,
     val messageRouterRawBatch: MessageRouter<MessageGroupBatch>,
