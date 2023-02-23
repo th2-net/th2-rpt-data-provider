@@ -47,7 +47,7 @@ import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.coroutineContext
 
 
-class SearchEventsHandler(private val context: Context) {
+class SearchEventsHandler(context: Context) {
 
     companion object {
         private val logger = KotlinLogging.logger { }
@@ -304,7 +304,7 @@ class SearchEventsHandler(private val context: Context) {
                     lastScannedObject.update(timestamp.startInterval)
 
                     getEventFlow(
-                        request, timestamp, coroutineContext
+                        request, timestamp, currentCoroutineContext()
                     ).collect { emit(it) }
 
                     if (request.parentEvent?.batchId != null) break
@@ -340,7 +340,7 @@ class SearchEventsHandler(private val context: Context) {
                     }
                 }
                 .onCompletion {
-                    coroutineContext.cancelChildren()
+                    currentCoroutineContext().cancelChildren()
                     it?.let { throwable -> throw throwable }
                 }
                 .let { eventFlow ->

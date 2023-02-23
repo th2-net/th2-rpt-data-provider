@@ -15,8 +15,8 @@
  ******************************************************************************/
 package com.exactpro.th2.rptdataprovider
 
-import com.exactpro.th2.common.metrics.liveness
-import com.exactpro.th2.common.metrics.readiness
+import com.exactpro.th2.common.metrics.LIVENESS_MONITOR
+import com.exactpro.th2.common.metrics.READINESS_MONITOR
 import com.exactpro.th2.common.schema.factory.CommonFactory
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.entities.configuration.CustomConfigurationClass
@@ -27,7 +27,6 @@ import com.exactpro.th2.rptdataprovider.server.ServerType.GRPC
 import com.exactpro.th2.rptdataprovider.server.ServerType.HTTP
 import io.ktor.server.engine.*
 import io.ktor.util.*
-import kotlinx.atomicfu.locks.ReentrantLock
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.IO_PARALLELISM_PROPERTY_NAME
@@ -36,6 +35,7 @@ import mu.KotlinLogging
 import java.util.*
 import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.locks.Condition
+import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.thread
 import kotlin.system.exitProcess
 
@@ -90,11 +90,11 @@ class Main {
     fun run() {
         logger.info { "Starting the box" }
 
-        liveness = true
+        LIVENESS_MONITOR.enable()
 
         startServer()
 
-        readiness = true
+        READINESS_MONITOR.enable()
 
         awaitShutdown(lock, condition)
     }
@@ -129,7 +129,7 @@ class Main {
             name = "Shutdown hook"
         ) {
             logger.info { "Shutdown start" }
-            readiness = false
+            READINESS_MONITOR.disable()
             try {
                 lock.lock()
                 condition.signalAll()
@@ -143,7 +143,7 @@ class Main {
                     logger.error(e) { "cannot close resource ${resource::class}" }
                 }
             }
-            liveness = false
+            LIVENESS_MONITOR.disable()
             logger.info { "Shutdown end" }
         })
     }
