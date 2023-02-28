@@ -286,7 +286,11 @@ class SearchEventsHandler(private val context: Context) {
             val resumeFromEvent = request.resumeFromId?.let {
                 eventProducer.fromId(ProviderEventId(it))
             }
-            val startTimestamp = resumeFromEvent?.startTimestamp ?: request.startTimestamp!!
+            val startTimestamp: Instant = if (resumeFromEvent == null) {
+                requireNotNull(request.startTimestamp) { "start timestamp must be set" }
+            } else {
+                request.startTimestamp ?: resumeFromEvent.startTimestamp
+            }
             val timeIntervals = getTimeIntervals(request, sseEventSearchStep, startTimestamp)
             val parentEventCounter = ParentEventCounter(request.limitForParent)
 
