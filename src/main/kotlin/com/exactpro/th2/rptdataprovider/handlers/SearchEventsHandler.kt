@@ -258,14 +258,8 @@ class SearchEventsHandler(private val context: Context) {
             var headIsDropped = false
             eventFlow.collect {
                 if (!headIsDropped) {
-                    when {
-                        dropByTimestamp(it) && it.id != resumeFromId -> head.add(it)
-                        it.id == resumeFromId -> headIsDropped = true
-                        else -> {
-                            emitAll(head.asFlow())
-                            emit(it)
-                            headIsDropped = true
-                        }
+                    if (it.id == resumeFromId) {
+                        headIsDropped = true
                     }
                 } else {
                     emit(it)
