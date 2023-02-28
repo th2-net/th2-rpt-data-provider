@@ -16,10 +16,8 @@
 
 package com.exactpro.th2.rptdataprovider.producers
 
-import com.exactpro.cradle.testevents.StoredTestEvent
 import com.exactpro.cradle.testevents.StoredTestEventBatch
 import com.exactpro.cradle.testevents.StoredTestEventId
-import com.exactpro.cradle.testevents.StoredTestEventSingle
 import com.exactpro.cradle.testevents.TestEventSingle
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType.NEED_ATTACHED_MESSAGES
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterSpecialType.NEED_BODY
@@ -28,9 +26,9 @@ import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
-import com.exactpro.th2.rptdataprovider.tryToGetTestEvents
 import com.fasterxml.jackson.databind.ObjectMapper
 import mu.KotlinLogging
+import java.time.Instant
 
 class EventProducer(private val cradle: CradleService, private val mapper: ObjectMapper) {
 
@@ -74,6 +72,18 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
                 batchedEvents[eventId]
             }
         }
+    }
+
+    /**
+     * Returns the batch timestamp if [id] has [ProviderEventId.batchId] set.
+     * Otherwise, return timestamp of [ProviderEventId.eventId]
+     * Returns `null` if event does not exist
+     */
+    suspend fun resumeTimestamp(id: ProviderEventId): Instant? {
+        val storedTestEvent = id.batchId?.let {
+            cradle.getEventSuspend(it)
+        } ?: cradle.getEventSuspend(id.eventId)
+        return storedTestEvent?.startTimestamp
     }
 
     suspend fun fromId(id: ProviderEventId): BaseEventEntity {

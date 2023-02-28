@@ -283,13 +283,14 @@ class SearchEventsHandler(private val context: Context) {
             val lastEventId = AtomicLong(0)
             val scanCnt = AtomicLong(0)
 
-            val resumeFromEvent = request.resumeFromId?.let {
-                eventProducer.fromId(ProviderEventId(it))
+            val resumeProviderId = request.resumeFromId?.let(::ProviderEventId)
+            val resumeFromEvent = resumeProviderId?.let {
+                eventProducer.fromId(it)
             }
-            val startTimestamp: Instant = if (resumeFromEvent == null) {
+            val startTimestamp: Instant = if (resumeProviderId == null) {
                 requireNotNull(request.startTimestamp) { "start timestamp must be set" }
             } else {
-                request.startTimestamp ?: resumeFromEvent.startTimestamp
+                requireNotNull(eventProducer.resumeTimestamp(resumeProviderId)) { "timestamp for $resumeProviderId cannot be extracted" }
             }
             val timeIntervals = getTimeIntervals(request, sseEventSearchStep, startTimestamp)
             val parentEventCounter = ParentEventCounter(request.limitForParent)
