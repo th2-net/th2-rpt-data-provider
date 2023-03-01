@@ -163,6 +163,7 @@ class SearchEventsHandler(private val context: Context) {
         parentContext: CoroutineContext
     ): Flow<Deferred<List<BaseEventEntity>>> {
         return coroutineScope {
+            logger.info { "Requesting event from $timestampFrom to $timestampTo" }
             flow {
                 val eventsCollection =
                     getEventsSuspend(request, timestampFrom, timestampTo)
@@ -233,13 +234,13 @@ class SearchEventsHandler(private val context: Context) {
     }
 
     private suspend fun dropByTimestampFilter(
-        request: SseEventSearchRequest, resumeFromEvent: BaseEventEntity
+        request: SseEventSearchRequest, resumeFromTimestamp: Instant
     ): (BaseEventEntity) -> Boolean {
         return { event: BaseEventEntity ->
             if (request.searchDirection == AFTER) {
-                event.startTimestamp.isBeforeOrEqual(resumeFromEvent.startTimestamp)
+                event.startTimestamp.isBeforeOrEqual(resumeFromTimestamp)
             } else {
-                event.startTimestamp.isAfterOrEqual(resumeFromEvent.startTimestamp)
+                event.startTimestamp.isAfterOrEqual(resumeFromTimestamp)
             }
         }
     }
@@ -248,23 +249,14 @@ class SearchEventsHandler(private val context: Context) {
     @ExperimentalCoroutinesApi
     private suspend fun dropBeforeResumeId(
         eventFlow: Flow<BaseEventEntity>,
-        request: SseEventSearchRequest,
-        resumeFromEvent: BaseEventEntity
+        resumeFromId: ProviderEventId,
     ): Flow<BaseEventEntity> {
         return flow {
-            val dropByTimestamp = dropByTimestampFilter(request, resumeFromEvent)
-            val head = mutableListOf<BaseEventEntity>()
             var headIsDropped = false
             eventFlow.collect {
                 if (!headIsDropped) {
-                    when {
-                        dropByTimestamp(it) && it.id != resumeFromEvent.id -> head.add(it)
-                        it.id == resumeFromEvent.id -> headIsDropped = true
-                        else -> {
-                            emitAll(head.asFlow())
-                            emit(it)
-                            headIsDropped = true
-                        }
+                    if (it.id == resumeFromId) {
+                        headIsDropped = true
                     }
                 } else {
                     emit(it)
@@ -283,10 +275,13 @@ class SearchEventsHandler(private val context: Context) {
             val lastEventId = AtomicLong(0)
             val scanCnt = AtomicLong(0)
 
-            val resumeFromEvent = request.resumeFromId?.let {
-                eventProducer.fromId(ProviderEventId(it))
+            val resumeProviderId = request.resumeFromId?.let(::ProviderEventId)
+            val resumeTimestamp: Instant? = resumeProviderId?.let { eventProducer.resumeTimestamp(it) }
+            val startTimestamp: Instant = if (resumeProviderId == null) {
+                requireNotNull(request.startTimestamp) { "start timestamp must be set" }
+            } else {
+                requireNotNull(resumeTimestamp) { "timestamp for $resumeProviderId cannot be extracted" }
             }
-            val startTimestamp = resumeFromEvent?.startTimestamp ?: request.startTimestamp!!
             val timeIntervals = getTimeIntervals(request, sseEventSearchStep, startTimestamp)
             val parentEventCounter = ParentEventCounter(request.limitForParent)
 
@@ -305,8 +300,8 @@ class SearchEventsHandler(private val context: Context) {
                 .map { it.await() }
                 .flatMapConcat { it.asFlow() }
                 .let { eventFlow: Flow<BaseEventEntity> ->
-                    if (resumeFromEvent != null) {
-                        dropBeforeResumeId(eventFlow, request, resumeFromEvent)
+                    if (resumeProviderId != null) {
+                        dropBeforeResumeId(eventFlow, resumeProviderId)
                     } else {
                         eventFlow
                     }
