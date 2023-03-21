@@ -43,9 +43,6 @@ repositories {
     }
 }
 
-configurations.implementation {
-    exclude group: 'io.fabric8', module: 'kubernetes-client' // because of the vulnerability
-}
 
 dependencies {
     api platform('com.exactpro.th2:bom:4.2.0')
