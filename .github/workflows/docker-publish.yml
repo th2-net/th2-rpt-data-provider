@@ -13,7 +13,6 @@ jobs:
     uses: th2-net/.github/.github/workflows/compound-java.yml@main
     with:
       build-target: 'Docker'
-      gradleVersion: '6'
       docker-username: ${{ github.actor }}
     secrets:
       docker-password: ${{ secrets.GITHUB_TOKEN }}
