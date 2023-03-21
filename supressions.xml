@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- FIXME: find out approach to solve problem when any artifact with grpc word in name is marked as cpe:/a:grpc:grpc -->
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+    <suppress base="true">
+        <notes><![CDATA[FP per issue https://github.com/jeremylong/DependencyCheck/issues/2995]]>
+        </notes>
+        <packageUrl regex="true">^pkg:maven/com\.exactpro\.th2/grpc-.*@.*$</packageUrl>
+        <cpe>cpe:/a:grpc:grpc</cpe>
+    </suppress>
+</suppressions>

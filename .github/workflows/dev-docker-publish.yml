@@ -5,6 +5,7 @@ on:
     branches-ignore:
       - master
       - version-*
+      - dev-version-*
 #     paths:
 #    - gradle.properties
 #    - package_info.json
