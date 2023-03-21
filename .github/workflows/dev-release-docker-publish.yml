@@ -1,22 +1,19 @@
-name: Build and publish dev-release Java distributions to sonatype.
+name: Build and publish Docker distributions to Github Container Registry ghcr.io
 
 on:
   workflow_dispatch:
   push:
     branches:
-    - dev-version-*
+      - dev-version-*
     paths:
-    - gradle.properties
+      - gradle.properties
 
 jobs:
-  build:
+  build-job:
     uses: th2-net/.github/.github/workflows/compound-java.yml@main
     with:
-      build-target: 'Sonatype'
-      runsOn: ubuntu-latest
+      build-target: 'Docker'
+      docker-username: ${{ github.actor }}
       devRelease: true
     secrets:
-      sonatypeUsername: ${{ secrets.SONATYPE_NEXUS_USERNAME }}
-      sonatypePassword: ${{ secrets.SONATYPE_NEXUS_PASSWORD }}
-      sonatypeSigningKey: ${{ secrets.SONATYPE_GPG_ARMORED_KEY }}
-      sonatypeSigningPassword: ${{ secrets.SONATYPE_SIGNING_PASSWORD }}
+      docker-password: ${{ secrets.GITHUB_TOKEN }}
