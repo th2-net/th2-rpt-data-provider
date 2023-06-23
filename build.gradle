@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2009-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2009-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,15 @@
  * limitations under the License.
  ******************************************************************************/
 
+import com.github.jk1.license.render.*
+
 plugins {
     id 'java'
     id 'org.jetbrains.kotlin.jvm' version '1.6.21'
     id 'application'
     id 'com.palantir.docker' version '0.25.0'
     id "org.owasp.dependencycheck" version "8.1.0"
-
+    id 'com.github.jk1.dependency-license-report' version '2.4'
 }
 
 ext {
@@ -161,4 +163,13 @@ dependencyCheck {
         nugetconfEnabled = false
         nodeEnabled = false
     }
+}
+
+licenseReport {
+    renderers = [
+            new XmlReportRenderer("${project.name}-licenses.xml"),
+            new CsvReportRenderer("${project.name}-licenses.csv"),
+            new JsonReportRenderer("${project.name}-licenses.json"),
+            new InventoryHtmlReportRenderer("${project.name}-licenses.html")
+    ]
 }
