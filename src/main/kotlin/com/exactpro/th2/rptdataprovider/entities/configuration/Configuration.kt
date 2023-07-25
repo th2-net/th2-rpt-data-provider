@@ -28,6 +28,7 @@ class CustomConfigurationClass {
 
     val eventCacheSize: Int = 1
     val messageCacheSize: Int = 1
+    val aliasToGroupCacheSize: Int = 1
 
     val ioDispatcherThreadPoolSize: Int = 10
 
@@ -69,6 +70,7 @@ class CustomConfigurationClass {
     val eventSearchGap: Int = 60
 
     val useStrictMode = false
+    val searchBySessionGroup = true
 
     val serverType: ServerType = ServerType.HTTP
 }
@@ -96,6 +98,12 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
 
     val messageCacheSize: Variable =
         Variable("messageCacheSize", customConfiguration.messageCacheSize.toString(), "1")
+
+    val searchBySessionGroup: Variable =
+    Variable("searchBySessionGroup", customConfiguration.searchBySessionGroup.toString(), "true")
+
+    val aliasToGroupCacheSize: Variable = // TODO: added value check
+        Variable("aliasToGroupCacheSize", customConfiguration.aliasToGroupCacheSize.toString(), "1")
 
     val ioDispatcherThreadPoolSize: Variable =
         Variable("ioDispatcherThreadPoolSize", customConfiguration.ioDispatcherThreadPoolSize.let {

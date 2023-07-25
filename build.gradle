@@ -1,5 +1,7 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
 /*******************************************************************************
- * Copyright 2009-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2009-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,13 +21,13 @@ plugins {
     id 'org.jetbrains.kotlin.jvm' version '1.6.21'
     id 'application'
     id 'com.palantir.docker' version '0.25.0'
-    id "org.owasp.dependencycheck" version "8.1.2"
-
+    id "org.owasp.dependencycheck" version "8.3.1"
+    id "com.gorylenko.gradle-git-properties" version "2.4.1"
 }
 
 ext {
     dockerImageVersion = release_version
-    cradleVersion       = '5.0.1'
+    cradleVersion       = '5.1.0-separate-executor-+'
 }
 
 group 'com.exactpro.th2'
@@ -45,7 +47,7 @@ repositories {
 
 
 dependencies {
-    api platform('com.exactpro.th2:bom:4.2.0')
+    api platform('com.exactpro.th2:bom:4.4.0')
 
     implementation 'org.slf4j:slf4j-api'
 
@@ -57,48 +59,40 @@ dependencies {
 
     implementation 'org.apache.commons:commons-lang3'
 
-    implementation('com.exactpro.th2:common:5.2.0') {
-        exclude group: 'com.fasterxml.jackson.core'
-        exclude group: 'org.apache.logging.log4j', module: 'log4j-slf4j-impl'
+    implementation('com.exactpro.th2:common:5.3.0-separate-executor-+') {
         exclude group: 'com.exactpro.th2', module: 'cradle-core'
         exclude group: 'com.exactpro.th2', module: 'cradle-cassandra'
     }
 
-    implementation("com.exactpro.th2:cradle-core:${cradleVersion}") {
-        exclude group: 'org.slf4j', module: 'slf4j-log4j12'
-    }
+    implementation "com.exactpro.th2:cradle-core:${cradleVersion}"
 
-    implementation("com.exactpro.th2:cradle-cassandra:${cradleVersion}") {
-        exclude group: 'org.slf4j', module: 'slf4j-log4j12'
-        exclude group: 'com.fasterxml.jackson.core'
-    }
-
-    implementation('org.apache.logging.log4j:log4j-core') {
-        because('need to have log4j core inside the classpath')
-    }
-    implementation('org.apache.logging.log4j:log4j-slf4j2-impl') {
-        because('need loging impl')
-    }
+    implementation "com.exactpro.th2:cradle-cassandra:${cradleVersion}"
 
     implementation 'com.exactpro.th2:grpc-data-provider:0.1.8'
 
-    implementation 'io.github.microutils:kotlin-logging:2.1.23'
+    implementation 'io.github.microutils:kotlin-logging:3.0.0' // The last version bases on kotlin 1.6.0
 
     implementation 'io.prometheus:simpleclient'
 
     implementation 'io.ktor:ktor-server-netty:1.6.8'
     implementation 'org.ehcache:ehcache:3.8.1'
 
-    testImplementation('io.mockk:mockk:1.9.3') {
+    testImplementation('io.mockk:mockk:1.12.4') { // The last version bases on kotlin 1.6.0
         exclude group: 'org.jetbrains.kotlin', module: 'kotlin-reflect' // because we need kotlin reflect with different version
     }
     testImplementation('org.jetbrains.kotlin:kotlin-reflect') {
         because('mockk needs it')
     }
-    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.7.0'
-    testImplementation "org.junit.jupiter:junit-jupiter-params:5.8.1"
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.3'
+    testImplementation "org.junit.jupiter:junit-jupiter-params:5.9.3"
 
-    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.7.0'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.9.3'
+}
+
+tasks.withType(KotlinCompile).configureEach {
+    kotlinOptions {
+        freeCompilerArgs += "-Xopt-in=kotlin.RequiresOptIn"
+    }
 }
 
 jar {

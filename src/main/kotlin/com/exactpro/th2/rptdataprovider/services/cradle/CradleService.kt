@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 
 package com.exactpro.th2.rptdataprovider.services.cradle
@@ -20,16 +20,22 @@ package com.exactpro.th2.rptdataprovider.services.cradle
 import com.exactpro.cradle.BookId
 import com.exactpro.cradle.CradleManager
 import com.exactpro.cradle.cassandra.CassandraStorageSettings
+import com.exactpro.cradle.counters.Interval
+import com.exactpro.cradle.messages.GroupedMessageFilter
 import com.exactpro.cradle.messages.MessageFilter
+import com.exactpro.cradle.messages.StoredGroupedMessageBatch
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.cradle.testevents.*
+import com.exactpro.cradle.testevents.StoredTestEvent
+import com.exactpro.cradle.testevents.StoredTestEventId
+import com.exactpro.cradle.testevents.TestEventFilter
 import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.convertToString
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.logTime
+import com.exactpro.th2.rptdataprovider.toGroupedMessageFilter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.channels.Channel
@@ -37,24 +43,35 @@ import kotlinx.coroutines.future.await
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import mu.KotlinLogging
+import org.ehcache.Cache
+import org.ehcache.config.builders.CacheConfigurationBuilder
+import org.ehcache.config.builders.CacheManagerBuilder
+import org.ehcache.config.builders.ResourcePoolsBuilder
+import java.time.Instant
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
-class CradleService(configuration: Configuration, private val cradleManager: CradleManager) {
+class CradleService(configuration: Configuration, cradleManager: CradleManager) {
 
     companion object {
         val logger = KotlinLogging.logger {}
 
-        private val getMessagesAsyncMetric: Metrics = Metrics("get_messages_async", "getMessagesAsync")
-
         private val getMessagesBatches: Metrics = Metrics("get_messages_batches_async", "getMessagesBatchesAsync")
 
+        private val getMapAliasToGroupAsyncMetric: Metrics =
+            Metrics("map_session_aslias_to_group_async", "findPage;getSessionGroups;getGroupedMessageBatches")
         private val getMessageAsyncMetric: Metrics = Metrics("get_message_async", "getMessageAsync")
         private val getTestEventsAsyncMetric: Metrics = Metrics("get_test_events_async", "getTestEventsAsync")
         private val getTestEventAsyncMetric: Metrics = Metrics("get_test_event_async", "getTestEventAsync")
-        private val getStreamsMetric: Metrics =
-            Metrics("get_streams", "getStreams")
+        private val getStreamsMetric: Metrics = Metrics("get_streams", "getStreams")
     }
 
+    private val manager = CacheManagerBuilder.newCacheManagerBuilder().build(true)
+
+    private val searchBySessionGroup = configuration.searchBySessionGroup.value.toBoolean()
+    private val aliasToGroupCacheSize = configuration.aliasToGroupCacheSize.value.toLong()
+
+    private val bookToCache = ConcurrentHashMap<String, Cache<String, String>>()
 
     private val cradleDispatcherPoolSize = configuration.cradleDispatcherPoolSize.value.toInt()
 
@@ -86,9 +103,37 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
         return withContext(cradleDispatcher) {
             (logMetrics(getMessagesBatches) {
                 logTime("getMessagesBatches (filter=${filter.convertToString()})") {
-                    storage.getMessageBatchesAsync(filter).await().asIterable()
+                    if (searchBySessionGroup) {
+                        val group = getSessionGroupSuspend(
+                            filter.bookId,
+                            filter.timestampFrom.value,
+                            filter.timestampTo.value,
+                            filter.sessionAlias
+                        )
+                        storage.getGroupedMessageBatches(filter.toGroupedMessageFilter(group)).asSequence()
+                            .map { batch ->
+                                batch.messages.asSequence().filter {
+                                    filter.sessionAlias == it.sessionAlias
+                                            && filter.timestampFrom?.check(it.timestamp) ?: true
+                                            && filter.timestampTo?.check(it.timestamp) ?: true
+                                }.toList()
+                                    .run {
+                                        if (isEmpty()) {
+                                            StoredMessageBatch()
+                                        } else {
+                                            StoredMessageBatch(
+                                                this,
+                                                storage.findPage(batch.bookId, batch.recDate).id,
+                                                batch.recDate
+                                            )
+                                        }
+                                    }
+                            }.filterNot(StoredMessageBatch::isEmpty)
+                    } else {
+                        storage.getMessageBatchesAsync(filter).await().asSequence()
+                    }
                 }
-            } ?: listOf())
+            } ?: sequenceOf())
                 .let { iterable ->
                     Channel<StoredMessageBatch>(1)
                         .also { channel ->
@@ -113,12 +158,73 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
         }
     }
 
+    private suspend fun getSessionGroupSuspend(
+        bookId: BookId,
+        from: Instant,
+        to: Instant,
+        sessionAlias: String
+    ): String? {
+        val cache = bookToCache.computeIfAbsent(bookId.name) {
+            manager.createCache(
+                "aliasToGroup(${bookId.name})",
+                CacheConfigurationBuilder.newCacheConfigurationBuilder(
+                    String::class.java,
+                    String::class.java,
+                    ResourcePoolsBuilder.heap(aliasToGroupCacheSize)
+                ).build()
+            )
+
+        }
+        return cache.get(sessionAlias)
+            ?: run {
+                withContext(cradleDispatcher) {
+                    logMetrics(getMapAliasToGroupAsyncMetric) {
+                        logTime("getSessionGroup (book=${bookId.name}, from=${from}, to=${to}, session alias=${sessionAlias})") {
+                            val groups = storage.getSessionGroups(bookId, Interval(from, to))
+                            groups.forEach { group ->
+                                storage.getGroupedMessageBatches(
+                                    GroupedMessageFilter.builder().apply {
+                                        bookId(bookId)
+                                        timestampFrom().isGreaterThanOrEqualTo(from)
+                                        timestampTo().isLessThanOrEqualTo(to)
+                                        groupName(group)
+                                    }.build()
+                                ).forEach { batch ->
+                                    batch.messages.forEach { message ->
+                                        cache.putIfAbsent(batch.group, message.sessionAlias)
+                                    }
+                                }
+                            }
+                            cache.get(sessionAlias)
+                                ?: error("Mapping between a session group and the '${sessionAlias}' session alias isn't found, book: ${bookId.name}, [from: $from, to: $to]")
+                        }
+                    }
+                }
+            }
+    }
+
+    private suspend fun getSessionGroupSuspend(id: StoredMessageId): String? =
+        getSessionGroupSuspend(id.bookId, id.timestamp, id.timestamp, id.sessionAlias)
 
     suspend fun getMessageSuspend(id: StoredMessageId): StoredMessage? {
         return withContext(cradleDispatcher) {
             logMetrics(getMessageAsyncMetric) {
                 logTime("getMessage (id=$id)") {
-                    storage.getMessageAsync(id).await()
+                    if (searchBySessionGroup) {
+                        getSessionGroupSuspend(id)?.run {
+                            storage.getGroupedMessageBatches(GroupedMessageFilter.builder().apply {
+                                bookId(id.bookId)
+                                timestampFrom().isGreaterThanOrEqualTo(id.timestamp)
+                                timestampTo().isLessThanOrEqualTo(id.timestamp)
+                                groupName(this@run)
+                            }.build()).asSequence()
+                                .flatMap(StoredGroupedMessageBatch::getMessages)
+                                .filter { message -> id == message.id }
+                                .firstOrNull()
+                        }
+                    } else {
+                        storage.getMessageAsync(id).await()
+                    }
                 }
             }
         }
@@ -140,7 +246,7 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
         return withContext(cradleDispatcher) {
             logMetrics(getTestEventsAsyncMetric) {
                 logTime("Get events parent: $parentId from: ${eventFilter.startTimestampFrom} to: ${eventFilter.startTimestampTo}") {
-                    eventFilter.setParentId(parentId)
+                    eventFilter.parentId = parentId
                     storage.getTestEventsAsync(eventFilter).await().asIterable()
                 }
             } ?: listOf()
@@ -164,7 +270,7 @@ class CradleService(configuration: Configuration, private val cradleManager: Cra
                 logTime("getStreams") {
                     storage.getSessionAliases(bookId)
                 }
-            } ?: emptyList<String>()
+            } ?: emptyList()
         }
     }
 

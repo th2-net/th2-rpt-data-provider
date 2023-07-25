@@ -21,7 +21,6 @@ import com.exactpro.cradle.Order
 import com.exactpro.cradle.PageId
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.testevents.*
-import com.exactpro.th2.common.value.listValue
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineFilteredMessage
@@ -39,6 +38,8 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertArrayEquals
@@ -147,7 +148,7 @@ class TestEventPipeline {
             val storedId = events.first().id
             StoredTestEventBatch(
                 TestEventBatchToStore
-                    .builder(batchSize)
+                    .builder(batchSize, 60_000)
                     .id(StoredTestEventId(pageId.bookId, scope, changeTimestamp(startTimestamp, -1), storedId.toString().split("-").first()))
                     .parentId(StoredTestEventId(pageId.bookId, scope, startTimestamp, "parent"))
                     .build().also {
@@ -213,6 +214,7 @@ class TestEventPipeline {
     }
 
 
+    @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
     private fun baseTestCase(
         testCase: EventsParameters,
         searchDirection: TimeRelation = TimeRelation.AFTER,
@@ -258,7 +260,7 @@ class TestEventPipeline {
 
 
     @Test
-    fun `testAllInterval`() {
+    fun testAllInterval() {
         val testData = EventsParameters(
             changeTimestamp(startTimestamp, -1),
             changeTimestamp(endTimestamp, 1),
@@ -272,7 +274,7 @@ class TestEventPipeline {
 
 
     @Test
-    fun `testStartInterval`() {
+    fun testStartInterval() {
         val testData = EventsParameters(
             changeTimestamp(startTimestamp, -1),
             changeTimestamp(startTimestamp, 1),
@@ -286,7 +288,7 @@ class TestEventPipeline {
 
 
     @Test
-    fun `baseTestBatches`() {
+    fun baseTestBatches() {
         val testData = EventsParameters(
             changeTimestamp(startTimestamp, -100),
             changeTimestamp(startTimestamp, 100),
@@ -306,7 +308,7 @@ class TestEventPipeline {
     }
 
     @Test
-    fun `testIntersectedBatches`() {
+    fun testIntersectedBatches() {
         val testData = EventsParameters(
             changeTimestamp(startTimestamp, -100),
             changeTimestamp(startTimestamp, 100),
@@ -330,7 +332,7 @@ class TestEventPipeline {
     }
 
     @Test
-    fun `baseResumeTest`() {
+    fun baseResumeTest() {
         val testData = EventsParameters(
             changeTimestamp(startTimestamp, -100),
             changeTimestamp(startTimestamp, 100),
@@ -354,7 +356,7 @@ class TestEventPipeline {
 
 
     @Test
-    fun `baseResumeTestSecondBatch`() {
+    fun baseResumeTestSecondBatch() {
         val testData = EventsParameters(
             changeTimestamp(startTimestamp, -100),
             changeTimestamp(startTimestamp, 100),
@@ -380,7 +382,7 @@ class TestEventPipeline {
 
 
     @Test
-    fun `testIntersectedBatchesResume`() {
+    fun testIntersectedBatchesResume() {
         val testData = EventsParameters(
             changeTimestamp(startTimestamp, -100),
             changeTimestamp(startTimestamp, 100),
@@ -403,7 +405,7 @@ class TestEventPipeline {
     }
 
     @Test
-    fun `testReverseInterval`() {
+    fun testReverseInterval() {
         val testData = EventsParameters(
             endTimestamp,
             startTimestamp,
@@ -417,7 +419,7 @@ class TestEventPipeline {
 
 
     @Test
-    fun `testReverseAllInterval`() {
+    fun testReverseAllInterval() {
         val testData = EventsParameters(
             endTimestamp,
             changeTimestamp(startTimestamp, -1),
@@ -431,7 +433,7 @@ class TestEventPipeline {
 
 
     @Test
-    fun `testReverseResume`() {
+    fun testReverseResume() {
         val testData = EventsParameters(
             endTimestamp,
             startTimestamp,
@@ -447,7 +449,7 @@ class TestEventPipeline {
     }
 
     @Test
-    fun `testIntersectedBatchesResumeReverse`() {
+    fun testIntersectedBatchesResumeReverse() {
         val testData = EventsParameters(
             startTimestamp = changeTimestamp(startTimestamp, 100),
             endTimestamp = changeTimestamp(startTimestamp, -100),
@@ -472,7 +474,7 @@ class TestEventPipeline {
 
 
     @Test
-    fun `testTimestamp`() {
+    fun testTimestamp() {
         val testData = EventsParameters(
             startTimestamp = startTimestamp,
             endTimestamp = changeTimestamp(startTimestamp, 10),
@@ -503,7 +505,7 @@ class TestEventPipeline {
     }
 
     @Test
-    fun `testTimestampReverse`() {
+    fun testTimestampReverse() {
         val testData = EventsParameters(
             changeTimestamp(startTimestamp, 10),
             startTimestamp,
@@ -535,7 +537,7 @@ class TestEventPipeline {
 
 
     @Test
-    fun `testTrimming`() {
+    fun testTrimming() {
         val testData = EventsParameters(
             startTimestamp,
             changeTimestamp(startTimestamp, 10),

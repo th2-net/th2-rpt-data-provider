@@ -1,4 +1,4 @@
-# Report data provider
+# Report data provider (5.7.0)
 
 # Overview
 This component serves as a backend for rpt-viewer. It will connect to the cassandra database via cradle api and expose the data stored in there as REST resources.
@@ -272,3 +272,24 @@ spec:
         cpu: 50m
 
 ```
+
+# Release notes
+
+## 5.7.0
+
+### Feature
++ Added optional session alias to group cache to translate cradle queries from `messages` to `grouped_messages` tables.
+  User can enable this feature by `searchBySessionGroup` option and set cache size in entries by `aliasToGroupCacheSize` option
+
+### Updated
++ gradle
+  + owasp `8.3.1`
+ 
++ th2
+  + cradle `5.1.0`
+  + bom `4.4.0`
+  + common `5.3.0`
+
+### Added
++ gradle
+  + gradle-git-properties `2.4.1` (gradle plugin for git metadata genration)
