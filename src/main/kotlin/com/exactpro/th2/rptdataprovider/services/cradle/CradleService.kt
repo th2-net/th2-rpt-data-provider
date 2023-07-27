@@ -19,6 +19,8 @@ package com.exactpro.th2.rptdataprovider.services.cradle
 
 import com.exactpro.cradle.BookId
 import com.exactpro.cradle.CradleManager
+import com.exactpro.cradle.Order
+import com.exactpro.cradle.PageInfo
 import com.exactpro.cradle.cassandra.CassandraStorageSettings
 import com.exactpro.cradle.counters.Interval
 import com.exactpro.cradle.messages.GroupedMessageFilter
@@ -64,6 +66,9 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
         private val getTestEventsAsyncMetric: Metrics = Metrics("get_test_events_async", "getTestEventsAsync")
         private val getTestEventAsyncMetric: Metrics = Metrics("get_test_event_async", "getTestEventAsync")
         private val getStreamsMetric: Metrics = Metrics("get_streams", "getStreams")
+
+        // source interval changes to exclude intersection to next or previous page
+        private fun PageInfo.toInterval(): Interval = Interval(started.plusNanos(1), ended.minusNanos(1))
     }
 
     private val manager = CacheManagerBuilder.newCacheManagerBuilder().build(true)
@@ -180,23 +185,46 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
                 withContext(cradleDispatcher) {
                     logMetrics(getMapAliasToGroupAsyncMetric) {
                         logTime("getSessionGroup (book=${bookId.name}, from=${from}, to=${to}, session alias=${sessionAlias})") {
-                            val groups = storage.getSessionGroups(bookId, Interval(from, to))
-                            groups.forEach { group ->
-                                storage.getGroupedMessageBatches(
-                                    GroupedMessageFilter.builder().apply {
-                                        bookId(bookId)
-                                        timestampFrom().isGreaterThanOrEqualTo(from)
-                                        timestampTo().isLessThanOrEqualTo(to)
-                                        groupName(group)
-                                    }.build()
-                                ).forEach { batch ->
-                                    batch.messages.forEach { message ->
-                                        cache.putIfAbsent(batch.group, message.sessionAlias)
-                                    }
+                            val interval = Interval(from, to)
+                            logger.debug { "Strat searching '$sessionAlias' session alias in cradle in $interval interval" }
+                            // getPagesAsync method is used instead of getPage because the first one return all pages touched by interval
+                            storage.getPagesAsync(bookId, interval).get().asSequence()
+                                .map { pageInfo -> pageInfo.toInterval() }
+                                .filter { pageInterval ->
+                                    storage.getSessionAliases(bookId, pageInterval).asSequence()
+                                        .any { alias -> alias == sessionAlias }
+                                }.firstOrNull()
+                                ?.let { pageInterval ->
+                                    logger.debug { "Strat searching session group by '$sessionAlias' alias in cradle in $pageInterval interval" }
+                                    storage.getSessionGroups(bookId, pageInterval).asSequence()
+                                        .flatMap { group ->
+                                            storage.getGroupedMessageBatches(
+                                                GroupedMessageFilter.builder()
+                                                    .bookId(bookId)
+                                                    .timestampFrom().isGreaterThan(pageInterval.start)
+                                                    .timestampTo().isLessThan(pageInterval.end)
+                                                    .groupName(group)
+                                                    .order(Order.DIRECT)
+                                                    .build()
+                                            ).asSequence()
+                                        }.forEach searchInBatch@{ batch ->
+                                            logger.debug { "Search session group by '$sessionAlias' alias in grouped batch" }
+                                            batch.messages.forEach { message ->
+                                                cache.putIfAbsent(message.sessionAlias, batch.group) ?: run {
+                                                    logger.info { "Put session '${message.sessionAlias}' alias to '${batch.group}' group to cache" }
+                                                }
+                                                if (sessionAlias == message.sessionAlias) {
+                                                    logger.debug { "Found session '${message.sessionAlias}' alias to '${batch.group}' group pair" }
+                                                    return@searchInBatch
+                                                }
+                                            }
+                                        }
+                                    cache.get(sessionAlias)
+                                        ?: error("Mapping between a session group and the '${sessionAlias}' session alias isn't found, book: ${bookId.name}, [from: $from, to: $to]")
+                                } ?: run {
+                                    logger.debug { "'$sessionAlias' session alias isn't in $interval interval" }
+                                    null
                                 }
-                            }
-                            cache.get(sessionAlias)
-                                ?: error("Mapping between a session group and the '${sessionAlias}' session alias isn't found, book: ${bookId.name}, [from: $from, to: $to]")
                         }
                     }
                 }
