@@ -76,16 +76,16 @@ fun MessageFilter.toGroupedMessageFilter(group: String?): GroupedMessageFilter =
     }
     when(timestampTo?.operation) {
         null -> { /* do noting */ }
-        ComparisonOperation.LESS -> builder.timestampTo().isLessThan(timestampFrom.value)
-        ComparisonOperation.LESS_OR_EQUALS -> builder.timestampTo().isLessThanOrEqualTo(timestampFrom.value)
-        else -> error("The '${timestampFrom.operation}' operation isn't supported")
+        ComparisonOperation.LESS -> builder.timestampTo().isLessThan(timestampTo.value)
+        ComparisonOperation.LESS_OR_EQUALS -> builder.timestampTo().isLessThanOrEqualTo(timestampTo.value)
+        else -> error("The '${timestampTo.operation}' operation isn't supported")
     }
 }.build()
 
 @OptIn(DelicateCoroutinesApi::class)
 suspend fun <T> logTime(methodName: String, lambda: suspend () -> T): T? {
     return withContext(coroutineContext) {
-        var result: T? = null
+        var result: T?
 
         logger.debug { "cradle: $methodName is starting" }
 

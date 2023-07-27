@@ -118,12 +118,15 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
                             filter.timestampTo.value,
                             filter.sessionAlias
                         )
-                        storage.getGroupedMessageBatches(filter.toGroupedMessageFilter(group)).asSequence()
+                        val groupedMessageFilter = filter.toGroupedMessageFilter(group).also {
+                            logger.debug { "Start searching group batches by $it" }
+                        }
+                        storage.getGroupedMessageBatchesAsync(groupedMessageFilter).await().asSequence()
                             .map { batch ->
-                                batch.messages.asSequence().filter {
-                                    filter.sessionAlias == it.sessionAlias
-                                            && filter.timestampFrom?.check(it.timestamp) ?: true
-                                            && filter.timestampTo?.check(it.timestamp) ?: true
+                                batch.messages.asSequence().filter { message ->
+                                    filter.sessionAlias == message.sessionAlias
+                                            && filter.timestampFrom?.check(message.timestamp) ?: true
+                                            && filter.timestampTo?.check(message.timestamp) ?: true
                                 }.toList()
                                     .run {
                                         if (isEmpty()) {
@@ -137,11 +140,12 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
                                         }
                                     }
                             }.filterNot(StoredMessageBatch::isEmpty)
+                            .asIterable()
                     } else {
-                        storage.getMessageBatchesAsync(filter).await().asSequence()
+                        storage.getMessageBatchesAsync(filter).await().asIterable()
                     }
                 }
-            } ?: sequenceOf())
+            } ?: listOf())
                 .let { iterable ->
                     Channel<StoredMessageBatch>(1)
                         .also { channel ->
