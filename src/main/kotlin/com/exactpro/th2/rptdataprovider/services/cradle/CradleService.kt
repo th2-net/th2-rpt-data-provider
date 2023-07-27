@@ -166,6 +166,7 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
         }
     }
 
+    // FIXME: migrate to statistic to reduce time interval for search
     private suspend fun getSessionGroupSuspend(
         bookId: BookId,
         from: Instant?,
@@ -250,8 +251,9 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
         filter.sessionAlias
     )
 
-    private suspend fun getSessionGroupSuspend(id: StoredMessageId): String? =
-        getSessionGroupSuspend(id.bookId, id.timestamp, id.timestamp, id.sessionAlias)
+    private suspend fun getSessionGroupSuspend(
+        id: StoredMessageId
+    ): String? = getSessionGroupSuspend(id.bookId, id.timestamp, id.timestamp, id.sessionAlias)
 
     suspend fun getMessageSuspend(id: StoredMessageId): StoredMessage? {
         return withContext(cradleDispatcher) {

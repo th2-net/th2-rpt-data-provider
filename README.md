@@ -241,6 +241,9 @@ spec:
     
     eventSearchTimeOffset: 5000 // sets the offset in milliseconds on search events. (startTimestamp - eventSearchTimeOffset) and (endTimestamp + eventSearchTimeOffset)     
 
+    searchBySessionGroup: true // if true data-provider uses the session alias to group cache and translates http / gRPC requests by session alias to group th2 storage request 
+    aliasToGroupCacheSize: 1000 // the size of cache for the mapping between session alias and group.
+
   pins: // pins are used to communicate with codec components to parse message data
     - name: to_codec
       connection-type: mq
