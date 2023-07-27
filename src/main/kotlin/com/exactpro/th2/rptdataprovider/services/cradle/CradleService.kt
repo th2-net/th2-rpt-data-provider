@@ -112,12 +112,7 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
             (logMetrics(getMessagesBatches) {
                 logTime("getMessagesBatches (filter=${filter.convertToString()})") {
                     if (searchBySessionGroup) {
-                        val group = getSessionGroupSuspend(
-                            filter.bookId,
-                            filter.timestampFrom.value,
-                            filter.timestampTo.value,
-                            filter.sessionAlias
-                        )
+                        val group = getSessionGroupSuspend(filter)
                         val groupedMessageFilter = filter.toGroupedMessageFilter(group).also {
                             logger.debug { "Start searching group batches by $it" }
                         }
@@ -125,6 +120,7 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
                             .map { batch ->
                                 batch.messages.asSequence().filter { message ->
                                     filter.sessionAlias == message.sessionAlias
+                                            && filter.direction == message.direction
                                             && filter.timestampFrom?.check(message.timestamp) ?: true
                                             && filter.timestampTo?.check(message.timestamp) ?: true
                                 }.toList()
@@ -172,8 +168,8 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
 
     private suspend fun getSessionGroupSuspend(
         bookId: BookId,
-        from: Instant,
-        to: Instant,
+        from: Instant?,
+        to: Instant?,
         sessionAlias: String
     ): String? {
         val cache = bookToCache.computeIfAbsent(bookId.name) {
@@ -192,7 +188,7 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
                 withContext(cradleDispatcher) {
                     logMetrics(getMapAliasToGroupAsyncMetric) {
                         logTime("getSessionGroup (book=${bookId.name}, from=${from}, to=${to}, session alias=${sessionAlias})") {
-                            val interval = Interval(from, to)
+                            val interval = Interval(from ?: Instant.MIN, to ?: Instant.MAX)
                             logger.debug { "Strat searching '$sessionAlias' session alias in cradle in [${interval.start}, ${interval.end}] interval" }
                             // getPagesAsync method is used instead of getPage because the first one return all pages touched by interval
                             storage.getPagesAsync(bookId, interval).get().asSequence()
@@ -244,6 +240,15 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
                 }
             }
     }
+
+    private suspend fun getSessionGroupSuspend(
+        filter: MessageFilter
+    ): String? = getSessionGroupSuspend(
+        filter.bookId,
+        filter.timestampFrom?.value,
+        filter.timestampTo?.value,
+        filter.sessionAlias
+    )
 
     private suspend fun getSessionGroupSuspend(id: StoredMessageId): String? =
         getSessionGroupSuspend(id.bookId, id.timestamp, id.timestamp, id.sessionAlias)
