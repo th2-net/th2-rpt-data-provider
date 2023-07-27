@@ -17,6 +17,7 @@
 package handlers.events
 
 import com.exactpro.cradle.BookId
+import com.exactpro.cradle.CradleEntitiesFactory
 import com.exactpro.cradle.Order
 import com.exactpro.cradle.PageId
 import com.exactpro.cradle.TimeRelation
@@ -54,6 +55,7 @@ import kotlin.math.abs
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class TestEventPipeline {
+    private val STORE_ACTION_REJECTION_THRESHOLD = 30000L
 
     private val startTimestamp = Instant.parse("2022-04-21T01:05:00Z")
     private val endTimestamp = Instant.parse("2022-04-21T01:15:00Z")
@@ -148,13 +150,13 @@ class TestEventPipeline {
             val storedId = events.first().id
             StoredTestEventBatch(
                 TestEventBatchToStore
-                    .builder(batchSize, 60_000)
+                    .builder(batchSize, STORE_ACTION_REJECTION_THRESHOLD)
                     .id(StoredTestEventId(pageId.bookId, scope, changeTimestamp(startTimestamp, -1), storedId.toString().split("-").first()))
                     .parentId(StoredTestEventId(pageId.bookId, scope, startTimestamp, "parent"))
                     .build().also {
                         for (event in events) {
                             it.addTestEvent(
-                                TestEventToStore.singleBuilder()
+                                TestEventSingleToStoreBuilder(STORE_ACTION_REJECTION_THRESHOLD)
                                     .id(event.id)
                                     .name("name")
                                     .parentId(it.parentId)
