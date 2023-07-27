@@ -103,7 +103,7 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
     Variable("searchBySessionGroup", customConfiguration.searchBySessionGroup.toString(), "true")
 
     val aliasToGroupCacheSize: Variable = // TODO: added value check
-        Variable("aliasToGroupCacheSize", customConfiguration.aliasToGroupCacheSize.toString(), "1")
+        Variable("aliasToGroupCacheSize", customConfiguration.aliasToGroupCacheSize.toString(), "1000")
 
     val ioDispatcherThreadPoolSize: Variable =
         Variable("ioDispatcherThreadPoolSize", customConfiguration.ioDispatcherThreadPoolSize.let {

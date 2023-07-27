@@ -197,7 +197,11 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
                                     storage.getSessionAliases(bookId, pageInterval).asSequence()
                                         .any { alias -> alias == sessionAlias }
                                 }.firstOrNull()
-                                ?.let { pageInterval ->
+                                ?.let searchInGroups@ { pageInterval ->
+                                    cache.get(sessionAlias)?.let { group ->
+                                        logger.debug { "Another coroutine has dound session '$sessionAlias' alias to '$group' group pair" }
+                                        return@searchInGroups group
+                                    }
                                     logger.debug { "Strat searching session group by '$sessionAlias' alias in cradle in (${pageInterval.start}, ${pageInterval.end}) interval" }
                                     storage.getSessionGroups(bookId, pageInterval).asSequence()
                                         .flatMap { group ->
@@ -211,6 +215,10 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
                                                     .build()
                                             ).asSequence()
                                         }.forEach searchInBatch@{ batch ->
+                                            cache.get(sessionAlias)?.let { group ->
+                                                logger.debug { "Another coroutine has dound session '$sessionAlias' alias to '$group' group pair" }
+                                                return@searchInGroups group
+                                            }
                                             logger.debug { "Search session group by '$sessionAlias' alias in grouped batch" }
                                             batch.messages.forEach { message ->
                                                 cache.putIfAbsent(message.sessionAlias, batch.group) ?: run {
@@ -218,12 +226,11 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
                                                 }
                                                 if (sessionAlias == message.sessionAlias) {
                                                     logger.debug { "Found session '${message.sessionAlias}' alias to '${batch.group}' group pair" }
-                                                    return@searchInBatch
+                                                    return@searchInGroups batch.group
                                                 }
                                             }
                                         }
-                                    cache.get(sessionAlias)
-                                        ?: error("Mapping between a session group and the '${sessionAlias}' session alias isn't found, book: ${bookId.name}, [from: $from, to: $to]")
+                                    error("Mapping between a session group and the '${sessionAlias}' session alias isn't found, book: ${bookId.name}, [from: $from, to: $to]")
                                 } ?: run {
                                     logger.debug { "'$sessionAlias' session alias isn't in [${interval.start}, ${interval.end}] interval interval" }
                                     null
