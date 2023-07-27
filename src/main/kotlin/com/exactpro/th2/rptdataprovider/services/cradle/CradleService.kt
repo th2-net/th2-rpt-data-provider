@@ -68,7 +68,10 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
         private val getStreamsMetric: Metrics = Metrics("get_streams", "getStreams")
 
         // source interval changes to exclude intersection to next or previous page
-        private fun PageInfo.toInterval(): Interval = Interval(started.plusNanos(1), ended.minusNanos(1))
+        private fun PageInfo.toInterval(): Interval = Interval(
+            started?.plusNanos(1) ?: Instant.MIN,
+            ended?.minusNanos(1) ?: Instant.MAX
+        )
     }
 
     private val manager = CacheManagerBuilder.newCacheManagerBuilder().build(true)
@@ -186,7 +189,7 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
                     logMetrics(getMapAliasToGroupAsyncMetric) {
                         logTime("getSessionGroup (book=${bookId.name}, from=${from}, to=${to}, session alias=${sessionAlias})") {
                             val interval = Interval(from, to)
-                            logger.debug { "Strat searching '$sessionAlias' session alias in cradle in $interval interval" }
+                            logger.debug { "Strat searching '$sessionAlias' session alias in cradle in [${interval.start}, ${interval.end}] interval" }
                             // getPagesAsync method is used instead of getPage because the first one return all pages touched by interval
                             storage.getPagesAsync(bookId, interval).get().asSequence()
                                 .map { pageInfo -> pageInfo.toInterval() }
@@ -195,7 +198,7 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
                                         .any { alias -> alias == sessionAlias }
                                 }.firstOrNull()
                                 ?.let { pageInterval ->
-                                    logger.debug { "Strat searching session group by '$sessionAlias' alias in cradle in $pageInterval interval" }
+                                    logger.debug { "Strat searching session group by '$sessionAlias' alias in cradle in (${pageInterval.start}, ${pageInterval.end}) interval" }
                                     storage.getSessionGroups(bookId, pageInterval).asSequence()
                                         .flatMap { group ->
                                             storage.getGroupedMessageBatches(
@@ -222,7 +225,7 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
                                     cache.get(sessionAlias)
                                         ?: error("Mapping between a session group and the '${sessionAlias}' session alias isn't found, book: ${bookId.name}, [from: $from, to: $to]")
                                 } ?: run {
-                                    logger.debug { "'$sessionAlias' session alias isn't in $interval interval" }
+                                    logger.debug { "'$sessionAlias' session alias isn't in [${interval.start}, ${interval.end}] interval interval" }
                                     null
                                 }
                         }
