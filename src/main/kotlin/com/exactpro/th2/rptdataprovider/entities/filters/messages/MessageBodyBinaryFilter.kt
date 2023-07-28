@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package com.exactpro.th2.rptdataprovider.entities.filters.messages
 
@@ -26,17 +26,19 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import mu.KotlinLogging
+import java.util.*
 
-class MessageBodyBinaryFilter private constructor(
+class MessageBodyBinaryFilter<RM, PM> private constructor(
     private var bodyBinary: List<String>,
     override var negative: Boolean = false,
     override var conjunct: Boolean = false
-) : Filter<MessageWithMetadata> {
+) : Filter<MessageWithMetadata<RM, PM>> {
 
     companion object {
         private val logger = KotlinLogging.logger { }
 
-        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<MessageWithMetadata> {
+        @Suppress("RedundantSuspendModifier")
+        suspend fun <RM, PM> build(filterRequest: FilterRequest, @Suppress("UNUSED_PARAMETER") cradleService: CradleService): Filter<MessageWithMetadata<RM, PM>> {
             return MessageBodyBinaryFilter(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
@@ -57,10 +59,10 @@ class MessageBodyBinaryFilter private constructor(
         )
     }
 
-    override fun match(element: MessageWithMetadata): Boolean {
+    override fun match(element: MessageWithMetadata<RM, PM>): Boolean {
         val predicate: (String) -> Boolean = { item ->
             element.message.rawMessageBody.let {
-                String(it).toLowerCase().contains(item.toLowerCase())
+                String(it).lowercase(Locale.getDefault()).contains(item.lowercase(Locale.getDefault()))
             }
         }
         return try {

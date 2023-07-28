@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package com.exactpro.th2.rptdataprovider.entities.configuration
 
@@ -23,24 +23,24 @@ class CustomConfigurationClass {
     val hostname: String = "localhost"
     val port: Int = 8080
 
-    val responseTimeout: Int = 60000
-    val serverCacheTimeout: Int = 60000
+    val responseTimeout: Int = 60_000
+    val serverCacheTimeout: Int = 60_000
 
     val eventCacheSize: Int = 1
     val messageCacheSize: Int = 1
-    val aliasToGroupCacheSize: Int = 1
+    val aliasToGroupCacheSize: Int = 1_000
 
     val ioDispatcherThreadPoolSize: Int = 10
 
-    val checkRequestsAliveDelay: Long = 2000
+    val checkRequestsAliveDelay: Long = 2_000
 
     val enableCaching: Boolean = true
-    val notModifiedObjectsLifetime: Int = 3600
+    val notModifiedObjectsLifetime: Int = 3_600
     val rarelyModifiedObjects: Int = 500
 
     val sseEventSearchStep: Long = 200
 
-    val keepAliveTimeout: Long = 5000
+    val keepAliveTimeout: Long = 5_000
 
     val messageExtractorOutputBatchBuffer: Int = 1
     val messageConverterOutputBatchBuffer: Int = 1
@@ -49,7 +49,7 @@ class CustomConfigurationClass {
     val messageFilterOutputMessageBuffer: Int = 100
     val messageMergerOutputMessageBuffer: Int = 10
 
-    val codecResponseTimeout: Int = 6000
+    val codecResponseTimeout: Int = 6_000
     val codecPendingBatchLimit: Int = 16
     val codecCallbackThreadPool: Int = 4
     val codecRequestThreadPool: Int = 1
@@ -59,7 +59,7 @@ class CustomConfigurationClass {
 
     val grpcThreadPoolSize: Int = 20
 
-    val eventSearchTimeOffset = 5000
+    val eventSearchTimeOffset = 5_000
 
     val cradleDispatcherPoolSize: Long = 1
 
@@ -70,7 +70,10 @@ class CustomConfigurationClass {
     val eventSearchGap: Int = 60
 
     val useStrictMode = false
+
     val searchBySessionGroup = true
+
+    val useTransportMode: Boolean = true
 
     val serverType: ServerType = ServerType.HTTP
 }
@@ -104,6 +107,9 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
 
     val aliasToGroupCacheSize: Variable = // TODO: added value check
         Variable("aliasToGroupCacheSize", customConfiguration.aliasToGroupCacheSize.toString(), "1000")
+
+    val useTransportMode: Variable =
+        Variable("useTransportMode", customConfiguration.useTransportMode.toString(), "true")
 
     val ioDispatcherThreadPoolSize: Variable =
         Variable("ioDispatcherThreadPoolSize", customConfiguration.ioDispatcherThreadPoolSize.let {

@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,37 +12,43 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package com.exactpro.th2.rptdataprovider.entities.sse
 
+import com.exactpro.th2.dataprovider.grpc.MessageData
 import com.exactpro.th2.dataprovider.grpc.StreamResponse
 import com.exactpro.th2.dataprovider.grpc.StreamsInfo
+import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineFilteredMessage
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepsInfo
-import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.responses.Event
 import com.exactpro.th2.rptdataprovider.entities.responses.EventTreeNode
+import com.exactpro.th2.rptdataprovider.entities.responses.HttpMessage
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.grpc.stub.StreamObserver
 import io.prometheus.client.Histogram
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
 import mu.KotlinLogging
 import java.io.Writer
-import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.roundToInt
 import kotlin.system.measureTimeMillis
+import kotlin.time.DurationUnit
 import kotlin.time.ExperimentalTime
+import kotlin.time.TimedValue
 import kotlin.time.measureTimedValue
 
 
-interface StreamWriter {
+interface StreamWriter<RM, PM> {
 
     companion object {
-        val metric = Histogram.build(
+        val metric: Histogram = Histogram.build(
             "th2_message_pipeline_seconds", "Time of message search pipeline steps"
         ).buckets(.005, .01, .025, .05, .075, .1, .25, .5, .75, 1.0, 2.5, 5.0, 7.5, 10.0, 25.0, 50.0, 75.0)
             .labelNames("step_name")
@@ -93,7 +99,7 @@ interface StreamWriter {
 
     suspend fun write(event: EventTreeNode, counter: AtomicLong)
 
-    suspend fun write(message: PipelineFilteredMessage, counter: AtomicLong)
+    suspend fun write(message: PipelineFilteredMessage<RM, PM>, counter: AtomicLong)
 
     suspend fun write(event: Event, lastEventId: AtomicLong)
 
@@ -104,7 +110,11 @@ interface StreamWriter {
     suspend fun closeWriter()
 }
 
-class HttpWriter(private val writer: Writer, private val jacksonMapper: ObjectMapper) : StreamWriter {
+class HttpWriter<RM, PM>(
+    private val writer: Writer,
+    private val jacksonMapper: ObjectMapper,
+    private val convertFunc: (MessageWithMetadata<RM, PM>) -> HttpMessage,
+) : StreamWriter<RM, PM> {
     val logger = KotlinLogging.logger { }
 
     fun eventWrite(event: SseEvent) {
@@ -131,11 +141,9 @@ class HttpWriter(private val writer: Writer, private val jacksonMapper: ObjectMa
     }
 
     @OptIn(ExperimentalTime::class)
-    override suspend fun write(message: PipelineFilteredMessage, counter: AtomicLong) {
-        val convertedMessage = measureTimedValue {
-            MessageMapper.convertToHttpMessage(message.payload)
-        }
-        message.info.serializingTime = convertedMessage.duration.toLongMilliseconds()
+    override suspend fun write(message: PipelineFilteredMessage<RM, PM>, counter: AtomicLong) {
+        val convertedMessage: TimedValue<HttpMessage> = measureTimedValue { convertFunc(message.payload) }
+        message.info.serializingTime = convertedMessage.duration.inWholeMilliseconds
         StreamWriter.setSerializing(message.info)
 
         val sendingTime = measureTimeMillis {
@@ -165,14 +173,13 @@ class HttpWriter(private val writer: Writer, private val jacksonMapper: ObjectMa
     }
 }
 
-
 @OptIn(ExperimentalTime::class)
-class GrpcWriter(
+class GrpcWriter<RM, PM>(
     responseBufferCapacity: Int,
     private val writer: StreamObserver<StreamResponse>,
-    private val jacksonMapper: ObjectMapper,
-    private val writerPool: CoroutineScope
-) : StreamWriter {
+    private val writerPool: CoroutineScope,
+    private val converFunc: (MessageWithMetadata<RM, PM>) -> List<MessageData>
+) : StreamWriter<RM, PM> {
     //FIXME: List<StreamResponse> is a temporary solution to send messages group without merging the content
 
     // yes, channel of deferred responses is required, since the order is critical
@@ -206,7 +213,7 @@ class GrpcWriter(
 
                 StreamWriter.setSendingTime(sendDuration)
 
-                logger.trace { "awaited response for ${awaited.duration.inMilliseconds.roundToInt()}ms, sent in ${sendDuration}ms" }
+                logger.trace { "awaited response for ${awaited.duration.toDouble(DurationUnit.MILLISECONDS).roundToInt()}ms, sent in ${sendDuration}ms" }
             }
         }
     }
@@ -229,7 +236,7 @@ class GrpcWriter(
     }
 
 
-    override suspend fun write(message: PipelineFilteredMessage, counter: AtomicLong) {
+    override suspend fun write(message: PipelineFilteredMessage<RM, PM>, counter: AtomicLong) {
         val result = CompletableDeferred<List<StreamResponse>>()
         responses.send(result)
 
@@ -237,10 +244,10 @@ class GrpcWriter(
             result.complete(
                 let {
                     val convertedMessage = measureTimedValue {
-                        MessageMapper.convertToGrpcMessageData(message.payload)
+                        converFunc(message.payload)
                             .map { StreamResponse.newBuilder().setMessage(it).build() }
                     }
-                    message.info.serializingTime = convertedMessage.duration.toLongMilliseconds()
+                    message.info.serializingTime = convertedMessage.duration.inWholeMilliseconds
                     StreamWriter.setSerializing(message.info)
 
                     convertedMessage.value

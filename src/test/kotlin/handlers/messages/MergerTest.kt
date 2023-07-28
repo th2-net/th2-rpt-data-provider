@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2022-2022 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2022-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package handlers.messages
 
@@ -20,7 +20,11 @@ package handlers.messages
 import com.exactpro.cradle.BookId
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.common.grpc.Message
+import com.exactpro.th2.common.grpc.MessageGroupBatch
+import com.exactpro.th2.rptdataprovider.ProtoContext
+import com.exactpro.th2.rptdataprovider.ProtoMessageGroup
+import com.exactpro.th2.rptdataprovider.ProtoRawMessage
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
@@ -70,7 +74,7 @@ class MergerTest {
 
     private fun getSearchRequest(
         startTimestamp: Instant, endTimestamp: Instant, resultCount: Int, resumeId: StoredMessageId? = null
-    ): SseMessageSearchRequest {
+    ): SseMessageSearchRequest<ProtoRawMessage, Message> {
         val parameters = mutableMapOf(
             "stream" to fullStreamName,
             "direction" to listOf(direction),
@@ -86,8 +90,8 @@ class MergerTest {
     }
 
 
-    private fun mockContextWithCradleService(): Context {
-        val context: Context = mockk()
+    private fun mockContextWithCradleService(): ProtoContext {
+        val context: ProtoContext = mockk()
 
         every { context.configuration.sendEmptyDelay.value } answers { "1000" }
         every { context.keepAliveTimeout } answers { 200 }
@@ -96,13 +100,13 @@ class MergerTest {
     }
 
     private fun getMessageStreams(
-        context: Context,
-        request: SseMessageSearchRequest,
+        context: ProtoContext,
+        request: SseMessageSearchRequest<ProtoRawMessage, Message>,
         scope: CoroutineScope,
         messageList: List<List<PipelineStepObject>>
-    ): List<PipelineComponent> {
+    ): List<PipelineComponent<MessageGroupBatch, ProtoMessageGroup, ProtoRawMessage, Message>> {
         return (streamNameObjects zip messageList).map { (streamName, messages) ->
-            object : PipelineComponent(context, request, scope, streamName, null, 1) {
+            object : PipelineComponent<MessageGroupBatch, ProtoMessageGroup, ProtoRawMessage, Message>(context, request, scope, streamName, null, 1) {
                 private val messagesStream = messages
                 private var last: PipelineStepObject? = null
                 private val sequence = sequence {
@@ -147,10 +151,10 @@ class MergerTest {
         }
     }
 
-    private fun getMessageGenerator(stream: StreamName, timestamp: MutableInstant): Sequence<PipelineFilteredMessage> {
+    private fun getMessageGenerator(stream: StreamName, timestamp: MutableInstant): Sequence<PipelineFilteredMessage<ProtoRawMessage, Message>> {
         return sequence {
             var index = 1L
-            val payload = mockk<MessageWithMetadata>()
+            val payload = mockk<MessageWithMetadata<ProtoRawMessage, Message>>()
             while (true) {
                 val id = StoredMessageId(BOOK, stream.name, stream.direction, TIMESTAMP, index++)
                 yield(PipelineFilteredMessage(false, id, timestamp.getAndAdd(), PipelineStepsInfo(), payload))
@@ -227,21 +231,21 @@ class MergerTest {
 
     @ParameterizedTest
     @MethodSource("provideMergeCase")
-    fun `testBorders`(testCase: StreamInfoCase) {
+    fun testBorders(testCase: StreamInfoCase) {
 
         val context = mockContextWithCradleService()
-        val resultMessages = mutableListOf<PipelineFilteredMessage>()
+        val resultMessages = mutableListOf<PipelineFilteredMessage<ProtoRawMessage, Message>>()
         val request = getSearchRequest(testCase.startTimestamp, testCase.endTimestamp, testCase.limit)
 
         runBlocking {
 
             val messageStreams = getMessageStreams(context, request, this, testCase.messageList)
 
-            val streamMerger = StreamMerger(context, request, this, messageStreams, 1, PipelineStatus(context))
+            val streamMerger = StreamMerger(context, request, this, messageStreams, 1, PipelineStatus())
             do {
                 val message = streamMerger.pollMessage()
-                if (message is PipelineFilteredMessage) {
-                    resultMessages.add(message)
+                if (message is PipelineFilteredMessage<*, *>) {
+                    resultMessages.add(message as PipelineFilteredMessage<ProtoRawMessage, Message>)
                 }
             } while (message !is StreamEndObject)
 

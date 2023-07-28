@@ -184,17 +184,18 @@ id: event / message id | null | null | null
 
 
 # Configuration
+
 schema component description example (rpt-data-provider.yml):
 ```
-apiVersion: th2.exactpro.com/v1
+apiVersion: th2.exactpro.com/v2
 kind: Th2CoreBox
 metadata:
   name: rpt-data-provider
 spec:
-  image-name: ghcr.io/th2-net/th2-rpt-data-provider
-  image-version: 2.2.5 // change this line if you want to use a newer version
+  imageName: ghcr.io/th2-net/th2-rpt-data-provider
+  imageVersion: 5.7.0 // change this line if you want to use a newer version
   type: th2-rpt-data-provider
-  custom-config:
+  customConfig:
     hostname: localhost
     port: 8080
     responseTimeout: 60000 // maximum request processing time in milliseconds
@@ -244,28 +245,44 @@ spec:
     searchBySessionGroup: true // if true data-provider uses the session alias to group cache and translates http / gRPC requests by session alias to group th2 storage request 
     aliasToGroupCacheSize: 1000 // the size of cache for the mapping between session alias and group.
 
+    useTransportMode: true // if true data-provider uses th2 transport protocol to interact with thw codecs
+
   pins: // pins are used to communicate with codec components to parse message data
-    - name: to_codec
-      connection-type: mq
-      attributes:
-        - to_codec
-        - raw
-        - publish
-    - name: from_codec
-      connection-type: mq
-      attributes:
+    mq:
+      subscribers:
+      - name: from_codec
+        attributes:
         - from_codec
-        - parsed
+        - transport-group
         - subscribe
-  extended-settings:
-    chart-cfg:
+        linkTo:
+          - box: codec-fix
+            pin: out_codec_decode
+      publishers:
+      - name: to_codec_fix
+        attributes:
+        - to_codec
+        - transport-group
+        - publish
+        filters:
+          - metadata:
+              - fieldName: "session_group"
+                expectedValue: "fix*"
+                operation: WILDCARD
+        
+  extendedSettings:
+    chartCfg:
       ref: schema-stable
       path: custom-component
     service:
       enabled: false
       nodePort: '31275'
     envVariables:
-      JAVA_TOOL_OPTIONS: "-XX:+ExitOnOutOfMemoryError -Ddatastax-java-driver.advanced.connection.init-query-timeout=\"5000 milliseconds\""
+      JAVA_TOOL_OPTIONS: > 
+        -XX:+ExitOnOutOfMemoryError
+        -Ddatastax-java-driver.advanced.connection.init-query-timeout="5000 milliseconds"
+        -XX:+UseContainerSupport 
+        -XX:MaxRAMPercentage=85
     resources:
       limits:
         memory: 2000Mi
@@ -283,6 +300,7 @@ spec:
 ### Feature
 + Added optional session alias to group cache to translate cradle queries from `messages` to `grouped_messages` tables.
   User can enable this feature by `searchBySessionGroup` option and set cache size in entries by `aliasToGroupCacheSize` option
++ Added mode to interact with codec by th2 transport protocol 
 
 ### Updated
 + gradle

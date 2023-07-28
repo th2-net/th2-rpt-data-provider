@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2022-2022 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2022-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package handlers.messages
 
@@ -20,11 +20,12 @@ package handlers.messages
 import com.exactpro.cradle.BookId
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.PageId
-import com.exactpro.cradle.messages.MessageToStore
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.common.grpc.Message
+import com.exactpro.th2.rptdataprovider.ProtoContext
+import com.exactpro.th2.rptdataprovider.ProtoRawMessage
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
 import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
@@ -86,7 +87,7 @@ class ExtractorTest {
         startTimestamp: Instant,
         endTimestamp: Instant,
         resumeId: StoredMessageId? = null
-    ): SseMessageSearchRequest {
+    ): SseMessageSearchRequest<ProtoRawMessage, Message> {
         val parameters = mutableMapOf(
             "stream" to listOf(fullStreamName),
             "direction" to listOf(streamDirection),
@@ -127,8 +128,8 @@ class ExtractorTest {
         return msg
     }
 
-    private fun mockContextWithCradleService(batch: StoredMessageBatch): Context {
-        val context: Context = mockk()
+    private fun mockContextWithCradleService(batch: StoredMessageBatch): ProtoContext {
+        val context: ProtoContext = mockk()
 
         every { context.configuration.sendEmptyDelay.value } answers { "10" }
 
@@ -191,7 +192,7 @@ class ExtractorTest {
 
 
     @Test
-    fun `extractByIntervals`() {
+    fun extractByIntervals() {
         var startTimestamp = Instant.parse("2022-04-21T10:00:00Z")
 
         val batch = chunkedBatch(startTimestamp)
@@ -205,7 +206,7 @@ class ExtractorTest {
                 val endTimestamp = startTimestamp.plus(1, ChronoUnit.HOURS)
                 val request = getSearchRequest(startTimestamp, endTimestamp)
 
-                val extractor = MessageExtractor(context, request, streamNameObject, this, 1, PipelineStatus(context))
+                val extractor = MessageExtractor(context, request, streamNameObject, this, 1, PipelineStatus())
 
                 var messages: Collection<StoredMessage> = emptyList()
 
@@ -268,7 +269,7 @@ class ExtractorTest {
         runBlocking {
             val request = getSearchRequest(startTimestamp, endTimestamp, resumeId)
 
-            val extractor = MessageExtractor(context, request, streamNameObject, this, 1, PipelineStatus(context))
+            val extractor = MessageExtractor(context, request, streamNameObject, this, 1, PipelineStatus())
 
             do {
                 val message = extractor.pollMessage()
@@ -300,7 +301,7 @@ class ExtractorTest {
 
     @ParameterizedTest
     @MethodSource("provideExtractorCase")
-    fun `bordersTest`(testParameters: BorderTestParameters) {
+    fun bordersTest(testParameters: BorderTestParameters) {
 
         val resultMessages = testBorders(
             testParameters.startTimestamp,

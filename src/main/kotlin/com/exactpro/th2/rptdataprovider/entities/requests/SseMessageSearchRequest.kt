@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 package com.exactpro.th2.rptdataprovider.entities.requests
 
 import com.exactpro.cradle.Direction
@@ -31,8 +31,8 @@ import com.exactpro.th2.rptdataprovider.grpcDirectionToCradle
 import java.time.Instant
 
 
-data class SseMessageSearchRequest(
-    val filterPredicate: FilterPredicate<MessageWithMetadata>,
+data class SseMessageSearchRequest<RM, PM>(
+    val filterPredicate: FilterPredicate<MessageWithMetadata<RM, PM>>,
     val startTimestamp: Instant?,
     val stream: List<String>,
     val searchDirection: TimeRelation,
@@ -47,7 +47,7 @@ data class SseMessageSearchRequest(
 ) {
     constructor(
         parameters: Map<String, List<String>>,
-        filterPredicate: FilterPredicate<MessageWithMetadata>,
+        filterPredicate: FilterPredicate<MessageWithMetadata<RM, PM>>,
         searchDirection: TimeRelation
     ) : this(
         filterPredicate = filterPredicate,
@@ -80,7 +80,7 @@ data class SseMessageSearchRequest(
 
     constructor(
         request: MessageSearchRequest,
-        filterPredicate: FilterPredicate<MessageWithMetadata>,
+        filterPredicate: FilterPredicate<MessageWithMetadata<RM, PM>>,
         bookId: BookId,
         searchDirection: TimeRelation
     ) : this(
@@ -135,7 +135,7 @@ data class SseMessageSearchRequest(
         bookId = bookId
     )
 
-    constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<MessageWithMetadata>) : this(
+    constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<MessageWithMetadata<RM, PM>>) : this(
         parameters = parameters,
         filterPredicate = filterPredicate,
         searchDirection = TimeRelation.AFTER
@@ -143,7 +143,7 @@ data class SseMessageSearchRequest(
 
     constructor(
         request: MessageSearchRequest,
-        filterPredicate: FilterPredicate<MessageWithMetadata>,
+        filterPredicate: FilterPredicate<MessageWithMetadata<RM, PM>>,
         bookId: BookId
     ) : this(
         request = request,

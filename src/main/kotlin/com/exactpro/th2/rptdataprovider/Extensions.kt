@@ -25,6 +25,7 @@ import com.exactpro.cradle.testevents.*
 import com.exactpro.th2.common.grpc.ConnectionID
 import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.message.toTimestamp
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.MessageId
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.prometheus.client.Gauge
 import io.prometheus.client.Histogram
@@ -200,12 +201,19 @@ fun StoredTestEventBatch.tryToGetTestEvents(parentEventId: StoredTestEventId? = 
 }
 
 
-fun StoredMessageId.convertToProto(): MessageID {
-    return MessageID.newBuilder()
+fun StoredMessageId.convertToProto(): MessageID = MessageID.newBuilder()
+    .setSequence(this.sequence)
+    .setDirection(cradleDirectionToGrpc(direction))
+    .setConnectionId(ConnectionID.newBuilder().setSessionAlias(this.sessionAlias))
+    .setTimestamp(timestamp.toTimestamp())
+    .setBookName(bookId.name)
+    .build()
+
+fun StoredMessageId.convertToTransport(): MessageId {
+    return MessageId.builder()
         .setSequence(this.sequence)
-        .setDirection(cradleDirectionToGrpc(direction))
-        .setConnectionId(ConnectionID.newBuilder().setSessionAlias(this.sessionAlias))
-        .setTimestamp(timestamp.toTimestamp())
-        .setBookName(bookId.name)
+        .setDirection(cradleDirectionToTransport(direction))
+        .setSessionAlias(this.sessionAlias)
+        .setTimestamp(timestamp)
         .build()
 }

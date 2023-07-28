@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2022-2022 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2022-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,16 +12,16 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package handlers.events
 
 import com.exactpro.cradle.BookId
-import com.exactpro.cradle.CradleEntitiesFactory
 import com.exactpro.cradle.Order
 import com.exactpro.cradle.PageId
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.testevents.*
+import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineFilteredMessage
@@ -55,7 +55,9 @@ import kotlin.math.abs
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class TestEventPipeline {
-    private val STORE_ACTION_REJECTION_THRESHOLD = 30000L
+    companion object {
+        private const val STORE_ACTION_REJECTION_THRESHOLD = 30_000L
+    }
 
     private val startTimestamp = Instant.parse("2022-04-21T01:05:00Z")
     private val endTimestamp = Instant.parse("2022-04-21T01:15:00Z")
@@ -113,8 +115,8 @@ class TestEventPipeline {
     private fun mockContextWithCradleService(
         batches: List<StoredTestEvent>,
         resumeId: ProviderEventId?
-    ): Context {
-        val context: Context = mockk()
+    ): ProtoContext {
+        val context: ProtoContext = mockk()
 
         every { context.configuration.sendEmptyDelay.value } answers { "10" }
         every { context.configuration.sseEventSearchStep.value } answers { "10" }
@@ -171,14 +173,14 @@ class TestEventPipeline {
         }
     }
 
-    private fun mockWriter(events: MutableList<EventTreeNode>): StreamWriter {
-        return object : StreamWriter {
+    private fun mockWriter(events: MutableList<EventTreeNode>): StreamWriter<ProtoRawMessage, Message> {
+        return object : StreamWriter<ProtoRawMessage, Message> {
 
             override suspend fun write(event: EventTreeNode, counter: AtomicLong) {
                 events.add(event)
             }
 
-            override suspend fun write(message: PipelineFilteredMessage, counter: AtomicLong) {
+            override suspend fun write(message: PipelineFilteredMessage<ProtoRawMessage, Message>, counter: AtomicLong) {
             }
 
             override suspend fun write(event: Event, lastEventId: AtomicLong) {

@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,114 +12,101 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package com.exactpro.th2.rptdataprovider.services.rabbitmq
 
+import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.common.grpc.MessageGroupBatch
-import com.exactpro.th2.common.message.direction
-import com.exactpro.th2.common.message.sequence
-import com.exactpro.th2.common.message.sessionAlias
-import com.exactpro.th2.common.schema.message.MessageListener
 import com.exactpro.th2.common.schema.message.MessageRouter
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.GroupBatch
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.ParsedMessage
+import com.exactpro.th2.rptdataprovider.ProtoMessageGroup
+import com.exactpro.th2.rptdataprovider.TransportMessageGroup
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
-import kotlinx.coroutines.*
+import com.exactpro.th2.rptdataprovider.services.rabbitmq.ProtoCodecBatchRequest.Companion.firstSequence
+import com.exactpro.th2.rptdataprovider.services.rabbitmq.ProtoCodecBatchRequest.Companion.lastSequence
+import com.exactpro.th2.rptdataprovider.services.rabbitmq.ProtoCodecBatchRequest.Companion.stream
+import com.exactpro.th2.rptdataprovider.services.rabbitmq.TransportCodecBatchRequest.Companion.firstSequence
+import com.exactpro.th2.rptdataprovider.services.rabbitmq.TransportCodecBatchRequest.Companion.lastSequence
+import com.exactpro.th2.rptdataprovider.services.rabbitmq.TransportCodecBatchRequest.Companion.stream
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import mu.KotlinLogging
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import kotlin.system.measureTimeMillis
 
-class RabbitMqService(
-    configuration: Configuration,
-    messageRouterParsedBatch: MessageRouter<MessageGroupBatch>,
-    private val messageRouterRawBatch: MessageRouter<MessageGroupBatch>
+abstract class RabbitMqService<B, G, PM>(
+    configuration: Configuration
 ) {
 
     companion object {
-        val logger = KotlinLogging.logger { }
+        val K_LOGGER = KotlinLogging.logger { }
+        @JvmStatic
+        protected val TO_CODEC_ATTRIBUTE_NAME = "to_codec"
+        @JvmStatic
+        protected val FROM_CODEC_ATTRIBUTE_NAME = "from_codec"
     }
 
-    private val toCodecAttributeName = "to_codec"
+    protected val responseTimeout = configuration.codecResponseTimeout.value.toLong()
+    protected val pendingRequests = ConcurrentHashMap<CodecRequestId,  PendingCodecBatchRequest<G, PM>>()
 
-    private val responseTimeout = configuration.codecResponseTimeout.value.toLong()
-    private val pendingRequests = ConcurrentHashMap<CodecRequestId, PendingCodecBatchRequest>()
+    protected val usePinAttributes = configuration.codecUsePinAttributes.value.toBoolean()
 
-    private val usePinAttributes = configuration.codecUsePinAttributes.value.toBoolean()
+    protected val maximumPendingRequests = configuration.codecPendingBatchLimit.value.toInt()
 
-    private val maximumPendingRequests = configuration.codecPendingBatchLimit.value.toInt()
-
-    private val mqRequestSenderScope = CoroutineScope(
+    protected val mqRequestSenderScope = CoroutineScope(
         Executors.newFixedThreadPool(configuration.codecRequestThreadPool.value.toInt()).asCoroutineDispatcher()
     )
 
-    private val mqCallbackScope = CoroutineScope(
+    protected val mqCallbackScope = CoroutineScope(
         Executors.newFixedThreadPool(configuration.codecCallbackThreadPool.value.toInt()).asCoroutineDispatcher()
     )
 
-    private val mqSubscribeScope = CoroutineScope(
+    protected val mqSubscribeScope = CoroutineScope(
         Executors.newSingleThreadExecutor().asCoroutineDispatcher()
     )
 
-    private val codecLatency = PipelineStatus.codecLatency
+    protected val codecLatency = PipelineStatus.codecLatency
 
     @Suppress("unused")
-    private val receiveChannel = mqSubscribeScope.launch {
-        messageRouterParsedBatch.subscribeAll(
-            MessageListener { _, decodedBatch ->
-                mqCallbackScope.launch {
+    protected abstract val receiveChannel: Job
 
-                    val response = MessageGroupBatchWrapper(decodedBatch)
-
-                    logger.trace { "codec response with hash ${response.responseHash} has been received" }
-
-                    pendingRequests.remove(response.requestId)?.let {
-                        codecLatency.gaugeDec(listOf(it.streamName))
-                        codecLatency.setDuration(it.startTimestamp.toDouble(), listOf(it.streamName))
-
-                        it.complete(response)
-                    }
-                        ?: logger.trace {
-                            val firstSequence =
-                                decodedBatch.groupsList.firstOrNull()?.messagesList?.firstOrNull()?.sequence
-                            val lastSequence =
-                                decodedBatch.groupsList?.lastOrNull()?.messagesList?.lastOrNull()?.sequence
-                            val stream =
-                                "${decodedBatch.groupsList.firstOrNull()?.messagesList?.firstOrNull()?.message?.sessionAlias}:${decodedBatch.groupsList.firstOrNull()?.messagesList?.firstOrNull()?.message?.direction.toString()}"
-                            "codec response with hash ${response.responseHash} has no matching requests (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} requestId=${response.requestId})"
-                        }
-                }
-            },
-
-            "from_codec"
+    private data class TimeoutInfo<B, G, PM>(
+        val firstSequence: Long?,
+        val lastSequence: Long?,
+        val stream: String
+    ) {
+        constructor(request:  CodecBatchRequest<B, G, PM>) : this(
+            request.firstSequence,
+            request.lastSequence,
+            request.stream
         )
     }
 
-    private data class TimeoutInfo(val firstSequence: Long?, val lastSequence: Long?, val stream: String) {
-        constructor(request: CodecBatchRequest) : this(
-            firstSequence = request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sequence,
-            lastSequence = request.protobufRawMessageBatch.groupsList.last()?.messagesList?.last()?.rawMessage?.sequence,
-            stream = "${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sessionAlias}:${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.direction.toString()}"
-        )
-    }
+    suspend fun sendToCodec(request:  CodecBatchRequest<B, G, PM>):  CodecBatchResponse<G, PM> {
 
-    suspend fun sendToCodec(request: CodecBatchRequest): CodecBatchResponse {
-
-        logger.trace { "Send batch before cycle ${request.requestId} with id to codec" }
+        K_LOGGER.trace { "Send batch before cycle ${request.requestId} with id to codec" }
 
         while (pendingRequests.keys.size > maximumPendingRequests) {
             delay(100)
         }
 
-        logger.trace { "Send batch ${request.requestId} with id to codec" }
+        K_LOGGER.trace { "Send batch ${request.requestId} with id to codec" }
 
         return pendingRequests.computeIfAbsent(request.requestId) {
             val pendingRequest = request.toPending()
 
-            logger.trace { "Get pending request for batch ${request.requestId}" }
+            K_LOGGER.trace { "Get pending request for batch ${request.requestId}" }
 
-            val info = if (logger.isWarnEnabled) TimeoutInfo(request) else null
+            val info = if (K_LOGGER.isWarnEnabled) TimeoutInfo(request) else null
 
             // launch timeout handler coroutine
             val timeoutHandler = mqCallbackScope.launch {
@@ -138,7 +125,7 @@ class RabbitMqService(
                             listOf(request.streamName)
                         )
 
-                        logger.warn {
+                        K_LOGGER.warn {
                             info?.let { timeout ->
                                 "codec request timed out after $responseTimeout ms (stream=${timeout.stream} firstId=${timeout.firstSequence} lastId=${timeout.lastSequence} hash=${request.requestHash}) requestId=${request.requestId}"
                             }
@@ -151,52 +138,38 @@ class RabbitMqService(
             // because it allows us to cancel it when we get parsed message
             pendingRequest.timeoutHandler = timeoutHandler
 
-            logger.trace { "Check timeout callback for batch ${request.requestId}" }
-            logger.trace { "Check mqRequestSenderScope alive ${mqRequestSenderScope.isActive}" }
+            K_LOGGER.trace { "Check timeout callback for batch ${request.requestId}" }
+            K_LOGGER.trace { "Check mqRequestSenderScope alive ${mqRequestSenderScope.isActive}" }
 
             mqRequestSenderScope.launch {
 
-                logger.trace { "Launch sendAll coroutine ${request.requestId}" }
+                K_LOGGER.trace { "Launch sendAll coroutine ${request.requestId}" }
 
                 measureTimeMillis {
                     try {
                         val sendAllTime = measureTimeMillis {
                             if (usePinAttributes) {
-                                val sessionAlias =
-                                    request.protobufRawMessageBatch.groupsList
-                                        .first().messagesList
-                                        .first().rawMessage.metadata.id.connectionId.sessionAlias
+                                val sessionAlias = request.sessionAlias
 
-                                logger.trace { "Session aliases for batch ${request.requestId}, alias $sessionAlias" }
+                                K_LOGGER.trace { "Session aliases for batch ${request.requestId}, alias $sessionAlias" }
 
                                 codecLatency.gaugeInc(listOf(request.streamName))
 
-                                logger.trace { "Start sendAll method for batch ${request.requestId}" }
+                                K_LOGGER.trace { "Start sendAll method for batch ${request.requestId}" }
 
                                 measureTimeMillis {
-                                    messageRouterRawBatch.sendAll(
-                                        request.protobufRawMessageBatch,
-                                        sessionAlias,
-                                        toCodecAttributeName
-                                    )
-                                }.also { logger.debug { "messageRouterRawBatch ${request.requestId} sendAll ${it}ms" } }
+                                    sendAll(request.rawMessageBatch, sessionAlias, TO_CODEC_ATTRIBUTE_NAME)
+                                }.also { K_LOGGER.debug { "messageRouterRawBatch ${request.requestId} sendAll ${it}ms" } }
                             } else {
                                 measureTimeMillis {
-                                    messageRouterRawBatch.sendAll(request.protobufRawMessageBatch, toCodecAttributeName)
-                                }.also { logger.debug { "messageRouterRawBatch ${request.requestId} sendAll ${it}ms" } }
+                                    sendAll(request.rawMessageBatch, TO_CODEC_ATTRIBUTE_NAME)
+                                }.also { K_LOGGER.debug { "messageRouterRawBatch ${request.requestId} sendAll ${it}ms" } }
                             }
 
-                            logger.trace {
-                                val firstSequence =
-                                    request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sequence
-                                val lastSequence =
-                                    request.protobufRawMessageBatch.groupsList.last()?.messagesList?.last()?.rawMessage?.sequence
-                                val stream =
-                                    "${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.sessionAlias}:${request.protobufRawMessageBatch.groupsList.first()?.messagesList?.first()?.rawMessage?.direction.toString()}"
-
-                                "codec request with hash ${request.requestHash} has been sent (stream=${stream} firstId=${firstSequence} lastId=${lastSequence} hash=${request.requestHash}) requestId=${request.requestId})"
+                            K_LOGGER.trace {
+                                "codec request with hash ${request.requestHash} has been sent (stream=${request.stream} firstId=${request.firstSequence} lastId=${request.lastSequence} hash=${request.requestHash}) requestId=${request.requestId})"
                             }
-                            logger.debug { "codec request with hash ${request.requestHash.hashCode()} has been sent" }
+                            K_LOGGER.debug { "codec request with hash ${request.requestHash.hashCode()} has been sent" }
                         }
 
                         StreamWriter.setSendToCodecTime(sendAllTime)
@@ -207,12 +180,101 @@ class RabbitMqService(
 
                             pendingRequests.remove(request.requestId)
                         }
-                        logger.error(e) { "unexpected exception while trying to send a codec request" }
+                        K_LOGGER.error(e) { "unexpected exception while trying to send a codec request" }
                     }
-                }.also { logger.info { "${request.requestId} mqRequestSenderScope ${it}ms" } }
+                }.also { K_LOGGER.info { "${request.requestId} mqRequestSenderScope ${it}ms" } }
             }
 
             pendingRequest
         }.toResponse()
+    }
+
+    protected abstract fun sendAll(batch: B, vararg attributes: String)
+}
+
+class ProtoRabbitMqService(
+    configuration: Configuration,
+    messageRouterParsedBatch: MessageRouter<MessageGroupBatch>,
+    private val messageRouter: MessageRouter<MessageGroupBatch>
+): RabbitMqService<MessageGroupBatch, ProtoMessageGroup, Message>(configuration) {
+
+    companion object {
+        val K_LOGGER = KotlinLogging.logger { }
+    }
+
+    @Suppress("unused")
+    override val receiveChannel = mqSubscribeScope.launch {
+        messageRouterParsedBatch.subscribeAll(
+            { _, decodedBatch ->
+                mqCallbackScope.launch {
+
+                    val response = ProtoMessageGroupBatchWrapper(decodedBatch)
+
+                    K_LOGGER.trace { "codec response with hash ${response.responseHash} has been received" }
+
+                    pendingRequests.remove(response.requestId)?.let {
+                        codecLatency.gaugeDec(listOf(it.streamName))
+                        codecLatency.setDuration(it.startTimestamp.toDouble(), listOf(it.streamName))
+
+                        it.complete(response)
+                    }
+                        ?: K_LOGGER.trace {
+                            "codec response with hash ${response.responseHash} has no matching requests (stream=${decodedBatch.stream()} firstId=${decodedBatch.firstSequence()} lastId=${decodedBatch.lastSequence()} requestId=${response.requestId})"
+                        }
+                }
+            },
+            FROM_CODEC_ATTRIBUTE_NAME
+        )
+    }
+
+    override fun sendAll(batch: MessageGroupBatch, vararg attributes: String) {
+        messageRouter.sendAll(
+            batch,
+            *attributes
+        )
+    }
+}
+
+class TransportRabbitMqService(
+    configuration: Configuration,
+    messageRouterParsedBatch: MessageRouter<GroupBatch>,
+    private val messageRouter: MessageRouter<GroupBatch>
+): RabbitMqService<GroupBatch, TransportMessageGroup, ParsedMessage>(configuration) {
+
+    companion object {
+        val K_LOGGER = KotlinLogging.logger { }
+    }
+
+    @Suppress("unused")
+    override val receiveChannel = mqSubscribeScope.launch {
+        messageRouterParsedBatch.subscribeAll(
+            { _, decodedBatch ->
+                mqCallbackScope.launch {
+
+                    val response = TransportMessageGroupBatchWrapper(decodedBatch)
+
+                    K_LOGGER.trace { "codec response with hash ${response.responseHash} has been received" }
+
+                    pendingRequests.remove(response.requestId)?.let {
+                        codecLatency.gaugeDec(listOf(it.streamName))
+                        codecLatency.setDuration(it.startTimestamp.toDouble(), listOf(it.streamName))
+
+                        it.complete(response)
+                    }
+                        ?: K_LOGGER.trace {
+                            "codec response with hash ${response.responseHash} has no matching requests (stream=${decodedBatch.stream()} firstId=${decodedBatch.firstSequence()} lastId=${decodedBatch.lastSequence()} requestId=${response.requestId})"
+                        }
+                }
+            },
+
+            "from_codec"
+        )
+    }
+
+    override fun sendAll(batch: GroupBatch, vararg attributes: String) {
+        messageRouter.sendAll(
+            batch,
+            *attributes
+        )
     }
 }

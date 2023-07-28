@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package com.exactpro.th2.rptdataprovider.entities.filters.messages
 
@@ -26,16 +26,17 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.internal.BodyWrapper
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
-import com.google.protobuf.util.JsonFormat
+import java.util.*
 
-class MessageBodyFilter private constructor(
+class MessageBodyFilter<RM, PM> private constructor(
     private var body: List<String>,
     override var negative: Boolean = false,
     override var conjunct: Boolean = false
-) : Filter<MessageWithMetadata> {
+) : Filter<MessageWithMetadata<RM, PM>> {
 
     companion object {
-        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<MessageWithMetadata> {
+        @Suppress("RedundantSuspendModifier")
+        suspend fun <RM, PM> build(filterRequest: FilterRequest, @Suppress("UNUSED_PARAMETER") cradleService: CradleService): Filter<MessageWithMetadata<RM, PM>> {
             return MessageBodyFilter(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
@@ -56,15 +57,15 @@ class MessageBodyFilter private constructor(
         )
     }
 
-    private fun predicate(element: BodyWrapper): Boolean {
+    private fun predicate(element: BodyWrapper<PM>): Boolean {
         val predicate: (String) -> Boolean = { item ->
-            JsonFormat.printer().omittingInsignificantWhitespace().print(element.message).toLowerCase()
-                .contains(item.toLowerCase())
+            element.toJson().lowercase(Locale.getDefault())
+                .contains(item.lowercase(Locale.getDefault()))
         }
         return negative.xor(if (conjunct) body.all(predicate) else body.any(predicate))
     }
 
-    override fun match(element: MessageWithMetadata): Boolean {
+    override fun match(element: MessageWithMetadata<RM, PM>): Boolean {
         return element.message.parsedMessageGroup?.let { messageBody ->
             messageBody.forEachIndexed { index, bodyWrapper ->
                 predicate(bodyWrapper).also {

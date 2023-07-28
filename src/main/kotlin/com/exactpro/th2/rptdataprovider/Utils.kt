@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2021-2021 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2021-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package com.exactpro.th2.rptdataprovider
 
@@ -27,6 +27,13 @@ fun cradleDirectionToGrpc(direction: Direction): com.exactpro.th2.common.grpc.Di
         com.exactpro.th2.common.grpc.Direction.FIRST
     else
         com.exactpro.th2.common.grpc.Direction.SECOND
+}
+
+fun cradleDirectionToTransport(direction: Direction): com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.Direction {
+    return if (direction == Direction.FIRST)
+        com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.Direction.INCOMING
+    else
+        com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.Direction.OUTGOING
 }
 
 fun grpcDirectionToCradle(direction: com.exactpro.th2.common.grpc.Direction): Direction {

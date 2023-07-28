@@ -1,5 +1,5 @@
-﻿/*******************************************************************************
- * Copyright 2021-2021 Exactpro (Exactpro Systems Limited)
+﻿/*
+ * Copyright 2021-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package com.exactpro.th2.rptdataprovider.entities.internal
 
@@ -23,18 +23,18 @@ interface DataWrapper<T> {
     var finalFiltered: Boolean
 }
 
-data class MessageWithMetadata(
-    override val message: Message,
+data class MessageWithMetadata<RM, PM>(
+    override val message: Message<RM, PM>,
     val filteredBody: MutableList<Boolean> = mutableListOf(),
     override var finalFiltered: Boolean = true
-) : DataWrapper<Message> {
+) : DataWrapper<Message<RM, PM>> {
 
-    constructor(message: Message) : this(
+    constructor(message: Message<RM, PM>) : this(
         message = message,
         filteredBody = message.parsedMessageGroup?.let { List(it.size) { true } as MutableList } ?: mutableListOf()
     )
 
-    constructor(message: Message, id: MessageID) : this(message) {
+    constructor(message: Message<RM, PM>, id: MessageID) : this(message) {
         message.parsedMessageGroup?.let { body ->
             val messageIndexWithSubsequence = body.indexOfFirst { it.id == id }
             if (messageIndexWithSubsequence >= 0) {

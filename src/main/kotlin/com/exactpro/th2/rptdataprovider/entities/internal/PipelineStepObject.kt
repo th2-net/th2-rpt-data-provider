@@ -1,5 +1,5 @@
-﻿/*******************************************************************************
- * Copyright 2021-2021 Exactpro (Exactpro Systems Limited)
+﻿/*
+ * Copyright 2021-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package com.exactpro.th2.rptdataprovider.entities.internal
 
@@ -106,28 +106,28 @@ data class PipelineRawBatch(
 ) : PipelineStepObject
 
 
-data class PipelineCodecRequest(
+data class PipelineCodecRequest<B, G, RM, PM>(
     override val streamEmpty: Boolean,
     override val lastProcessedId: StoredMessageId?,
     override val lastScannedTime: Instant,
-    val storedBatchWrapper: MessageBatchWrapper,
-    val codecRequest: CodecBatchRequest,
+    val storedBatchWrapper: MessageBatchWrapper<RM>,
+    val codecRequest:  CodecBatchRequest<B, G, PM>,
     override val info: PipelineStepsInfo
 ) : PipelineStepObject
 
 
-data class PipelineDecodedBatch(
+data class PipelineDecodedBatch<B, G, RM, PM>(
     override val streamEmpty: Boolean,
     override val lastProcessedId: StoredMessageId?,
     override val lastScannedTime: Instant,
-    val storedBatchWrapper: MessageBatchWrapper,
+    val storedBatchWrapper: MessageBatchWrapper<RM>,
     override val info: PipelineStepsInfo,
-    val codecResponse: CodecBatchResponse,
+    val codecResponse: CodecBatchResponse<G, PM>,
     val imageType: String?
 ) : PipelineStepObject {
     constructor(
-        pipelineMessage: PipelineCodecRequest,
-        codecBatchResponse: CodecBatchResponse,
+        pipelineMessage: PipelineCodecRequest<B, G, RM, PM>,
+        codecBatchResponse: CodecBatchResponse<G, PM>,
         imageType: String? = null
     ) : this(
         pipelineMessage.streamEmpty,
@@ -141,14 +141,14 @@ data class PipelineDecodedBatch(
 }
 
 
-data class PipelineParsedMessage(
+data class PipelineParsedMessage<RM, PM>(
     override val streamEmpty: Boolean,
     override val lastProcessedId: StoredMessageId?,
     override val lastScannedTime: Instant,
     override val info: PipelineStepsInfo,
-    val payload: Message
+    val payload: Message<RM, PM>
 ) : PipelineStepObject {
-    constructor(pipelineStepObject: PipelineStepObject, payload: Message) : this(
+    constructor(pipelineStepObject: PipelineStepObject, payload: Message<RM, PM>) : this(
         pipelineStepObject.streamEmpty,
         payload.id,
         payload.timestamp,
@@ -158,14 +158,14 @@ data class PipelineParsedMessage(
 }
 
 
-data class PipelineFilteredMessage(
+data class PipelineFilteredMessage<RM, PM>(
     override val streamEmpty: Boolean,
     override val lastProcessedId: StoredMessageId?,
     override val lastScannedTime: Instant,
     override val info: PipelineStepsInfo,
-    val payload: MessageWithMetadata
+    val payload: MessageWithMetadata<RM, PM>
 ) : PipelineStepObject {
-    constructor(pipelineStepObject: PipelineStepObject, payload: MessageWithMetadata) : this(
+    constructor(pipelineStepObject: PipelineStepObject, payload: MessageWithMetadata<RM, PM>) : this(
         pipelineStepObject.streamEmpty,
         pipelineStepObject.lastProcessedId,
         pipelineStepObject.lastScannedTime,

@@ -1,5 +1,5 @@
-﻿/*******************************************************************************
- * Copyright 2021-2021 Exactpro (Exactpro Systems Limited)
+﻿/*
+ * Copyright 2021-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,27 +12,24 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
-import com.exactpro.cradle.BookId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.*
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
-import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import kotlinx.coroutines.*
 
-class MessageFilter(
-    context: Context,
-    searchRequest: SseMessageSearchRequest,
+class MessageFilter<B, G, RM, PM>(
+    context: Context<B, G, RM, PM>,
+    searchRequest: SseMessageSearchRequest<RM, PM>,
     streamName: StreamName?,
     externalScope: CoroutineScope,
-    previousComponent: PipelineComponent?,
-    messageFlowCapacity: Int,
-    private val pipelineStatus: PipelineStatus
-) : PipelineComponent(context, searchRequest, externalScope, streamName, previousComponent, messageFlowCapacity) {
+    previousComponent: PipelineComponent<B, G, RM, PM>?,
+    messageFlowCapacity: Int
+) : PipelineComponent<B, G, RM, PM>(context, searchRequest, externalScope, streamName, previousComponent, messageFlowCapacity) {
 
     private val sendEmptyDelay: Long = context.configuration.sendEmptyDelay.value.toLong()
     @Volatile
@@ -47,26 +44,24 @@ class MessageFilter(
 
 
     constructor(
-        pipelineComponent: MessageBatchUnpacker,
-        messageFlowCapacity: Int,
-        pipelineStatus: PipelineStatus
+        pipelineComponent: MessageBatchUnpacker<B, G, RM, PM>,
+        messageFlowCapacity: Int
     ) : this(
         pipelineComponent.context,
         pipelineComponent.searchRequest,
         pipelineComponent.streamName,
         pipelineComponent.externalScope,
         pipelineComponent,
-        messageFlowCapacity,
-        pipelineStatus
+        messageFlowCapacity
     )
 
-    private fun updateState(parsedMessage: PipelineParsedMessage) {
+    private fun updateState(parsedMessage: PipelineParsedMessage<*, *>) {
         lastScannedObject = parsedMessage
         processedMessagesCounter++
     }
 
 
-    private suspend fun applyFilter(parsedMessage: Message): MessageWithMetadata {
+    private fun applyFilter(parsedMessage: Message<RM, PM>): MessageWithMetadata<RM, PM> {
         return MessageWithMetadata(parsedMessage).apply {
             finalFiltered = searchRequest.filterPredicate.apply(this)
         }
@@ -88,11 +83,11 @@ class MessageFilter(
             launch { emptySender(this) }
             while (isActive) {
                 val parsedMessage = previousComponent!!.pollMessage()
-                if (parsedMessage is PipelineParsedMessage) {
+                if (parsedMessage is PipelineParsedMessage<*, *>) {
 
                     updateState(parsedMessage)
 
-                    val filtered = applyFilter(parsedMessage.payload)
+                    val filtered = applyFilter(parsedMessage.payload as Message<RM, PM>)
 
                     if (filtered.finalFiltered) {
                         sendToChannel(PipelineFilteredMessage(parsedMessage, filtered))

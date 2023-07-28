@@ -63,6 +63,7 @@ dependencies {
         exclude group: 'com.exactpro.th2', module: 'cradle-core'
         exclude group: 'com.exactpro.th2', module: 'cradle-cassandra'
     }
+    implementation 'com.exactpro.th2:common-utils:2.1.0-transport-protocol-+'
 
     implementation "com.exactpro.th2:cradle-core:${cradleVersion}"
 
