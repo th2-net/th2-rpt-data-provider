@@ -62,24 +62,6 @@ class Main @InternalAPI constructor(args: Array<String>) {
         configuration =
             Configuration(commonFactory.getCustomConfiguration(CustomConfigurationClass::class.java))
         if (configuration.useTransportMode.value.toBoolean()) {
-            protoContext = ProtoContext(
-                configuration,
-
-                serverType = ServerType.valueOf(configuration.serverType.value),
-
-                cradleManager = commonFactory.cradleManager.also {
-                    resources += it
-                },
-                protoMessageRouterPublisher = commonFactory.messageRouterMessageGroupBatch.also {
-                    resources += it
-                },
-                protoMessageRouterSubscriber = commonFactory.messageRouterMessageGroupBatch.also {
-                    resources += it
-                },
-                grpcConfig = commonFactory.grpcConfiguration
-            )
-            transportContext = null
-        } else {
             protoContext = null
             transportContext = TransportContext(
                 configuration,
@@ -97,6 +79,24 @@ class Main @InternalAPI constructor(args: Array<String>) {
                 },
                 grpcConfig = commonFactory.grpcConfiguration
             )
+        } else {
+            protoContext = ProtoContext(
+                configuration,
+
+                serverType = ServerType.valueOf(configuration.serverType.value),
+
+                cradleManager = commonFactory.cradleManager.also {
+                    resources += it
+                },
+                protoMessageRouterPublisher = commonFactory.messageRouterMessageGroupBatch.also {
+                    resources += it
+                },
+                protoMessageRouterSubscriber = commonFactory.messageRouterMessageGroupBatch.also {
+                    resources += it
+                },
+                grpcConfig = commonFactory.grpcConfiguration
+            )
+            transportContext = null
         }
     }
 
