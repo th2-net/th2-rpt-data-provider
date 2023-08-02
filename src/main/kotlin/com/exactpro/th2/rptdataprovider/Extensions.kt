@@ -83,18 +83,15 @@ fun MessageFilter.toGroupedMessageFilter(group: String?): GroupedMessageFilter =
     }
 }.build()
 
-@OptIn(DelicateCoroutinesApi::class)
 suspend fun <T> logTime(methodName: String, lambda: suspend () -> T): T? {
-    return withContext(coroutineContext) {
-        var result: T?
+    var result: T?
 
-        logger.debug { "cradle: $methodName is starting" }
+    logger.debug { "cradle: $methodName is starting" }
 
-        measureTimeMillis { result = lambda.invoke() }
-            .also { logger.debug { "cradle: $methodName took ${it}ms" } }
+    measureTimeMillis { result = lambda.invoke() }
+        .also { logger.debug { "cradle: $methodName took ${it}ms" } }
 
-        result
-    }
+    return result
 }
 
 data class Metrics(

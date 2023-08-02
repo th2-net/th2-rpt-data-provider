@@ -61,13 +61,7 @@ abstract class Context<B, G, RM, PM>(
     val timeout: Long = configuration.responseTimeout.value.toLong(),
     val cacheTimeout: Long = configuration.serverCacheTimeout.value.toLong(),
 
-    val jacksonMapper: ObjectMapper = jacksonObjectMapper()
-        .registerModule(JavaTimeModule())
-        .registerModule(SimpleModule("backward_compatibility").apply {
-            addSerializer(Instant::class.java, InstantBackwardCompatibilitySerializer)
-        })
-        .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
-        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES),
+    val jacksonMapper: ObjectMapper = JACKSON_MAPPER,
 
     val cradleManager: CradleManager,
 
@@ -126,6 +120,15 @@ abstract class Context<B, G, RM, PM>(
     val searchEventsHandler: SearchEventsHandler = SearchEventsHandler(this)
 
     companion object {
+        @JvmStatic
+        protected val JACKSON_MAPPER: ObjectMapper = jacksonObjectMapper()
+        .registerModule(JavaTimeModule())
+        .registerModule(SimpleModule("backward_compatibility").apply {
+            addSerializer(Instant::class.java, InstantBackwardCompatibilitySerializer)
+        })
+        .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
+        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+
         @JvmStatic
         protected fun cacheControlConfig(timeout: Int, enableCaching: Boolean): CacheControl {
             return if (enableCaching) {

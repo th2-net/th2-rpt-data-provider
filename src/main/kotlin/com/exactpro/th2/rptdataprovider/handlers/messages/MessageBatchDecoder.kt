@@ -80,13 +80,14 @@ class MessageBatchDecoder<B, G, RM, PM>(
         val pipelineMessage = previousComponent!!.pollMessage()
 
         if (pipelineMessage is PipelineCodecRequest<*, *, *, *>) {
+            @Suppress("UNCHECKED_CAST")
+            pipelineMessage as PipelineCodecRequest<B, G, RM, PM>
 
             val protocol = pipelineMessage.codecRequest.protocol
-
             if (isImage(protocol)) {
                 sendToChannel(
                     PipelineDecodedBatch(
-                        (pipelineMessage as PipelineCodecRequest<B, G, RM, PM>).also {
+                        pipelineMessage.also {
                             it.info.startParseMessage = System.currentTimeMillis()
                         },
                         CodecBatchResponse(CompletableDeferred(value = null)),
@@ -101,7 +102,7 @@ class MessageBatchDecoder<B, G, RM, PM>(
                     pipelineMessage.codecRequest.groupsCount.toLong()
                 )
 
-                @Suppress("UNCHECKED_CAST") val codecRequest:  CodecBatchRequest<B, G, PM> = (pipelineMessage as PipelineCodecRequest<B, G, RM, PM>).codecRequest
+                val codecRequest:  CodecBatchRequest<B, G, PM> = pipelineMessage.codecRequest
                 val result = PipelineDecodedBatch(
                     pipelineMessage.also {
                         it.info.startParseMessage = System.currentTimeMillis()

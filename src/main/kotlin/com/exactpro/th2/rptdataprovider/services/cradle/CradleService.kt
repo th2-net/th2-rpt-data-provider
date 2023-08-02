@@ -111,7 +111,7 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
                                 logger.debug { "Start searching group batches by $it" }
                             }
                             storage.getGroupedMessageBatchesAsync(groupedMessageFilter).await().asSequence()
-                                .map { batch ->
+                                .mapNotNull { batch ->
                                     batch.messages.asSequence().filter { message ->
                                         filter.sessionAlias == message.sessionAlias
                                                 && filter.direction == message.direction
@@ -120,7 +120,7 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
                                     }.toList()
                                         .run {
                                             if (isEmpty()) {
-                                                StoredMessageBatch()
+                                                null
                                             } else {
                                                 StoredMessageBatch(
                                                     this,
@@ -129,8 +129,7 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
                                                 )
                                             }
                                         }
-                                }.filterNot(StoredMessageBatch::isEmpty)
-                                .asIterable()
+                                }.asIterable()
 
                         } ?: listOf()
                     } else {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+ * Copyright 2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,18 +45,12 @@ import com.exactpro.th2.rptdataprovider.handlers.TransportSearchMessagesHandler
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.producers.MessageProducer
 import com.exactpro.th2.rptdataprovider.producers.TransportMessageProducer
-import com.exactpro.th2.rptdataprovider.serialization.InstantBackwardCompatibilitySerializer
 import com.exactpro.th2.rptdataprovider.server.ServerType
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.TransportRabbitMqService
-import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.databind.module.SimpleModule
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import io.ktor.http.*
-import java.time.Instant
+import io.ktor.http.CacheControl
 
 @Suppress("MemberVisibilityCanBePrivate")
 class TransportContext(
@@ -67,13 +61,7 @@ class TransportContext(
     timeout: Long = configuration.responseTimeout.value.toLong(),
     cacheTimeout: Long = configuration.serverCacheTimeout.value.toLong(),
 
-    jacksonMapper: ObjectMapper = jacksonObjectMapper()
-        .registerModule(JavaTimeModule())
-        .registerModule(SimpleModule("backward_compatibility").apply {
-            addSerializer(Instant::class.java, InstantBackwardCompatibilitySerializer)
-        })
-        .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
-        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES),
+    jacksonMapper: ObjectMapper = JACKSON_MAPPER,
 
     cradleManager: CradleManager,
 
