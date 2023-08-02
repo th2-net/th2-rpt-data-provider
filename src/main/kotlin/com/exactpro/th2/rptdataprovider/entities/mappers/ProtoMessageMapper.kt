@@ -57,9 +57,6 @@ object ProtoMessageMapper {
             MessageData.newBuilder()
                 .setMessageId(groupElement.id)
                 .setTimestamp(groupElement.id.timestamp)
-//                .setBodyBase64(messageWithMetadata.message.rawMessageBody.let {
-//                    Base64.getEncoder().encodeToString(it)
-//                })
                 .setMessageType(groupElement.messageType)
                 .setMessage(groupElement.message)
                 .build()
@@ -67,7 +64,6 @@ object ProtoMessageMapper {
             MessageData.newBuilder()
                 .setMessageId(message.id.convertToProto())
                 .setTimestamp(message.timestamp.toTimestamp())
-//                .setBodyBase64(message.rawMessageBody.let { Base64.getEncoder().encodeToString(it) })
                 .build()
         })
     }
@@ -75,7 +71,7 @@ object ProtoMessageMapper {
 
     fun convertToHttpMessage(messageWithMetadata: MessageWithMetadata<RawMessage, Message>): HttpMessage {
         return with(messageWithMetadata) {
-            val httpMessage = HttpMessage(
+            HttpMessage(
                 timestamp = message.timestamp,
                 messageType = messageWithMetadata.message.parsedMessageGroup
                     ?.joinToString("/") { it.messageType } ?: messageWithMetadata.message.imageType ?: "",
@@ -86,7 +82,6 @@ object ProtoMessageMapper {
                 body = MessageMapper.getBodyMessage(messageWithMetadata),
                 bodyBase64 = message.rawMessageBody.let { Base64.getEncoder().encodeToString(it) }
             )
-            httpMessage
         }
     }
 }

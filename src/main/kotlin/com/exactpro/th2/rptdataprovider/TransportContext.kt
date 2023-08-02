@@ -70,10 +70,7 @@ class TransportContext(
 
     grpcConfig: GrpcConfiguration,
 
-    cradleService: CradleService = CradleService(
-        configuration,
-        cradleManager
-    ),
+    cradleService: CradleService = createCradleService(configuration, cradleManager),
 
     rabbitMqService: RabbitMqService<GroupBatch, MessageGroup, ParsedMessage> = TransportRabbitMqService(
         configuration,
