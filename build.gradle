@@ -15,14 +15,18 @@
  ******************************************************************************/
 
 import com.github.jk1.license.render.*
+import com.github.jk1.license.filter.LicenseBundleNormalizer
+import com.github.jk1.license.render.JsonReportRenderer
+
 
 plugins {
     id 'java'
     id 'org.jetbrains.kotlin.jvm' version '1.6.21'
     id 'application'
     id 'com.palantir.docker' version '0.25.0'
-    id "org.owasp.dependencycheck" version "8.1.0"
-    id 'com.github.jk1.dependency-license-report'
+    id "org.owasp.dependencycheck" version "8.2.1"
+    id 'com.github.jk1.dependency-license-report' version '2.5'
+    id "de.undercouch.download" version "5.4.0"
 }
 
 ext {
@@ -166,10 +170,21 @@ dependencyCheck {
 }
 
 licenseReport {
-    renderers = [
-            new XmlReportRenderer("${project.name}-licenses.xml"),
-            new CsvCustomReportRenderer("${project.name}-licenses.csv"),
-            new JsonReportRenderer("${project.name}-licenses.json"),
-            new InventoryHtmlReportRenderer("${project.name}-licenses.html")
+    def licenseNormalizerBundlePath = "$buildDir/license-normalizer-bundle.json"
+
+    if (!file(licenseNormalizerBundlePath).exists()) {
+        download.run {
+            src 'https://raw.githubusercontent.com/th2-net/.github/main/license-compliance/gradle-license-report/license-normalizer-bundle.json'
+            dest "$buildDir/license-normalizer-bundle.json"
+            overwrite false
+        }
+    }
+
+    filters = [
+            new LicenseBundleNormalizer(licenseNormalizerBundlePath, false)
     ]
+    renderers = [                                                                                                                                                     new JsonReportRenderer('licenses.json', false),
+    ]
+    excludeOwnGroup = false
+    allowedLicensesFile = new URL("https://raw.githubusercontent.com/th2-net/.github/main/license-compliance/gradle-license-report/allowed-licenses.json")
 }
