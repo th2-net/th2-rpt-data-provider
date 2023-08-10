@@ -1,4 +1,6 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import com.github.jk1.license.filter.LicenseBundleNormalizer
+import com.github.jk1.license.render.JsonReportRenderer
 
 /*******************************************************************************
  * Copyright 2009-2023 Exactpro (Exactpro Systems Limited)
@@ -23,6 +25,8 @@ plugins {
     id 'com.palantir.docker' version '0.25.0'
     id "org.owasp.dependencycheck" version "8.3.1"
     id "com.gorylenko.gradle-git-properties" version "2.4.1"
+    id 'com.github.jk1.dependency-license-report' version '2.5'
+    id "de.undercouch.download" version "5.4.0"
 }
 
 ext {
@@ -158,4 +162,25 @@ dependencyCheck {
         nugetconfEnabled = false
         nodeEnabled = false
     }
+}
+
+licenseReport {
+    def licenseNormalizerBundlePath = "$buildDir/license-normalizer-bundle.json"
+
+    if (!file(licenseNormalizerBundlePath).exists()) {
+        download.run {
+            src 'https://raw.githubusercontent.com/th2-net/.github/main/license-compliance/gradle-license-report/license-normalizer-bundle.json'
+            dest "$buildDir/license-normalizer-bundle.json"
+            overwrite false
+        }
+    }
+
+    filters = [
+            new LicenseBundleNormalizer(licenseNormalizerBundlePath, false)
+    ]
+    renderers = [
+            new JsonReportRenderer('licenses.json', false),
+    ]
+    excludeOwnGroup = false
+    allowedLicensesFile = new URL("https://raw.githubusercontent.com/th2-net/.github/main/license-compliance/gradle-license-report/allowed-licenses.json")
 }
