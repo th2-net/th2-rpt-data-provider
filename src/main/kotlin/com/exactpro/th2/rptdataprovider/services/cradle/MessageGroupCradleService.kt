@@ -21,6 +21,7 @@ import com.exactpro.cradle.BookId
 import com.exactpro.cradle.CradleManager
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.FrameType
+import com.exactpro.cradle.PageInfo
 import com.exactpro.cradle.counters.Interval
 import com.exactpro.cradle.messages.GroupedMessageFilter
 import com.exactpro.cradle.messages.MessageFilter
@@ -70,12 +71,38 @@ class MessageGroupCradleService(
         // CradleStorage.getMessageCountersAsync add FrameType.getMillisInFrame to get the last next lest interval
         // Cradle should support null value for from / to Interval properties
         private val CRADLE_MAX_TIMESTAMP: Instant = Instant.ofEpochMilli(Long.MAX_VALUE).minusMillis(FrameType.values().asSequence().map(FrameType::getMillisInFrame).maxOf(Long::toLong))
+
+        // source interval changes to exclude intersection to next or previous page
+        private fun PageInfo.toInterval(): Interval = Interval(
+            started?.plusNanos(1) ?: Instant.MIN,
+            ended?.minusNanos(1) ?: Instant.MAX
+        )
+
+        private fun Interval.print(): String = "[$start, $end]"
+        private fun max(instantA: Instant, instantB: Instant):Instant = if (instantA.isAfter(instantB)) {
+            instantA
+        } else {
+            instantB
+        }
+
+        private fun min(instantA: Instant, instantB: Instant):Instant = if (instantA.isBefore(instantB)) {
+            instantA
+        } else {
+            instantB
+        }
+
+        private fun intersection(intervalA: Interval, intervalB: Interval): Interval {
+            require(!intervalA.start.isAfter(intervalB.end)
+                    && !intervalB.start.isAfter(intervalA.end)) {
+                "${intervalA.print()}, ${intervalB.print()} intervals aren't intersection"
+            }
+            return Interval(max(intervalA.start, intervalB.start), min(intervalA.end, intervalB.end))
+        }
     }
 
     private val aliasToGroupCacheSize = configuration.aliasToGroupCacheSize.value.toLong()
 
     private val bookToCache = ConcurrentHashMap<String, Cache<String, String>>()
-
 
     override suspend fun getMessageBatches(
         filter: MessageFilter
@@ -150,54 +177,116 @@ class MessageGroupCradleService(
         logTime("getSessionGroup (book=${bookId.name}, from=${from}, to=${to}, session alias=${sessionAlias})") {
             val interval = createInterval(from, to)
 
-            K_LOGGER.debug { "Strat searching '$sessionAlias' session alias counters in cradle in [${interval.start}, ${interval.end}] interval, ${FrameType.TYPE_100MS} frame type" }
-            val counter = storage.getMessageCountersAsync(bookId, sessionAlias, direction, FrameType.TYPE_100MS, interval)
-                .await().asSequence().firstOrNull()
+            val sessionGroup: String? = seachSessionGorupByStatistics(sessionAlias, interval, bookId, direction, cache)
+                ?: seachSessionGorupByPage(sessionAlias, interval, bookId, cache)
 
-            cache.get(sessionAlias)?.let { group ->
-                K_LOGGER.debug { "Another coroutine has dound '$sessionAlias' session alias to '$group' group pair" }
-                return@logTime group
+            if (sessionGroup == null) {
+                cache.get(sessionAlias)?.let { group ->
+                    K_LOGGER.debug { "Another coroutine has dound '$sessionAlias' session alias to '$group' group pair" }
+                    return@logTime group
+                } ?: error("Mapping between a session group and the '${sessionAlias}' alias isn't found, book: ${bookId.name}, [from: $from, to: $to]")
+            } else {
+                return@logTime sessionGroup
             }
+        }
+    }
 
-            if (counter == null) {
-                K_LOGGER.info { "'$sessionAlias' session alias isn't in [${interval.start}, ${interval.end}] interval" }
-                return@logTime null
+    private suspend fun seachSessionGorupByStatistics(
+        sessionAlias: String,
+        interval: Interval,
+        bookId: BookId,
+        direction: Direction,
+        cache: Cache<String, String>
+    ): String? {
+        K_LOGGER.debug { "Strat searching '$sessionAlias' session alias counters in cradle in [${interval.start}, ${interval.end}] interval, ${FrameType.TYPE_100MS} frame type" }
+        val counter = storage.getMessageCountersAsync(bookId, sessionAlias, direction, FrameType.TYPE_100MS, interval)
+            .await().asSequence().firstOrNull()
+
+        cache.get(sessionAlias)?.let { group ->
+            K_LOGGER.debug { "Another coroutine has dound '$sessionAlias' session alias to '$group' group pair" }
+            return group
+        }
+
+        if (counter == null) {
+            K_LOGGER.info { "'$sessionAlias' session alias isn't in [${interval.start}, ${interval.end}] interval" }
+            return null
+        }
+
+        val shortInterval = Interval(counter.frameStart, counter.frameStart.plusMillis(100))
+        return seachSessionGorupByGroupedMessage(sessionAlias, shortInterval, bookId, cache).also {
+            if (it == null) {
+                K_LOGGER.warn { "Mapping between a session group and the '${sessionAlias}' alias isn't found by statistics, book: ${bookId.name}, interval: [${interval.start}, ${interval.end}] " }
             }
+        }
+    }
 
-            val shortInterval = Interval(counter.frameStart, counter.frameStart.plusMillis(100))
-            K_LOGGER.debug { "Strat searching session group by '$sessionAlias' alias in cradle in (${shortInterval.start}, ${shortInterval.end}) interval" }
-            storage.getSessionGroupsAsync(bookId, shortInterval).await().asSequence()
-                .flatMap { group ->
-                    storage.getGroupedMessageBatches(
-                        GroupedMessageFilter.builder()
-                            .bookId(bookId)
-                            .timestampFrom().isGreaterThanOrEqualTo(shortInterval.start)
-                            .timestampTo().isLessThanOrEqualTo(shortInterval.end)
-                            .groupName(group)
-                            .build()
-                    ).asSequence()
-                }.forEach searchInBatch@{ batch ->
-                    cache.get(sessionAlias)?.let { group ->
-                        K_LOGGER.debug { "Another coroutine has dound '$sessionAlias' session alias to '$group' group pair" }
-                        return@logTime group
-                    }
-                    K_LOGGER.debug { "Search session group by '$sessionAlias' alias in grouped batch" }
-                    batch.messages.forEach { message ->
-                        cache.putIfAbsent(message.sessionAlias, batch.group) ?: run {
-                            K_LOGGER.info { "Put '${message.sessionAlias}' session alias to '${batch.group}' group to cache" }
-                            if (sessionAlias == message.sessionAlias) {
-                                K_LOGGER.debug { "Found '${message.sessionAlias}' session alias to '${batch.group}' group pair" }
-                            }
+    private suspend fun seachSessionGorupByPage(
+        sessionAlias: String,
+        interval: Interval,
+        bookId: BookId,
+        cache: Cache<String, String>
+    ): String? {
+        K_LOGGER.debug { "Strat searching '$sessionAlias' session alias in cradle in [${interval.start}, ${interval.end}] interval by page" }
+        // getPagesAsync method is used instead of getPage because the first one return all pages touched by interval
+        val pageInterval = storage.getPagesAsync(bookId, interval).await().asSequence()
+            .map { pageInfo -> pageInfo.toInterval() }
+            .filter { pageInterval ->
+                storage.getSessionAliases(bookId, pageInterval).asSequence()
+                    .any { alias -> alias == sessionAlias }
+            }.firstOrNull()
+
+        cache.get(sessionAlias)?.let { group ->
+            K_LOGGER.debug { "Another coroutine has dound '$sessionAlias' session alias to '$group' group pair" }
+            return group
+        }
+
+        if (pageInterval == null) {
+            K_LOGGER.debug { "'$sessionAlias' session alias isn't in [${interval.start}, ${interval.end}] interval" }
+            return null
+        }
+
+        val targetInterval = intersection(interval, pageInterval)
+
+        return seachSessionGorupByGroupedMessage(sessionAlias, targetInterval, bookId, cache).also {
+            if (it == null) {
+                K_LOGGER.warn { "Mapping between a session group and the '${sessionAlias}' alias isn't found by page, book: ${bookId.name}, interval: [${interval.start}, ${interval.end}] " }
+            }
+        }
+    }
+
+    private suspend fun seachSessionGorupByGroupedMessage(
+        sessionAlias: String,
+        shortInterval: Interval,
+        bookId: BookId,
+        cache: Cache<String, String>
+    ): String? {
+        K_LOGGER.debug { "Strat searching session group by '$sessionAlias' alias in cradle in (${shortInterval.start}, ${shortInterval.end}) interval" }
+        storage.getSessionGroupsAsync(bookId, shortInterval).await().asSequence()
+            .flatMap { group ->
+                storage.getGroupedMessageBatches(
+                    GroupedMessageFilter.builder()
+                        .bookId(bookId)
+                        .timestampFrom().isGreaterThanOrEqualTo(shortInterval.start)
+                        .timestampTo().isLessThanOrEqualTo(shortInterval.end)
+                        .groupName(group)
+                        .build()
+                ).asSequence()
+            }.forEach searchInBatch@{ batch ->
+                cache.get(sessionAlias)?.let { group ->
+                    K_LOGGER.debug { "Another coroutine has dound '$sessionAlias' session alias to '$group' group pair" }
+                    return group
+                }
+                K_LOGGER.debug { "Search session group by '$sessionAlias' alias in grouped batch" }
+                batch.messages.forEach { message ->
+                    cache.putIfAbsent(message.sessionAlias, batch.group) ?: run {
+                        K_LOGGER.info { "Put '${message.sessionAlias}' session alias to '${batch.group}' group to cache" }
+                        if (sessionAlias == message.sessionAlias) {
+                            K_LOGGER.debug { "Found '${message.sessionAlias}' session alias to '${batch.group}' group pair" }
                         }
                     }
                 }
-
-            cache.get(sessionAlias)?.let { group ->
-                K_LOGGER.debug { "Another coroutine has dound '$sessionAlias' session alias to '$group' group pair" }
-                return@logTime group
-            } ?: error("Mapping between a session group and the '${sessionAlias}' alias isn't found, book: ${bookId.name}, [from: $from, to: $to]")
-
-        }
+            }
+        return null
     }
 
     private suspend fun getSessionGroupSuspend(
