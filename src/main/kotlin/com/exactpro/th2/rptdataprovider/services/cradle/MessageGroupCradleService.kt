@@ -57,6 +57,19 @@ class MessageGroupCradleService(
 
         private val GET_MAP_ALIAS_TO_GROUP_ASYNC_METRIC: Metrics =
             Metrics("map_session_aslias_to_group_async", "findPage;getSessionGroups;getGroupedMessageBatches")
+
+        private fun createInterval(from: Instant?, to: Instant?): Interval {
+            return Interval(
+                if (from == null || from.isBefore(CRADLE_MIN_TIMESTAMP)) CRADLE_MIN_TIMESTAMP else from,
+                if (to == null || to.isAfter(CRADLE_MAX_TIMESTAMP)) CRADLE_MAX_TIMESTAMP else to,
+            )
+        }
+
+        private val CRADLE_MIN_TIMESTAMP: Instant = Instant.ofEpochMilli(0L)
+        // FIXME: minusMillis(FrameType.values().asSequence().map(FrameType::getMillisInFrame).maxOf(Long::toLong)) is used as workaround for `long overflow` problem in CradleStorage.getMessageCountersAsync method.
+        // CradleStorage.getMessageCountersAsync add FrameType.getMillisInFrame to get the last next lest interval
+        // Cradle should support null value for from / to Interval properties
+        private val CRADLE_MAX_TIMESTAMP: Instant = Instant.ofEpochMilli(Long.MAX_VALUE).minusMillis(FrameType.values().asSequence().map(FrameType::getMillisInFrame).maxOf(Long::toLong))
     }
 
     private val aliasToGroupCacheSize = configuration.aliasToGroupCacheSize.value.toLong()
@@ -135,7 +148,7 @@ class MessageGroupCradleService(
         cache: Cache<String, String>
     ): String? = logMetrics(GET_MAP_ALIAS_TO_GROUP_ASYNC_METRIC) {
         logTime("getSessionGroup (book=${bookId.name}, from=${from}, to=${to}, session alias=${sessionAlias})") {
-            val interval = Interval(from ?: Instant.MIN, to ?: Instant.MAX)
+            val interval = createInterval(from, to)
 
             K_LOGGER.debug { "Strat searching '$sessionAlias' session alias counters in cradle in [${interval.start}, ${interval.end}] interval, ${FrameType.TYPE_100MS} frame type" }
             val counter = storage.getMessageCountersAsync(bookId, sessionAlias, direction, FrameType.TYPE_100MS, interval)
