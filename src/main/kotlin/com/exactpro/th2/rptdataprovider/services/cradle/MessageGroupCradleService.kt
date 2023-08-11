@@ -74,8 +74,8 @@ class MessageGroupCradleService(
 
         // source interval changes to exclude intersection to next or previous page
         private fun PageInfo.toInterval(): Interval = Interval(
-            started?.plusNanos(1) ?: Instant.MIN,
-            ended?.minusNanos(1) ?: Instant.MAX
+            started?.plusNanos(1) ?: CRADLE_MIN_TIMESTAMP,
+            ended?.minusNanos(1) ?: CRADLE_MAX_TIMESTAMP
         )
 
         private fun Interval.print(): String = "[$start, $end]"
