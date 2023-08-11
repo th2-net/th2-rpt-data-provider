@@ -212,7 +212,7 @@ class MessageGroupCradleService(
             return null
         }
 
-        val shortInterval = Interval(counter.frameStart, counter.frameStart.plusMillis(100))
+        val shortInterval = Interval(counter.frameStart, counter.frameStart.plusMillis(FrameType.TYPE_100MS.millisInFrame))
         return seachSessionGorupByGroupedMessage(sessionAlias, shortInterval, bookId, cache).also {
             if (it == null) {
                 K_LOGGER.warn { "Mapping between a session group and the '${sessionAlias}' alias isn't found by statistics, book: ${bookId.name}, interval: [${interval.start}, ${interval.end}] " }
@@ -227,7 +227,6 @@ class MessageGroupCradleService(
         cache: Cache<String, String>
     ): String? {
         K_LOGGER.debug { "Strat searching '$sessionAlias' session alias in cradle in [${interval.start}, ${interval.end}] interval by page" }
-        // getPagesAsync method is used instead of getPage because the first one return all pages touched by interval
         val pageInterval = storage.getPagesAsync(bookId, interval).await().asSequence()
             .map { pageInfo -> pageInfo.toInterval() }
             .filter { pageInterval ->
@@ -241,7 +240,7 @@ class MessageGroupCradleService(
         }
 
         if (pageInterval == null) {
-            K_LOGGER.debug { "'$sessionAlias' session alias isn't in [${interval.start}, ${interval.end}] interval" }
+            K_LOGGER.info { "'$sessionAlias' session alias isn't in [${interval.start}, ${interval.end}] interval" }
             return null
         }
 
