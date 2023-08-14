@@ -1,20 +1,25 @@
-/*******************************************************************************
- * Copyright (c) 2022-2022, Exactpro Systems LLC
- * www.exactpro.com
- * Build Software to Test Software
+/*
+ * Copyright 2022-2023 Exactpro (Exactpro Systems Limited)
  *
- * All rights reserved.
- * This is unpublished, licensed software, confidential and proprietary
- * information which is the property of Exactpro Systems LLC or its licensors.
- ******************************************************************************/
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package handlers.events
 
 import com.exactpro.cradle.BookId
-import com.exactpro.cradle.PageId
 import com.exactpro.cradle.TimeRelation
-import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEvent
+import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.th2.rptdataprovider.*
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
@@ -83,7 +88,7 @@ class TimestampGeneratorTest {
 
 
     @Test
-    fun `testTimestampInOneDay`() {
+    fun testTimestampInOneDay() {
         val request = getSearchRequest(startTimestamp, endTimestamp)
         val generator = TimeIntervalGenerator(request, null, null)
         val result = generator.toList()
@@ -101,7 +106,7 @@ class TimestampGeneratorTest {
     }
 
     @Test
-    fun `testTimestampInOneDayReverse`() {
+    fun testTimestampInOneDayReverse() {
         val request = getSearchRequest(endTimestamp, startTimestamp, TimeRelation.BEFORE)
         val generator = TimeIntervalGenerator(request, null, null)
         val result = generator.toList()
@@ -119,7 +124,7 @@ class TimestampGeneratorTest {
     }
 
     @Test
-    fun `testTimestampInDifferentDays`() {
+    fun testTimestampInDifferentDays() {
         val startPlusOneDay = startTimestamp.plus(1, ChronoUnit.DAYS)
 
         val request = getSearchRequest(startTimestamp, startPlusOneDay)
@@ -147,7 +152,7 @@ class TimestampGeneratorTest {
 
 
     @Test
-    fun `testTimestampInDifferentDaysReverse`() {
+    fun testTimestampInDifferentDaysReverse() {
         val startMinusOneDay = startTimestamp.minus(1, ChronoUnit.DAYS)
 
         val request = getSearchRequest(startTimestamp, startMinusOneDay, TimeRelation.BEFORE)
@@ -174,7 +179,7 @@ class TimestampGeneratorTest {
     }
 
     @Test
-    fun `testResumeIdSingleInOneDay`() {
+    fun testResumeIdSingleInOneDay() {
         val request = getSearchRequest(startTimestamp, endTimestamp, resumeId = providerEventIdSingle)
 
         val eventStart = startTimestamp.plusSeconds(10)
@@ -198,7 +203,7 @@ class TimestampGeneratorTest {
 
 
     @Test
-    fun `testResumeIdSingleInTwoDays`() {
+    fun testResumeIdSingleInTwoDays() {
         val startPlusOneDay = startTimestamp.plus(1, ChronoUnit.DAYS)
 
         val request = getSearchRequest(null, startPlusOneDay, resumeId = providerEventIdSingle)

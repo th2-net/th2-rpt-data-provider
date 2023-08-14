@@ -1,5 +1,5 @@
-﻿/*******************************************************************************
- * Copyright 2021-2021 Exactpro (Exactpro Systems Limited)
+﻿/*
+ * Copyright 2021-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
@@ -39,14 +39,14 @@ import mu.KotlinLogging
 import java.time.Instant
 
 
-class MessageExtractor(
-    context: Context,
-    val request: SseMessageSearchRequest,
+class MessageExtractor<B, G, RM, PM>(
+    context: Context<B, G, RM, PM>,
+    val request: SseMessageSearchRequest<RM, PM>,
     stream: StreamName,
     externalScope: CoroutineScope,
     messageFlowCapacity: Int,
     private val pipelineStatus: PipelineStatus
-) : PipelineComponent(
+) : PipelineComponent<B, G, RM, PM>(
     context, request, externalScope, stream, messageFlowCapacity = messageFlowCapacity
 ) {
 

@@ -38,7 +38,7 @@ data class StreamInfo(val streamPointer: StreamName, @JsonIgnore val messageId: 
             streamPointer.name,
             streamPointer.direction,
             Instant.ofEpochMilli(0),
-            -1
+            0
         )
     }
 

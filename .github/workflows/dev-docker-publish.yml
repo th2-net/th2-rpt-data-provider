@@ -5,7 +5,6 @@ on:
     branches-ignore:
       - master
       - version-*
-      - dev-version-*
 
 jobs:
   build-job:

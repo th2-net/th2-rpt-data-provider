@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,12 +12,14 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package com.exactpro.th2.rptdataprovider.server
 
 import com.exactpro.th2.common.schema.grpc.router.GrpcRouter
+import com.exactpro.th2.dataprovider.grpc.MessageData
 import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.grpc.RptDataProviderGrpcHandler
 import io.ktor.server.engine.*
 import io.ktor.util.*
@@ -29,9 +31,13 @@ import java.util.concurrent.TimeUnit
 @InternalAPI
 @EngineAPI
 @ExperimentalCoroutinesApi
-class GrpcServer(private val context: Context, grpcRouter: GrpcRouter) {
+class GrpcServer<B, G, RM, PM>(
+    private val context: Context<B, G, RM, PM>,
+    grpcRouter: GrpcRouter,
+    converterFun: (MessageWithMetadata<RM, PM>) -> List<MessageData>
+) {
 
-    private val reportDataProviderServer = RptDataProviderGrpcHandler(context)
+    private val reportDataProviderServer = RptDataProviderGrpcHandler(context, converterFun)
     private val server = grpcRouter.startServer(reportDataProviderServer)
 
     companion object {

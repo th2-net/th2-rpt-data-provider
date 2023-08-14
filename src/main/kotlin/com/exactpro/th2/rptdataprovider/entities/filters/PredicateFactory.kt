@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,24 +12,18 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package com.exactpro.th2.rptdataprovider.entities.filters
 
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterInfo
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
-import mu.KotlinLogging
 
 class PredicateFactory<T>(
-    private val filters: Map<FilterInfo, suspend (FilterRequest, CradleService) -> Filter<T>>,
+    filters: Map<FilterInfo, suspend (FilterRequest, CradleService) -> Filter<T>>,
     private val cradleService: CradleService
 ) {
-
-    companion object {
-        private val logger = KotlinLogging.logger { }
-    }
-
     private var containedFiltersInfo: Map<String, FilterInfo> = mapOf()
 
     private var containedFiltersInit: Map<String, suspend (FilterRequest, CradleService) -> Filter<T>>
@@ -54,7 +48,7 @@ class PredicateFactory<T>(
         return FilterPredicate(filtersList)
     }
 
-    suspend fun getEmptyPredicate(): FilterPredicate<T> {
+    fun getEmptyPredicate(): FilterPredicate<T> {
         return FilterPredicate(emptyList())
     }
 

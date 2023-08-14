@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2022-2022 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2022-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package com.exactpro.th2.rptdataprovider.handlers.messages.helpers
 
@@ -21,14 +21,13 @@ import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepObject
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import io.prometheus.client.Histogram
-import mu.KotlinLogging
+import kotlin.time.DurationUnit
 import kotlin.time.ExperimentalTime
 import kotlin.time.measureTimedValue
 
-class StreamHolder(val messageStream: PipelineComponent) {
+class StreamHolder(val messageStream: PipelineComponent<*, *, *, *>) {
 
     companion object {
-        private val logger = KotlinLogging.logger { }
         private val pullFromStream = Histogram.build(
             "th2_stream_pull_time", "Time of stream pull"
         ).buckets(.0001, .0005, .001, .005, .01)
@@ -72,7 +71,7 @@ class StreamHolder(val messageStream: PipelineComponent) {
                     ?: throw InvalidInitializationException("StreamHolder ${messageStream.streamName} need initialization")
             }
         }.let {
-            labelMetric.observe(it.duration.inSeconds)
+            labelMetric.observe(it.duration.toDouble(DurationUnit.SECONDS))
             it.value
         }
     }

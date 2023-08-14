@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,20 +12,24 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package com.exactpro.th2.rptdataprovider
 
 
+import com.exactpro.cradle.filters.ComparisonOperation
+import com.exactpro.cradle.messages.GroupedMessageFilter
 import com.exactpro.cradle.messages.MessageFilter
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.testevents.*
 import com.exactpro.th2.common.grpc.ConnectionID
 import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.message.toTimestamp
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.MessageId
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.prometheus.client.Gauge
 import io.prometheus.client.Histogram
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope.coroutineContext
 import kotlinx.coroutines.withContext
@@ -59,17 +63,35 @@ fun MessageFilter.convertToString(): String {
             "order=${filter.order}"
 }
 
-suspend fun <T> logTime(methodName: String, lambda: suspend () -> T): T? {
-    return withContext(coroutineContext) {
-        var result: T? = null
+fun MessageFilter.toGroupedMessageFilter(group: String?): GroupedMessageFilter = GroupedMessageFilter.builder().also { builder ->
+     builder.bookId(bookId)
+        .pageId(pageId)
+        .groupName(group)
+        .order(order)
 
-        logger.debug { "cradle: $methodName is starting" }
-
-        measureTimeMillis { result = lambda.invoke() }
-            .also { logger.debug { "cradle: $methodName took ${it}ms" } }
-
-        result
+    when(timestampFrom?.operation) {
+        null -> { /* do noting */ }
+        ComparisonOperation.GREATER -> builder.timestampFrom().isGreaterThan(timestampFrom.value)
+        ComparisonOperation.GREATER_OR_EQUALS -> builder.timestampFrom().isGreaterThanOrEqualTo(timestampFrom.value)
+        else -> error("The '${timestampFrom.operation}' operation isn't supported")
     }
+    when(timestampTo?.operation) {
+        null -> { /* do noting */ }
+        ComparisonOperation.LESS -> builder.timestampTo().isLessThan(timestampTo.value)
+        ComparisonOperation.LESS_OR_EQUALS -> builder.timestampTo().isLessThanOrEqualTo(timestampTo.value)
+        else -> error("The '${timestampTo.operation}' operation isn't supported")
+    }
+}.build()
+
+suspend fun <T> logTime(methodName: String, lambda: suspend () -> T): T? {
+    var result: T?
+
+    logger.debug { "cradle: $methodName is starting" }
+
+    measureTimeMillis { result = lambda.invoke() }
+        .also { logger.debug { "cradle: $methodName took ${it}ms" } }
+
+    return result
 }
 
 data class Metrics(
@@ -123,6 +145,7 @@ data class Metrics(
     }
 }
 
+@OptIn(DelicateCoroutinesApi::class)
 suspend fun <T> logMetrics(metrics: Metrics, lambda: suspend () -> T): T? {
     return withContext(coroutineContext) {
         val timer = metrics.startObserve()
@@ -175,12 +198,19 @@ fun StoredTestEventBatch.tryToGetTestEvents(parentEventId: StoredTestEventId? = 
 }
 
 
-fun StoredMessageId.convertToProto(): MessageID {
-    return MessageID.newBuilder()
+fun StoredMessageId.convertToProto(): MessageID = MessageID.newBuilder()
+    .setSequence(this.sequence)
+    .setDirection(cradleDirectionToGrpc(direction))
+    .setConnectionId(ConnectionID.newBuilder().setSessionAlias(this.sessionAlias))
+    .setTimestamp(timestamp.toTimestamp())
+    .setBookName(bookId.name)
+    .build()
+
+fun StoredMessageId.convertToTransport(): MessageId {
+    return MessageId.builder()
         .setSequence(this.sequence)
-        .setDirection(cradleDirectionToGrpc(direction))
-        .setConnectionId(ConnectionID.newBuilder().setSessionAlias(this.sessionAlias))
-        .setTimestamp(timestamp.toTimestamp())
-        .setBookName(bookId.name)
+        .setDirection(cradleDirectionToTransport(direction))
+        .setSessionAlias(this.sessionAlias)
+        .setTimestamp(timestamp)
         .build()
 }

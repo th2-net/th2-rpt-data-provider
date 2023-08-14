@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package com.exactpro.th2.rptdataprovider.grpc
 
@@ -21,14 +21,24 @@ import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.utils.CradleIdException
 import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.grpc.MessageID
-import com.exactpro.th2.dataprovider.grpc.*
+import com.exactpro.th2.dataprovider.grpc.DataProviderGrpc
+import com.exactpro.th2.dataprovider.grpc.EventData
+import com.exactpro.th2.dataprovider.grpc.EventSearchRequest
+import com.exactpro.th2.dataprovider.grpc.FilterInfo
+import com.exactpro.th2.dataprovider.grpc.FilterName
+import com.exactpro.th2.dataprovider.grpc.IsMatched
+import com.exactpro.th2.dataprovider.grpc.ListFilterName
+import com.exactpro.th2.dataprovider.grpc.MatchRequest
+import com.exactpro.th2.dataprovider.grpc.MessageData
+import com.exactpro.th2.dataprovider.grpc.MessageSearchRequest
+import com.exactpro.th2.dataprovider.grpc.StreamResponse
+import com.exactpro.th2.dataprovider.grpc.StringList
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.CodecResponseException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
-import com.exactpro.th2.rptdataprovider.entities.mappers.MessageMapper
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.sse.GrpcWriter
@@ -40,24 +50,35 @@ import com.google.protobuf.MessageOrBuilder
 import com.google.protobuf.TextFormat
 import io.grpc.Status
 import io.grpc.stub.StreamObserver
-import io.ktor.application.*
 import io.ktor.server.engine.*
 import io.ktor.util.*
 import io.prometheus.client.Counter
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.InternalCoroutinesApi
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import mu.KotlinLogging
 import org.apache.commons.lang3.exception.ExceptionUtils
-import java.util.concurrent.Executors
 import java.time.Instant
+import java.util.concurrent.Executors
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
-
-private typealias Streaming = suspend (StreamWriter) -> Unit
 
 @EngineAPI
 @InternalAPI
 @ExperimentalCoroutinesApi
-class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrpc.DataProviderImplBase() {
+class RptDataProviderGrpcHandler<B, G, RM, PM>(
+    private val context: Context<B, G, RM, PM>,
+    private val converterFun: (MessageWithMetadata<RM, PM>) -> List<MessageData>
+) : DataProviderGrpc.DataProviderImplBase() {
 
     companion object {
 
@@ -97,7 +118,6 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     private val eventCache = this.context.eventCache
     private val messageCache = this.context.messageCache
     private val checkRequestAliveDelay = context.configuration.checkRequestsAliveDelay.value.toLong()
-    private val getEventsLimit = this.context.configuration.eventSearchChunkSize.value.toInt()
 
     private val searchEventsHandler = this.context.searchEventsHandler
     private val searchMessagesHandler = this.context.searchMessagesHandler
@@ -155,7 +175,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
                                 handleSseRequest(
                                     responseObserver as StreamObserver<StreamResponse>,
                                     context,
-                                    calledFun.invoke() as Streaming
+                                    calledFun.invoke() as suspend (StreamWriter<RM, PM>) -> Unit
                                 )
                             } else {
                                 handleRestApiRequest(responseObserver, context, calledFun as suspend () -> T)
@@ -218,7 +238,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     private suspend fun handleSseRequest(
         responseObserver: StreamObserver<StreamResponse>,
         grpcContext: io.grpc.Context,
-        calledFun: Streaming
+        calledFun: suspend (StreamWriter<RM, PM>) -> Unit
     ) {
         coroutineScope {
             val job = launch {
@@ -228,8 +248,8 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
             val grpcWriter = GrpcWriter(
                 context.configuration.grpcWriterMessageBuffer.value.toInt(),
                 responseObserver,
-                context.jacksonMapper,
-                this
+                this,
+                converterFun
             )
 
             try {
@@ -267,7 +287,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
                     messageIdWithoutSubsequence.sequence
                 ).toString()
             ).let {
-                MessageMapper.convertToGrpcMessageData(MessageWithMetadata(it, request))
+                converterFun(MessageWithMetadata(it, request))
             }
         }
     }
@@ -287,7 +307,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     @FlowPreview
     override fun searchMessages(grpcRequest: MessageSearchRequest, responseObserver: StreamObserver<StreamResponse>) {
         handleRequest(responseObserver, "grpc search message", useStream = true, request = grpcRequest) {
-            suspend fun(streamWriter: StreamWriter) {
+            suspend fun(streamWriter: StreamWriter<RM, PM>) {
                 val filterPredicate = messageFiltersPredicateFactory.build(grpcRequest.filtersList)
                 val request = SseMessageSearchRequest(grpcRequest, filterPredicate, BookId(""))
                 request.checkRequest()
@@ -301,7 +321,7 @@ class RptDataProviderGrpcHandler(private val context: Context) : DataProviderGrp
     override fun searchEvents(grpcRequest: EventSearchRequest, responseObserver: StreamObserver<StreamResponse>) {
         handleRequest(responseObserver, "grpc search events", useStream = true, request = grpcRequest) {
 
-            suspend fun(streamWriter: StreamWriter) {
+            suspend fun(streamWriter: StreamWriter<RM, PM>) {
                 val filterPredicate = eventFiltersPredicateFactory.build(grpcRequest.filtersList)
                 val request = SseEventSearchRequest(grpcRequest, filterPredicate, BookId(""))
                 request.checkRequest()

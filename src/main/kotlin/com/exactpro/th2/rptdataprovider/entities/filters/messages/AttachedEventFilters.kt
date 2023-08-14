@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,11 +12,10 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package com.exactpro.th2.rptdataprovider.entities.filters.messages
 
-import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
 import com.exactpro.th2.rptdataprovider.entities.filters.Filter
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterRequest
@@ -29,16 +28,16 @@ import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import mu.KotlinLogging
 
-class AttachedEventFilters private constructor(
+class AttachedEventFilters<RM, PM> private constructor(
     private var messagesFromAttachedId: Set<String>,
     override var negative: Boolean = false,
     override var conjunct: Boolean = false
-) : Filter<MessageWithMetadata> {
+) : Filter<MessageWithMetadata<RM, PM>> {
 
     companion object {
         private val logger = KotlinLogging.logger { }
 
-        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<MessageWithMetadata> {
+        suspend fun <RM, PM> build(filterRequest: FilterRequest, cradleService: CradleService): Filter<MessageWithMetadata<RM, PM>> {
             return AttachedEventFilters(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
@@ -54,7 +53,7 @@ class AttachedEventFilters private constructor(
                         (batch?.getTestEvent(id.eventId) ?: cradleService.getEventSuspend(id.eventId)
                             ?.asSingle())?.messages?.map(Any::toString)
                             ?.toSet()
-                            ?: emptySet<String>()
+                            ?: emptySet()
                     }
                     ?.reduce { set, element ->
                         if (filterRequest.isConjunct()) {
@@ -86,7 +85,7 @@ class AttachedEventFilters private constructor(
         )
     }
 
-    override fun match(element: MessageWithMetadata): Boolean {
+    override fun match(element: MessageWithMetadata<RM, PM>): Boolean {
         return negative.xor(messagesFromAttachedId.contains(element.message.messageId))
     }
 

@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package com.exactpro.th2.rptdataprovider.entities.filters.events
 
@@ -24,6 +24,7 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterTyp
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
+import java.util.*
 
 class EventStatusFilter private constructor(
     private var status: Boolean, override var negative: Boolean = false, override var conjunct: Boolean = false
@@ -32,8 +33,9 @@ class EventStatusFilter private constructor(
         private const val failedStatus = "failed"
         private const val passedStatus = "passed"
 
-        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<BaseEventEntity> {
-            val status = filterRequest.getValues()?.first()?.toLowerCase()
+        @Suppress("RedundantSuspendModifier")
+        suspend fun build(filterRequest: FilterRequest, @Suppress("UNUSED_PARAMETER") cradleService: CradleService): Filter<BaseEventEntity> {
+            val status = filterRequest.getValues()?.first()?.lowercase(Locale.getDefault())
                 ?: throw InvalidRequestException("'${filterInfo.name}-value' cannot be empty")
 
             if (failedStatus != status && passedStatus != status) {

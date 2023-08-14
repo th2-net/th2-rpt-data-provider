@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package com.exactpro.th2.rptdataprovider.handlers
 
@@ -20,20 +20,48 @@ package com.exactpro.th2.rptdataprovider.handlers
 import com.exactpro.cradle.Order
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.TimeRelation.AFTER
-import com.exactpro.cradle.testevents.*
-import com.exactpro.th2.rptdataprovider.*
+import com.exactpro.cradle.testevents.StoredTestEvent
+import com.exactpro.cradle.testevents.TestEventFilter
+import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.requests.SseEventSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedEventInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
+import com.exactpro.th2.rptdataprovider.isAfterOrEqual
+import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
+import com.exactpro.th2.rptdataprovider.maxInstant
+import com.exactpro.th2.rptdataprovider.minInstant
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
+import com.exactpro.th2.rptdataprovider.tryToGetTestEvents
 import io.prometheus.client.Counter
-import kotlinx.coroutines.*
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.channels.Channel.Factory.BUFFERED
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.buffer
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.flatMapConcat
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.takeWhile
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import mu.KotlinLogging
 import java.time.Instant
 import java.time.LocalTime
@@ -43,7 +71,7 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.coroutineContext
 
-class SearchEventsHandler(private val context: Context) {
+class SearchEventsHandler(context: Context<*, *, *, *>) {
 
     companion object {
         private val logger = KotlinLogging.logger { }
@@ -87,7 +115,7 @@ class SearchEventsHandler(private val context: Context) {
 
 
     private suspend fun keepAlive(
-        writer: StreamWriter,
+        writer: StreamWriter<*, *>,
         lastScannedObjectInfo: LastScannedObjectInfo,
         counter: AtomicLong
     ) {
@@ -268,7 +296,7 @@ class SearchEventsHandler(private val context: Context) {
 
     @ExperimentalCoroutinesApi
     @FlowPreview
-    suspend fun searchEventsSse(request: SseEventSearchRequest, writer: StreamWriter) {
+    suspend fun searchEventsSse(request: SseEventSearchRequest, writer: StreamWriter<*, *>) {
         coroutineScope {
 
             val lastScannedObject = LastScannedEventInfo()

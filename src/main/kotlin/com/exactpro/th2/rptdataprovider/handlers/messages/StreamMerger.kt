@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2021-2021 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2021-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
@@ -31,22 +31,22 @@ import com.exactpro.th2.rptdataprovider.handlers.messages.helpers.MultipleStream
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import kotlinx.coroutines.*
-import kotlinx.coroutines.sync.Mutex
 import mu.KotlinLogging
 import java.time.Instant
 import kotlin.coroutines.coroutineContext
+import kotlin.time.DurationUnit
 import kotlin.time.ExperimentalTime
 import kotlin.time.measureTimedValue
 
 //FIXME: Check stream stop condition and streaminfo object
-class StreamMerger(
-    context: Context,
-    searchRequest: SseMessageSearchRequest,
+class StreamMerger<B, G, RM, PM>(
+    context: Context<B, G, RM, PM>,
+    searchRequest: SseMessageSearchRequest<RM, PM>,
     externalScope: CoroutineScope,
-    pipelineStreams: List<PipelineComponent>,
+    pipelineStreams: List<PipelineComponent<B, G, RM, PM>>,
     messageFlowCapacity: Int,
     private val pipelineStatus: PipelineStatus
-) : PipelineComponent(context, searchRequest, externalScope, messageFlowCapacity = messageFlowCapacity) {
+) : PipelineComponent<B, G, RM, PM>(context, searchRequest, externalScope, messageFlowCapacity = messageFlowCapacity) {
 
     companion object {
         private val logger = KotlinLogging.logger { }
@@ -118,7 +118,7 @@ class StreamMerger(
                 val nextMessage = measureTimedValue {
                     getNextMessage()
                 }.let {
-                    StreamWriter.setMerging(it.duration.inMilliseconds.toLong())
+                    StreamWriter.setMerging(it.duration.toDouble(DurationUnit.MILLISECONDS).toLong())
                     it.value
                 }
 

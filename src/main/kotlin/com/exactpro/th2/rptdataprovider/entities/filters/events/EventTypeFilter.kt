@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package com.exactpro.th2.rptdataprovider.entities.filters.events
 
@@ -24,6 +24,7 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterTyp
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
+import java.util.*
 
 class EventTypeFilter private constructor(
     private var type: List<String>,
@@ -32,7 +33,8 @@ class EventTypeFilter private constructor(
 ) : Filter<BaseEventEntity> {
 
     companion object {
-        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<BaseEventEntity> {
+        @Suppress("RedundantSuspendModifier")
+        suspend fun build(filterRequest: FilterRequest, @Suppress("UNUSED_PARAMETER") cradleService: CradleService): Filter<BaseEventEntity> {
             return EventTypeFilter(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
@@ -54,7 +56,7 @@ class EventTypeFilter private constructor(
 
     override fun match(element: BaseEventEntity): Boolean {
         val predicate: (String) -> Boolean = { item ->
-            element.eventType.toLowerCase().contains(item.toLowerCase())
+            element.eventType.lowercase(Locale.getDefault()).contains(item.lowercase(Locale.getDefault()))
         }
         return negative.xor(if (conjunct) type.all(predicate) else type.any(predicate))
     }

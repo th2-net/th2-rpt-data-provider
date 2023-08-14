@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package com.exactpro.th2.rptdataprovider.entities.filters.events
 
@@ -24,13 +24,15 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.FilterParameterTyp
 import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
+import java.util.Locale
 
 class EventNameFilter private constructor(
     private var name: List<String>, override var negative: Boolean = false, override var conjunct: Boolean = false
 ) : Filter<BaseEventEntity> {
 
     companion object {
-        suspend fun build(filterRequest: FilterRequest, cradleService: CradleService): Filter<BaseEventEntity> {
+        @Suppress("RedundantSuspendModifier")
+        suspend fun build(filterRequest: FilterRequest, @Suppress("UNUSED_PARAMETER") cradleService: CradleService): Filter<BaseEventEntity> {
             return EventNameFilter(
                 negative = filterRequest.isNegative(),
                 conjunct = filterRequest.isConjunct(),
@@ -52,7 +54,7 @@ class EventNameFilter private constructor(
 
     override fun match(element: BaseEventEntity): Boolean {
         val predicate: (String) -> Boolean = { item ->
-            element.eventName.toLowerCase().contains(item.toLowerCase())
+            element.eventName.lowercase(Locale.getDefault()).contains(item.lowercase(Locale.getDefault()))
         }
         return negative.xor(if (conjunct) name.all(predicate) else name.any(predicate))
     }

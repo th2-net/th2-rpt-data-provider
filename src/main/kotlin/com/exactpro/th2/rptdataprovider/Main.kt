@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,17 +12,16 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 package com.exactpro.th2.rptdataprovider
 
-import com.exactpro.th2.common.grpc.EventBatch
 import com.exactpro.th2.common.metrics.LIVENESS_MONITOR
 import com.exactpro.th2.common.metrics.READINESS_MONITOR
-import com.exactpro.th2.common.metrics.liveness
-import com.exactpro.th2.common.metrics.readiness
 import com.exactpro.th2.common.schema.factory.CommonFactory
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.entities.configuration.CustomConfigurationClass
+import com.exactpro.th2.rptdataprovider.entities.mappers.ProtoMessageMapper
+import com.exactpro.th2.rptdataprovider.entities.mappers.TransportMessageMapper
 import com.exactpro.th2.rptdataprovider.server.GrpcServer
 import com.exactpro.th2.rptdataprovider.server.HttpServer
 import com.exactpro.th2.rptdataprovider.server.ServerType
@@ -44,43 +43,61 @@ import kotlin.system.exitProcess
 
 private val logger = KotlinLogging.logger {}
 
-class Main {
+class Main @InternalAPI constructor(args: Array<String>) {
 
     private val commonFactory: CommonFactory
+    private val configuration: Configuration
 
-    private val context: Context
+    private val protoContext: ProtoContext?
+    private val transportContext: TransportContext?
 
     private val resources: Deque<AutoCloseable> = ConcurrentLinkedDeque()
     private val lock = ReentrantLock()
     private val condition: Condition = lock.newCondition()
 
-    @InternalAPI
-    constructor(args: Array<String>) {
-
+    init {
         configureShutdownHook(resources, lock, condition)
-
         commonFactory = CommonFactory.createFromArguments(*args)
         resources += commonFactory
-
-        val configuration =
+        configuration =
             Configuration(commonFactory.getCustomConfiguration(CustomConfigurationClass::class.java))
+        if (configuration.useTransportMode.value.toBoolean()) {
+            protoContext = null
+            transportContext = TransportContext(
+                configuration,
 
-        context = Context(
-            configuration,
+                serverType = ServerType.valueOf(configuration.serverType.value),
 
-            serverType = ServerType.valueOf(configuration.serverType.value),
+                cradleManager = commonFactory.cradleManager.also {
+                    resources += it
+                },
+                transportMessageRouterPublisher = commonFactory.transportGroupBatchRouter.also {
+                    resources += it
+                },
+                transportMessageRouterSubscriber = commonFactory.transportGroupBatchRouter.also {
+                    resources += it
+                },
+                grpcConfig = commonFactory.grpcConfiguration
+            )
+        } else {
+            protoContext = ProtoContext(
+                configuration,
 
-            cradleManager = commonFactory.cradleManager.also {
-                resources += it
-            },
-            messageRouterRawBatch = commonFactory.messageRouterMessageGroupBatch.also {
-                resources += it
-            },
-            messageRouterParsedBatch = commonFactory.messageRouterMessageGroupBatch.also {
-                resources += it
-            },
-            grpcConfig = commonFactory.grpcConfiguration
-        )
+                serverType = ServerType.valueOf(configuration.serverType.value),
+
+                cradleManager = commonFactory.cradleManager.also {
+                    resources += it
+                },
+                protoMessageRouterPublisher = commonFactory.messageRouterMessageGroupBatch.also {
+                    resources += it
+                },
+                protoMessageRouterSubscriber = commonFactory.messageRouterMessageGroupBatch.also {
+                    resources += it
+                },
+                grpcConfig = commonFactory.grpcConfiguration
+            )
+            transportContext = null
+        }
     }
 
 
@@ -108,19 +125,54 @@ class Main {
     @InternalAPI
     private fun startServer() {
 
-        System.setProperty(IO_PARALLELISM_PROPERTY_NAME, context.configuration.ioDispatcherThreadPoolSize.value)
-
-        when (context.serverType) {
-            HTTP -> {
-                HttpServer(context).run()
+        if (configuration.useTransportMode.value.toBoolean()) {
+            requireNotNull(transportContext) {
+                "Transport context can't be null"
             }
-            GRPC -> {
-                val grpcRouter = commonFactory.grpcRouter
-                resources += grpcRouter
 
-                val grpcServer = GrpcServer(context, grpcRouter)
-                resources += AutoCloseable { grpcServer.stop() }
-                grpcServer.start()
+            System.setProperty(
+                IO_PARALLELISM_PROPERTY_NAME,
+                transportContext.configuration.ioDispatcherThreadPoolSize.value
+            )
+
+            when (transportContext.serverType) {
+                HTTP -> {
+                    HttpServer(transportContext, TransportMessageMapper::convertToHttpMessage).run()
+                }
+                GRPC -> {
+                    val grpcRouter = commonFactory.grpcRouter
+                    resources += grpcRouter
+
+                    val grpcServer = GrpcServer(transportContext, grpcRouter, TransportMessageMapper::convertToTransportMessageData)
+
+                    resources += AutoCloseable { grpcServer.stop() }
+                    grpcServer.start()
+                }
+            }
+        } else {
+            requireNotNull(protoContext) {
+                "Protobuf context can't be null"
+            }
+
+            System.setProperty(
+                IO_PARALLELISM_PROPERTY_NAME,
+                protoContext.configuration.ioDispatcherThreadPoolSize.value
+            )
+
+            when (protoContext.serverType) {
+                HTTP -> {
+                    HttpServer(protoContext, ProtoMessageMapper::convertToHttpMessage).run()
+                }
+
+                GRPC -> {
+                    val grpcRouter = commonFactory.grpcRouter
+                    resources += grpcRouter
+
+                    val grpcServer = GrpcServer(protoContext, grpcRouter, ProtoMessageMapper::convertToGrpcMessageData)
+
+                    resources += AutoCloseable { grpcServer.stop() }
+                    grpcServer.start()
+                }
             }
         }
     }

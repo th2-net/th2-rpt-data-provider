@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2021-2021 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2021-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,23 +12,24 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package com.exactpro.th2.rptdataprovider.entities.internal
 
 import com.exactpro.cradle.messages.StoredMessageId
-import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.rptdataprovider.entities.responses.MessageWrapper
 import java.time.Instant
 
 
-data class Message(
+data class Message<RM, PM>(
     val type: String = "message",
+    val book: String,
+    val sessionGroup: String,
     val timestamp: Instant,
     val direction: Direction,
-    val sessionId: String,
+    val sessionAlias: String,
     val attachedEventIds: Set<String>,
-    val parsedMessageGroup: List<BodyWrapper>?,
+    val parsedMessageGroup: List<BodyWrapper<PM>>?,
 
     @Suppress("ArrayInDataClass")
     val rawMessageBody: ByteArray,
@@ -43,8 +44,8 @@ data class Message(
 
 
     constructor(
-        messageWrapper: MessageWrapper,
-        parsedMessageGroup: List<BodyWrapper>?,
+        messageWrapper: MessageWrapper<RM>,
+        parsedMessageGroup: List<BodyWrapper<PM>>?,
         events: Set<String>,
         imageType: String? = null
     ) : this(
@@ -52,9 +53,11 @@ data class Message(
         id = messageWrapper.id,
         direction = messageWrapper.direction,
         timestamp = messageWrapper.timestamp,
-        sessionId = messageWrapper.sessionId,
+        book = messageWrapper.book,
+        sessionGroup = messageWrapper.sessionGroup,
+        sessionAlias = messageWrapper.sessionAlias,
         attachedEventIds = events,
-        rawMessageBody = messageWrapper.rawMessage.body.toByteArray(),
+        rawMessageBody = messageWrapper.storedContent,
         parsedMessageGroup = parsedMessageGroup,
         imageType = imageType
     )
