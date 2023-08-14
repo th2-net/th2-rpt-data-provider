@@ -3,10 +3,8 @@ name: Build and publish Docker distributions to Github Container Registry ghcr.i
 on:
   workflow_dispatch:
   push:
-    branches:
-      - dev-version-*
-    paths:
-      - gradle.properties
+    tags:
+      - \d+.\d+.\d+-dev
 
 jobs:
   build-job:
