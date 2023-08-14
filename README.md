@@ -295,6 +295,10 @@ spec:
 
 # Release notes
 
+## 5.7.1
++ Fixed request groped message on single page [EPOCH, null] problem 
++ Updated caradle: `5.1.2-dev`
+
 ## 5.7.0
 
 ### Feature
