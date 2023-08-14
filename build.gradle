@@ -18,6 +18,9 @@ import com.github.jk1.license.render.JsonReportRenderer
  * limitations under the License.
  ******************************************************************************/
 
+import com.github.jk1.license.filter.LicenseBundleNormalizer
+import com.github.jk1.license.render.JsonReportRenderer
+
 plugins {
     id 'java'
     id 'org.jetbrains.kotlin.jvm' version '1.6.21'
