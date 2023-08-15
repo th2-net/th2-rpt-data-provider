@@ -35,7 +35,7 @@ repositories {
 
 
 dependencies {
-    api platform('com.exactpro.th2:bom:4.5.0-TH2-5035-+')
+    api platform('com.exactpro.th2:bom:4.5.0')
 
     implementation 'org.slf4j:slf4j-api'
 
@@ -47,11 +47,11 @@ dependencies {
 
     implementation 'org.apache.commons:commons-lang3'
 
-    implementation('com.exactpro.th2:common:5.4.0-TH2-5035-+') {
+    implementation('com.exactpro.th2:common:5.4.0-dev') {
         exclude group: 'com.exactpro.th2', module: 'cradle-core'
         exclude group: 'com.exactpro.th2', module: 'cradle-cassandra'
     }
-    implementation 'com.exactpro.th2:common-utils:2.2.0-TH2-5035-+'
+    implementation 'com.exactpro.th2:common-utils:2.2.0-dev'
 
     implementation "com.exactpro.th2:cradle-core:${cradleVersion}"
 
