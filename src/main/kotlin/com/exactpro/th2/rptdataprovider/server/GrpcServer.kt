@@ -29,7 +29,7 @@ import java.util.concurrent.TimeUnit
 
 
 @InternalAPI
-@EngineAPI
+//@EngineAPI
 @ExperimentalCoroutinesApi
 class GrpcServer<B, G, RM, PM>(
     private val context: Context<B, G, RM, PM>,

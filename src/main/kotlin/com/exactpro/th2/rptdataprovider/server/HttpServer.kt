@@ -34,14 +34,16 @@ import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
-import io.ktor.application.*
-import io.ktor.features.*
+import io.ktor.server.application.*
+
 import io.ktor.http.*
-import io.ktor.request.*
-import io.ktor.response.*
-import io.ktor.routing.*
+import io.ktor.server.request.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
+import io.ktor.server.plugins.compression.Compression
+import io.ktor.server.util.getOrFail
 import io.ktor.util.*
 import io.ktor.util.pipeline.*
 import io.prometheus.client.Counter
@@ -91,7 +93,7 @@ class HttpServer<B, G, RM, PM>(
     private class Timeouts {
         class Config(var requestTimeout: Long = 5000L, var excludes: List<String> = listOf("sse"))
 
-        companion object : ApplicationFeature<ApplicationCallPipeline, Config, Unit> {
+        companion object : BaseApplicationPlugin<ApplicationCallPipeline, Config, Unit> {
             override val key: AttributeKey<Unit> = AttributeKey("Timeouts")
 
             override fun install(pipeline: ApplicationCallPipeline, configure: Config.() -> Unit) {
@@ -111,7 +113,7 @@ class HttpServer<B, G, RM, PM>(
         }
     }
 
-    @EngineAPI
+//    @EngineAPI
     @InternalAPI
     suspend fun checkContext(context: ApplicationCall) {
         context.javaClass.getDeclaredField("call").also {
@@ -154,7 +156,7 @@ class HttpServer<B, G, RM, PM>(
     }
 
     @ExperimentalCoroutinesApi
-    @EngineAPI
+//    @EngineAPI
     @InternalAPI
     private suspend fun handleRequest(
         call: ApplicationCall,
@@ -208,7 +210,7 @@ class HttpServer<B, G, RM, PM>(
 
 
     @ExperimentalCoroutinesApi
-    @EngineAPI
+//    @EngineAPI
     @InternalAPI
     private suspend fun handleSseRequest(
         call: ApplicationCall,
@@ -246,7 +248,7 @@ class HttpServer<B, G, RM, PM>(
     }
 
     @ExperimentalCoroutinesApi
-    @EngineAPI
+//    @EngineAPI
     @InternalAPI
     private suspend fun handleRestApiRequest(
         call: ApplicationCall,
@@ -288,7 +290,7 @@ class HttpServer<B, G, RM, PM>(
     @InternalCoroutinesApi
     @FlowPreview
     @ExperimentalCoroutinesApi
-    @EngineAPI
+//    @EngineAPI
     @InternalAPI
     fun run() {
 
