@@ -33,6 +33,7 @@ import com.exactpro.th2.rptdataprovider.entities.sse.HttpWriter
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.logMetrics
+import com.exactpro.th2.rptdataprovider.server.handler.AbortableRequestHandler
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import io.ktor.server.application.*
 
@@ -50,6 +51,7 @@ import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.nio.channels.ClosedChannelException
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -116,16 +118,16 @@ class HttpServer<B, G, RM, PM>(
 //    @EngineAPI
     @InternalAPI
     suspend fun checkContext(context: ApplicationCall) {
-        context.javaClass.getDeclaredField("call").also {
-            it.trySetAccessible()
-            val nettyApplicationRequest = it.get(context) as NettyApplicationCall
+        val flag = AtomicBoolean(false)
+        context.attributes.put(AbortableRequestHandler.ABORT_HANDLER_KEY) {
+            flag.set(true)
+        }
 
-            while (coroutineContext.isActive) {
-                if (nettyApplicationRequest.context.isRemoved)
-                    throw ClosedChannelException()
-
-                delay(checkRequestAliveDelay)
+        while (coroutineContext.isActive) {
+            if (flag.get()) {
+                throw ClosedChannelException()
             }
+            delay(checkRequestAliveDelay)
         }
     }
 
@@ -310,7 +312,12 @@ class HttpServer<B, G, RM, PM>(
 
         val getEventsLimit = this.applicationContext.configuration.eventSearchChunkSize.value.toInt()
 
-        embeddedServer(Netty, configuration.port.value.toInt(), configure = { responseWriteTimeoutSeconds = -1 }) {
+        embeddedServer(Netty, configuration.port.value.toInt(), configure = {
+            responseWriteTimeoutSeconds = -1
+            channelPipelineConfig = {
+                addLast("cancellationDetector", AbortableRequestHandler())
+            }
+        }) {
 
             install(Compression)
             install(Timeouts) {
