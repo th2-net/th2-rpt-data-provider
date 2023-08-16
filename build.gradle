@@ -63,9 +63,8 @@ dependencies {
 
     implementation 'io.prometheus:simpleclient'
 
-    // https://mvnrepository.com/artifact/io.ktor/ktor-server-netty
-    implementation 'io.ktor:ktor-server-netty:2.0.3'
-    implementation 'io.ktor:ktor-server:2.0.3'
+    implementation 'io.ktor:ktor-server-netty:2.3.3'
+    implementation 'io.ktor:ktor-server:2.3.3'
     implementation 'org.ehcache:ehcache:3.8.1'
 
     testImplementation('io.mockk:mockk:1.12.4') { // The last version bases on kotlin 1.6.0
