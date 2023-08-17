@@ -21,7 +21,7 @@ import io.netty.channel.ChannelHandlerContext
 import io.netty.channel.ChannelInboundHandlerAdapter
 import java.util.concurrent.atomic.AtomicReference
 
-class AbortableRequestHandler : ChannelInboundHandlerAdapter() {
+internal class AbortableRequestHandler : ChannelInboundHandlerAdapter() {
     companion object {
         val ABORT_HANDLER_KEY = AttributeKey<() -> Unit>("abortFuture")
     }
@@ -38,7 +38,7 @@ class AbortableRequestHandler : ChannelInboundHandlerAdapter() {
     override fun channelInactive(ctx: ChannelHandlerContext) {
         val call = ref.getAndSet(null)
         if (call != null) {
-            call.attributes[ABORT_HANDLER_KEY]()
+            call.attributes.getOrNull(ABORT_HANDLER_KEY)?.invoke()
         }
 
         super.channelInactive(ctx)

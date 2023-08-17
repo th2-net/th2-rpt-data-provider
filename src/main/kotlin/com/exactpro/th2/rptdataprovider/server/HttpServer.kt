@@ -115,7 +115,6 @@ class HttpServer<B, G, RM, PM>(
         }
     }
 
-//    @EngineAPI
     @InternalAPI
     suspend fun checkContext(context: ApplicationCall) {
         val flag = AtomicBoolean(false)
@@ -158,7 +157,6 @@ class HttpServer<B, G, RM, PM>(
     }
 
     @ExperimentalCoroutinesApi
-//    @EngineAPI
     @InternalAPI
     private suspend fun handleRequest(
         call: ApplicationCall,
@@ -212,7 +210,6 @@ class HttpServer<B, G, RM, PM>(
 
 
     @ExperimentalCoroutinesApi
-//    @EngineAPI
     @InternalAPI
     private suspend fun handleSseRequest(
         call: ApplicationCall,
@@ -250,7 +247,6 @@ class HttpServer<B, G, RM, PM>(
     }
 
     @ExperimentalCoroutinesApi
-//    @EngineAPI
     @InternalAPI
     private suspend fun handleRestApiRequest(
         call: ApplicationCall,
@@ -292,7 +288,6 @@ class HttpServer<B, G, RM, PM>(
     @InternalCoroutinesApi
     @FlowPreview
     @ExperimentalCoroutinesApi
-//    @EngineAPI
     @InternalAPI
     fun run() {
 

@@ -233,7 +233,6 @@ class RptDataProviderGrpcHandler<B, G, RM, PM>(
 
 
     @ExperimentalCoroutinesApi
-//    @EngineAPI
     @InternalAPI
     private suspend fun handleSseRequest(
         responseObserver: StreamObserver<StreamResponse>,

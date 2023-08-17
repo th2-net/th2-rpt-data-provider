@@ -21,15 +21,13 @@ import com.exactpro.th2.dataprovider.grpc.MessageData
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.grpc.RptDataProviderGrpcHandler
-import io.ktor.server.engine.*
-import io.ktor.util.*
+import io.ktor.util.InternalAPI
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import mu.KotlinLogging
 import java.util.concurrent.TimeUnit
 
 
 @InternalAPI
-//@EngineAPI
 @ExperimentalCoroutinesApi
 class GrpcServer<B, G, RM, PM>(
     private val context: Context<B, G, RM, PM>,
