@@ -33,21 +33,25 @@ import com.exactpro.th2.rptdataprovider.entities.sse.HttpWriter
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.logMetrics
+import com.exactpro.th2.rptdataprovider.server.handler.AbortableRequestHandler
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
-import io.ktor.application.*
-import io.ktor.features.*
+import io.ktor.server.application.*
+
 import io.ktor.http.*
-import io.ktor.request.*
-import io.ktor.response.*
-import io.ktor.routing.*
+import io.ktor.server.request.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
+import io.ktor.server.plugins.compression.Compression
+import io.ktor.server.util.getOrFail
 import io.ktor.util.*
 import io.ktor.util.pipeline.*
 import io.prometheus.client.Counter
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.nio.channels.ClosedChannelException
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -91,7 +95,7 @@ class HttpServer<B, G, RM, PM>(
     private class Timeouts {
         class Config(var requestTimeout: Long = 5000L, var excludes: List<String> = listOf("sse"))
 
-        companion object : ApplicationFeature<ApplicationCallPipeline, Config, Unit> {
+        companion object : BaseApplicationPlugin<ApplicationCallPipeline, Config, Unit> {
             override val key: AttributeKey<Unit> = AttributeKey("Timeouts")
 
             override fun install(pipeline: ApplicationCallPipeline, configure: Config.() -> Unit) {
@@ -111,19 +115,18 @@ class HttpServer<B, G, RM, PM>(
         }
     }
 
-    @EngineAPI
     @InternalAPI
     suspend fun checkContext(context: ApplicationCall) {
-        context.javaClass.getDeclaredField("call").also {
-            it.trySetAccessible()
-            val nettyApplicationRequest = it.get(context) as NettyApplicationCall
+        val flag = AtomicBoolean(false)
+        context.attributes.put(AbortableRequestHandler.ABORT_HANDLER_KEY) {
+            flag.set(true)
+        }
 
-            while (coroutineContext.isActive) {
-                if (nettyApplicationRequest.context.isRemoved)
-                    throw ClosedChannelException()
-
-                delay(checkRequestAliveDelay)
+        while (coroutineContext.isActive) {
+            if (flag.get()) {
+                throw ClosedChannelException()
             }
+            delay(checkRequestAliveDelay)
         }
     }
 
@@ -154,7 +157,6 @@ class HttpServer<B, G, RM, PM>(
     }
 
     @ExperimentalCoroutinesApi
-    @EngineAPI
     @InternalAPI
     private suspend fun handleRequest(
         call: ApplicationCall,
@@ -208,7 +210,6 @@ class HttpServer<B, G, RM, PM>(
 
 
     @ExperimentalCoroutinesApi
-    @EngineAPI
     @InternalAPI
     private suspend fun handleSseRequest(
         call: ApplicationCall,
@@ -246,7 +247,6 @@ class HttpServer<B, G, RM, PM>(
     }
 
     @ExperimentalCoroutinesApi
-    @EngineAPI
     @InternalAPI
     private suspend fun handleRestApiRequest(
         call: ApplicationCall,
@@ -288,7 +288,6 @@ class HttpServer<B, G, RM, PM>(
     @InternalCoroutinesApi
     @FlowPreview
     @ExperimentalCoroutinesApi
-    @EngineAPI
     @InternalAPI
     fun run() {
 
@@ -308,7 +307,12 @@ class HttpServer<B, G, RM, PM>(
 
         val getEventsLimit = this.applicationContext.configuration.eventSearchChunkSize.value.toInt()
 
-        embeddedServer(Netty, configuration.port.value.toInt(), configure = { responseWriteTimeoutSeconds = -1 }) {
+        embeddedServer(Netty, configuration.port.value.toInt(), configure = {
+            responseWriteTimeoutSeconds = -1
+            channelPipelineConfig = {
+                addLast("cancellationDetector", AbortableRequestHandler())
+            }
+        }) {
 
             install(Compression)
             install(Timeouts) {

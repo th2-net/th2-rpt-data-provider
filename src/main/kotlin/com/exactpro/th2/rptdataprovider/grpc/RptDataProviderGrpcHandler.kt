@@ -72,7 +72,7 @@ import java.util.concurrent.Executors
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
-@EngineAPI
+//@EngineAPI
 @InternalAPI
 @ExperimentalCoroutinesApi
 class RptDataProviderGrpcHandler<B, G, RM, PM>(
@@ -233,7 +233,6 @@ class RptDataProviderGrpcHandler<B, G, RM, PM>(
 
 
     @ExperimentalCoroutinesApi
-    @EngineAPI
     @InternalAPI
     private suspend fun handleSseRequest(
         responseObserver: StreamObserver<StreamResponse>,

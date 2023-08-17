@@ -104,7 +104,6 @@ class Main @InternalAPI constructor(args: Array<String>) {
     @InternalCoroutinesApi
     @ExperimentalCoroutinesApi
     @FlowPreview
-    @EngineAPI
     @InternalAPI
     fun run() {
         logger.info { "Starting the box" }
@@ -121,7 +120,6 @@ class Main @InternalAPI constructor(args: Array<String>) {
     @InternalCoroutinesApi
     @ExperimentalCoroutinesApi
     @FlowPreview
-    @EngineAPI
     @InternalAPI
     private fun startServer() {
 
@@ -218,7 +216,6 @@ class Main @InternalAPI constructor(args: Array<String>) {
 
 @InternalCoroutinesApi
 @FlowPreview
-@EngineAPI
 @InternalAPI
 @ExperimentalCoroutinesApi
 fun main(args: Array<String>) {
