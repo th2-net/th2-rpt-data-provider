@@ -63,25 +63,28 @@ fun MessageFilter.convertToString(): String {
             "order=${filter.order}"
 }
 
-fun MessageFilter.toGroupedMessageFilter(group: String?): GroupedMessageFilter = GroupedMessageFilter.builder().also { builder ->
-     builder.bookId(bookId)
-        .pageId(pageId)
-        .groupName(group)
-        .order(order)
+fun MessageFilter.toGroupedMessageFilter(group: String): GroupedMessageFilter =
+    GroupedMessageFilter.builder().also { builder ->
+        logger.debug { "Creating group filter from ${this.convertToString()}" }
+        builder.bookId(bookId)
+            .pageId(pageId)
+            .groupName(group)
+            .order(order)
+            .limit(limit)
 
-    when(timestampFrom?.operation) {
-        null -> { /* do noting */ }
-        ComparisonOperation.GREATER -> builder.timestampFrom().isGreaterThan(timestampFrom.value)
-        ComparisonOperation.GREATER_OR_EQUALS -> builder.timestampFrom().isGreaterThanOrEqualTo(timestampFrom.value)
-        else -> error("The '${timestampFrom.operation}' operation isn't supported")
-    }
-    when(timestampTo?.operation) {
-        null -> { /* do noting */ }
-        ComparisonOperation.LESS -> builder.timestampTo().isLessThan(timestampTo.value)
-        ComparisonOperation.LESS_OR_EQUALS -> builder.timestampTo().isLessThanOrEqualTo(timestampTo.value)
-        else -> error("The '${timestampTo.operation}' operation isn't supported")
-    }
-}.build()
+        when (timestampFrom?.operation) {
+            null -> { /* do noting */ }
+            ComparisonOperation.GREATER -> builder.timestampFrom().isGreaterThan(timestampFrom.value)
+            ComparisonOperation.GREATER_OR_EQUALS -> builder.timestampFrom().isGreaterThanOrEqualTo(timestampFrom.value)
+            else -> error("The '${timestampFrom.operation}' operation isn't supported")
+        }
+        when (timestampTo?.operation) {
+            null -> { /* do noting */ }
+            ComparisonOperation.LESS -> builder.timestampTo().isLessThan(timestampTo.value)
+            ComparisonOperation.LESS_OR_EQUALS -> builder.timestampTo().isLessThanOrEqualTo(timestampTo.value)
+            else -> error("The '${timestampTo.operation}' operation isn't supported")
+        }
+    }.build()
 
 suspend fun <T> logTime(methodName: String, lambda: suspend () -> T): T? {
     var result: T?
