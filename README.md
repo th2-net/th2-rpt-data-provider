@@ -1,4 +1,4 @@
-# Report data provider (5.9.1)
+# Report data provider (5.9.2)
 
 # Overview
 This component serves as a backend for rpt-viewer. It will connect to the cassandra database via cradle api and expose the data stored in there as REST resources.
@@ -294,6 +294,9 @@ spec:
 ```
 
 # Release notes
+
+## 5.9.2
++ Fix problem with accumulating all batches in memory when provider loads messages by group
 
 ## 5.9.1
 + Migrated to the cradle version with fixed load pages where `removed` field is null problem.
