@@ -85,7 +85,7 @@ open class CradleService(configuration: Configuration, cradleManager: CradleMana
                 logTime("getMessagesBatches (filter=${filter.convertToString()})") {
                     getMessageBatches(filter)
                 }
-            } ?: listOf())
+            } ?: emptySequence())
                 .let { iterable ->
                     Channel<StoredMessageBatch>(1)
                         .also { channel ->
@@ -181,7 +181,7 @@ open class CradleService(configuration: Configuration, cradleManager: CradleMana
 
     protected open suspend fun getMessageBatches(
         filter: MessageFilter
-    ): Iterable<StoredMessageBatch> = storage.getMessageBatchesAsync(filter).await().asIterable()
+    ): Sequence<StoredMessageBatch> = storage.getMessageBatchesAsync(filter).await().asSequence()
 
     protected open suspend fun getMessageBatches(
         id: StoredMessageId

@@ -70,7 +70,6 @@ fun MessageFilter.toGroupedMessageFilter(group: String): GroupedMessageFilter =
             .pageId(pageId)
             .groupName(group)
             .order(order)
-            .limit(limit)
 
         when (timestampFrom?.operation) {
             null -> { /* do noting */ }
