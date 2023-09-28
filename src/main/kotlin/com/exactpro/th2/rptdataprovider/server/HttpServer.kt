@@ -105,7 +105,7 @@ class HttpServer<B, G, RM, PM>(
 
                 if (timeout <= 0) return
 
-                pipeline.intercept(ApplicationCallPipeline.Features) {
+                pipeline.intercept(ApplicationCallPipeline.Plugins) {
                     if (excludes.any { call.request.uri.contains(it) }) return@intercept
                     withTimeout(timeout) {
                         proceed()

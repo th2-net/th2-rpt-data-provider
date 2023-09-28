@@ -106,12 +106,12 @@ class MessageGroupCradleService(
 
     override suspend fun getMessageBatches(
         filter: MessageFilter
-    ): Iterable<StoredMessageBatch> =
+    ): Sequence<StoredMessageBatch> =
         getSessionGroupSuspend(filter)?.let { group ->
             val groupedMessageFilter = filter.toGroupedMessageFilter(group).also {
                 K_LOGGER.debug { "Start searching group batches by $it" }
             }
-            storage.getGroupedMessageBatchesAsync(groupedMessageFilter).await().asIterable()
+            storage.getGroupedMessageBatchesAsync(groupedMessageFilter).await().asSequence()
                 .mapNotNull { batch ->
                     val messages = batch.messages.filter { message ->
                         filter.sessionAlias == message.sessionAlias
@@ -130,7 +130,7 @@ class MessageGroupCradleService(
                     }
                 }
 
-        } ?: listOf()
+        } ?: emptySequence()
 
     override suspend fun getMessageBatches(
         id: StoredMessageId
