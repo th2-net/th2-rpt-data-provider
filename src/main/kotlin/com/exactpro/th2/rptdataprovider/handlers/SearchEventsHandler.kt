@@ -50,7 +50,6 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.buffer
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flatMapConcat
 import kotlinx.coroutines.flow.flow
@@ -163,7 +162,7 @@ class SearchEventsHandler(context: Context<*, *, *, *>) {
         timestampFrom: Instant,
         timestampTo: Instant,
     ): List<BaseEventEntity> {
-        return wrappers.flatMap { entry ->
+        return wrappers.asSequence().flatMap { entry ->
             if (entry.isBatch) {
                 val batch = entry.asBatch()
                 batch.tryToGetTestEvents(request.parentEvent?.eventId).mapNotNull { event ->
@@ -175,10 +174,24 @@ class SearchEventsHandler(context: Context<*, *, *, *>) {
                 }
             } else {
                 val single = entry.asSingle()
-                listOf(single to eventProducer.fromStoredEvent(single, null))
+                sequenceOf(single to eventProducer.fromStoredEvent(single, null))
             }
         }.let { eventTreesNodes ->
-            eventProducer.fromEventsProcessed(eventTreesNodes, request)
+            eventProducer.mutableFromEventsProcessed(eventTreesNodes, request)
+        }.also { events ->
+            // The sorting here is performed in order to avoid unexpected events order
+            // when several batches were added in the same chunk we process here
+            // Events between those batches might be unordered
+            events.sortWith(
+                Comparator.comparing(BaseEventEntity::startTimestamp)
+                    .run {
+                        if (request.searchDirection == AFTER) {
+                            this
+                        } else {
+                            reversed()
+                        }
+                    }
+            )
         }
     }
 
@@ -197,19 +210,18 @@ class SearchEventsHandler(context: Context<*, *, *, *>) {
                     getEventsSuspend(request, timestampFrom, timestampTo)
                         .asSequence()
                         .chunked(eventSearchChunkSize)
+                // Cradle suppose to return events in the right order depending on the order in the request
+                // We don't need to sort entities between each other.
+                // However, there still might be an issue with batches if it contains events for a long period of time
+                // For now just keep it in mind when you are investigating the reason
+                // some events returned in unexpected order
                 for (event in eventsCollection)
                     emit(event)
             }
                 .map { wrappers ->
                     async(parentContext) {
                         prepareEvents(wrappers, request, timestampFrom, timestampTo)
-                            .let { events ->
-                                if (request.searchDirection == AFTER) {
-                                    events
-                                } else {
-                                    events.reversed()
-                                }
-                            }.also { parentContext.ensureActive() }
+                            .also { parentContext.ensureActive() }
                     }
                 }.buffer(BUFFERED)
         }

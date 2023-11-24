@@ -124,10 +124,10 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
             .toList()
     }
 
-    fun fromEventsProcessed(
-        events: List<Pair<TestEventSingle, BaseEventEntity>>,
+    fun mutableFromEventsProcessed(
+        events: Sequence<Pair<TestEventSingle, BaseEventEntity>>,
         request: SseEventSearchRequest
-    ): List<BaseEventEntity> {
+    ): MutableList<BaseEventEntity> {
 
         return events.let {
             if (!request.metadataOnly || request.filterPredicate.getSpecialTypes().contains(NEED_BODY)) {
@@ -148,7 +148,7 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
                 }
             } else {
                 it.map { (_, event) -> event }
-            }
+            }.toMutableList()
         }
     }
 
