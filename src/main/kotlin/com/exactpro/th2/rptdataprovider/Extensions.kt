@@ -184,18 +184,18 @@ fun Instant.isAfterOrEqual(other: Instant): Boolean {
     return this.isAfter(other) || this == other
 }
 
-fun StoredTestEventBatch.tryToGetTestEvents(parentEventId: StoredTestEventId? = null): Collection<BatchedStoredTestEvent> {
+fun StoredTestEventBatch.tryToGetTestEvents(parentEventId: StoredTestEventId? = null): Sequence<BatchedStoredTestEvent> {
     return try {
-        this.testEvents?.let { events ->
+        this.testEvents?.asSequence()?.let { events ->
             if (parentEventId != null) {
                 events.filter { it.parentId == parentEventId }
             } else {
                 events
             }
-        }?: emptyList()
+        } ?: emptySequence()
     } catch (e: IOException) {
         logger.error(e) { "unexpected IO exception while trying to parse an event batch - contents were ignored" }
-        emptyList()
+        emptySequence()
     }
 }
 
