@@ -182,7 +182,7 @@ abstract class RabbitMqService<B, G, PM>(
                         }
                         K_LOGGER.error(e) { "unexpected exception while trying to send a codec request" }
                     }
-                }.also { K_LOGGER.info { "${request.requestId} mqRequestSenderScope ${it}ms" } }
+                }.also { K_LOGGER.debug { "${request.requestId} mqRequestSenderScope ${it}ms" } }
             }
 
             pendingRequest

@@ -1,4 +1,4 @@
-# Report data provider (5.9.4)
+# Report data provider (5.9.5)
 
 # Overview
 This component serves as a backend for rpt-viewer. It will connect to the cassandra database via cradle api and expose the data stored in there as REST resources.
@@ -294,6 +294,9 @@ spec:
 ```
 
 # Release notes
+
+## 5.9.5
++ Disabled unsupported [Cassandra driver metrics](https://docs.datastax.com/en/developer/java-driver/4.10/manual/core/metrics/)
 
 ## 5.9.4
 
