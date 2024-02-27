@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2022-2024 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,6 +37,7 @@ import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.channels.Channel
@@ -65,7 +66,7 @@ class ExtractorTest {
     private val baseStreamName = "test_stream"
     private val streamDirection = "FIRST"
 
-    private val BOOK = BookId("")
+    private val bookId = BookId("")
     private val fullStreamName = "${baseStreamName}:${streamDirection}"
     private val streamNameObject = StreamName(baseStreamName, Direction.valueOf(streamDirection), BookId(""))
 
@@ -93,7 +94,7 @@ class ExtractorTest {
             "direction" to listOf(streamDirection),
             "startTimestamp" to listOf(startTimestamp.toEpochMilli().toString()),
             "endTimestamp" to listOf(endTimestamp.toEpochMilli().toString()),
-            "bookId" to listOf(BOOK.name)
+            "bookId" to listOf(bookId.name)
         )
         if (resumeId != null) {
             parameters["messageId"] = listOf(resumeId.toString())
@@ -113,10 +114,10 @@ class ExtractorTest {
         every { msg.sessionAlias } answers { fullStreamName }
         every { msg.protocol } answers { "protocol" }
         every { msg.direction } answers { Direction.FIRST }
-        every { msg.getContent() } answers { byteArrayOf(1, 1, 1) }
-        every { msg.getId() } answers {
+        every { msg.content } answers { byteArrayOf(1, 1, 1) }
+        every { msg.id } answers {
             StoredMessageId(
-                BOOK,
+                bookId,
                 baseStreamName,
                 Direction.valueOf(streamDirection),
                 timestamp,
@@ -128,6 +129,7 @@ class ExtractorTest {
         return msg
     }
 
+    @OptIn(DelicateCoroutinesApi::class)
     private fun mockContextWithCradleService(batch: StoredMessageBatch): ProtoContext {
         val context: ProtoContext = mockk()
 
@@ -187,7 +189,7 @@ class ExtractorTest {
             startTimestamp = endTimestamp.plusNanos(1)
         }
 
-        return StoredMessageBatch(allMessages, PageId(BookId("1"), "1"), Instant.now())
+        return StoredMessageBatch(allMessages, PageId(BookId("1"), start,"1"), Instant.now())
     }
 
 
@@ -250,7 +252,7 @@ class ExtractorTest {
 
         allMessages.add(getMessage(endTimestamp, index))
 
-        return StoredMessageBatch(allMessages, PageId(BookId("1"), "1"), Instant.now())
+        return StoredMessageBatch(allMessages, PageId(BookId("1"), startTimestamp, "1"), Instant.now())
     }
 
     private fun testBorders(
