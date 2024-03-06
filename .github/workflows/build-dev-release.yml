@@ -1,0 +1,14 @@
+name: Build and publish dev release Docker image to Github Container Registry ghcr.io
+
+on: workflow_dispatch
+
+jobs:
+  build:
+    uses: th2-net/.github/.github/workflows/compound-java.yml@main
+    with:
+      build-target: 'Docker'
+      devRelease: true
+      createTag: true
+      docker-username: ${{ github.actor }}
+    secrets:
+      docker-password: ${{ secrets.GITHUB_TOKEN }}
