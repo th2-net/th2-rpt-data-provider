@@ -1,17 +1,14 @@
-name: Build and publish Docker distributions to Github Container Registry ghcr.io
+name: Build and publish release Docker image to Github Container Registry ghcr.io
 
-on:
-  workflow_dispatch:
-  push:
-    tags:
-      - \d+.\d+.\d+-dev
+on: workflow_dispatch
 
 jobs:
-  build-job:
+  build:
     uses: th2-net/.github/.github/workflows/compound-java.yml@main
     with:
       build-target: 'Docker'
+      devRelease: false
+      createTag: true
       docker-username: ${{ github.actor }}
-      devRelease: true
     secrets:
       docker-password: ${{ secrets.GITHUB_TOKEN }}

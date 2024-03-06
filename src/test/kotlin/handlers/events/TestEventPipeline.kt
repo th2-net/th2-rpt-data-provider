@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2022-2024 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -63,7 +63,7 @@ class TestEventPipeline {
     private val endTimestamp = Instant.parse("2022-04-21T01:15:00Z")
 
     private val batchSize = 4096
-    private val pageId = PageId(BookId("testBook"), "testPage")
+    private val pageId = PageId(BookId("testBook"), startTimestamp,"testPage")
     private val scope = "testScope"
 
     private val eventsFromStartToEnd11 = createEvents("1", startTimestamp, endTimestamp)

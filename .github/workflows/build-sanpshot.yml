@@ -1,10 +1,13 @@
-name: Dev build and publish Docker distributions to Github Container Registry ghcr.io
+name: Build and publish Docker image to Github Container Registry ghcr.io
 
 on:
   push:
     branches-ignore:
       - master
       - version-*
+      - dependabot**
+    paths-ignore:
+      - README.md
 
 jobs:
   build-job:
