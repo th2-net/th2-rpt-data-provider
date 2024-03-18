@@ -11,7 +11,7 @@ on:
 
 jobs:
   build-job:
-    uses: th2-net/.github/.github/workflows/compound-java-dev.yml@main
+    uses: th2-net/.github/.github/workflows/compound-java-dev.yml@test-provenance
     with:
       build-target: 'Docker'
       docker-username: ${{ github.actor }}
