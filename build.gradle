@@ -1,25 +1,22 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-import com.github.jk1.license.filter.LicenseBundleNormalizer
-import com.github.jk1.license.render.JsonReportRenderer
 
 plugins {
-    id 'java'
     id 'org.jetbrains.kotlin.jvm' version '1.8.22'
+    id "com.exactpro.th2.gradle.component" version "0.0.6"
     id 'application'
-    id 'com.palantir.docker' version '0.25.0'
-    id "org.owasp.dependencycheck" version "9.0.9"
-    id "com.gorylenko.gradle-git-properties" version "2.4.1"
-    id 'com.github.jk1.dependency-license-report' version '2.5'
-    id "de.undercouch.download" version "5.4.0"
 }
 
 ext {
     dockerImageVersion = release_version
-    cradleVersion       = '5.2.0-dev'
+    cradleVersion      = '5.3.0-dev'
 }
 
 group 'com.exactpro.th2'
 version release_version
+
+kotlin {
+    jvmToolchain(11)
+}
 
 repositories {
     mavenCentral()
@@ -33,10 +30,12 @@ repositories {
     }
 }
 
+configurations.configureEach {
+    resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
+    resolutionStrategy.cacheDynamicVersionsFor 0, 'seconds'
+}
 
 dependencies {
-    api platform('com.exactpro.th2:bom:4.5.0')
-
     implementation 'org.slf4j:slf4j-api'
 
     implementation 'com.fasterxml.jackson.core:jackson-core'
@@ -47,11 +46,11 @@ dependencies {
 
     implementation 'org.apache.commons:commons-lang3'
 
-    implementation('com.exactpro.th2:common:5.8.0-dev') {
+    implementation('com.exactpro.th2:common:5.11.0-dev') {
         exclude group: 'com.exactpro.th2', module: 'cradle-core'
         exclude group: 'com.exactpro.th2', module: 'cradle-cassandra'
     }
-    implementation 'com.exactpro.th2:common-utils:2.2.2-dev'
+    implementation 'com.exactpro.th2:common-utils:2.2.3-dev'
 
     implementation "com.exactpro.th2:cradle-core:${cradleVersion}"
 
@@ -59,7 +58,7 @@ dependencies {
 
     implementation 'com.exactpro.th2:grpc-data-provider:0.1.8'
 
-    implementation 'io.github.microutils:kotlin-logging:3.0.0' // The last version bases on kotlin 1.6.0
+    implementation 'io.github.microutils:kotlin-logging:3.0.5'
 
     implementation 'io.prometheus:simpleclient'
 
@@ -85,25 +84,11 @@ tasks.withType(KotlinCompile).configureEach {
     }
 }
 
-jar {
-    manifest {
-        attributes(
-                'Created-By': "${System.getProperty('java.version')} (${System.getProperty('java.vendor')})",
-                'Specification-Title': '',
-                'Specification-Vendor': 'Exactpro Systems LLC',
-                'Implementation-Title': project.archivesBaseName,
-                'Implementation-Vendor': 'Exactpro Systems LLC',
-                'Implementation-Vendor-Id': 'com.exactpro',
-                'Implementation-Version': project.version
-        )
-    }
+application {
+    applicationName = 'service'
+    mainClassName = "com.exactpro.th2.rptdataprovider.MainKt"
 }
 
-applicationName = 'service'
-
-distTar {
-    archiveName "${applicationName}.tar"
-}
 
 test {
 // FIXME: the tests were temporary disabled since they're not compatible with new api
@@ -111,61 +96,6 @@ test {
 //    useJUnitPlatform()
 }
 
-dockerPrepare {
-    dependsOn distTar
-}
-
-docker {
-    copySpec.from(tarTree("$buildDir/distributions/${applicationName}.tar"))
-}
-
-
-compileKotlin {
-    kotlinOptions.jvmTarget = "11"
-}
-
-compileTestKotlin {
-    kotlinOptions.jvmTarget = "11"
-}
-
-application {
-    mainClassName = "com.exactpro.th2.rptdataprovider.MainKt"
-}
-
-configurations.configureEach {
-    resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
-    resolutionStrategy.cacheDynamicVersionsFor 0, 'seconds'
-}
-
 dependencyCheck {
-    formats=['SARIF', 'JSON', 'HTML']
     suppressionFile='supressions.xml'
-    failBuildOnCVSS=5
-
-    analyzers {
-        assemblyEnabled = false
-        nugetconfEnabled = false
-        nodeEnabled = false
-    }
-}
-
-licenseReport {
-    def licenseNormalizerBundlePath = "$buildDir/license-normalizer-bundle.json"
-
-    if (!file(licenseNormalizerBundlePath).exists()) {
-        download.run {
-            src 'https://raw.githubusercontent.com/th2-net/.github/main/license-compliance/gradle-license-report/license-normalizer-bundle.json'
-            dest "$buildDir/license-normalizer-bundle.json"
-            overwrite false
-        }
-    }
-
-    filters = [
-            new LicenseBundleNormalizer(licenseNormalizerBundlePath, false)
-    ]
-    renderers = [
-            new JsonReportRenderer('licenses.json', false),
-    ]
-    excludeOwnGroup = false
-    allowedLicensesFile = new URL("https://raw.githubusercontent.com/th2-net/.github/main/license-compliance/gradle-license-report/allowed-licenses.json")
 }

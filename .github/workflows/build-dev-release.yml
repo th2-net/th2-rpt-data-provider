@@ -12,3 +12,4 @@ jobs:
       docker-username: ${{ github.actor }}
     secrets:
       docker-password: ${{ secrets.GITHUB_TOKEN }}
+      nvd-api-key: ${{ secrets.NVD_APIKEY }}
