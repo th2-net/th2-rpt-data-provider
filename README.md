@@ -301,6 +301,7 @@ spec:
 + Updated common: `5.11.0-dev`
 + Updated common-utils: `2.2.3-dev`
 + Updated cradle api: `5.3.0-dev`
++ Updated grpc-data-provider: `0.2.0-dev`
 
 ## 5.10.0
 + Updated cradle api: `5.2.0-dev`

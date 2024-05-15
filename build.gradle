@@ -56,7 +56,7 @@ dependencies {
 
     implementation "com.exactpro.th2:cradle-cassandra:${cradleVersion}"
 
-    implementation 'com.exactpro.th2:grpc-data-provider:0.1.8'
+    implementation 'com.exactpro.th2:grpc-data-provider:0.2.0-dev'
 
     implementation 'io.github.microutils:kotlin-logging:3.0.5'
 
@@ -85,7 +85,6 @@ tasks.withType(KotlinCompile).configureEach {
 }
 
 application {
-    applicationName = 'service'
     mainClassName = "com.exactpro.th2.rptdataprovider.MainKt"
 }
 
