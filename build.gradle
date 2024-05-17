@@ -64,7 +64,11 @@ dependencies {
 
     implementation 'io.ktor:ktor-server-netty:2.3.3'
     implementation 'io.ktor:ktor-server:2.3.3'
+
     implementation 'org.ehcache:ehcache:3.8.1'
+    implementation('org.glassfish.jaxb:jaxb-runtime:2.3.9') {
+        because("'2.3.9' version has 'EDL 1.0' license instead of 'CDDL GPL 1.1' in the '2.3.1'")
+    }
 
     testImplementation('io.mockk:mockk:1.12.4') { // The last version bases on kotlin 1.6.0
         exclude group: 'org.jetbrains.kotlin', module: 'kotlin-reflect' // because we need kotlin reflect with different version
