@@ -296,6 +296,7 @@ spec:
 # Release notes
 
 ## 5.11.1
+* Migrate to th2 gradle plugin `0.0.7`
 * Updated jaxb-runtime: `2.3.9`
   * '2.3.9' version has 'EDL 1.0' license instead of 'CDDL GPL 1.1' in the '2.3.1'
 
