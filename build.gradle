@@ -103,3 +103,7 @@ test {
 dependencyCheck {
     suppressionFile='supressions.xml'
 }
+
+licenseReport {
+    excludeBoms = true
+}
