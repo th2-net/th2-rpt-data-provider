@@ -2,7 +2,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     id 'org.jetbrains.kotlin.jvm' version '1.8.22'
-    id "com.exactpro.th2.gradle.component" version "0.0.7"
+    id "com.exactpro.th2.gradle.component" version "0.0.8"
     id 'application'
 }
 
@@ -46,7 +46,7 @@ dependencies {
 
     implementation 'org.apache.commons:commons-lang3'
 
-    implementation('com.exactpro.th2:common:5.11.0-dev') {
+    implementation('com.exactpro.th2:common:5.12.0-dev') {
         exclude group: 'com.exactpro.th2', module: 'cradle-core'
         exclude group: 'com.exactpro.th2', module: 'cradle-cassandra'
     }
@@ -102,8 +102,4 @@ test {
 
 dependencyCheck {
     suppressionFile='supressions.xml'
-}
-
-licenseReport {
-    excludeBoms = true
 }
