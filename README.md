@@ -295,6 +295,12 @@ spec:
 
 # Release notes
 
+## 5.12.0
+* Migrate to th2 gradle plugin `0.0.8`
+* Updated common: `5.12.0-dev`
+* Updated jaxb-runtime: `2.3.9`
+  * '2.3.9' version has 'EDL 1.0' license instead of 'CDDL GPL 1.1' in the '2.3.1'
+
 ## 5.11.0
 + Migrate to th2 gradle plugin `0.0.6`
 + Updated bom: `4.6.1`
