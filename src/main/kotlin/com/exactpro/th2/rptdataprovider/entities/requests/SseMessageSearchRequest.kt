@@ -39,7 +39,7 @@ data class SseMessageSearchRequest<RM, PM>(
     val endTimestamp: Instant?,
     val resultCountLimit: Int?,
     val attachedEvents: Boolean,
-    val lookupLimitDays: Int?,
+    val lookupLimit: Long?,
     val resumeFromIdsList: List<StreamPointer>,
     val includeProtocols: List<String>?,
     val excludeProtocols: List<String>?,
@@ -70,7 +70,7 @@ data class SseMessageSearchRequest<RM, PM>(
 
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt(),
         attachedEvents = parameters["attachedEvents"]?.firstOrNull()?.toBoolean() ?: false,
-        lookupLimitDays = parameters["lookupLimitDays"]?.firstOrNull()?.toInt(),
+        lookupLimit = parameters["lookupLimitDays"]?.firstOrNull()?.toLong()?.run { this * 24 * 60 * 60 * 1_000 },
 
         includeProtocols = parameters["includeProtocols"],
         excludeProtocols = parameters["excludeProtocols"],
@@ -127,7 +127,7 @@ data class SseMessageSearchRequest<RM, PM>(
 
         attachedEvents = false,
 
-        lookupLimitDays = null,
+        lookupLimit = null,
 
         includeProtocols = null,
 
@@ -165,10 +165,16 @@ data class SseMessageSearchRequest<RM, PM>(
     }
 
     private fun checkLookupLimitDays() {
-        if (lookupLimitDays != null && endTimestamp != null) {
+        if (lookupLimit != null && endTimestamp != null) {
             throw InvalidRequestException(
-                "endTimestamp: $endTimestamp must be null if lookupLimitDays: $lookupLimitDays isn't null"
+                "endTimestamp: $endTimestamp must be null if lookupLimit: $lookupLimit isn't null"
             )
+        }
+    }
+
+    private fun checkNoEndTimestamp() {
+        if (endTimestamp != null) {
+            throw InvalidRequestException("endTimestamp: $endTimestamp must be null")
         }
     }
 
@@ -211,7 +217,7 @@ data class SseMessageSearchRequest<RM, PM>(
 
     fun checkIdsRequest() {
         checkStartPoint()
-        checkEndTimestamp()
+        checkNoEndTimestamp()
         checkStreamList()
         checkTimestampAndId()
         checkLookupLimitDays()

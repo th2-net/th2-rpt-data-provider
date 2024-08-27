@@ -445,7 +445,7 @@ class HttpServer<B, G, RM, PM>(
                             queryParametersMap,
                             messageFiltersPredicateFactory.getEmptyPredicate(),
                         ).also(SseMessageSearchRequest<*, *>::checkIdsRequest)
-                        searchMessagesHandler.getIds(request)
+                        searchMessagesHandler.getIds(request, configuration.messageIdsLookupLimit.value.toLong())
                     }
                 }
 

@@ -127,7 +127,10 @@ abstract class SearchMessagesHandler<B, G, RM, PM>(
         }
     }
 
-    suspend fun getIds(request: SseMessageSearchRequest<RM, PM>): Map<String, List<StreamInfo>> {
+    suspend fun getIds(request: SseMessageSearchRequest<RM, PM>, lookupLimit: Long): Map<String, List<StreamInfo>> {
+        require(request.startTimestamp != null && request.endTimestamp == null) {
+            "startTimestamp must be not null and endTimestamp be null in request: $request"
+        }
         searchMessageRequests.inc()
         val resumeId = request.resumeFromIdsList.firstOrNull()
         val messageId = resumeId?.let {
@@ -143,8 +146,8 @@ abstract class SearchMessagesHandler<B, G, RM, PM>(
             request.copy(startTimestamp = resumeId.timestamp)
         } ?: request
 
-        val before = getIds(resultRequest, messageId, TimeRelation.BEFORE)
-        val after = getIds(resultRequest, messageId, TimeRelation.AFTER)
+        val before = getIds(resultRequest, messageId, lookupLimit, TimeRelation.BEFORE)
+        val after = getIds(resultRequest, messageId, lookupLimit, TimeRelation.AFTER)
 
         return mapOf(
             TimeRelationMapper.toHttp(TimeRelation.BEFORE) to before,
@@ -161,9 +164,13 @@ abstract class SearchMessagesHandler<B, G, RM, PM>(
     private suspend fun getIds(
         request: SseMessageSearchRequest<RM, PM>,
         messageId: StoredMessageId?,
+        lookupLimit: Long,
         searchDirection: TimeRelation
     ): MutableList<StreamInfo> {
-        val resultRequest = request.copy(searchDirection = searchDirection)
+        val resultRequest = request.copy(
+            searchDirection = searchDirection,
+            lookupLimit = request.lookupLimit ?: lookupLimit
+        )
 
         val pipelineStatus = PipelineStatus()
 

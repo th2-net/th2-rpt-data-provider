@@ -296,7 +296,7 @@ spec:
 # Release notes
 
 ## 5.13.0
-* Provided ability to limit `messageIds` request by `lookupLimitDays` argument
+* Provided ability to limit `messageIds` request by `lookupLimitDays` argument or `messageIdsLookupLimit` option
 * Updated:
   * th2 gradle plugin: `0.1.1`
   * common: `5.14.0-dev`

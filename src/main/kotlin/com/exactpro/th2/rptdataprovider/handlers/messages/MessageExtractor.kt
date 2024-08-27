@@ -42,7 +42,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.time.Instant
-import java.time.temporal.ChronoUnit
 
 
 class MessageExtractor<B, G, RM, PM>(
@@ -184,25 +183,15 @@ class MessageExtractor<B, G, RM, PM>(
                                     startTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
                                     endTimestamp?.let { builder.timestampTo().isLessThan(it) }
 
-                                    if (startTimestamp != null &&
-                                        endTimestamp == null &&
-                                        lookupLimitDays != null
-                                    ) {
-                                        builder.timestampTo().isLessThan(
-                                            startTimestamp.plus(lookupLimitDays.toLong(), ChronoUnit.DAYS)
-                                        )
+                                    if (startTimestamp != null && endTimestamp == null && lookupLimit != null) {
+                                        builder.timestampTo().isLessThan(startTimestamp.plusMillis(lookupLimit))
                                     }
                                 } else {
                                     startTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
                                     endTimestamp?.let { builder.timestampFrom().isGreaterThan(it) }
 
-                                    if (startTimestamp != null &&
-                                        endTimestamp == null &&
-                                        lookupLimitDays != null
-                                    ) {
-                                        builder.timestampFrom().isGreaterThan(
-                                            startTimestamp.minus(lookupLimitDays.toLong(), ChronoUnit.DAYS)
-                                        )
+                                    if (startTimestamp != null && endTimestamp == null && lookupLimit != null) {
+                                        builder.timestampFrom().isGreaterThan(startTimestamp.minusMillis(lookupLimit))
                                     }
                                 }
                             }
