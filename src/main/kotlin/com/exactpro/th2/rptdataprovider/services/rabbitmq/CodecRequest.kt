@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2024 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ import com.exactpro.th2.rptdataprovider.ProtoMessageGroup
 import com.exactpro.th2.rptdataprovider.TransportMessageGroup
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 
 
 data class CodecRequestId(private val ids: Set<BaseMessageId>) {

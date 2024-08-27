@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2024 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ import com.exactpro.th2.rptdataprovider.entities.filters.info.Parameter
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 
 class AttachedEventFilters<RM, PM> private constructor(
     private var messagesFromAttachedId: Set<String>,

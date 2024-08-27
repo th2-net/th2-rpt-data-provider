@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2024 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,12 @@ import com.exactpro.th2.rptdataprovider.ProtoMessageGroup
 import com.exactpro.th2.rptdataprovider.ProtoRawMessage
 import com.exactpro.th2.rptdataprovider.TransportMessageGroup
 import com.exactpro.th2.rptdataprovider.TransportRawMessage
-import com.exactpro.th2.rptdataprovider.entities.internal.*
+import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineFilteredMessage
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineKeepAlive
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
+import com.exactpro.th2.rptdataprovider.entities.internal.StreamEndObject
+import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
 import com.exactpro.th2.rptdataprovider.entities.mappers.TimeRelationMapper
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
@@ -39,13 +44,16 @@ import com.exactpro.th2.rptdataprovider.handlers.messages.MessageExtractor
 import com.exactpro.th2.rptdataprovider.handlers.messages.ProtoChainBuilder
 import com.exactpro.th2.rptdataprovider.handlers.messages.StreamMerger
 import com.exactpro.th2.rptdataprovider.handlers.messages.TransportChainBuilder
+import io.github.oshai.kotlinlogging.KotlinLogging
 import io.prometheus.client.Counter
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.takeWhile
-import mu.KotlinLogging
+import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlin.math.roundToInt

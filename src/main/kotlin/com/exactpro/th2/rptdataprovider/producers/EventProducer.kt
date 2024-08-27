@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2020-2024 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package com.exactpro.th2.rptdataprovider.producers
 
@@ -27,7 +27,7 @@ import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleEventNotFoundException
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.fasterxml.jackson.databind.ObjectMapper
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.time.Instant
 
 class EventProducer(private val cradle: CradleService, private val mapper: ObjectMapper) {

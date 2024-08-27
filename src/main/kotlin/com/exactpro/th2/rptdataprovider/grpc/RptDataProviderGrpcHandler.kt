@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2024 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,10 +48,10 @@ import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import com.google.protobuf.MessageOrBuilder
 import com.google.protobuf.TextFormat
+import io.github.oshai.kotlinlogging.KotlinLogging
 import io.grpc.Status
 import io.grpc.stub.StreamObserver
-import io.ktor.server.engine.*
-import io.ktor.util.*
+import io.ktor.util.InternalAPI
 import io.prometheus.client.Counter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -65,7 +65,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import mu.KotlinLogging
 import org.apache.commons.lang3.exception.ExceptionUtils
 import java.time.Instant
 import java.util.concurrent.Executors
