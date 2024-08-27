@@ -164,6 +164,14 @@ data class SseMessageSearchRequest<RM, PM>(
         }
     }
 
+    private fun checkLookupLimitDays() {
+        if (lookupLimitDays != null && endTimestamp != null) {
+            throw InvalidRequestException(
+                "endTimestamp: $endTimestamp must be null if lookupLimitDays: $lookupLimitDays isn't null"
+            )
+        }
+    }
+
     private fun checkStartPoint() {
         if (startTimestamp == null && resumeFromIdsList.isEmpty())
             throw InvalidRequestException("One of the 'startTimestamp' or 'messageId' must not be null")
@@ -206,6 +214,7 @@ data class SseMessageSearchRequest<RM, PM>(
         checkEndTimestamp()
         checkStreamList()
         checkTimestampAndId()
+        checkLookupLimitDays()
         checkResumeIds()
     }
 

@@ -34,9 +34,15 @@ import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
-import kotlinx.coroutines.*
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 
 
 class MessageExtractor<B, G, RM, PM>(
@@ -173,12 +179,32 @@ class MessageExtractor<B, G, RM, PM>(
                                 }
                             }
                             // always need to make sure that we send messages within the specified timestamp (in case the resume ID points to the past)
-                            if (order == Order.DIRECT) {
-                                request.startTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
-                                request.endTimestamp?.let { builder.timestampTo().isLessThan(it) }
-                            } else {
-                                request.startTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
-                                request.endTimestamp?.let { builder.timestampFrom().isGreaterThan(it) }
+                            with(request) {
+                                if (order == Order.DIRECT) {
+                                    startTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
+                                    endTimestamp?.let { builder.timestampTo().isLessThan(it) }
+
+                                    if (startTimestamp != null &&
+                                        endTimestamp == null &&
+                                        lookupLimitDays != null
+                                    ) {
+                                        builder.timestampTo().isLessThan(
+                                            startTimestamp.plus(lookupLimitDays.toLong(), ChronoUnit.DAYS)
+                                        )
+                                    }
+                                } else {
+                                    startTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
+                                    endTimestamp?.let { builder.timestampFrom().isGreaterThan(it) }
+
+                                    if (startTimestamp != null &&
+                                        endTimestamp == null &&
+                                        lookupLimitDays != null
+                                    ) {
+                                        builder.timestampFrom().isGreaterThan(
+                                            startTimestamp.minus(lookupLimitDays.toLong(), ChronoUnit.DAYS)
+                                        )
+                                    }
+                                }
                             }
                         }.build()
                 )
