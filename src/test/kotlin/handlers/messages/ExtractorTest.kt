@@ -125,6 +125,7 @@ class ExtractorTest {
             )
         }
         every { msg.metadata } answers { null }
+        every { msg.serializedSize } answers { 0 }
 
         return msg
     }

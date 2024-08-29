@@ -54,18 +54,21 @@ class TimestampGeneratorTest {
         searchDirection: TimeRelation = TimeRelation.AFTER,
         resumeId: ProviderEventId? = null
     ): SseEventSearchRequest {
-        val parameters = mutableMapOf<String, List<String>>()
+        val parameters = buildMap {
+            put("bookId", listOf(bookId.name))
+            put("scope", listOf(scope))
 
-        if (startTimestamp != null) {
-            parameters["startTimestamp"] = listOf(startTimestamp.toEpochMilli().toString())
-        }
+            if (startTimestamp != null) {
+                put("startTimestamp", listOf(startTimestamp.toEpochMilli().toString()))
+            }
 
-        if (endTimestamp != null) {
-            parameters["endTimestamp"] = listOf(endTimestamp.toEpochMilli().toString())
-        }
+            if (endTimestamp != null) {
+                put("endTimestamp", listOf(endTimestamp.toEpochMilli().toString()))
+            }
 
-        if (resumeId != null) {
-            parameters["resumeFromId"] = listOf(resumeId.toString())
+            if (resumeId != null) {
+                put("resumeFromId", listOf(resumeId.toString()))
+            }
         }
 
         return SseEventSearchRequest(parameters, FilterPredicate(emptyList()))
