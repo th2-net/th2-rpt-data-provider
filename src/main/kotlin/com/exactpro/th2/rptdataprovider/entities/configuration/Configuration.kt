@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2024 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 package com.exactpro.th2.rptdataprovider.entities.configuration
 
 import com.exactpro.th2.rptdataprovider.server.ServerType
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 
 class CustomConfigurationClass {
     val hostname: String = "localhost"
@@ -48,6 +48,7 @@ class CustomConfigurationClass {
     val messageUnpackerOutputMessageBuffer: Int = 100
     val messageFilterOutputMessageBuffer: Int = 100
     val messageMergerOutputMessageBuffer: Int = 10
+    val messageIdsLookupLimitDays: Int = 7
 
     val codecResponseTimeout: Int = 6_000
     val codecPendingBatchLimit: Int = 16
@@ -176,6 +177,12 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
             customConfiguration.messageMergerOutputMessageBuffer.toString(),
             "10"
         )
+
+    val messageIdsLookupLimitDays: Variable = Variable(
+        "messageIdsLookupLimitDays",
+        customConfiguration.messageIdsLookupLimitDays.toString(),
+        "7"
+    )
 
     val codecResponseTimeout: Variable = Variable(
         "codecResponseTimeout",

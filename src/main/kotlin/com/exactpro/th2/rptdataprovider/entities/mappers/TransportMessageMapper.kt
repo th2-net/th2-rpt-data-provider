@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2022-2024 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ import com.exactpro.th2.rptdataprovider.convertToProto
 import com.exactpro.th2.rptdataprovider.convertToTransport
 import com.exactpro.th2.rptdataprovider.entities.internal.MessageWithMetadata
 import com.exactpro.th2.rptdataprovider.entities.responses.HttpMessage
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.util.*
 
 object TransportMessageMapper {

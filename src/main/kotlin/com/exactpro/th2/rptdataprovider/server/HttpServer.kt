@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2024 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,21 +35,20 @@ import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.server.handler.AbortableRequestHandler
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
-import io.ktor.server.application.*
-
+import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.http.*
-import io.ktor.server.request.*
-import io.ktor.server.response.*
-import io.ktor.server.routing.*
+import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.compression.Compression
+import io.ktor.server.request.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
 import io.ktor.server.util.getOrFail
 import io.ktor.util.*
 import io.ktor.util.pipeline.*
 import io.prometheus.client.Counter
 import kotlinx.coroutines.*
-import mu.KotlinLogging
 import java.nio.channels.ClosedChannelException
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.coroutineContext
@@ -446,19 +445,19 @@ class HttpServer<B, G, RM, PM>(
                             queryParametersMap,
                             messageFiltersPredicateFactory.getEmptyPredicate(),
                         ).also(SseMessageSearchRequest<*, *>::checkIdsRequest)
-                        searchMessagesHandler.getIds(request)
+                        searchMessagesHandler.getIds(request, configuration.messageIdsLookupLimitDays.value.toLong())
                     }
                 }
 
                 get("/bookIds") {
-                    handleRequest(call, context, "book ids", null, false, false) {
+                    handleRequest(call, context, "book ids", null, probe = false, useSse = false) {
                         cradleService.getBookIds()
                     }
                 }
 
                 get("/scopeIds") {
                     val book = call.parameters["bookId"]!!
-                    handleRequest(call, context, "event scopes", null, false, false) {
+                    handleRequest(call, context, "event scopes", null, probe = false, useSse = false) {
                         cradleService.getEventScopes(BookId(book))
                     }
                 }

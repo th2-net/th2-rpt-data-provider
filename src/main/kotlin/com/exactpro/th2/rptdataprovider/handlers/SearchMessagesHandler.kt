@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2024 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ package com.exactpro.th2.rptdataprovider.handlers
 
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.TimeRelation
+import com.exactpro.cradle.TimeRelation.AFTER
+import com.exactpro.cradle.TimeRelation.BEFORE
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.common.grpc.MessageGroupBatch
@@ -28,7 +30,12 @@ import com.exactpro.th2.rptdataprovider.ProtoMessageGroup
 import com.exactpro.th2.rptdataprovider.ProtoRawMessage
 import com.exactpro.th2.rptdataprovider.TransportMessageGroup
 import com.exactpro.th2.rptdataprovider.TransportRawMessage
-import com.exactpro.th2.rptdataprovider.entities.internal.*
+import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineFilteredMessage
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineKeepAlive
+import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
+import com.exactpro.th2.rptdataprovider.entities.internal.StreamEndObject
+import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
 import com.exactpro.th2.rptdataprovider.entities.mappers.TimeRelationMapper
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
@@ -39,13 +46,17 @@ import com.exactpro.th2.rptdataprovider.handlers.messages.MessageExtractor
 import com.exactpro.th2.rptdataprovider.handlers.messages.ProtoChainBuilder
 import com.exactpro.th2.rptdataprovider.handlers.messages.StreamMerger
 import com.exactpro.th2.rptdataprovider.handlers.messages.TransportChainBuilder
+import io.github.oshai.kotlinlogging.KotlinLogging
 import io.prometheus.client.Counter
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.takeWhile
-import mu.KotlinLogging
+import kotlinx.coroutines.withContext
+import java.time.temporal.ChronoUnit.DAYS
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlin.math.roundToInt
@@ -119,7 +130,10 @@ abstract class SearchMessagesHandler<B, G, RM, PM>(
         }
     }
 
-    suspend fun getIds(request: SseMessageSearchRequest<RM, PM>): Map<String, List<StreamInfo>> {
+    suspend fun getIds(request: SseMessageSearchRequest<RM, PM>, lookupLimitDays: Long): Map<String, List<StreamInfo>> {
+        require(request.startTimestamp != null && request.endTimestamp == null) {
+            "startTimestamp must be not null and endTimestamp be null in request: $request"
+        }
         searchMessageRequests.inc()
         val resumeId = request.resumeFromIdsList.firstOrNull()
         val messageId = resumeId?.let {
@@ -135,12 +149,12 @@ abstract class SearchMessagesHandler<B, G, RM, PM>(
             request.copy(startTimestamp = resumeId.timestamp)
         } ?: request
 
-        val before = getIds(resultRequest, messageId, TimeRelation.BEFORE)
-        val after = getIds(resultRequest, messageId, TimeRelation.AFTER)
+        val before = getIds(resultRequest, messageId, lookupLimitDays, BEFORE)
+        val after = getIds(resultRequest, messageId, lookupLimitDays, AFTER)
 
         return mapOf(
-            TimeRelationMapper.toHttp(TimeRelation.BEFORE) to before,
-            TimeRelationMapper.toHttp(TimeRelation.AFTER) to after,
+            TimeRelationMapper.toHttp(BEFORE) to before,
+            TimeRelationMapper.toHttp(AFTER) to after,
         )
     }
 
@@ -153,9 +167,19 @@ abstract class SearchMessagesHandler<B, G, RM, PM>(
     private suspend fun getIds(
         request: SseMessageSearchRequest<RM, PM>,
         messageId: StoredMessageId?,
+        lookupLimitDays: Long,
         searchDirection: TimeRelation
     ): MutableList<StreamInfo> {
-        val resultRequest = request.copy(searchDirection = searchDirection)
+        val lookupLimit = request.lookupLimitDays ?: lookupLimitDays
+        val resultRequest = request.run {
+            copy(
+                searchDirection = searchDirection,
+                endTimestamp = when (searchDirection) {
+                    BEFORE -> startTimestamp?.minus(lookupLimit, DAYS)
+                    AFTER -> startTimestamp?.plus(lookupLimit, DAYS)
+                }
+            ).also(SseMessageSearchRequest<*, *>::checkIdsRequest)
+        }
 
         val pipelineStatus = PipelineStatus()
 

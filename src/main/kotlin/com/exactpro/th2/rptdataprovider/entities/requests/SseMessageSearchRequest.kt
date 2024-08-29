@@ -39,7 +39,7 @@ data class SseMessageSearchRequest<RM, PM>(
     val endTimestamp: Instant?,
     val resultCountLimit: Int?,
     val attachedEvents: Boolean,
-    val lookupLimitDays: Int?,
+    val lookupLimitDays: Long?,
     val resumeFromIdsList: List<StreamPointer>,
     val includeProtocols: List<String>?,
     val excludeProtocols: List<String>?,
@@ -70,7 +70,7 @@ data class SseMessageSearchRequest<RM, PM>(
 
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt(),
         attachedEvents = parameters["attachedEvents"]?.firstOrNull()?.toBoolean() ?: false,
-        lookupLimitDays = parameters["lookupLimitDays"]?.firstOrNull()?.toInt(),
+        lookupLimitDays = parameters["lookupLimitDays"]?.firstOrNull()?.toLong(),
 
         includeProtocols = parameters["includeProtocols"],
         excludeProtocols = parameters["excludeProtocols"],

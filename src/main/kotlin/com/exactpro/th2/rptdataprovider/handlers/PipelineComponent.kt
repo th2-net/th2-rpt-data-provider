@@ -1,5 +1,5 @@
 ﻿/*
- * Copyright 2021-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2021-2024 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 
 
 abstract class PipelineComponent<B, G, RM, PM>(
