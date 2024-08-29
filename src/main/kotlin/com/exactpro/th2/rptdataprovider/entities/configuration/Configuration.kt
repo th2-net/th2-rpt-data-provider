@@ -48,7 +48,7 @@ class CustomConfigurationClass {
     val messageUnpackerOutputMessageBuffer: Int = 100
     val messageFilterOutputMessageBuffer: Int = 100
     val messageMergerOutputMessageBuffer: Int = 10
-    val messageIdsLookupLimit: Int = 60 * 30 * 1_000
+    val messageIdsLookupLimitDays: Int = 7
 
     val codecResponseTimeout: Int = 6_000
     val codecPendingBatchLimit: Int = 16
@@ -178,10 +178,10 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
             "10"
         )
 
-    val messageIdsLookupLimit: Variable = Variable(
-        "messageIdsLookupLimit",
-        customConfiguration.messageIdsLookupLimit.toString(),
-        "1800000"
+    val messageIdsLookupLimitDays: Variable = Variable(
+        "messageIdsLookupLimitDays",
+        customConfiguration.messageIdsLookupLimitDays.toString(),
+        "7"
     )
 
     val codecResponseTimeout: Variable = Variable(

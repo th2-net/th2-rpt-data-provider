@@ -222,6 +222,8 @@ spec:
     messageUnpackerOutputMessageBuffer: 100
     messageFilterOutputMessageBuffer: 100
     messageMergerOutputMessageBuffer: 10
+    
+    messageIdsLookupLimitDays: 7            // lookup limit value for seacing next and previous message ids.  
    
     codecPendingBatchLimit: 16              // the total number of messages sent to the codec batches in parallel for all pipelines
     codecCallbackThreadPool: 4              // thread pool for parsing messages received from codecs
@@ -296,7 +298,7 @@ spec:
 # Release notes
 
 ## 5.13.0
-* Provided ability to limit `messageIds` request by `lookupLimitDays` argument or `messageIdsLookupLimit` option
+* Provided ability to limit `messageIds` request by `lookupLimitDays` argument or `messageIdsLookupLimitDays` option
 * Updated:
   * th2 gradle plugin: `0.1.1`
   * common: `5.14.0-dev`

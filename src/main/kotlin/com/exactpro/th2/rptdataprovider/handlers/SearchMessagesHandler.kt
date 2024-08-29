@@ -18,6 +18,8 @@ package com.exactpro.th2.rptdataprovider.handlers
 
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.TimeRelation
+import com.exactpro.cradle.TimeRelation.AFTER
+import com.exactpro.cradle.TimeRelation.BEFORE
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.common.grpc.MessageGroupBatch
@@ -54,6 +56,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.withContext
+import java.time.temporal.ChronoUnit.DAYS
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlin.math.roundToInt
@@ -127,7 +130,7 @@ abstract class SearchMessagesHandler<B, G, RM, PM>(
         }
     }
 
-    suspend fun getIds(request: SseMessageSearchRequest<RM, PM>, lookupLimit: Long): Map<String, List<StreamInfo>> {
+    suspend fun getIds(request: SseMessageSearchRequest<RM, PM>, lookupLimitDays: Long): Map<String, List<StreamInfo>> {
         require(request.startTimestamp != null && request.endTimestamp == null) {
             "startTimestamp must be not null and endTimestamp be null in request: $request"
         }
@@ -146,12 +149,12 @@ abstract class SearchMessagesHandler<B, G, RM, PM>(
             request.copy(startTimestamp = resumeId.timestamp)
         } ?: request
 
-        val before = getIds(resultRequest, messageId, lookupLimit, TimeRelation.BEFORE)
-        val after = getIds(resultRequest, messageId, lookupLimit, TimeRelation.AFTER)
+        val before = getIds(resultRequest, messageId, lookupLimitDays, BEFORE)
+        val after = getIds(resultRequest, messageId, lookupLimitDays, AFTER)
 
         return mapOf(
-            TimeRelationMapper.toHttp(TimeRelation.BEFORE) to before,
-            TimeRelationMapper.toHttp(TimeRelation.AFTER) to after,
+            TimeRelationMapper.toHttp(BEFORE) to before,
+            TimeRelationMapper.toHttp(AFTER) to after,
         )
     }
 
@@ -164,13 +167,19 @@ abstract class SearchMessagesHandler<B, G, RM, PM>(
     private suspend fun getIds(
         request: SseMessageSearchRequest<RM, PM>,
         messageId: StoredMessageId?,
-        lookupLimit: Long,
+        lookupLimitDays: Long,
         searchDirection: TimeRelation
     ): MutableList<StreamInfo> {
-        val resultRequest = request.copy(
-            searchDirection = searchDirection,
-            lookupLimit = request.lookupLimit ?: lookupLimit
-        )
+        val lookupLimit = request.lookupLimitDays ?: lookupLimitDays
+        val resultRequest = request.run {
+            copy(
+                searchDirection = searchDirection,
+                endTimestamp = when (searchDirection) {
+                    BEFORE -> startTimestamp?.minus(lookupLimit, DAYS)
+                    AFTER -> startTimestamp?.plus(lookupLimit, DAYS)
+                }
+            ).also(SseMessageSearchRequest<*, *>::checkIdsRequest)
+        }
 
         val pipelineStatus = PipelineStatus()
 

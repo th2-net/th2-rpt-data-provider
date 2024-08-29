@@ -445,19 +445,19 @@ class HttpServer<B, G, RM, PM>(
                             queryParametersMap,
                             messageFiltersPredicateFactory.getEmptyPredicate(),
                         ).also(SseMessageSearchRequest<*, *>::checkIdsRequest)
-                        searchMessagesHandler.getIds(request, configuration.messageIdsLookupLimit.value.toLong())
+                        searchMessagesHandler.getIds(request, configuration.messageIdsLookupLimitDays.value.toLong())
                     }
                 }
 
                 get("/bookIds") {
-                    handleRequest(call, context, "book ids", null, false, false) {
+                    handleRequest(call, context, "book ids", null, probe = false, useSse = false) {
                         cradleService.getBookIds()
                     }
                 }
 
                 get("/scopeIds") {
                     val book = call.parameters["bookId"]!!
-                    handleRequest(call, context, "event scopes", null, false, false) {
+                    handleRequest(call, context, "event scopes", null, probe = false, useSse = false) {
                         cradleService.getEventScopes(BookId(book))
                     }
                 }

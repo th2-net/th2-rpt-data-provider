@@ -39,7 +39,7 @@ data class SseMessageSearchRequest<RM, PM>(
     val endTimestamp: Instant?,
     val resultCountLimit: Int?,
     val attachedEvents: Boolean,
-    val lookupLimit: Long?,
+    val lookupLimitDays: Long?,
     val resumeFromIdsList: List<StreamPointer>,
     val includeProtocols: List<String>?,
     val excludeProtocols: List<String>?,
@@ -70,7 +70,7 @@ data class SseMessageSearchRequest<RM, PM>(
 
         resultCountLimit = parameters["resultCountLimit"]?.firstOrNull()?.toInt(),
         attachedEvents = parameters["attachedEvents"]?.firstOrNull()?.toBoolean() ?: false,
-        lookupLimit = parameters["lookupLimitDays"]?.firstOrNull()?.toLong()?.run { this * 24 * 60 * 60 * 1_000 },
+        lookupLimitDays = parameters["lookupLimitDays"]?.firstOrNull()?.toLong(),
 
         includeProtocols = parameters["includeProtocols"],
         excludeProtocols = parameters["excludeProtocols"],
@@ -127,7 +127,7 @@ data class SseMessageSearchRequest<RM, PM>(
 
         attachedEvents = false,
 
-        lookupLimit = null,
+        lookupLimitDays = null,
 
         includeProtocols = null,
 
@@ -161,20 +161,6 @@ data class SseMessageSearchRequest<RM, PM>(
         } else {
             if (startTimestamp.isBefore(endTimestamp))
                 throw InvalidRequestException("startTimestamp: $startTimestamp < endTimestamp: $endTimestamp")
-        }
-    }
-
-    private fun checkLookupLimitDays() {
-        if (lookupLimit != null && endTimestamp != null) {
-            throw InvalidRequestException(
-                "endTimestamp: $endTimestamp must be null if lookupLimit: $lookupLimit isn't null"
-            )
-        }
-    }
-
-    private fun checkNoEndTimestamp() {
-        if (endTimestamp != null) {
-            throw InvalidRequestException("endTimestamp: $endTimestamp must be null")
         }
     }
 
@@ -217,10 +203,9 @@ data class SseMessageSearchRequest<RM, PM>(
 
     fun checkIdsRequest() {
         checkStartPoint()
-        checkNoEndTimestamp()
+        checkEndTimestamp()
         checkStreamList()
         checkTimestampAndId()
-        checkLookupLimitDays()
         checkResumeIds()
     }
 

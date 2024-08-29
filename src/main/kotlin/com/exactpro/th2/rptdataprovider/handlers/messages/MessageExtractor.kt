@@ -178,22 +178,12 @@ class MessageExtractor<B, G, RM, PM>(
                                 }
                             }
                             // always need to make sure that we send messages within the specified timestamp (in case the resume ID points to the past)
-                            with(request) {
-                                if (order == Order.DIRECT) {
-                                    startTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
-                                    endTimestamp?.let { builder.timestampTo().isLessThan(it) }
-
-                                    if (startTimestamp != null && endTimestamp == null && lookupLimit != null) {
-                                        builder.timestampTo().isLessThan(startTimestamp.plusMillis(lookupLimit))
-                                    }
-                                } else {
-                                    startTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
-                                    endTimestamp?.let { builder.timestampFrom().isGreaterThan(it) }
-
-                                    if (startTimestamp != null && endTimestamp == null && lookupLimit != null) {
-                                        builder.timestampFrom().isGreaterThan(startTimestamp.minusMillis(lookupLimit))
-                                    }
-                                }
+                            if (order == Order.DIRECT) {
+                                request.startTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
+                                request.endTimestamp?.let { builder.timestampTo().isLessThan(it) }
+                            } else {
+                                request.startTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
+                                request.endTimestamp?.let { builder.timestampFrom().isGreaterThan(it) }
                             }
                         }.build()
                 )
