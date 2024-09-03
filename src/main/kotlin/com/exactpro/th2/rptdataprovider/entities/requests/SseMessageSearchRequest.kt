@@ -203,7 +203,6 @@ data class SseMessageSearchRequest<RM, PM>(
                 }
             }
         }
-            throw InvalidRequestException("You cannot specify resume Id and start timestamp at the same time")
     }
 
     private fun checkResumeIds() {
