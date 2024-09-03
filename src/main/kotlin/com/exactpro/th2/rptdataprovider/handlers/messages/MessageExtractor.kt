@@ -16,8 +16,10 @@
 
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
-import com.exactpro.cradle.Order
-import com.exactpro.cradle.TimeRelation
+import com.exactpro.cradle.Order.DIRECT
+import com.exactpro.cradle.Order.REVERSE
+import com.exactpro.cradle.TimeRelation.AFTER
+import com.exactpro.cradle.TimeRelation.BEFORE
 import com.exactpro.cradle.messages.MessageFilterBuilder
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageBatch
@@ -66,10 +68,9 @@ class MessageExtractor<B, G, RM, PM>(
     private var lastElement: StoredMessageId? = null
     private var lastTimestamp: Instant? = null
 
-    private val order = if (request.searchDirection == TimeRelation.AFTER) {
-        Order.DIRECT
-    } else {
-        Order.REVERSE
+    private val order = when(request.searchDirection) {
+        BEFORE -> REVERSE
+        AFTER -> DIRECT
     }
 
     init {
@@ -86,10 +87,9 @@ class MessageExtractor<B, G, RM, PM>(
     }
 
     private fun getMessagesFromBatch(batch: StoredMessageBatch): Collection<StoredMessage> {
-        return if (order == Order.DIRECT) {
-            batch.messages
-        } else {
-            batch.messagesReverse
+        return when(order) {
+            DIRECT -> batch.messages
+            REVERSE -> batch.messagesReverse
         }
     }
 
@@ -102,10 +102,9 @@ class MessageExtractor<B, G, RM, PM>(
             if (resumeFromId?.sequence != null) {
                 val startSeq = resumeFromId.sequence
                 dropWhile {
-                    if (order == Order.DIRECT) {
-                        it.sequence < startSeq
-                    } else {
-                        it.sequence > startSeq
+                    when(order) {
+                        DIRECT -> it.sequence < startSeq
+                        REVERSE -> it.sequence > startSeq
                     }
                 }
             } else {
@@ -113,10 +112,9 @@ class MessageExtractor<B, G, RM, PM>(
             }
         }.dropWhile { //trim messages that do not strictly match time filter
             request.startTimestamp?.let { startTimestamp ->
-                if (order == Order.DIRECT) {
-                    it.timestamp.isBefore(startTimestamp)
-                } else {
-                    it.timestamp.isAfter(startTimestamp)
+                when(order) {
+                    DIRECT -> it.timestamp.isBefore(startTimestamp)
+                    REVERSE -> it.timestamp.isAfter(startTimestamp)
                 }
             } ?: false
         }
@@ -124,10 +122,9 @@ class MessageExtractor<B, G, RM, PM>(
 
     private fun trimMessagesListTail(message: StoredMessage): Boolean {
         return request.endTimestamp?.let { endTimestamp ->
-            if (order == Order.DIRECT) {
-                message.timestamp.isAfterOrEqual(endTimestamp)
-            } else {
-                message.timestamp.isBeforeOrEqual(endTimestamp)
+            when(order) {
+                DIRECT -> message.timestamp.isAfterOrEqual(endTimestamp)
+                REVERSE -> message.timestamp.isBeforeOrEqual(endTimestamp)
             }
         } ?: false
     }
@@ -149,9 +146,14 @@ class MessageExtractor<B, G, RM, PM>(
 
             streamName!!
 
-            val resumeFromId = request.resumeFromIdsList.firstOrNull {
-                it.stream.name == streamName.name && it.stream.direction == streamName.direction
-            }
+            val resumeFromId = request.resumeFromIdsList.asSequence()
+                .filter { it.stream.name == streamName.name && it.stream.direction == streamName.direction }
+                .run {
+                    when(order) {
+                        DIRECT -> minByOrNull(StreamPointer::sequence)
+                        REVERSE -> maxByOrNull(StreamPointer::sequence)
+                    }
+                }
 
             logger.debug { "acquiring cradle iterator for stream $streamName" }
 
@@ -170,20 +172,22 @@ class MessageExtractor<B, G, RM, PM>(
                         .also { builder ->
                             if (resumeFromId != null) {
                                 builder.sequence().let {
-                                    if (order == Order.DIRECT) {
-                                        it.isGreaterThanOrEqualTo(resumeFromId.sequence)
-                                    } else {
-                                        it.isLessThanOrEqualTo(resumeFromId.sequence)
+                                    when(order) {
+                                        DIRECT -> it.isGreaterThanOrEqualTo(resumeFromId.sequence)
+                                        REVERSE -> it.isLessThanOrEqualTo(resumeFromId.sequence)
                                     }
                                 }
                             }
                             // always need to make sure that we send messages within the specified timestamp (in case the resume ID points to the past)
-                            if (order == Order.DIRECT) {
-                                request.startTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
-                                request.endTimestamp?.let { builder.timestampTo().isLessThan(it) }
-                            } else {
-                                request.startTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
-                                request.endTimestamp?.let { builder.timestampFrom().isGreaterThan(it) }
+                            when(order) {
+                                DIRECT -> {
+                                    request.startTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
+                                    request.endTimestamp?.let { builder.timestampTo().isLessThan(it) }
+                                }
+                                REVERSE -> {
+                                    request.startTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
+                                    request.endTimestamp?.let { builder.timestampFrom().isGreaterThan(it) }
+                                }
                             }
                         }.build()
                 )
@@ -207,8 +211,14 @@ class MessageExtractor<B, G, RM, PM>(
                                 }
                             }
 
-                        val firstMessage = if (order == Order.DIRECT) batch.messages.first() else batch.messages.last()
-                        val lastMessage = if (order == Order.DIRECT) batch.messages.last() else batch.messages.first()
+                        val firstMessage = when(order) {
+                            DIRECT -> batch.messages.first()
+                            REVERSE -> batch.messages.last()
+                        }
+                        val lastMessage = when(order) {
+                            DIRECT -> batch.messages.last()
+                            REVERSE -> batch.messages.first()
+                        }
 
                         logger.trace {
                             "batch ${batch.id.sequence} of stream $streamName has been trimmed (targetStartTimestamp=${request.startTimestamp} targetEndTimestamp=${request.endTimestamp} targetId=${resumeFromId?.sequence}) - ${trimmedMessages.size} of ${batch.messages.size} messages left (firstId=${firstMessage.id.sequence} firstTimestamp=${firstMessage.timestamp} lastId=${lastMessage.id.sequence} lastTimestamp=${lastMessage.timestamp})"
@@ -254,10 +264,9 @@ class MessageExtractor<B, G, RM, PM>(
             }
 
             isStreamEmpty = true
-            lastTimestamp = if (order == Order.DIRECT) {
-                Instant.ofEpochMilli(Long.MAX_VALUE)
-            } else {
-                Instant.ofEpochMilli(Long.MIN_VALUE)
+            lastTimestamp = when(order) {
+                DIRECT -> Instant.ofEpochMilli(Long.MAX_VALUE)
+                REVERSE -> Instant.ofEpochMilli(Long.MIN_VALUE)
             }
 
             logger.debug { "no more data for stream $streamName (lastId=${lastElement.toString()} lastTimestamp=${lastTimestamp})" }

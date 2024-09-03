@@ -36,6 +36,7 @@ import com.exactpro.th2.rptdataprovider.entities.internal.PipelineKeepAlive
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
 import com.exactpro.th2.rptdataprovider.entities.internal.StreamEndObject
 import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
+import com.exactpro.th2.rptdataprovider.entities.internal.StreamPointer
 import com.exactpro.th2.rptdataprovider.entities.mappers.TimeRelationMapper
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
@@ -74,6 +75,14 @@ abstract class SearchMessagesHandler<B, G, RM, PM>(
         private val searchMessageRequests =
             Counter.build("th2_search_messages", "Count of search message requests")
                 .register()
+
+        private fun StreamPointer.toStoredMessageId() = StoredMessageId(
+            stream.bookId,
+            stream.name,
+            stream.direction,
+            timestamp,
+            sequence
+        )
     }
 
 
@@ -135,22 +144,9 @@ abstract class SearchMessagesHandler<B, G, RM, PM>(
             "(startTimestamp must not be null or resumeFromIdsList must not be empty) and endTimestamp must be null in request: $request"
         }
         searchMessageRequests.inc()
-        val resumeId = request.resumeFromIdsList.firstOrNull()
-        val messageId = resumeId?.let {
-            StoredMessageId(
-                it.stream.bookId,
-                it.stream.name,
-                it.stream.direction,
-                it.timestamp,
-                it.sequence
-            )
-        }
-        val resultRequest = resumeId?.let {
-            request.copy(startTimestamp = resumeId.timestamp)
-        } ?: request
 
-        val before = getIds(resultRequest, messageId, lookupLimitDays, BEFORE)
-        val after = getIds(resultRequest, messageId, lookupLimitDays, AFTER)
+        val before = getIds(request, request.resumeFromIdsList, lookupLimitDays, BEFORE)
+        val after = getIds(request, request.resumeFromIdsList, lookupLimitDays, AFTER)
 
         return mapOf(
             TimeRelationMapper.toHttp(BEFORE) to before,
@@ -166,10 +162,15 @@ abstract class SearchMessagesHandler<B, G, RM, PM>(
 
     private suspend fun getIds(
         request: SseMessageSearchRequest<RM, PM>,
-        messageId: StoredMessageId?,
+        messageIds: List<StreamPointer>,
         lookupLimitDays: Long,
         searchDirection: TimeRelation
     ): MutableList<StreamInfo> {
+        val messageId = when(searchDirection) {
+            BEFORE -> messageIds.maxByOrNull(StreamPointer::timestamp)
+            AFTER -> messageIds.minByOrNull(StreamPointer::timestamp)
+        }?.toStoredMessageId()
+
         val lookupLimit = request.lookupLimitDays ?: lookupLimitDays
         val resultRequest = request.run {
             val calculatedStartTimestamp = startTimestamp ?: messageId?.timestamp
