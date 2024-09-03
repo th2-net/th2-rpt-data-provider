@@ -298,7 +298,7 @@ spec:
 # Release notes
 
 ## 5.13.1
-* Fixed the problem data provider can't handle `messageIds` request without startTimestamp
+* Fixed the problem data provider can't handle `messageIds` request with `messageId` but without `startTimestamp` arguments
 
 ## 5.13.0
 * Provided ability to limit `messageIds` request by `lookupLimitDays` argument or `messageIdsLookupLimitDays` option
