@@ -40,7 +40,7 @@ import kotlin.time.measureTimedValue
 abstract class MessageBatchUnpacker<B, G, RM, PM>(
     context: Context<B, G, RM, PM>,
     searchRequest: SseMessageSearchRequest<RM, PM>,
-    streamName: StreamName?,
+    streamName: CommonStreamName?,
     externalScope: CoroutineScope,
     previousComponent: PipelineComponent<B, G, RM, PM>?,
     messageFlowCapacity: Int,
@@ -60,7 +60,7 @@ abstract class MessageBatchUnpacker<B, G, RM, PM>(
     ) : this(
         pipelineComponent.context,
         pipelineComponent.searchRequest,
-        pipelineComponent.streamName,
+        pipelineComponent.commonStreamName,
         pipelineComponent.externalScope,
         pipelineComponent,
         messageFlowCapacity,
@@ -92,7 +92,7 @@ abstract class MessageBatchUnpacker<B, G, RM, PM>(
         val messages = pipelineMessage.storedBatchWrapper.trimmedMessages
 
         val errorMessage = """"codec response is null 
-                    | (stream=${streamName} 
+                    | (stream=${commonStreamName} 
                     | firstRequestId=${messages.first().id.sequence}
                     | lastRequestId=${messages.last().id.sequence} 
                     | requestSize=${messages.size})
@@ -114,7 +114,7 @@ abstract class MessageBatchUnpacker<B, G, RM, PM>(
         if (pipelineMessage is PipelineDecodedBatch<*, *, *, *>) {
 
             pipelineStatus.unpackStart(
-                streamName.toString(),
+                commonStreamName.toString(),
                 pipelineMessage.storedBatchWrapper.trimmedMessages.size.toLong()
             )
 
@@ -127,7 +127,7 @@ abstract class MessageBatchUnpacker<B, G, RM, PM>(
                 }
             }.also {
                 logger.debug {
-                    "awaited codec response for ${it.duration.toDouble(DurationUnit.MILLISECONDS)}ms (stream=${streamName} firstRequestId=${requests.first().id.sequence} lastRequestId=${requests.last().id.sequence} requestSize=${requests.size} responseSize=${it.value?.groupCount})"
+                    "awaited codec response for ${it.duration.toDouble(DurationUnit.MILLISECONDS)}ms (stream=${commonStreamName} firstRequestId=${requests.first().id.sequence} lastRequestId=${requests.last().id.sequence} requestSize=${requests.size} responseSize=${it.value?.groupCount})"
                 }
             }.value?.groups
 
@@ -148,24 +148,24 @@ abstract class MessageBatchUnpacker<B, G, RM, PM>(
 
             val messages = pipelineMessage.storedBatchWrapper.trimmedMessages
 
-            logger.debug { "codec response unpacking took ${result.duration.toDouble(DurationUnit.MILLISECONDS)}ms (stream=${streamName.toString()} firstId=${messages.first().id.sequence} lastId=${messages.last().id.sequence} messages=${messages.size})" }
+            logger.debug { "codec response unpacking took ${result.duration.toDouble(DurationUnit.MILLISECONDS)}ms (stream=${commonStreamName.toString()} firstId=${messages.first().id.sequence} lastId=${messages.last().id.sequence} messages=${messages.size})" }
 
             pipelineMessage.info.buildMessage = result.duration.toDouble(DurationUnit.MILLISECONDS).toLong()
             StreamWriter.setBuildMessage(pipelineMessage.info)
 
             pipelineStatus.unpackEnd(
-                streamName.toString(),
+                commonStreamName.toString(),
                 pipelineMessage.storedBatchWrapper.trimmedMessages.size.toLong()
             )
 
             result.value.forEach { (sendToChannel(it)) }
 
             pipelineStatus.unpackSendDownstream(
-                streamName.toString(),
+                commonStreamName.toString(),
                 pipelineMessage.storedBatchWrapper.trimmedMessages.size.toLong()
             )
 
-            logger.debug { "unpacked responses are sent (stream=${streamName.toString()} firstId=${messages.first().id.sequence} lastId=${messages.last().id.sequence} messages=${result.value.size})" }
+            logger.debug { "unpacked responses are sent (stream=${commonStreamName.toString()} firstId=${messages.first().id.sequence} lastId=${messages.last().id.sequence} messages=${result.value.size})" }
 
         } else {
             sendToChannel(pipelineMessage)
@@ -233,7 +233,7 @@ class ProtoMessageBatchUnpacker(
 
                 throw CodecResponseException(
                     """codec dont parsed all messages
-                    | (stream=${streamName} 
+                    | (stream=${commonStreamName} 
                     | firstRequestId=${messages.first().id.sequence}
                     | lastRequestId=${messages.last().id.sequence}
                     | notParsedMessagesId=$notParsed
@@ -259,10 +259,10 @@ class ProtoMessageBatchUnpacker(
 
                 let {
                     if (response == null) {
-                        pipelineStatus.countParseReceivedFailed(streamName.toString())
+                        pipelineStatus.countParseReceivedFailed(commonStreamName.toString())
                     }
 
-                    pipelineStatus.countParseReceivedTotal(streamName.toString())
+                    pipelineStatus.countParseReceivedTotal(commonStreamName.toString())
 
                     response?.messagesList?.map { ProtoBodyWrapper(it.message) }
                 },
@@ -321,7 +321,7 @@ class TransportMessageBatchUnpacker(
 
                 throw CodecResponseException(
                     """codec dont parsed all messages
-                    | (stream=${streamName} 
+                    | (stream=${commonStreamName} 
                     | firstRequestId=${messages.first().id.sequence}
                     | lastRequestId=${messages.last().id.sequence}
                     | notParsedMessagesId=$notParsed
@@ -347,10 +347,10 @@ class TransportMessageBatchUnpacker(
 
                 let {
                     if (response == null) {
-                        pipelineStatus.countParseReceivedFailed(streamName.toString())
+                        pipelineStatus.countParseReceivedFailed(commonStreamName.toString())
                     }
 
-                    pipelineStatus.countParseReceivedTotal(streamName.toString())
+                    pipelineStatus.countParseReceivedTotal(commonStreamName.toString())
 
                     response?.messages?.map { TransportBodyWrapper((it as ParsedMessage), rawMessageWrapper.book, rawMessageWrapper.sessionAlias) }
                 },

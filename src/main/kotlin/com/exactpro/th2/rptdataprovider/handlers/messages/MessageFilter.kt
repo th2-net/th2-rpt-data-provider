@@ -25,7 +25,7 @@ import kotlinx.coroutines.*
 class MessageFilter<B, G, RM, PM>(
     context: Context<B, G, RM, PM>,
     searchRequest: SseMessageSearchRequest<RM, PM>,
-    streamName: StreamName?,
+    streamName: CommonStreamName?,
     externalScope: CoroutineScope,
     previousComponent: PipelineComponent<B, G, RM, PM>?,
     messageFlowCapacity: Int
@@ -49,7 +49,7 @@ class MessageFilter<B, G, RM, PM>(
     ) : this(
         pipelineComponent.context,
         pipelineComponent.searchRequest,
-        pipelineComponent.streamName,
+        pipelineComponent.commonStreamName,
         pipelineComponent.externalScope,
         pipelineComponent,
         messageFlowCapacity

@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider.handlers
 
-import com.exactpro.cradle.Direction
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.TimeRelation.AFTER
 import com.exactpro.cradle.TimeRelation.BEFORE
@@ -30,12 +29,12 @@ import com.exactpro.th2.rptdataprovider.ProtoMessageGroup
 import com.exactpro.th2.rptdataprovider.ProtoRawMessage
 import com.exactpro.th2.rptdataprovider.TransportMessageGroup
 import com.exactpro.th2.rptdataprovider.TransportRawMessage
+import com.exactpro.th2.rptdataprovider.entities.internal.CommonStreamName
 import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineFilteredMessage
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineKeepAlive
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
 import com.exactpro.th2.rptdataprovider.entities.internal.StreamEndObject
-import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
 import com.exactpro.th2.rptdataprovider.entities.mappers.TimeRelationMapper
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
@@ -183,9 +182,7 @@ abstract class SearchMessagesHandler<B, G, RM, PM>(
 
         val pipelineStatus = PipelineStatus()
 
-        val streamNames = resultRequest.stream.flatMap { stream ->
-            Direction.values().map { StreamName(stream, it, request.bookId) }
-        }
+        val streamNames = resultRequest.stream.map { stream -> CommonStreamName(request.bookId, stream) }
 
         val coroutineScope = CoroutineScope(coroutineContext + Job(coroutineContext[Job]))
         pipelineStatus.addStreams(streamNames.map { it.toString() })
@@ -222,7 +219,7 @@ abstract class SearchMessagesHandler<B, G, RM, PM>(
             } while (listPair.isEmpty())
 
             listPair.first().let {
-                streamInfoList.add(StreamInfo(messageExtractor.streamName!!, it.first))
+                streamInfoList.add(StreamInfo(messageExtractor.commonStreamName, it.first))
             }
         }
         return streamInfoList

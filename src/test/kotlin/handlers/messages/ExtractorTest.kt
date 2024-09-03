@@ -68,7 +68,7 @@ class ExtractorTest {
 
     private val bookId = BookId("")
     private val fullStreamName = "${baseStreamName}:${streamDirection}"
-    private val streamNameObject = StreamName(baseStreamName, Direction.valueOf(streamDirection), BookId(""))
+    private val streamNameObject = StreamName(BookId(""), baseStreamName, Direction.valueOf(streamDirection))
 
     inner class BorderTestParameters(
         val startTimestamp: Instant,

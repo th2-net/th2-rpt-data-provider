@@ -35,7 +35,7 @@ class StreamHolder(val messageStream: PipelineComponent<*, *, *, *>) {
             .register()
     }
 
-    private val streamName = messageStream.streamName?.toString()
+    private val streamName = messageStream.commonStreamName?.toString()
     private val labelMetric = pullFromStream.labels(streamName)
 
     var currentElement: PipelineStepObject? = null
@@ -53,7 +53,7 @@ class StreamHolder(val messageStream: PipelineComponent<*, *, *, *>) {
             if (previousElement == null && currentElement == null) {
                 currentElement = it
             } else {
-                throw InvalidInitializationException("StreamHolder ${messageStream.streamName} already initialized")
+                throw InvalidInitializationException("StreamHolder ${messageStream.commonStreamName} already initialized")
             }
         }
     }
@@ -68,7 +68,7 @@ class StreamHolder(val messageStream: PipelineComponent<*, *, *, *>) {
                     previousElement = currentElement
                     currentElement = newElement
                 }
-                    ?: throw InvalidInitializationException("StreamHolder ${messageStream.streamName} need initialization")
+                    ?: throw InvalidInitializationException("StreamHolder ${messageStream.commonStreamName} need initialization")
             }
         }.let {
             labelMetric.observe(it.duration.toDouble(DurationUnit.SECONDS))
@@ -86,7 +86,7 @@ class StreamHolder(val messageStream: PipelineComponent<*, *, *, *>) {
         while (isNeedSearchResumeId(sequenceFilter)) {
             pop()
         }
-        val streamName = checkNotNull(messageStream.streamName) { "stream name is null" }
+        val streamName = checkNotNull(messageStream.commonStreamName) { "stream name is null" }
         val stepObject = currentElement
         return if (stepObject != null && stepObject.streamEmpty) {
             StreamInfo(streamName, null)

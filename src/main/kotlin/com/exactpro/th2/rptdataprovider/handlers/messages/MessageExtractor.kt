@@ -17,15 +17,17 @@
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.cradle.Order
-import com.exactpro.cradle.TimeRelation
-import com.exactpro.cradle.messages.MessageFilterBuilder
+import com.exactpro.cradle.TimeRelation.AFTER
+import com.exactpro.cradle.TimeRelation.BEFORE
+import com.exactpro.cradle.messages.GroupedMessageFilterBuilder
+import com.exactpro.cradle.messages.StoredGroupedMessageBatch
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.rptdataprovider.entities.internal.CommonStreamName
 import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
-import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
 import com.exactpro.th2.rptdataprovider.entities.internal.StreamPointer
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.StoredMessageBatchWrapper
@@ -47,12 +49,12 @@ import java.time.Instant
 class MessageExtractor<B, G, RM, PM>(
     context: Context<B, G, RM, PM>,
     val request: SseMessageSearchRequest<RM, PM>,
-    stream: StreamName,
+    override val commonStreamName: CommonStreamName,
     externalScope: CoroutineScope,
     messageFlowCapacity: Int,
     private val pipelineStatus: PipelineStatus
 ) : PipelineComponent<B, G, RM, PM>(
-    context, request, externalScope, stream, messageFlowCapacity = messageFlowCapacity
+    context, request, externalScope, commonStreamName, messageFlowCapacity = messageFlowCapacity
 ) {
 
     companion object {
@@ -66,7 +68,7 @@ class MessageExtractor<B, G, RM, PM>(
     private var lastElement: StoredMessageId? = null
     private var lastTimestamp: Instant? = null
 
-    private val order = if (request.searchDirection == TimeRelation.AFTER) {
+    private val order = if (request.searchDirection == AFTER) {
         Order.DIRECT
     } else {
         Order.REVERSE
@@ -77,13 +79,39 @@ class MessageExtractor<B, G, RM, PM>(
             try {
                 processMessage()
             } catch (e: CancellationException) {
-                logger.debug { "message extractor for stream $streamName has been stopped" }
+                logger.debug { "message extractor for stream $commonStreamName has been stopped" }
             } catch (e: Exception) {
                 logger.error(e) { "unexpected exception" }
                 throw e
             }
         }
     }
+
+    private val StoredGroupedMessageBatch.orderedMessages: Collection<StoredMessage>
+        get() = if (order == Order.DIRECT) messages else messagesReverse
+
+    private val StoredMessage.isNotCorrectAlias: Boolean
+        get() = commonStreamName?.let { sessionAlias != it.name } ?: false
+
+    private fun StoredMessage.isNotResume(point: StreamPointer?): Boolean =
+        point?.let {
+            point.sequence == sequence &&
+                    point.timestamp == timestamp
+                    point.stream.name == sessionAlias &&
+                    point.stream.direction == direction
+
+
+        } ?: false
+
+    private val StoredMessage.isEarlierStart
+        get() = request.startTimestamp?.let {
+            if (order == Order.DIRECT) timestamp.isBefore(it) else timestamp.isAfter(it)
+        } ?: false
+
+    private val StoredMessage.isLaterEnd
+        get() = request.endTimestamp?.let {
+            if (order == Order.DIRECT) timestamp.isAfterOrEqual(it) else timestamp.isBeforeOrEqual(it)
+        } ?: false
 
     private fun getMessagesFromBatch(batch: StoredMessageBatch): Collection<StoredMessage> {
         return if (order == Order.DIRECT) {
@@ -147,74 +175,117 @@ class MessageExtractor<B, G, RM, PM>(
                 }
             }
 
-            streamName!!
+            commonStreamName!!
 
-            val resumeFromId = request.resumeFromIdsList.firstOrNull {
-                it.stream.name == streamName.name && it.stream.direction == streamName.direction
-            }
+            val resumeFromId = request.resumeFromIdsList.asSequence()
+                .filter { it.stream.name == commonStreamName.name }
+                .run {
+                    when(request.searchDirection) {
+                        BEFORE -> maxByOrNull { it.timestamp }
+                        AFTER -> minByOrNull { it.timestamp }
+                    }
+                }
 
-            logger.debug { "acquiring cradle iterator for stream $streamName" }
+            logger.debug { "acquiring cradle iterator for stream $commonStreamName" }
 
-            resumeFromId?.let { logger.debug { "resume sequence for stream $streamName is set to ${it.sequence}" } }
-            request.startTimestamp?.let { logger.debug { "start timestamp for stream $streamName is set to $it" } }
+            resumeFromId?.let { logger.debug { "resume sequence for stream $commonStreamName is set to ${it.sequence}" } }
+            request.startTimestamp?.let { logger.debug { "start timestamp for stream $commonStreamName is set to $it" } }
 
             if (resumeFromId == null || resumeFromId.hasStarted) {
-                val cradleMessageIterable = context.cradleService.getMessagesBatchesSuspend(
-                    MessageFilterBuilder()
-                        .sessionAlias(streamName.name)
-                        .direction(streamName.direction)
-                        .order(order)
-                        .bookId(streamName.bookId)
+                val sessionGroup = context.cradleService.getSessionGroup(
+                    commonStreamName.bookId,
+                    commonStreamName.name,
+                    request.startTimestamp,
+                    request.endTimestamp,
+                )
+                val cradleMessageIterable = context.cradleService.getGroupedMessages(
+                    this,
+                    GroupedMessageFilterBuilder().apply {
+                        groupName(
+                            sessionGroup,
+                        )
+                        order(order)
+
+                        if (order == Order.DIRECT) {
+                            request.startTimestamp?.let { timestampFrom().isGreaterThanOrEqualTo(it) }
+                            request.endTimestamp?.let { timestampTo().isLessThan(it) }
+                        } else {
+                            request.startTimestamp?.let { timestampTo().isLessThanOrEqualTo(it) }
+                            request.endTimestamp?.let { timestampFrom().isGreaterThan(it) }
+                        }
+                    }.build()
+                )
+//                getMessagesBatchesSuspend(
+//                    MessageFilterBuilder()
+//                        .sessionAlias(streamName.name)
+//                        .direction(streamName.direction)
+//                        .order(order)
+//                        .bookId(streamName.bookId)
 
                         // timestamps will be ignored if resumeFromId is present
-                        .also { builder ->
-                            if (resumeFromId != null) {
-                                builder.sequence().let {
-                                    if (order == Order.DIRECT) {
-                                        it.isGreaterThanOrEqualTo(resumeFromId.sequence)
-                                    } else {
-                                        it.isLessThanOrEqualTo(resumeFromId.sequence)
-                                    }
-                                }
-                            }
-                            // always need to make sure that we send messages within the specified timestamp (in case the resume ID points to the past)
-                            if (order == Order.DIRECT) {
-                                request.startTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
-                                request.endTimestamp?.let { builder.timestampTo().isLessThan(it) }
-                            } else {
-                                request.startTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
-                                request.endTimestamp?.let { builder.timestampFrom().isGreaterThan(it) }
-                            }
-                        }.build()
-                )
+//                        .also { builder ->
+//                            if (resumeFromId != null) {
+//                                builder.sequence().let {
+//                                    if (order == Order.DIRECT) {
+//                                        it.isGreaterThanOrEqualTo(resumeFromId.sequence)
+//                                    } else {
+//                                        it.isLessThanOrEqualTo(resumeFromId.sequence)
+//                                    }
+//                                }
+//                            }
+//                            // always need to make sure that we send messages within the specified timestamp (in case the resume ID points to the past)
+//                            if (order == Order.DIRECT) {
+//                                request.startTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
+//                                request.endTimestamp?.let { builder.timestampTo().isLessThan(it) }
+//                            } else {
+//                                request.startTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
+//                                request.endTimestamp?.let { builder.timestampFrom().isGreaterThan(it) }
+//                            }
+//                        }.build()
+//                )
 
-                logger.debug { "cradle iterator has been built for stream $streamName" }
+                logger.debug { "cradle iterator has been built for session group: $sessionGroup, alias: $commonStreamName" }
 
+                var firstFound = false
+                var lastFound = false
                 var isLastMessageTrimmed = false
 
-                for (batch in cradleMessageIterable) {
-                    if (externalScope.isActive && !isLastMessageTrimmed) {
+                for (batch: StoredGroupedMessageBatch in cradleMessageIterable) {
+                    if (externalScope.isActive && !lastFound) {
 
                         val timeStart = System.currentTimeMillis()
 
-                        pipelineStatus.fetchedStart(streamName.toString())
-                        logger.trace { "batch ${batch.id.sequence} of stream $streamName with ${batch.messageCount} messages (${batch.batchSize} bytes) has been extracted" }
+                        pipelineStatus.fetchedStart(commonStreamName.toString())
+                        logger.trace { "batch ${batch.firstTimestamp} of group $sessionGroup for stream $commonStreamName with ${batch.messageCount} messages (${batch.batchSize} bytes) has been extracted" }
 
-                        val trimmedMessages = trimMessagesListHead(getMessagesFromBatch(batch), resumeFromId)
-                            .dropLastWhile { message ->
-                                trimMessagesListTail(message).also {
-                                    isLastMessageTrimmed = isLastMessageTrimmed || it
+                        val trimmedMessages = ArrayList<StoredMessage>(batch.messageCount)
+                        batch.orderedMessages.forEach { msg ->
+                            if (msg.isNotCorrectAlias) { return@forEach }
+
+                            if (!firstFound) {
+                                if (msg.isEarlierStart) { return@forEach }
+                                if (msg.isNotResume(resumeFromId)) { return@forEach }
+                                firstFound = true
+                            }
+
+                            if(!lastFound) {
+                                if (msg.isLaterEnd) {
+                                    lastFound = true
+                                    return@forEach
                                 }
                             }
+
+                            trimmedMessages.add(msg)
+                        }
 
                         val firstMessage = if (order == Order.DIRECT) batch.messages.first() else batch.messages.last()
                         val lastMessage = if (order == Order.DIRECT) batch.messages.last() else batch.messages.first()
 
                         logger.trace {
-                            "batch ${batch.id.sequence} of stream $streamName has been trimmed (targetStartTimestamp=${request.startTimestamp} targetEndTimestamp=${request.endTimestamp} targetId=${resumeFromId?.sequence}) - ${trimmedMessages.size} of ${batch.messages.size} messages left (firstId=${firstMessage.id.sequence} firstTimestamp=${firstMessage.timestamp} lastId=${lastMessage.id.sequence} lastTimestamp=${lastMessage.timestamp})"
+                            "batch ${batch.firstTimestamp} of group $sessionGroup for stream $commonStreamName has been trimmed (targetStartTimestamp=${request.startTimestamp} targetEndTimestamp=${request.endTimestamp} targetId=${resumeFromId?.sequence}) - ${trimmedMessages.size} of ${batch.messageCount} messages left (firstId=${firstMessage.id.sequence} firstTimestamp=${firstMessage.timestamp} lastId=${lastMessage.id.sequence} lastTimestamp=${lastMessage.timestamp})"
                         }
 
-                        pipelineStatus.fetchedEnd(streamName.toString())
+                        pipelineStatus.fetchedEnd(commonStreamName.toString())
 
                         try {
                             trimmedMessages.last().let { message ->
@@ -222,7 +293,7 @@ class MessageExtractor<B, G, RM, PM>(
                                     false,
                                     message.id,
                                     message.timestamp,
-                                    StoredMessageBatchWrapper(batch.id, trimmedMessages)
+                                    StoredMessageBatchWrapper(batch.firstTimestamp, trimmedMessages)
                                 ).also {
                                     it.info.startExtract = timeStart
                                     it.info.endExtract = System.currentTimeMillis()
@@ -231,23 +302,23 @@ class MessageExtractor<B, G, RM, PM>(
                                 lastElement = message.id
                                 lastTimestamp = message.timestamp
 
-                                logger.trace { "batch ${batch.id.sequence} of stream $streamName has been sent downstream" }
+                                logger.trace { "batch ${batch.firstTimestamp} of group $sessionGroup for stream $commonStreamName has been sent downstream" }
 
                             }
                         } catch (e: NoSuchElementException) {
-                            logger.trace { "skipping batch ${batch.id.sequence} of stream $streamName - no messages left after trimming" }
-                            pipelineStatus.countSkippedBatches(streamName.toString())
+                            logger.trace { "skipping batch ${batch.firstTimestamp} of group $sessionGroup for stream $commonStreamName - no messages left after trimming" }
+                            pipelineStatus.countSkippedBatches(commonStreamName.toString())
                         }
-                        pipelineStatus.fetchedSendDownstream(streamName.toString())
+                        pipelineStatus.fetchedSendDownstream(commonStreamName.toString())
 
-                        pipelineStatus.countFetchedBytes(streamName.toString(), batch.batchSize.toLong())
-                        pipelineStatus.countFetchedBatches(streamName.toString())
-                        pipelineStatus.countFetchedMessages(streamName.toString(), trimmedMessages.size.toLong())
+                        pipelineStatus.countFetchedBytes(commonStreamName.toString(), batch.batchSize.toLong())
+                        pipelineStatus.countFetchedBatches(commonStreamName.toString())
+                        pipelineStatus.countFetchedMessages(commonStreamName.toString(), trimmedMessages.size.toLong())
                         pipelineStatus.countSkippedMessages(
-                            streamName.toString(), batch.messageCount - trimmedMessages.size.toLong()
+                            commonStreamName.toString(), batch.messageCount - trimmedMessages.size.toLong()
                         )
                     } else {
-                        logger.debug { "Exiting $streamName loop. External scope active: '${externalScope.isActive}', LastMessageTrimmed: '$isLastMessageTrimmed'" }
+                        logger.debug { "Exiting $commonStreamName loop. External scope active: '${externalScope.isActive}', LastMessageTrimmed: '$isLastMessageTrimmed'" }
                         break
                     }
                 }
@@ -260,7 +331,7 @@ class MessageExtractor<B, G, RM, PM>(
                 Instant.ofEpochMilli(Long.MIN_VALUE)
             }
 
-            logger.debug { "no more data for stream $streamName (lastId=${lastElement.toString()} lastTimestamp=${lastTimestamp})" }
+            logger.debug { "no more data for stream $commonStreamName (lastId=${lastElement.toString()} lastTimestamp=${lastTimestamp})" }
         }
     }
 }

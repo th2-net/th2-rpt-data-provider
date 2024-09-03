@@ -59,7 +59,7 @@ class MergerTest {
     private val fullStreamName = streamDirection.map { "${baseStreamName}:${it}" }
 
     private val streamNameObjects = streamDirection.map {
-        StreamName(baseStreamName, Direction.valueOf(it.uppercase()), BOOK)
+        StreamName(BOOK, baseStreamName, Direction.valueOf(it.uppercase()))
     }
 
     private val direction = "next"
