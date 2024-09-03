@@ -131,8 +131,8 @@ abstract class SearchMessagesHandler<B, G, RM, PM>(
     }
 
     suspend fun getIds(request: SseMessageSearchRequest<RM, PM>, lookupLimitDays: Long): Map<String, List<StreamInfo>> {
-        require(request.startTimestamp != null && request.endTimestamp == null) {
-            "startTimestamp must be not null and endTimestamp be null in request: $request"
+        require((request.startTimestamp != null || request.resumeFromIdsList.isEmpty()) && request.endTimestamp == null) {
+            "(startTimestamp must not be null or resumeFromIdsList must not be empty) and endTimestamp must be null in request: $request"
         }
         searchMessageRequests.inc()
         val resumeId = request.resumeFromIdsList.firstOrNull()
@@ -172,11 +172,13 @@ abstract class SearchMessagesHandler<B, G, RM, PM>(
     ): MutableList<StreamInfo> {
         val lookupLimit = request.lookupLimitDays ?: lookupLimitDays
         val resultRequest = request.run {
+            val calculatedStartTimestamp = startTimestamp ?: messageId?.timestamp
             copy(
                 searchDirection = searchDirection,
+                startTimestamp = calculatedStartTimestamp,
                 endTimestamp = when (searchDirection) {
-                    BEFORE -> startTimestamp?.minus(lookupLimit, DAYS)
-                    AFTER -> startTimestamp?.plus(lookupLimit, DAYS)
+                    BEFORE -> calculatedStartTimestamp?.minus(lookupLimit, DAYS)
+                    AFTER -> calculatedStartTimestamp?.plus(lookupLimit, DAYS)
                 }
             ).also(SseMessageSearchRequest<*, *>::checkIdsRequest)
         }
