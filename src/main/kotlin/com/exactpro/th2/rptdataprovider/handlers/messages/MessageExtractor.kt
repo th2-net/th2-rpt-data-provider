@@ -44,6 +44,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.time.Instant
+import com.exactpro.cradle.Order as CradleOrder
 
 
 class MessageExtractor<B, G, RM, PM>(
@@ -68,7 +69,7 @@ class MessageExtractor<B, G, RM, PM>(
     private var lastElement: StoredMessageId? = null
     private var lastTimestamp: Instant? = null
 
-    private val order = when(request.searchDirection) {
+    private val order: CradleOrder = when(request.searchDirection) {
         BEFORE -> REVERSE
         AFTER -> DIRECT
     }
