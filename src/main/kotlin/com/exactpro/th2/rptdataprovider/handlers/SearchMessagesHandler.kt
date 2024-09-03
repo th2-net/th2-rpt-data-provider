@@ -131,7 +131,7 @@ abstract class SearchMessagesHandler<B, G, RM, PM>(
     }
 
     suspend fun getIds(request: SseMessageSearchRequest<RM, PM>, lookupLimitDays: Long): Map<String, List<StreamInfo>> {
-        require((request.startTimestamp != null || request.resumeFromIdsList.isEmpty()) && request.endTimestamp == null) {
+        require((request.startTimestamp != null || request.resumeFromIdsList.isNotEmpty()) && request.endTimestamp == null) {
             "(startTimestamp must not be null or resumeFromIdsList must not be empty) and endTimestamp must be null in request: $request"
         }
         searchMessageRequests.inc()
