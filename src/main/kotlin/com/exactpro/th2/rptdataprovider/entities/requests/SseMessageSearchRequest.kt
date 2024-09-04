@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2024 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ package com.exactpro.th2.rptdataprovider.entities.requests
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.BookId
 import com.exactpro.cradle.TimeRelation
+import com.exactpro.cradle.TimeRelation.AFTER
+import com.exactpro.cradle.TimeRelation.BEFORE
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.util.toInstant
 import com.exactpro.th2.dataprovider.grpc.MessageSearchRequest
@@ -96,7 +98,7 @@ data class SseMessageSearchRequest<RM, PM>(
 
         searchDirection = request.searchDirection.let {
             when (it) {
-                PREVIOUS -> TimeRelation.BEFORE
+                PREVIOUS -> BEFORE
                 else -> searchDirection
             }
         },
@@ -138,7 +140,7 @@ data class SseMessageSearchRequest<RM, PM>(
     constructor(parameters: Map<String, List<String>>, filterPredicate: FilterPredicate<MessageWithMetadata<RM, PM>>) : this(
         parameters = parameters,
         filterPredicate = filterPredicate,
-        searchDirection = TimeRelation.AFTER
+        searchDirection = AFTER
     )
 
     constructor(
@@ -148,19 +150,24 @@ data class SseMessageSearchRequest<RM, PM>(
     ) : this(
         request = request,
         filterPredicate = filterPredicate,
-        searchDirection = TimeRelation.AFTER,
+        searchDirection = AFTER,
         bookId = bookId
     )
 
     private fun checkEndTimestamp() {
         if (endTimestamp == null || startTimestamp == null) return
 
-        if (searchDirection == TimeRelation.AFTER) {
-            if (startTimestamp.isAfter(endTimestamp))
-                throw InvalidRequestException("startTimestamp: $startTimestamp > endTimestamp: $endTimestamp")
-        } else {
-            if (startTimestamp.isBefore(endTimestamp))
-                throw InvalidRequestException("startTimestamp: $startTimestamp < endTimestamp: $endTimestamp")
+        when(searchDirection) {
+            BEFORE -> {
+                if (startTimestamp < endTimestamp) {
+                    throw InvalidRequestException("startTimestamp: $startTimestamp < endTimestamp: $endTimestamp")
+                }
+            }
+            AFTER -> {
+                if (startTimestamp > endTimestamp) {
+                    throw InvalidRequestException("startTimestamp: $startTimestamp > endTimestamp: $endTimestamp")
+                }
+            }
         }
     }
 
@@ -176,8 +183,26 @@ data class SseMessageSearchRequest<RM, PM>(
     }
 
     private fun checkTimestampAndId() {
-        if (startTimestamp != null && resumeFromIdsList.isNotEmpty())
-            throw InvalidRequestException("You cannot specify resume Id and start timestamp at the same time")
+        if (startTimestamp != null && resumeFromIdsList.isNotEmpty()) {
+            when(searchDirection) {
+                BEFORE -> {
+                    val pointers = resumeFromIdsList.filter { it.timestamp > startTimestamp }
+                    if (pointers.isNotEmpty()) {
+                        throw InvalidRequestException(
+                            "You cannot specify resume Ids $pointers with timestamp greater than startTimestamp $startTimestamp"
+                        )
+                    }
+                }
+                AFTER -> {
+                    val pointers = resumeFromIdsList.filter { it.timestamp < startTimestamp }
+                    if (pointers.isNotEmpty()) {
+                        throw InvalidRequestException(
+                            "You cannot specify resume Ids $pointers with timestamp less than startTimestamp $startTimestamp"
+                        )
+                    }
+                }
+            }
+        }
     }
 
     private fun checkResumeIds() {
