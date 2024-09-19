@@ -93,9 +93,7 @@ application {
 
 
 test {
-// FIXME: the tests were temporary disabled since they're not compatible with new api
-
-//    useJUnitPlatform()
+    useJUnitPlatform()
 }
 
 dependencyCheck {
