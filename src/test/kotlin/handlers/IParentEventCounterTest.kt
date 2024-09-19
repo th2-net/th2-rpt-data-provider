@@ -143,17 +143,39 @@ class IParentEventCounterTest {
             )
         }
 
-        assertFalse(
-            eventCounter.checkCountAndGet(
-                createEventEntity(
-                    ProviderEventId(
-                        batchId = null,
-                        eventId = StoredTestEventId(BOOK_ID, SCOPE, Instant.now(), NEXT_UUID),
+        val nextEventId = StoredTestEventId(BOOK_ID, SCOPE, Instant.now(), NEXT_UUID)
+        assertAll(
+            {
+                assertFalse(
+                    eventCounter.checkCountAndGet(
+                        createEventEntity(
+                            ProviderEventId(
+                                batchId = null,
+                                eventId = nextEventId,
+                            ),
+                            parentEventId,
+                        ),
                     ),
-                    parentEventId,
+                    "single event id, attempt ${limitForParent + 1}",
                 )
-            ),
-            "single event id, attempt ${limitForParent + 1}",
+            },
+            {
+                assertFalse(
+                    eventCounter.checkCountAndGet(
+                        createEventEntity(
+                            ProviderEventId(
+                                batchId = null,
+                                eventId = StoredTestEventId(BOOK_ID, SCOPE, Instant.now(), NEXT_UUID),
+                            ),
+                            ProviderEventId(
+                                batchId = null,
+                                eventId = nextEventId,
+                            )
+                        ),
+                    ),
+                    "child of single event id, attempt ${limitForParent + 1}",
+                )
+            },
         )
     }
 
@@ -183,17 +205,39 @@ class IParentEventCounterTest {
             )
         }
 
-        assertFalse(
-            eventCounter.checkCountAndGet(
-                createEventEntity(
-                    ProviderEventId(
-                        batchId = batchId,
-                        eventId = StoredTestEventId(BOOK_ID, SCOPE, Instant.now(), NEXT_UUID),
+        val nextEventId = StoredTestEventId(BOOK_ID, SCOPE, Instant.now(), NEXT_UUID)
+        assertAll(
+            {
+                assertFalse(
+                    eventCounter.checkCountAndGet(
+                        createEventEntity(
+                            ProviderEventId(
+                                batchId = batchId,
+                                eventId = nextEventId,
+                            ),
+                            parentEventId,
+                        ),
                     ),
-                    parentEventId,
+                    "single event id, attempt ${limitForParent + 1}",
                 )
-            ),
-            "single event id, attempt ${limitForParent + 1}",
+            },
+            {
+                assertFalse(
+                    eventCounter.checkCountAndGet(
+                        createEventEntity(
+                            ProviderEventId(
+                                batchId = batchId,
+                                eventId = StoredTestEventId(BOOK_ID, SCOPE, Instant.now(), NEXT_UUID),
+                            ),
+                            ProviderEventId(
+                                batchId = batchId,
+                                eventId = nextEventId
+                            )
+                        ),
+                    ),
+                    "child of single event id, attempt ${limitForParent + 1}",
+                )
+            },
         )
     }
 

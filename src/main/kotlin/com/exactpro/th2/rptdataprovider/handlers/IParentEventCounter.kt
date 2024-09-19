@@ -28,7 +28,7 @@ internal interface IParentEventCounter {
      */
     fun checkCountAndGet(event: BaseEventEntity): Boolean
 
-    private class NoLimitedParentEventCounter : IParentEventCounter {
+    private object NoLimitedParentEventCounter : IParentEventCounter {
         override fun checkCountAndGet(event: BaseEventEntity): Boolean = true
     }
 
@@ -50,7 +50,12 @@ internal interface IParentEventCounter {
                         parentEventCounter.putIfAbsent(event.id.eventId.id, MAX_EVENT_COUNTER)
                         MAX_EVENT_COUNTER
                     } else {
-                        if (value.incrementAndGet() > limitForParent) MAX_EVENT_COUNTER else value
+                        if (value.incrementAndGet() > limitForParent) {
+                            parentEventCounter.putIfAbsent(event.id.eventId.id, MAX_EVENT_COUNTER)
+                            MAX_EVENT_COUNTER
+                        } else {
+                            value
+                        }
                     }
                 }
             }
@@ -60,10 +65,9 @@ internal interface IParentEventCounter {
     }
 
     companion object {
-        private val NO_LIMIT_COUNTER = NoLimitedParentEventCounter()
         private val MAX_EVENT_COUNTER = AtomicLong(Long.MAX_VALUE)
 
         fun create(limitForParent: Long? = null): IParentEventCounter =
-            limitForParent?.let { LimitedParentEventCounter(it) } ?: NO_LIMIT_COUNTER
+            limitForParent?.let { LimitedParentEventCounter(it) } ?: NoLimitedParentEventCounter
     }
 }
