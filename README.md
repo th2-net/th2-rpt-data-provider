@@ -1,4 +1,4 @@
-# Report data provider (5.13.1)
+# Report data provider (5.13.2)
 
 # Overview
 This component serves as a backend for rpt-viewer. It will connect to the cassandra database via cradle api and expose the data stored in there as REST resources.
@@ -296,6 +296,9 @@ spec:
 ```
 
 # Release notes
+
+## 5.13.2
+* Reduced required memory for executing sse event request with `limitForParent` parameter
 
 ## 5.13.1
 * Fixed the problem data provider can't handle `messageIds` request with `messageId` but without `startTimestamp` arguments

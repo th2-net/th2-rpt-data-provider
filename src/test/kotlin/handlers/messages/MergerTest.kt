@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2022-2024 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -201,7 +201,7 @@ class MergerTest {
                 getMessages(startTimestamp, 2, 3),
                 limit = 4,
                 streamInfo = listOf(
-                    StreamInfo(streamNameObjects[0], StoredMessageId(BOOK, baseStreamName, Direction.FIRST, TIMESTAMP_EMPTY, -1)),
+                    StreamInfo(streamNameObjects[0], StoredMessageId(BOOK, baseStreamName, Direction.FIRST, TIMESTAMP_EMPTY, 0)),
                     StreamInfo(streamNameObjects[1], StoredMessageId(BOOK, baseStreamName, Direction.SECOND, TIMESTAMP, 3)),
                 )
             ),
@@ -211,7 +211,7 @@ class MergerTest {
                 getMessages(startTimestamp, 2, 4),
                 limit = 4,
                 streamInfo = listOf(
-                    StreamInfo(streamNameObjects[0], StoredMessageId(BOOK, baseStreamName, Direction.FIRST, TIMESTAMP_EMPTY, -1)),
+                    StreamInfo(streamNameObjects[0], StoredMessageId(BOOK, baseStreamName, Direction.FIRST, TIMESTAMP_EMPTY, 0)),
                     StreamInfo(streamNameObjects[1], StoredMessageId(BOOK, baseStreamName, Direction.SECOND, TIMESTAMP, 3)),
                 )
             ),
@@ -221,7 +221,7 @@ class MergerTest {
                 getMessages(startTimestamp, 2, 4),
                 limit = 2,
                 streamInfo = listOf(
-                    StreamInfo(streamNameObjects[0], StoredMessageId(BOOK, baseStreamName, Direction.FIRST, TIMESTAMP_EMPTY, -1)),
+                    StreamInfo(streamNameObjects[0], StoredMessageId(BOOK, baseStreamName, Direction.FIRST, TIMESTAMP_EMPTY, 0)),
                     StreamInfo(streamNameObjects[1], StoredMessageId(BOOK, baseStreamName, Direction.SECOND, TIMESTAMP, 1)),
                 )
             )
