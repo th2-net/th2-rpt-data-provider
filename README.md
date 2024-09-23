@@ -299,8 +299,8 @@ spec:
 
 ## 5.14.0
 * Reduced required memory for executing sse event request with `limitForParent` parameter
-* Updated th2 gradle plugin: `0.1.2`
-* Updated bom: `4.7.0`
+* Updated th2 gradle plugin: `0.1.3`
+* Updated bom: `4.8.0`
 
 ## 5.13.1
 * Fixed the problem data provider can't handle `messageIds` request with `messageId` but without `startTimestamp` arguments
