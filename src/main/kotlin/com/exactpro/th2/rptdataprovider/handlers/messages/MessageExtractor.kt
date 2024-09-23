@@ -16,26 +16,23 @@
 
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
+import com.exactpro.cradle.BookId
 import com.exactpro.cradle.Order
 import com.exactpro.cradle.TimeRelation.AFTER
 import com.exactpro.cradle.TimeRelation.BEFORE
 import com.exactpro.cradle.messages.GroupedMessageFilterBuilder
 import com.exactpro.cradle.messages.StoredGroupedMessageBatch
 import com.exactpro.cradle.messages.StoredMessage
-import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.CommonStreamName
 import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
-import com.exactpro.th2.rptdataprovider.entities.internal.StreamPointer
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.StoredMessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
-import com.exactpro.th2.rptdataprovider.isAfterOrEqual
-import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -44,7 +41,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.time.Instant
-
 
 class MessageExtractor<B, G, RM, PM>(
     context: Context<B, G, RM, PM>,
@@ -56,22 +52,24 @@ class MessageExtractor<B, G, RM, PM>(
 ) : PipelineComponent<B, G, RM, PM>(
     context, request, externalScope, commonStreamName, messageFlowCapacity = messageFlowCapacity
 ) {
-
-    companion object {
-        private val logger = KotlinLogging.logger { }
-    }
-
     private val sendEmptyDelay = context.configuration.sendEmptyDelay.value.toLong()
-
     private var isStreamEmpty: Boolean = false
-
     private var lastElement: StoredMessageId? = null
     private var lastTimestamp: Instant? = null
 
-    private val order = if (request.searchDirection == AFTER) {
-        Order.DIRECT
-    } else {
-        Order.REVERSE
+    private val order = when (request.searchDirection) {
+        AFTER -> Order.DIRECT
+        BEFORE -> Order.REVERSE
+    }
+
+    private val sequenceComparator = when (order)  {
+        Order.DIRECT -> { l1: Long, l2: Long -> l1 < l2 }
+        Order.REVERSE -> { l1: Long, l2: Long -> l2 < l1 }
+    }
+
+    private val timestampComparator = when (order) {
+        Order.DIRECT -> Instant::isBefore
+        Order.REVERSE -> Instant::isAfter
     }
 
     init {
@@ -79,86 +77,19 @@ class MessageExtractor<B, G, RM, PM>(
             try {
                 processMessage()
             } catch (e: CancellationException) {
-                logger.debug { "message extractor for stream $commonStreamName has been stopped" }
+                LOGGER.debug { "message extractor for stream $commonStreamName has been stopped" }
             } catch (e: Exception) {
-                logger.error(e) { "unexpected exception" }
+                LOGGER.error(e) { "unexpected exception" }
                 throw e
             }
         }
     }
 
     private val StoredGroupedMessageBatch.orderedMessages: Collection<StoredMessage>
-        get() = if (order == Order.DIRECT) messages else messagesReverse
-
-    private val StoredMessage.isNotCorrectAlias: Boolean
-        get() = commonStreamName?.let { sessionAlias != it.name } ?: false
-
-    private fun StoredMessage.isNotResume(point: StreamPointer?): Boolean =
-        point?.let {
-            point.sequence == sequence &&
-                    point.timestamp == timestamp
-                    point.stream.name == sessionAlias &&
-                    point.stream.direction == direction
-
-
-        } ?: false
-
-    private val StoredMessage.isEarlierStart
-        get() = request.startTimestamp?.let {
-            if (order == Order.DIRECT) timestamp.isBefore(it) else timestamp.isAfter(it)
-        } ?: false
-
-    private val StoredMessage.isLaterEnd
-        get() = request.endTimestamp?.let {
-            if (order == Order.DIRECT) timestamp.isAfterOrEqual(it) else timestamp.isBeforeOrEqual(it)
-        } ?: false
-
-    private fun getMessagesFromBatch(batch: StoredMessageBatch): Collection<StoredMessage> {
-        return if (order == Order.DIRECT) {
-            batch.messages
-        } else {
-            batch.messagesReverse
+        get() = when (order) {
+            Order.DIRECT -> messages
+            Order.REVERSE -> messagesReverse
         }
-    }
-
-    private fun trimMessagesListHead(
-        messages: Collection<StoredMessage>,
-        resumeFromId: StreamPointer?
-    ): List<StoredMessage> {
-        return messages.run {
-            // trim messages if resumeFromId is present
-            if (resumeFromId?.sequence != null) {
-                val startSeq = resumeFromId.sequence
-                dropWhile {
-                    if (order == Order.DIRECT) {
-                        it.sequence < startSeq
-                    } else {
-                        it.sequence > startSeq
-                    }
-                }
-            } else {
-                this // nothing to filter by sequence
-            }
-        }.dropWhile { //trim messages that do not strictly match time filter
-            request.startTimestamp?.let { startTimestamp ->
-                if (order == Order.DIRECT) {
-                    it.timestamp.isBefore(startTimestamp)
-                } else {
-                    it.timestamp.isAfter(startTimestamp)
-                }
-            } ?: false
-        }
-    }
-
-    private fun trimMessagesListTail(message: StoredMessage): Boolean {
-        return request.endTimestamp?.let { endTimestamp ->
-            if (order == Order.DIRECT) {
-                message.timestamp.isAfterOrEqual(endTimestamp)
-            } else {
-                message.timestamp.isBeforeOrEqual(endTimestamp)
-            }
-        } ?: false
-    }
 
     override suspend fun processMessage() {
         coroutineScope {
@@ -168,14 +99,12 @@ class MessageExtractor<B, G, RM, PM>(
                     //FIXME: replace delay-based stream updates with synchronous updates from iterator
                     lastTimestamp?.also {
                         sendToChannel(EmptyPipelineObject(isStreamEmpty, lastElement, it).also { msg ->
-                            logger.trace { "Extractor has sent EmptyPipelineObject downstream: (lastProcessedId${msg.lastProcessedId} lastScannedTime=${msg.lastScannedTime} streamEmpty=${msg.streamEmpty} hash=${msg.hashCode()})" }
+                            LOGGER.trace { "Extractor has sent EmptyPipelineObject downstream: (lastProcessedId${msg.lastProcessedId} lastScannedTime=${msg.lastScannedTime} streamEmpty=${msg.streamEmpty} hash=${msg.hashCode()})" }
                         })
                     }
                     delay(sendEmptyDelay)
                 }
             }
-
-            commonStreamName!!
 
             val resumeFromId = request.resumeFromIdsList.asSequence()
                 .filter { it.stream.name == commonStreamName.name }
@@ -186,10 +115,10 @@ class MessageExtractor<B, G, RM, PM>(
                     }
                 }
 
-            logger.debug { "acquiring cradle iterator for stream $commonStreamName" }
+            LOGGER.debug { "acquiring cradle iterator for stream $commonStreamName" }
 
-            resumeFromId?.let { logger.debug { "resume sequence for stream $commonStreamName is set to ${it.sequence}" } }
-            request.startTimestamp?.let { logger.debug { "start timestamp for stream $commonStreamName is set to $it" } }
+            resumeFromId?.let { LOGGER.debug { "resume sequence for stream $commonStreamName is set to ${it.sequence}" } }
+            request.startTimestamp?.let { LOGGER.debug { "start timestamp for stream $commonStreamName is set to $it" } }
 
             if (resumeFromId == null || resumeFromId.hasStarted) {
                 val sessionGroup = context.cradleService.getSessionGroup(
@@ -201,9 +130,8 @@ class MessageExtractor<B, G, RM, PM>(
                 val cradleMessageIterable = context.cradleService.getGroupedMessages(
                     this,
                     GroupedMessageFilterBuilder().apply {
-                        groupName(
-                            sessionGroup,
-                        )
+                        bookId(BOOK_ID)
+                        groupName(sessionGroup)
                         order(order)
 
                         if (order == Order.DIRECT) {
@@ -215,102 +143,75 @@ class MessageExtractor<B, G, RM, PM>(
                         }
                     }.build()
                 )
-//                getMessagesBatchesSuspend(
-//                    MessageFilterBuilder()
-//                        .sessionAlias(streamName.name)
-//                        .direction(streamName.direction)
-//                        .order(order)
-//                        .bookId(streamName.bookId)
 
-                        // timestamps will be ignored if resumeFromId is present
-//                        .also { builder ->
-//                            if (resumeFromId != null) {
-//                                builder.sequence().let {
-//                                    if (order == Order.DIRECT) {
-//                                        it.isGreaterThanOrEqualTo(resumeFromId.sequence)
-//                                    } else {
-//                                        it.isLessThanOrEqualTo(resumeFromId.sequence)
-//                                    }
-//                                }
-//                            }
-//                            // always need to make sure that we send messages within the specified timestamp (in case the resume ID points to the past)
-//                            if (order == Order.DIRECT) {
-//                                request.startTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
-//                                request.endTimestamp?.let { builder.timestampTo().isLessThan(it) }
-//                            } else {
-//                                request.startTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
-//                                request.endTimestamp?.let { builder.timestampFrom().isGreaterThan(it) }
-//                            }
-//                        }.build()
-//                )
+                LOGGER.debug { "cradle iterator has been built for session group: $sessionGroup, alias: $commonStreamName" }
 
-                logger.debug { "cradle iterator has been built for session group: $sessionGroup, alias: $commonStreamName" }
-
-                var firstFound = false
-                var lastFound = false
-                var isLastMessageTrimmed = false
+                var lastNotFound = true
 
                 for (batch: StoredGroupedMessageBatch in cradleMessageIterable) {
-                    if (externalScope.isActive && !lastFound) {
-
+                    if (externalScope.isActive && lastNotFound) {
                         val timeStart = System.currentTimeMillis()
 
                         pipelineStatus.fetchedStart(commonStreamName.toString())
-                        logger.trace { "batch ${batch.firstTimestamp} of group $sessionGroup for stream $commonStreamName with ${batch.messageCount} messages (${batch.batchSize} bytes) has been extracted" }
+                        LOGGER.trace { "batch ${batch.firstTimestamp} of group $sessionGroup for stream $commonStreamName with ${batch.messageCount} messages (${batch.batchSize} bytes) has been extracted" }
 
-                        val trimmedMessages = ArrayList<StoredMessage>(batch.messageCount)
-                        batch.orderedMessages.forEach { msg ->
-                            if (msg.isNotCorrectAlias) { return@forEach }
+                        val resumeSequence = resumeFromId?.sequence
+                        val start = request.startTimestamp
+                        val end = request.endTimestamp
 
-                            if (!firstFound) {
-                                if (msg.isEarlierStart) { return@forEach }
-                                if (msg.isNotResume(resumeFromId)) { return@forEach }
-                                firstFound = true
-                            }
-
-                            if(!lastFound) {
-                                if (msg.isLaterEnd) {
-                                    lastFound = true
-                                    return@forEach
+                        val trimmedMessages = batch.orderedMessages.asSequence()
+                            .filter { it.sessionAlias == commonStreamName.name }
+                            .dropWhile(
+                                when {
+                                    resumeSequence != null -> { { sequenceComparator(it.sequence, resumeSequence) } }
+                                    start == null -> { { false } }
+                                    else -> { { timestampComparator(it.timestamp, start) } }
                                 }
-                            }
+                            )
+                            .takeWhile(
+                                when {
+                                    end == null -> { { true } }
+                                    else -> { {
+                                        lastNotFound = timestampComparator(it.timestamp, end)
+                                        lastNotFound
+                                    } }
+                                }
+                            )
+                            .toList()
 
-                            trimmedMessages.add(msg)
-                        }
+                        val firstMessage = batch.orderedMessages.firstOrNull()
+                        val lastMessage = batch.orderedMessages.lastOrNull()
 
-                        val firstMessage = if (order == Order.DIRECT) batch.messages.first() else batch.messages.last()
-                        val lastMessage = if (order == Order.DIRECT) batch.messages.last() else batch.messages.first()
-
-                        logger.trace {
-                            "batch ${batch.firstTimestamp} of group $sessionGroup for stream $commonStreamName has been trimmed (targetStartTimestamp=${request.startTimestamp} targetEndTimestamp=${request.endTimestamp} targetId=${resumeFromId?.sequence}) - ${trimmedMessages.size} of ${batch.messageCount} messages left (firstId=${firstMessage.id.sequence} firstTimestamp=${firstMessage.timestamp} lastId=${lastMessage.id.sequence} lastTimestamp=${lastMessage.timestamp})"
+                        LOGGER.trace {
+                            "batch ${batch.firstTimestamp} of group $sessionGroup for stream $commonStreamName has been trimmed (targetStartTimestamp=${request.startTimestamp} targetEndTimestamp=${request.endTimestamp} targetId=${resumeFromId?.sequence}) - ${trimmedMessages.size} of ${batch.messageCount} messages left (firstId=${firstMessage?.id?.sequence} firstTimestamp=${firstMessage?.timestamp} lastId=${lastMessage?.id?.sequence} lastTimestamp=${lastMessage?.timestamp})"
                         }
 
                         pipelineStatus.fetchedEnd(commonStreamName.toString())
 
-                        try {
-                            trimmedMessages.last().let { message ->
-                                sendToChannel(PipelineRawBatch(
-                                    false,
-                                    message.id,
-                                    message.timestamp,
-                                    StoredMessageBatchWrapper(batch.firstTimestamp, trimmedMessages)
-                                ).also {
-                                    it.info.startExtract = timeStart
-                                    it.info.endExtract = System.currentTimeMillis()
-                                    StreamWriter.setExtract(it.info)
-                                })
-                                lastElement = message.id
-                                lastTimestamp = message.timestamp
+                        if (trimmedMessages.isNotEmpty()) {
+                            val message = trimmedMessages.last()
+                            val rawBatch = PipelineRawBatch(
+                                false,
+                                message.id,
+                                message.timestamp,
+                                StoredMessageBatchWrapper(batch.firstTimestamp, trimmedMessages)
+                            )
+                            rawBatch.info.startExtract = timeStart
+                            rawBatch.info.endExtract = System.currentTimeMillis()
+                            StreamWriter.setExtract(rawBatch.info)
 
-                                logger.trace { "batch ${batch.firstTimestamp} of group $sessionGroup for stream $commonStreamName has been sent downstream" }
+                            sendToChannel(rawBatch)
 
-                            }
-                        } catch (e: NoSuchElementException) {
-                            logger.trace { "skipping batch ${batch.firstTimestamp} of group $sessionGroup for stream $commonStreamName - no messages left after trimming" }
+                            lastElement = message.id
+                            lastTimestamp = message.timestamp
+
+                            LOGGER.trace { "batch ${batch.firstTimestamp} of group $sessionGroup for stream $commonStreamName has been sent downstream" }
+                        } else {
+                            LOGGER.trace { "skipping batch ${batch.firstTimestamp} of group $sessionGroup for stream $commonStreamName - no messages left after trimming" }
                             pipelineStatus.countSkippedBatches(commonStreamName.toString())
                         }
-                        pipelineStatus.fetchedSendDownstream(commonStreamName.toString())
 
+                        pipelineStatus.fetchedSendDownstream(commonStreamName.toString())
                         pipelineStatus.countFetchedBytes(commonStreamName.toString(), batch.batchSize.toLong())
                         pipelineStatus.countFetchedBatches(commonStreamName.toString())
                         pipelineStatus.countFetchedMessages(commonStreamName.toString(), trimmedMessages.size.toLong())
@@ -318,20 +219,24 @@ class MessageExtractor<B, G, RM, PM>(
                             commonStreamName.toString(), batch.messageCount - trimmedMessages.size.toLong()
                         )
                     } else {
-                        logger.debug { "Exiting $commonStreamName loop. External scope active: '${externalScope.isActive}', LastMessageTrimmed: '$isLastMessageTrimmed'" }
+                        LOGGER.debug { "Exiting $commonStreamName loop. External scope active: '${externalScope.isActive}', LastMessageTrimmed: '${!lastNotFound}'" }
                         break
                     }
                 }
             }
 
             isStreamEmpty = true
-            lastTimestamp = if (order == Order.DIRECT) {
-                Instant.ofEpochMilli(Long.MAX_VALUE)
-            } else {
-                Instant.ofEpochMilli(Long.MIN_VALUE)
+            lastTimestamp = when (order) {
+                Order.DIRECT -> Instant.MAX
+                Order.REVERSE -> Instant.MIN
             }
 
-            logger.debug { "no more data for stream $commonStreamName (lastId=${lastElement.toString()} lastTimestamp=${lastTimestamp})" }
+            LOGGER.debug { "no more data for stream $commonStreamName (lastId=${lastElement.toString()} lastTimestamp=${lastTimestamp})" }
         }
+    }
+
+    companion object {
+        private val LOGGER = KotlinLogging.logger {}
+        private val BOOK_ID = BookId("test_book_01")
     }
 }

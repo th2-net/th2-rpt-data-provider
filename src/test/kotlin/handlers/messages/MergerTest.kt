@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2022-2024 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
  */
 
 package handlers.messages
-
 
 import com.exactpro.cradle.BookId
 import com.exactpro.cradle.Direction
@@ -45,25 +44,8 @@ import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
 import java.time.Instant
 
-
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class MergerTest {
-    private val baseStreamName = "test_stream"
-
-    private val streamDirection = listOf("first", "second")
-
-    private val BOOK = BookId("")
-    private val TIMESTAMP = Instant.now()
-    private val TIMESTAMP_EMPTY = Instant.ofEpochMilli(0)
-
-    private val fullStreamName = streamDirection.map { "${baseStreamName}:${it}" }
-
-    private val streamNameObjects = streamDirection.map {
-        StreamName(BOOK, baseStreamName, Direction.valueOf(it.uppercase()))
-    }
-
-    private val direction = "next"
-
     data class StreamInfoCase(
         val startTimestamp: Instant,
         val endTimestamp: Instant,
@@ -76,19 +58,20 @@ class MergerTest {
         startTimestamp: Instant, endTimestamp: Instant, resultCount: Int, resumeId: StoredMessageId? = null
     ): SseMessageSearchRequest<ProtoRawMessage, Message> {
         val parameters = mutableMapOf(
-            "stream" to fullStreamName,
-            "direction" to listOf(direction),
+            "stream" to streamNames,
+            "direction" to listOf(DIRECTION),
             "startTimestamp" to listOf(startTimestamp.toEpochMilli().toString()),
             "endTimestamp" to listOf(endTimestamp.toEpochMilli().toString()),
             "resultCountLimit" to listOf(resultCount.toString()),
-            "bookId" to listOf(BOOK.name)
+            "bookId" to listOf(BOOK_ID.name)
         )
+
         if (resumeId != null) {
             parameters["messageId"] = listOf(resumeId.toString())
         }
+
         return SseMessageSearchRequest(parameters, FilterPredicate(emptyList()))
     }
-
 
     private fun mockContextWithCradleService(): ProtoContext {
         val context: ProtoContext = mockk()
@@ -151,12 +134,12 @@ class MergerTest {
         }
     }
 
-    private fun getMessageGenerator(stream: StreamName, timestamp: MutableInstant): Sequence<PipelineFilteredMessage<ProtoRawMessage, Message>> {
+    private fun getMessageGenerator(stream: CommonStreamName, direction: Direction, timestamp: MutableInstant): Sequence<PipelineFilteredMessage<ProtoRawMessage, Message>> {
         return sequence {
             var index = 1L
             val payload = mockk<MessageWithMetadata<ProtoRawMessage, Message>>()
             while (true) {
-                val id = StoredMessageId(BOOK, stream.name, stream.direction, TIMESTAMP, index++)
+                val id = StoredMessageId(BOOK_ID, stream.name, direction, TIMESTAMP, index++)
                 yield(PipelineFilteredMessage(false, id, timestamp.getAndAdd(), PipelineStepsInfo(), payload))
             }
         }
@@ -166,11 +149,10 @@ class MergerTest {
         return EmptyPipelineObject(false, last.lastProcessedId, last.lastScannedTime)
     }
 
-
     private fun getMessages(start: Instant, firstN: Int, secondN: Int): List<List<PipelineStepObject>> {
         val startTimestamp = MutableInstant(start)
-        val first = getMessageGenerator(streamNameObjects[0], startTimestamp).take(firstN).toList()
-        val second = getMessageGenerator(streamNameObjects[1], startTimestamp).take(secondN).toList()
+        val first = getMessageGenerator(streamNameObjects[0], Direction.FIRST, startTimestamp).take(firstN).toList()
+        val second = getMessageGenerator(streamNameObjects[1], Direction.SECOND, startTimestamp).take(secondN).toList()
 
         val firstStream = mutableListOf<PipelineStepObject>().apply {
             for (msg in first) {
@@ -189,7 +171,6 @@ class MergerTest {
         return listOf(firstStream, secondStream)
     }
 
-
     private fun provideMergeCase(): Iterable<Arguments> {
         val startTimestamp = Instant.parse("2022-04-21T00:00:00Z")
         val endTimestamp = Instant.parse("2022-04-21T01:00:00Z")
@@ -201,8 +182,8 @@ class MergerTest {
                 getMessages(startTimestamp, 2, 3),
                 limit = 4,
                 streamInfo = listOf(
-                    StreamInfo(streamNameObjects[0], StoredMessageId(BOOK, baseStreamName, Direction.FIRST, TIMESTAMP_EMPTY, 0)),
-                    StreamInfo(streamNameObjects[1], StoredMessageId(BOOK, baseStreamName, Direction.SECOND, TIMESTAMP, 3)),
+                    StreamInfo(streamNameObjects[0], StoredMessageId(BOOK_ID, streamNames[0], Direction.FIRST, TIMESTAMP_EMPTY, 0)),
+                    StreamInfo(streamNameObjects[1], StoredMessageId(BOOK_ID, streamNames[1], Direction.SECOND, TIMESTAMP, 3)),
                 )
             ),
             StreamInfoCase(
@@ -211,8 +192,8 @@ class MergerTest {
                 getMessages(startTimestamp, 2, 4),
                 limit = 4,
                 streamInfo = listOf(
-                    StreamInfo(streamNameObjects[0], StoredMessageId(BOOK, baseStreamName, Direction.FIRST, TIMESTAMP_EMPTY, 0)),
-                    StreamInfo(streamNameObjects[1], StoredMessageId(BOOK, baseStreamName, Direction.SECOND, TIMESTAMP, 3)),
+                    StreamInfo(streamNameObjects[0], StoredMessageId(BOOK_ID, streamNames[0], Direction.FIRST, TIMESTAMP_EMPTY, 0)),
+                    StreamInfo(streamNameObjects[1], StoredMessageId(BOOK_ID, streamNames[1], Direction.SECOND, TIMESTAMP, 3)),
                 )
             ),
             StreamInfoCase(
@@ -221,41 +202,40 @@ class MergerTest {
                 getMessages(startTimestamp, 2, 4),
                 limit = 2,
                 streamInfo = listOf(
-                    StreamInfo(streamNameObjects[0], StoredMessageId(BOOK, baseStreamName, Direction.FIRST, TIMESTAMP_EMPTY, 0)),
-                    StreamInfo(streamNameObjects[1], StoredMessageId(BOOK, baseStreamName, Direction.SECOND, TIMESTAMP, 1)),
+                    StreamInfo(streamNameObjects[0], StoredMessageId(BOOK_ID, streamNames[0], Direction.FIRST, TIMESTAMP_EMPTY, 0)),
+                    StreamInfo(streamNameObjects[1], StoredMessageId(BOOK_ID, streamNames[1], Direction.SECOND, TIMESTAMP, 1)),
                 )
             )
         ).map { Arguments { listOf(it).toTypedArray() } }
     }
 
-
     @ParameterizedTest
     @MethodSource("provideMergeCase")
     fun testBorders(testCase: StreamInfoCase) {
-
         val context = mockContextWithCradleService()
-        val resultMessages = mutableListOf<PipelineFilteredMessage<ProtoRawMessage, Message>>()
         val request = getSearchRequest(testCase.startTimestamp, testCase.endTimestamp, testCase.limit)
 
         runBlocking {
-
             val messageStreams = getMessageStreams(context, request, this, testCase.messageList)
-
             val streamMerger = StreamMerger(context, request, this, messageStreams, 1, PipelineStatus())
-            do {
-                val message = streamMerger.pollMessage()
-                if (message is PipelineFilteredMessage<*, *>) {
-                    resultMessages.add(message as PipelineFilteredMessage<ProtoRawMessage, Message>)
-                }
-            } while (message !is StreamEndObject)
 
-            val sss = streamMerger.getStreamsInfo().map { it.lastElement }.toList()
-            println(sss)
+            while (streamMerger.pollMessage() !is StreamEndObject) {}
+
             assertArrayEquals(
                 testCase.streamInfo.map { it.lastElement }.toTypedArray(),
                 streamMerger.getStreamsInfo().map { it.lastElement }.toTypedArray()
             )
+
             coroutineContext.cancelChildren()
         }
+    }
+
+    companion object {
+        private val streamNames = listOf("test_stream_1", "test_stream_2")
+        private val BOOK_ID = BookId("test_book_01")
+        private val streamNameObjects = streamNames.map { CommonStreamName(BOOK_ID, it) }
+        private val TIMESTAMP = Instant.now()
+        private val TIMESTAMP_EMPTY = Instant.ofEpochMilli(0)
+        private const val DIRECTION = "next"
     }
 }

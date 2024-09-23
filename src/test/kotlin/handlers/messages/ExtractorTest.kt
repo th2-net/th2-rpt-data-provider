@@ -16,19 +16,18 @@
 
 package handlers.messages
 
-
 import com.exactpro.cradle.BookId
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.PageId
+import com.exactpro.cradle.messages.StoredGroupedMessageBatch
 import com.exactpro.cradle.messages.StoredMessage
-import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.rptdataprovider.ProtoContext
 import com.exactpro.th2.rptdataprovider.ProtoRawMessage
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
+import com.exactpro.th2.rptdataprovider.entities.internal.CommonStreamName
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
-import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.messages.MessageExtractor
@@ -55,21 +54,8 @@ import java.time.temporal.ChronoUnit
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.random.Random
 
-
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ExtractorTest {
-
-    private val messagesInChunk = 10
-    private val chunkCount = 3
-    private val batchSize = messagesInChunk * chunkCount
-
-    private val baseStreamName = "test_stream"
-    private val streamDirection = "FIRST"
-
-    private val bookId = BookId("")
-    private val fullStreamName = "${baseStreamName}:${streamDirection}"
-    private val streamNameObject = StreamName(BookId(""), baseStreamName, Direction.valueOf(streamDirection))
-
     inner class BorderTestParameters(
         val startTimestamp: Instant,
         val endTimestamp: Instant,
@@ -79,9 +65,7 @@ class ExtractorTest {
         val resultIndexes: List<Long>,
         id: Long? = null
     ) {
-        val resumeId = id?.let {
-            StoredMessageId(BookId(""), streamNameObject.name, streamNameObject.direction, Instant.now(), it)
-        }
+        val resumeId = id?.let { StoredMessageId(BOOK_ID, STREAM_NAME_OBJECT.name, Direction.FIRST, Instant.now(), it) }
     }
 
     private fun getSearchRequest(
@@ -90,11 +74,10 @@ class ExtractorTest {
         resumeId: StoredMessageId? = null
     ): SseMessageSearchRequest<ProtoRawMessage, Message> {
         val parameters = mutableMapOf(
-            "stream" to listOf(fullStreamName),
-            "direction" to listOf(streamDirection),
+            "stream" to listOf(STREAM_NAME),
             "startTimestamp" to listOf(startTimestamp.toEpochMilli().toString()),
             "endTimestamp" to listOf(endTimestamp.toEpochMilli().toString()),
-            "bookId" to listOf(bookId.name)
+            "bookId" to listOf(BOOK_ID.name)
         )
         if (resumeId != null) {
             parameters["messageId"] = listOf(resumeId.toString())
@@ -111,15 +94,16 @@ class ExtractorTest {
             index = globalIndex.getAndIncrement()
             every { msg.sequence } answers { index }
         }
-        every { msg.sessionAlias } answers { fullStreamName }
+        every { msg.sessionAlias } answers { STREAM_NAME }
+        every { msg.pageId } answers { PageId(BOOK_ID, Instant.MIN, "page_1") }
         every { msg.protocol } answers { "protocol" }
         every { msg.direction } answers { Direction.FIRST }
         every { msg.content } answers { byteArrayOf(1, 1, 1) }
         every { msg.id } answers {
             StoredMessageId(
-                bookId,
-                baseStreamName,
-                Direction.valueOf(streamDirection),
+                BOOK_ID,
+                STREAM_NAME,
+                Direction.FIRST,
                 timestamp,
                 index
             )
@@ -131,16 +115,19 @@ class ExtractorTest {
     }
 
     @OptIn(DelicateCoroutinesApi::class)
-    private fun mockContextWithCradleService(batch: StoredMessageBatch): ProtoContext {
+    private fun mockContextWithCradleService(batch: StoredGroupedMessageBatch): ProtoContext {
         val context: ProtoContext = mockk()
 
         every { context.configuration.sendEmptyDelay.value } answers { "10" }
 
         val cradle = mockk<CradleService>()
+        coEvery {
+            cradle.getSessionGroup(any(), any(), any(), any())
+        } answers { SESSION_GROUP }
 
-        coEvery { cradle.getMessagesBatchesSuspend(any()) } answers {
+        coEvery { cradle.getGroupedMessages(any(), any()) } answers {
             runBlocking {
-                Channel<StoredMessageBatch>(1).also {
+                Channel<StoredGroupedMessageBatch>(1).also {
                     GlobalScope.launch {
                         it.send(batch)
                         it.close()
@@ -163,7 +150,7 @@ class ExtractorTest {
         return mutableListOf<StoredMessage>().apply {
             add(getMessage(startTimestamp))
 
-            repeat(messagesInChunk - 2) {
+            repeat(MESSAGES_IN_CHUNK - 2) {
                 add(getMessage(getTimestampBetween(startTimestamp, endTimestamp)))
             }
 
@@ -173,12 +160,12 @@ class ExtractorTest {
         }
     }
 
-    private fun chunkedBatch(start: Instant): StoredMessageBatch {
+    private fun chunkedGroupedBatch(start: Instant): StoredGroupedMessageBatch {
         var index = 1L
         var startTimestamp = start
 
         val allMessages = mutableListOf<StoredMessage>()
-        repeat(chunkCount) {
+        repeat(CHUNK_COUNT) {
             val endTimestamp = startTimestamp.plus(1, ChronoUnit.HOURS)
 
             val messages = getMessages(startTimestamp, endTimestamp)
@@ -190,35 +177,29 @@ class ExtractorTest {
             startTimestamp = endTimestamp.plusNanos(1)
         }
 
-        return StoredMessageBatch(allMessages, PageId(BookId("1"), start,"1"), Instant.now())
+        return StoredGroupedMessageBatch(SESSION_GROUP, allMessages, PageId(BookId("1"), start,"1"), Instant.now())
     }
-
 
     @Test
     fun extractByIntervals() {
         var startTimestamp = Instant.parse("2022-04-21T10:00:00Z")
-
-        val batch = chunkedBatch(startTimestamp)
-
+        val batch = chunkedGroupedBatch(startTimestamp)
         val context = mockContextWithCradleService(batch)
-
         var count = 0
 
         runBlocking {
-            repeat(chunkCount + 1) {
+            repeat(CHUNK_COUNT + 1) {
                 val endTimestamp = startTimestamp.plus(1, ChronoUnit.HOURS)
                 val request = getSearchRequest(startTimestamp, endTimestamp)
 
-                val extractor = MessageExtractor(context, request, streamNameObject, this, 1, PipelineStatus())
+                val extractor = MessageExtractor(context, request, STREAM_NAME_OBJECT, this, 1, PipelineStatus())
 
                 var messages: Collection<StoredMessage> = emptyList()
-
-                while (true) {
+                do {
                     val message = extractor.pollMessage()
                     if (message is PipelineRawBatch)
                         messages = message.storedBatchWrapper.trimmedMessages
-                    if (message.streamEmpty) break
-                }
+                } while (!message.streamEmpty)
 
                 count += messages.size
 
@@ -237,12 +218,11 @@ class ExtractorTest {
                 startTimestamp = endTimestamp
             }
             coroutineContext.cancelChildren()
-            assertEquals(batchSize, count)
+            assertEquals(BATCH_SIZE, count)
         }
     }
 
-    private fun getOutOfStartBatch(startTimestamp: Instant, endTimestamp: Instant): StoredMessageBatch {
-
+    private fun getOutOfStartBatch(startTimestamp: Instant, endTimestamp: Instant): StoredGroupedMessageBatch {
         val allMessages = mutableListOf<StoredMessage>()
         val index = AtomicLong(1L)
 
@@ -253,7 +233,7 @@ class ExtractorTest {
 
         allMessages.add(getMessage(endTimestamp, index))
 
-        return StoredMessageBatch(allMessages, PageId(BookId("1"), startTimestamp, "1"), Instant.now())
+        return StoredGroupedMessageBatch(SESSION_GROUP, allMessages, PageId(BookId("1"), startTimestamp, "1"), Instant.now())
     }
 
     private fun testBorders(
@@ -263,7 +243,6 @@ class ExtractorTest {
         batchEndTimestamp: Instant,
         resumeId: StoredMessageId? = null
     ): List<StoredMessage> {
-
         val batch = getOutOfStartBatch(batchStartTimestamp, batchEndTimestamp)
         val context = mockContextWithCradleService(batch)
 
@@ -272,7 +251,7 @@ class ExtractorTest {
         runBlocking {
             val request = getSearchRequest(startTimestamp, endTimestamp, resumeId)
 
-            val extractor = MessageExtractor(context, request, streamNameObject, this, 1, PipelineStatus())
+            val extractor = MessageExtractor(context, request, STREAM_NAME_OBJECT, this, 1, PipelineStatus())
 
             do {
                 val message = extractor.pollMessage()
@@ -287,7 +266,6 @@ class ExtractorTest {
         return resultMessages
     }
 
-
     private fun provideExtractorCase(): Iterable<Arguments> {
         val start = Instant.parse("2022-04-21T00:00:00Z")
         val end = Instant.parse("2022-04-21T01:00:00Z")
@@ -301,11 +279,9 @@ class ExtractorTest {
         ).map { Arguments { listOf(it).toTypedArray() } }
     }
 
-
     @ParameterizedTest
     @MethodSource("provideExtractorCase")
     fun bordersTest(testParameters: BorderTestParameters) {
-
         val resultMessages = testBorders(
             testParameters.startTimestamp,
             testParameters.endTimestamp,
@@ -319,5 +295,15 @@ class ExtractorTest {
             testParameters.resultIndexes.toTypedArray(),
             resultMessages.map { it.sequence }.toTypedArray()
         )
+    }
+
+    companion object {
+        private const val MESSAGES_IN_CHUNK = 10
+        private const val CHUNK_COUNT = 3
+        private const val BATCH_SIZE = MESSAGES_IN_CHUNK * CHUNK_COUNT
+        private const val STREAM_NAME = "test_stream"
+        private val BOOK_ID = BookId("test_book_01")
+        private const val SESSION_GROUP = "session_group_1"
+        private val STREAM_NAME_OBJECT = CommonStreamName(BOOK_ID, STREAM_NAME)
     }
 }
