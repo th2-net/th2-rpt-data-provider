@@ -34,10 +34,8 @@ import org.junit.jupiter.api.TestInstance
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
-
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class TimestampGeneratorTest {
-
     private val startTimestamp = Instant.parse("2022-04-21T12:00:00Z")
     private val endTimestamp = Instant.parse("2022-04-21T23:00:00Z")
 
@@ -47,29 +45,28 @@ class TimestampGeneratorTest {
     private val eventId = StoredTestEventId(bookId, scope, startTimestamp, "id")
     private val providerEventIdSingle = ProviderEventId(null, eventId)
 
-
     private fun getSearchRequest(
         startTimestamp: Instant?,
         endTimestamp: Instant?,
         searchDirection: TimeRelation = TimeRelation.AFTER,
         resumeId: ProviderEventId? = null
     ): SseEventSearchRequest {
-        val parameters = mutableMapOf<String, List<String>>()
+        val parameters = buildMap {
+            put("bookId", listOf(bookId.name))
+            put("scope", listOf(scope))
 
-        if (startTimestamp != null) {
-            parameters["startTimestamp"] = listOf(startTimestamp.toEpochMilli().toString())
+            if (startTimestamp != null) {
+                put("startTimestamp", listOf(startTimestamp.toEpochMilli().toString()))
+            }
+
+            if (endTimestamp != null) {
+                put("endTimestamp", listOf(endTimestamp.toEpochMilli().toString()))
+            }
+
+            if (resumeId != null) {
+                put("resumeFromId", listOf(resumeId.toString()))
+            }
         }
-
-        if (endTimestamp != null) {
-            parameters["endTimestamp"] = listOf(endTimestamp.toEpochMilli().toString())
-        }
-
-        if (resumeId != null) {
-            parameters["resumeFromId"] = listOf(resumeId.toString())
-        }
-
-        parameters["bookId"] = listOf(bookId.toString())
-        parameters["scope"] = listOf(scope)
 
         return SseEventSearchRequest(parameters, FilterPredicate(emptyList()))
             .copy(searchDirection = searchDirection)
@@ -78,17 +75,14 @@ class TimestampGeneratorTest {
             }
     }
 
-
     private fun mockEvent(startTimestamp: Instant, resumeId: ProviderEventId): StoredTestEvent {
         val event: StoredTestEvent = mockk()
 
         every { event.startTimestamp } answers { startTimestamp }
-
         every { event.id } answers { resumeId.eventId }
 
         return event
     }
-
 
     @Test
     fun testTimestampInOneDay() {
@@ -123,6 +117,7 @@ class TimestampGeneratorTest {
                 )
             ),
             result
+
         )
     }
 
@@ -152,7 +147,6 @@ class TimestampGeneratorTest {
             result
         )
     }
-
 
     @Test
     fun testTimestampInDifferentDaysReverse() {
@@ -204,7 +198,6 @@ class TimestampGeneratorTest {
         )
     }
 
-
     @Test
     fun testResumeIdSingleInTwoDays() {
         val startPlusOneDay = startTimestamp.plus(1, ChronoUnit.DAYS)
@@ -235,5 +228,4 @@ class TimestampGeneratorTest {
             result
         )
     }
-
 }

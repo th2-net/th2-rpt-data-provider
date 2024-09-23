@@ -218,9 +218,7 @@ data class SseMessageSearchRequest<RM, PM>(
         mapStreams.forEach {
             val messageDirectionList = it.value.map { streamPointer -> streamPointer.stream.direction }
 
-            if (!messageDirectionList.containsAll(Direction.values().toList())) {
-                throw InvalidRequestException("ResumeId was not passed for the stream: ${it.key}")
-            } else if (messageDirectionList.size > 2) {
+            if (messageDirectionList.size > 2) {
                 throw InvalidRequestException("Stream ${it.key} has more than two id")
             }
         }

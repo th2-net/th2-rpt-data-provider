@@ -30,9 +30,9 @@ import com.exactpro.th2.rptdataprovider.ProtoMessageGroup
 import com.exactpro.th2.rptdataprovider.ProtoRawMessage
 import com.exactpro.th2.rptdataprovider.TransportMessageGroup
 import com.exactpro.th2.rptdataprovider.TransportRawMessage
+import com.exactpro.th2.rptdataprovider.entities.internal.CommonStreamName
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineCodecRequest
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
-import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
 import com.exactpro.th2.rptdataprovider.entities.mappers.ProtoMessageMapper
 import com.exactpro.th2.rptdataprovider.entities.mappers.TransportMessageMapper
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
@@ -44,15 +44,15 @@ import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchRequest
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.ProtoCodecBatchRequest
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.TransportCodecBatchRequest
+import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import io.github.oshai.kotlinlogging.KotlinLogging
 
 abstract class MessageBatchConverter<B, G, RM, PM>(
     context: Context<B, G, RM, PM>,
     searchRequest: SseMessageSearchRequest<RM, PM>,
-    streamName: StreamName?,
+    streamName: CommonStreamName?,
     externalScope: CoroutineScope,
     previousComponent: PipelineComponent<B, G, RM, PM>?,
     messageFlowCapacity: Int,
@@ -84,7 +84,7 @@ abstract class MessageBatchConverter<B, G, RM, PM>(
     ) : this(
         pipelineComponent.context,
         pipelineComponent.searchRequest,
-        pipelineComponent.streamName,
+        pipelineComponent.commonStreamName,
         pipelineComponent.externalScope,
         pipelineComponent,
         messageFlowCapacity,
@@ -100,13 +100,13 @@ abstract class MessageBatchConverter<B, G, RM, PM>(
         if (pipelineMessage is PipelineRawBatch) {
 
             pipelineStatus.convertStart(
-                streamName.toString(),
+                commonStreamName.toString(),
                 pipelineMessage.storedBatchWrapper.trimmedMessages.size.toLong()
             )
 
             val timeStart = System.currentTimeMillis()
 
-            logger.trace { "received raw batch (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.batchId})" }
+            logger.trace { "received raw batch (stream=${commonStreamName.toString()} first-time=${pipelineMessage.storedBatchWrapper.batchFirstTime})" }
 
             val filteredMessages: List<MessageHolder<G, RM>> = pipelineMessage.storedBatchWrapper.trimmedMessages.convertAndFilter()
 
@@ -114,7 +114,7 @@ abstract class MessageBatchConverter<B, G, RM, PM>(
                 pipelineMessage.streamEmpty,
                 pipelineMessage.lastProcessedId,
                 pipelineMessage.lastScannedTime,
-                MessageBatchWrapper(pipelineMessage.storedBatchWrapper.batchId, filteredMessages.map(MessageHolder<G, RM>::messageWrapper)),
+                MessageBatchWrapper(pipelineMessage.storedBatchWrapper.batchFirstTime, filteredMessages.map(MessageHolder<G, RM>::messageWrapper)),
                 createCodecBatchRequest(filteredMessages),
                 info = pipelineMessage.info.also {
                     it.startConvert = timeStart
@@ -124,24 +124,24 @@ abstract class MessageBatchConverter<B, G, RM, PM>(
             )
 
             pipelineStatus.convertEnd(
-                streamName.toString(),
+                commonStreamName.toString(),
                 pipelineMessage.storedBatchWrapper.trimmedMessages.size.toLong()
             )
 
             if (codecRequest.codecRequest.groupsCount > 0) {
                 sendToChannel(codecRequest)
-                logger.trace { "converted batch is sent downstream (stream=${streamName.toString()} id=${codecRequest.storedBatchWrapper.batchId} requestHash=${codecRequest.codecRequest.requestHash})" }
+                logger.trace { "converted batch is sent downstream (stream=${commonStreamName.toString()} first-time=${codecRequest.storedBatchWrapper.batchFirstTime} requestHash=${codecRequest.codecRequest.requestHash})" }
             } else {
-                logger.trace { "converted batch is discarded because it has no messages (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.batchId})" }
+                logger.trace { "converted batch is discarded because it has no messages (stream=${commonStreamName.toString()} first-time=${pipelineMessage.storedBatchWrapper.batchFirstTime})" }
             }
 
             pipelineStatus.convertSendDownstream(
-                streamName.toString(),
+                commonStreamName.toString(),
                 pipelineMessage.storedBatchWrapper.trimmedMessages.size.toLong()
             )
 
             pipelineStatus.countParsePrepared(
-                streamName.toString(),
+                commonStreamName.toString(),
                 filteredMessages.size.toLong()
             )
 
@@ -188,7 +188,7 @@ class ProtoMessageBatchConverter(
         ((included.isNullOrEmpty() || included.contains(protocol))
                 && (excluded.isNullOrEmpty() || !excluded.contains(protocol)))
             .also {
-                logger.trace { "message ${message?.sequence} has protocol $protocol (matchesProtocolFilter=${it}) (stream=${streamName.toString()})" }
+                logger.trace { "message ${message?.sequence} has protocol $protocol (matchesProtocolFilter=${it}) (stream=${commonStreamName.toString()})" }
             }
     }.toList()
 
@@ -198,7 +198,7 @@ class ProtoMessageBatchConverter(
                 .newBuilder()
                 .addAllGroups(filteredMessages.map(MessageHolder<ProtoMessageGroup, ProtoRawMessage>::messageGroup))
                 .build(),
-            streamName.toString()
+            commonStreamName.toString()
         )
     }
 }
@@ -224,7 +224,7 @@ class TransportMessageBatchConverter(
         ((included.isNullOrEmpty() || included.contains(protocol))
                 && (excluded.isNullOrEmpty() || !excluded.contains(protocol)))
             .also {
-                logger.trace { "message ${message?.id?.sequence} has protocol $protocol (matchesProtocolFilter=$it) (stream=$streamName)" }
+                logger.trace { "message ${message?.id?.sequence} has protocol $protocol (matchesProtocolFilter=$it) (stream=$commonStreamName)" }
             }
     }.toList()
 
@@ -236,7 +236,7 @@ class TransportMessageBatchConverter(
                 .setSessionGroup(firstMessageWrapper.sessionGroup)
                 .setGroups(filteredMessages.map(MessageHolder<TransportMessageGroup, TransportRawMessage>::messageGroup))
                 .build(),
-            streamName.toString()
+            commonStreamName.toString()
         )
     }
 }

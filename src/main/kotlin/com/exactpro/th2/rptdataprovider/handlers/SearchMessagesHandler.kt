@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider.handlers
 
-import com.exactpro.cradle.Direction
 import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.TimeRelation.AFTER
 import com.exactpro.cradle.TimeRelation.BEFORE
@@ -30,12 +29,12 @@ import com.exactpro.th2.rptdataprovider.ProtoMessageGroup
 import com.exactpro.th2.rptdataprovider.ProtoRawMessage
 import com.exactpro.th2.rptdataprovider.TransportMessageGroup
 import com.exactpro.th2.rptdataprovider.TransportRawMessage
+import com.exactpro.th2.rptdataprovider.entities.internal.CommonStreamName
 import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineFilteredMessage
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineKeepAlive
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
 import com.exactpro.th2.rptdataprovider.entities.internal.StreamEndObject
-import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
 import com.exactpro.th2.rptdataprovider.entities.internal.StreamPointer
 import com.exactpro.th2.rptdataprovider.entities.mappers.TimeRelationMapper
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
@@ -53,9 +52,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.takeWhile
+import kotlinx.coroutines.flow.transform
 import kotlinx.coroutines.withContext
 import java.time.temporal.ChronoUnit.DAYS
 import java.util.concurrent.atomic.AtomicLong
@@ -69,23 +71,6 @@ import kotlin.time.measureTimedValue
 abstract class SearchMessagesHandler<B, G, RM, PM>(
     protected val applicationContext: Context<B, G, RM, PM>
 ) {
-
-    companion object {
-        private val logger = KotlinLogging.logger { }
-        private val searchMessageRequests =
-            Counter.build("th2_search_messages", "Count of search message requests")
-                .register()
-
-        private fun StreamPointer.toStoredMessageId() = StoredMessageId(
-            stream.bookId,
-            stream.name,
-            stream.direction,
-            timestamp,
-            sequence
-        )
-    }
-
-
     @OptIn(ExperimentalTime::class)
     suspend fun searchMessagesSse(request: SseMessageSearchRequest<RM, PM>, writer: StreamWriter<RM, PM>) {
         withContext(coroutineContext) {
@@ -102,7 +87,7 @@ abstract class SearchMessagesHandler<B, G, RM, PM>(
                 streamMerger = chainBuilder(request, chainScope, pipelineStatus).buildChain()
 
                 do {
-                    logger.trace { "Polling message from pipeline" }
+                    LOGGER.trace { "Polling message from pipeline" }
                     val message = measureTimedValue {
                         streamMerger?.pollMessage()
                     }
@@ -111,7 +96,7 @@ abstract class SearchMessagesHandler<B, G, RM, PM>(
                         message.value?.let { emit(it) }
                     }.also {
                         if (message.value !is EmptyPipelineObject) {
-                            logger.trace { "message was produced in ${
+                            LOGGER.trace { "message was produced in ${
                                 message.duration.toDouble(DurationUnit.MILLISECONDS).roundToInt()
                             } and consumed in ${it}ms" }
                         }
@@ -124,13 +109,14 @@ abstract class SearchMessagesHandler<B, G, RM, PM>(
                     streamMerger?.let { merger -> writer.write(merger.getStreamsInfo()) }
                     chainScope.cancel()
                     it?.let { throwable -> throw throwable }
-                    logger.debug { "message pipeline flow has been completed" }
+                    LOGGER.debug { "message pipeline flow has been completed" }
                 }
                 .collect {
                     coroutineContext.ensureActive()
 
                     if (it is PipelineFilteredMessage<*, *>) {
                         pipelineStatus.countSend()
+                        @Suppress("UNCHECKED_CAST")
                         writer.write(it as PipelineFilteredMessage<RM, PM>, lastMessageIdCounter)
                     } else if (it is PipelineKeepAlive) {
                         writer.write(LastScannedMessageInfo(it), lastMessageIdCounter)
@@ -139,10 +125,14 @@ abstract class SearchMessagesHandler<B, G, RM, PM>(
         }
     }
 
+    private fun StreamPointer.toStoredMessageId() =
+        StoredMessageId(stream.bookId, stream.name, stream.direction, timestamp, sequence)
+
     suspend fun getIds(request: SseMessageSearchRequest<RM, PM>, lookupLimitDays: Long): Map<String, List<StreamInfo>> {
         require((request.startTimestamp != null || request.resumeFromIdsList.isNotEmpty()) && request.endTimestamp == null) {
             "(startTimestamp must not be null or resumeFromIdsList must not be empty) and endTimestamp must be null in request: $request"
         }
+
         searchMessageRequests.inc()
 
         val before = getIds(request, request.resumeFromIdsList, lookupLimitDays, BEFORE)
@@ -165,7 +155,7 @@ abstract class SearchMessagesHandler<B, G, RM, PM>(
         messageIds: List<StreamPointer>,
         lookupLimitDays: Long,
         searchDirection: TimeRelation
-    ): MutableList<StreamInfo> {
+    ): List<StreamInfo> {
         val messageId = when(searchDirection) {
             BEFORE -> messageIds.maxByOrNull(StreamPointer::timestamp)
             AFTER -> messageIds.minByOrNull(StreamPointer::timestamp)
@@ -184,19 +174,13 @@ abstract class SearchMessagesHandler<B, G, RM, PM>(
             ).also(SseMessageSearchRequest<*, *>::checkIdsRequest)
         }
 
+        val streamNames = resultRequest.stream.map { stream -> CommonStreamName(request.bookId, stream) }
         val pipelineStatus = PipelineStatus()
-
-        val streamNames = resultRequest.stream.flatMap { stream ->
-            Direction.values().map { StreamName(stream, it, request.bookId) }
-        }
-
-        val coroutineScope = CoroutineScope(coroutineContext + Job(coroutineContext[Job]))
         pipelineStatus.addStreams(streamNames.map { it.toString() })
 
-        val streamInfoList = mutableListOf<StreamInfo>()
-
-        val extractors = streamNames.map { streamName ->
-            MessageExtractor(
+        val coroutineScope = CoroutineScope(coroutineContext + Job(coroutineContext[Job]))
+        return streamNames.map { streamName ->
+            val extractor = MessageExtractor(
                 applicationContext,
                 resultRequest,
                 streamName,
@@ -204,31 +188,25 @@ abstract class SearchMessagesHandler<B, G, RM, PM>(
                 1,
                 pipelineStatus
             )
-        }
 
-        extractors.forEach { messageExtractor ->
-            val listPair = mutableListOf<Pair<StoredMessageId?, Boolean>>()
-
-            do {
-                messageExtractor.pollMessage().let {
-                    if (it is PipelineRawBatch && listPair.isEmpty()) {
-                        val trimmedMessages = it.storedBatchWrapper.trimmedMessages
-                        for (trimmedMessage in trimmedMessages) {
-                            if (trimmedMessage.id == messageId) continue
-                            if (listPair.isNotEmpty()) break
-                            listPair.add(Pair(trimmedMessage.id, it.streamEmpty))
-                        }
-                    } else if (listPair.isEmpty() && it.streamEmpty) {
-                        listPair.add(Pair(null, it.streamEmpty))
+            flow { while (true) emit(extractor.pollMessage()) }
+                .transform { pipelineObject ->
+                    when {
+                        pipelineObject is PipelineRawBatch -> pipelineObject.storedBatchWrapper.trimmedMessages
+                            .firstOrNull { msg -> msg.id != messageId }
+                            ?.let { msg -> emit(msg.id) }
+                        pipelineObject.streamEmpty -> emit(null)
                     }
                 }
-            } while (listPair.isEmpty())
-
-            listPair.first().let {
-                streamInfoList.add(StreamInfo(messageExtractor.streamName!!, it.first))
-            }
+                .map { id -> StreamInfo(extractor.commonStreamName, id) }
+                .first()
         }
-        return streamInfoList
+    }
+
+    companion object {
+        private val LOGGER = KotlinLogging.logger { }
+        private val searchMessageRequests =
+            Counter.build("th2_search_messages", "Count of search message requests").register()
     }
 }
 
@@ -244,6 +222,7 @@ class ProtoSearchMessagesHandler(
     ): ChainBuilder<MessageGroupBatch, ProtoMessageGroup, ProtoRawMessage, Message> =
         ProtoChainBuilder(applicationContext, request, chainScope, pipelineStatus)
 }
+
 class TransportSearchMessagesHandler(
     applicationContext: Context<GroupBatch, TransportMessageGroup, TransportRawMessage, ParsedMessage>
 ): SearchMessagesHandler<GroupBatch, TransportMessageGroup, TransportRawMessage, ParsedMessage> (
@@ -255,5 +234,4 @@ class TransportSearchMessagesHandler(
         pipelineStatus: PipelineStatus
     ): ChainBuilder<GroupBatch, TransportMessageGroup, TransportRawMessage, ParsedMessage> =
         TransportChainBuilder(applicationContext, request, chainScope, pipelineStatus)
-
 }

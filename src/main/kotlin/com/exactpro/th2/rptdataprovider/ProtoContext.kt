@@ -70,7 +70,7 @@ class ProtoContext(
 
     grpcConfig: GrpcConfiguration,
 
-    cradleService: CradleService = createCradleService(configuration, cradleManager),
+    cradleService: CradleService = CradleService(configuration, cradleManager),
 
     rabbitMqService: RabbitMqService<MessageGroupBatch, MessageGroup, Message> = ProtoRabbitMqService(
         configuration,

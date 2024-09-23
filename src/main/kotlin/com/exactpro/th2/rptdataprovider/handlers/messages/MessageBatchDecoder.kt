@@ -16,25 +16,25 @@
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.rptdataprovider.entities.internal.CommonStreamName
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineCodecRequest
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineDecodedBatch
 import com.exactpro.th2.rptdataprovider.entities.internal.ProtoProtocolInfo.isImage
-import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.handlers.PipelineComponent
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchRequest
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.CodecBatchResponse
+import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import io.github.oshai.kotlinlogging.KotlinLogging
 
 class MessageBatchDecoder<B, G, RM, PM>(
     context: Context<B, G, RM, PM>,
     searchRequest: SseMessageSearchRequest<RM, PM>,
-    streamName: StreamName?,
+    streamName: CommonStreamName?,
     externalScope: CoroutineScope,
     previousComponent: PipelineComponent<B, G, RM, PM>?,
     messageFlowCapacity: Int,
@@ -55,7 +55,7 @@ class MessageBatchDecoder<B, G, RM, PM>(
     ) : this(
         pipelineComponent.context,
         pipelineComponent.searchRequest,
-        pipelineComponent.streamName,
+        pipelineComponent.commonStreamName,
         pipelineComponent.externalScope,
         pipelineComponent,
         messageFlowCapacity,
@@ -95,10 +95,10 @@ class MessageBatchDecoder<B, G, RM, PM>(
                     )
                 )
             } else {
-                logger.trace { "received converted batch (stream=${streamName.toString()} id=${pipelineMessage.storedBatchWrapper.batchId} requestHash=${pipelineMessage.codecRequest.requestHash})" }
+                logger.trace { "received converted batch (stream=${commonStreamName.toString()} first-time=${pipelineMessage.storedBatchWrapper.batchFirstTime} requestHash=${pipelineMessage.codecRequest.requestHash})" }
 
                 pipelineStatus.decodeStart(
-                    streamName.toString(),
+                    commonStreamName.toString(),
                     pipelineMessage.codecRequest.groupsCount.toLong()
                 )
 
@@ -111,20 +111,20 @@ class MessageBatchDecoder<B, G, RM, PM>(
                     protocol
                 )
                 pipelineStatus.decodeEnd(
-                    streamName.toString(),
+                    commonStreamName.toString(),
                     pipelineMessage.codecRequest.groupsCount.toLong()
                 )
                 sendToChannel(result)
                 pipelineStatus.decodeSendDownstream(
-                    streamName.toString(),
+                    commonStreamName.toString(),
                     pipelineMessage.codecRequest.groupsCount.toLong()
                 )
 
-                logger.trace { "decoded batch is sent downstream (stream=${streamName.toString()} id=${result.storedBatchWrapper.batchId} requestHash=${pipelineMessage.codecRequest.requestHash})" }
+                logger.trace { "decoded batch is sent downstream (stream=${commonStreamName.toString()} first-time=${result.storedBatchWrapper.batchFirstTime} requestHash=${pipelineMessage.codecRequest.requestHash})" }
             }
 
             pipelineStatus.countParseRequested(
-                streamName.toString(),
+                commonStreamName.toString(),
                 pipelineMessage.storedBatchWrapper.trimmedMessages.count().toLong()
             )
 

@@ -2,7 +2,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     id 'org.jetbrains.kotlin.jvm' version '1.8.22'
-    id "com.exactpro.th2.gradle.component" version "0.1.1"
+    id "com.exactpro.th2.gradle.component" version "0.1.2"
     id 'application'
 }
 
@@ -14,9 +14,7 @@ ext {
 group 'com.exactpro.th2'
 version release_version
 
-kotlin {
-    jvmToolchain(11)
-}
+kotlin.jvmToolchain(11)
 
 repositories {
     mavenCentral()
@@ -87,15 +85,6 @@ tasks.withType(KotlinCompile).configureEach {
     }
 }
 
-application {
-    mainClassName = "com.exactpro.th2.rptdataprovider.MainKt"
-}
-
-
-test {
-    useJUnitPlatform()
-}
-
-dependencyCheck {
-    suppressionFile='supressions.xml'
-}
+application.mainClass = "com.exactpro.th2.rptdataprovider.MainKt"
+test.useJUnitPlatform()
+dependencyCheck.suppressionFile = 'suppressions.xml'

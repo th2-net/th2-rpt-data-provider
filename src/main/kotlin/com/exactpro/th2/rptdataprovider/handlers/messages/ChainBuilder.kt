@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
-import com.exactpro.cradle.Direction
 import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.common.grpc.MessageGroupBatch
 import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.GroupBatch
@@ -26,6 +25,7 @@ import com.exactpro.th2.rptdataprovider.ProtoMessageGroup
 import com.exactpro.th2.rptdataprovider.ProtoRawMessage
 import com.exactpro.th2.rptdataprovider.TransportMessageGroup
 import com.exactpro.th2.rptdataprovider.TransportRawMessage
+import com.exactpro.th2.rptdataprovider.entities.internal.CommonStreamName
 import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
@@ -38,9 +38,7 @@ abstract class ChainBuilder<B, G, RM, PM>(
     protected val pipelineStatus: PipelineStatus
 ) {
     fun buildChain(): StreamMerger<B, G, RM, PM> {
-        val streamNames =
-            request.stream.flatMap { stream -> Direction.values().map { StreamName(stream, it, request.bookId) } }
-
+        val streamNames = request.stream.map { stream -> CommonStreamName(request.bookId, stream) }
 
         pipelineStatus.addStreams(streamNames.map { it.toString() })
 
