@@ -17,7 +17,6 @@
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.cradle.BookId
-import com.exactpro.cradle.Order as CradleOrder
 import com.exactpro.cradle.Order.DIRECT
 import com.exactpro.cradle.Order.REVERSE
 import com.exactpro.cradle.TimeRelation.AFTER
@@ -60,18 +59,18 @@ class MessageExtractor<B, G, RM, PM>(
     private var lastTimestamp: Instant? = null
 
     private val order = when (request.searchDirection) {
-        AFTER -> Order.DIRECT
-        BEFORE -> Order.REVERSE
+        AFTER -> DIRECT
+        BEFORE -> REVERSE
     }
 
     private val sequenceComparator = when (order)  {
-        Order.DIRECT -> { l1: Long, l2: Long -> l1 < l2 }
-        Order.REVERSE -> { l1: Long, l2: Long -> l2 < l1 }
+        DIRECT -> { l1: Long, l2: Long -> l1 < l2 }
+        REVERSE -> { l1: Long, l2: Long -> l2 < l1 }
     }
 
     private val timestampComparator = when (order) {
-        Order.DIRECT -> Instant::isBefore
-        Order.REVERSE -> Instant::isAfter
+        DIRECT -> Instant::isBefore
+        REVERSE -> Instant::isAfter
     }
 
     init {
@@ -89,8 +88,8 @@ class MessageExtractor<B, G, RM, PM>(
 
     private val StoredGroupedMessageBatch.orderedMessages: Collection<StoredMessage>
         get() = when (order) {
-            Order.DIRECT -> messages
-            Order.REVERSE -> messagesReverse
+            DIRECT -> messages
+            REVERSE -> messagesReverse
         }
 
     override suspend fun processMessage() {
@@ -136,12 +135,12 @@ class MessageExtractor<B, G, RM, PM>(
                         groupName(sessionGroup)
                         order(order)
 
-                        if (order == Order.DIRECT) {
-                            request.startTimestamp?.let { timestampFrom().isGreaterThanOrEqualTo(it) }
-                            request.endTimestamp?.let { timestampTo().isLessThan(it) }
-                        } else {
+                        if (order == REVERSE) { // default: DIRECT
                             request.startTimestamp?.let { timestampTo().isLessThanOrEqualTo(it) }
                             request.endTimestamp?.let { timestampFrom().isGreaterThan(it) }
+                        } else {
+                            request.startTimestamp?.let { timestampFrom().isGreaterThanOrEqualTo(it) }
+                            request.endTimestamp?.let { timestampTo().isLessThan(it) }
                         }
                     }.build()
                 )
@@ -229,8 +228,8 @@ class MessageExtractor<B, G, RM, PM>(
 
             isStreamEmpty = true
             lastTimestamp = when (order) {
-                Order.DIRECT -> Instant.MAX
-                Order.REVERSE -> Instant.MIN
+                DIRECT -> Instant.MAX
+                REVERSE -> Instant.MIN
             }
 
             LOGGER.debug { "no more data for stream $commonStreamName (lastId=${lastElement.toString()} lastTimestamp=${lastTimestamp})" }
