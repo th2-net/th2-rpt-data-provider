@@ -36,6 +36,7 @@ import com.exactpro.th2.rptdataprovider.minInstant
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.tryToGetTestEvents
+import io.github.oshai.kotlinlogging.KotlinLogging
 import io.prometheus.client.Counter
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -61,11 +62,9 @@ import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import io.github.oshai.kotlinlogging.KotlinLogging
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneOffset
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.coroutineContext
@@ -84,34 +83,6 @@ class SearchEventsHandler(context: Context<*, *, *, *>) {
     private val sseEventSearchStep: Long = context.configuration.sseEventSearchStep.value.toLong()
     private val eventSearchChunkSize: Int = context.configuration.eventSearchChunkSize.value.toInt()
     private val keepAliveTimeout: Long = context.configuration.keepAliveTimeout.value.toLong()
-
-
-    private data class ParentEventCounter private constructor(
-        private val parentEventCounter: ConcurrentHashMap<String, AtomicLong>?,
-        val limitForParent: Long?
-    ) {
-
-        constructor(limitForParent: Long?) : this(
-            parentEventCounter = limitForParent?.let { ConcurrentHashMap<String, AtomicLong>() },
-            limitForParent = limitForParent
-        )
-
-        fun checkCountAndGet(event: BaseEventEntity): BaseEventEntity? {
-            if (limitForParent == null || event.parentEventId == null)
-                return event
-
-            return parentEventCounter!!.getOrPut(event.parentEventId.toString(), { AtomicLong(1) }).let { parentCount ->
-                if (parentCount.get() <= limitForParent) {
-                    parentCount.incrementAndGet()
-                    event
-                } else {
-                    parentEventCounter.putIfAbsent(event.id.toString(), AtomicLong(Long.MAX_VALUE))
-                    null
-                }
-            }
-        }
-    }
-
 
     private suspend fun keepAlive(
         writer: StreamWriter<*, *>,
@@ -323,7 +294,7 @@ class SearchEventsHandler(context: Context<*, *, *, *>) {
                 requireNotNull(resumeTimestamp) { "timestamp for $resumeProviderId cannot be extracted" }
             }
             val timeIntervals = getTimeIntervals(request, sseEventSearchStep, startTimestamp)
-            val parentEventCounter = ParentEventCounter(request.limitForParent)
+            val parentEventCounter = IParentEventCounter.create(request.limitForParent)
 
             flow {
                 for ((start, end) in timeIntervals) {
@@ -359,14 +330,7 @@ class SearchEventsHandler(context: Context<*, *, *, *>) {
                     lastScannedObject.update(event, scanCnt)
                     processedEventCount.inc()
                 }
-                .filter { request.filterPredicate.apply(it) }
-                .let {
-                    if (parentEventCounter.limitForParent != null) {
-                        it.filter { event -> parentEventCounter.checkCountAndGet(event) != null }
-                    } else {
-                        it
-                    }
-                }
+                .filter { request.filterPredicate.apply(it) && parentEventCounter.checkCountAndGet(it) }
                 .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
                 .onStart {
                     launch {

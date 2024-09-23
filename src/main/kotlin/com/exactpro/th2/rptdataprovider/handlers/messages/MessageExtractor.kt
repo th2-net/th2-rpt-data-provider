@@ -17,7 +17,9 @@
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
 import com.exactpro.cradle.BookId
-import com.exactpro.cradle.Order
+import com.exactpro.cradle.Order as CradleOrder
+import com.exactpro.cradle.Order.DIRECT
+import com.exactpro.cradle.Order.REVERSE
 import com.exactpro.cradle.TimeRelation.AFTER
 import com.exactpro.cradle.TimeRelation.BEFORE
 import com.exactpro.cradle.messages.GroupedMessageFilterBuilder

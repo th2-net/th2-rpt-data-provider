@@ -54,9 +54,8 @@ import java.time.temporal.ChronoUnit
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs
 
-
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@Disabled
+@Disabled("update required")
 class TestEventPipeline {
     companion object {
         private const val STORE_ACTION_REJECTION_THRESHOLD = 30_000L
@@ -82,7 +81,6 @@ class TestEventPipeline {
         val expectedResult: List<String>
     )
 
-
     private fun changeTimestamp(timestamp: Instant, minutes: Long): Instant {
         return if (minutes > 0) {
             timestamp.plus(minutes, ChronoUnit.MINUTES)
@@ -90,7 +88,6 @@ class TestEventPipeline {
             timestamp.minus(abs(minutes), ChronoUnit.MINUTES)
         }
     }
-
 
     private fun getSearchRequest(
         startTimestamp: Instant,
@@ -216,11 +213,9 @@ class TestEventPipeline {
         }
     }
 
-
     private fun getIdRange(batchId: String, start: Int, end: Int): List<String> {
         return (start..end).map { "$batchId-$it" }
     }
-
 
     @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
     private fun baseTestCase(
@@ -266,7 +261,6 @@ class TestEventPipeline {
         }
     }
 
-
     @Test
     fun testAllInterval() {
         val testData = EventsParameters(
@@ -280,7 +274,6 @@ class TestEventPipeline {
         baseTestCase(testData)
     }
 
-
     @Test
     fun testStartInterval() {
         val testData = EventsParameters(
@@ -293,7 +286,6 @@ class TestEventPipeline {
 
         baseTestCase(testData)
     }
-
 
     @Test
     fun baseTestBatches() {
@@ -362,7 +354,6 @@ class TestEventPipeline {
         baseTestCase(testData)
     }
 
-
     @Test
     fun baseResumeTestSecondBatch() {
         val testData = EventsParameters(
@@ -387,7 +378,6 @@ class TestEventPipeline {
 
         baseTestCase(testData)
     }
-
 
     @Test
     fun testIntersectedBatchesResume() {
@@ -425,7 +415,6 @@ class TestEventPipeline {
         baseTestCase(testData, TimeRelation.BEFORE)
     }
 
-
     @Test
     fun testReverseAllInterval() {
         val testData = EventsParameters(
@@ -438,7 +427,6 @@ class TestEventPipeline {
 
         baseTestCase(testData, TimeRelation.BEFORE)
     }
-
 
     @Test
     fun testReverseResume() {
@@ -479,7 +467,6 @@ class TestEventPipeline {
 
         baseTestCase(testData, TimeRelation.BEFORE, intersects = true)
     }
-
 
     @Test
     fun testTimestamp() {
@@ -542,7 +529,6 @@ class TestEventPipeline {
 
         baseTestCase(testData, TimeRelation.BEFORE)
     }
-
 
     @Test
     fun testTrimming() {
