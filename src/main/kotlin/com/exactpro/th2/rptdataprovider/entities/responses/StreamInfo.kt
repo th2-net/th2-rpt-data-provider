@@ -27,12 +27,11 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import java.time.Instant
 
 data class StreamInfo(val streamPointer: CommonStreamName, @JsonIgnore val messageId: StoredMessageId? = null) {
-
     @JsonIgnore
     private val lastMessage = messageId ?: let {
         // set sequence to a negative value if stream has not started to avoid mistaking it for the default value
         // FIXME change interface to make that case explicit
-        logger.trace { "lastElement is null - StreamInfo should be build as if the stream $streamPointer has no messages" }
+        LOGGER.trace { "lastElement is null - StreamInfo should be build as if the stream $streamPointer has no messages" }
         StoredMessageId(
             streamPointer.bookId,
             streamPointer.name,
@@ -44,18 +43,18 @@ data class StreamInfo(val streamPointer: CommonStreamName, @JsonIgnore val messa
 
     val lastElement = lastMessage.toString()
 
-    companion object {
-        val logger = KotlinLogging.logger { }
-    }
-
     fun convertToProto(): Stream {
         return lastMessage.run {
-            logger.trace { "stream $streamPointer - lastElement is $sequence" }
+            LOGGER.trace { "stream $streamPointer - lastElement is $sequence" }
             Stream.newBuilder()
                 .setDirection(cradleDirectionToGrpc(direction))
                 .setSession(sessionAlias)
                 .setLastId(this.convertToProto())
                 .build()
         }
+    }
+
+    companion object {
+        private val LOGGER = KotlinLogging.logger { }
     }
 }

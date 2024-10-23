@@ -147,6 +147,10 @@ class MessageExtractor<B, G, RM, PM>(
 
                 LOGGER.debug { "cradle iterator has been built for session group: $sessionGroup, alias: $commonStreamName" }
 
+                val start = request.startTimestamp
+                val end = request.endTimestamp
+
+                var firstNotFound = resumeFromId != null || start != null
                 var lastNotFound = true
 
                 for (batch: StoredGroupedMessageBatch in cradleMessageIterable) {
@@ -156,29 +160,46 @@ class MessageExtractor<B, G, RM, PM>(
                         pipelineStatus.fetchedStart(commonStreamName.toString())
                         LOGGER.trace { "batch ${batch.firstTimestamp} of group $sessionGroup for stream $commonStreamName with ${batch.messageCount} messages (${batch.batchSize} bytes) has been extracted" }
 
-                        val resumeSequence = resumeFromId?.sequence
-                        val start = request.startTimestamp
-                        val end = request.endTimestamp
-
-                        val trimmedMessages = batch.orderedMessages.asSequence()
+                        // TODO: this is not optimal solution (BEGIN)
+                        val isBatchOrdered = batch.messages.asSequence()
                             .filter { it.sessionAlias == commonStreamName.name }
-                            .dropWhile(
+                            .map { it.timestamp }
+                            .runningReduce { previous, current -> if (current < previous) null else current }
+                            .all { it != null }
+
+                        var streamSequence = if (isBatchOrdered) {
+                            batch.orderedMessages.asSequence().filter { it.sessionAlias == commonStreamName.name }
+                        } else {
+                            val orderedMessages = batch.messages
+                                .filter { it.sessionAlias == commonStreamName.name }
+                                .sortedBy { it.timestamp }
+
+                            when (request.searchDirection) {
+                                AFTER -> orderedMessages
+                                BEFORE -> orderedMessages.asReversed()
+                            }.asSequence()
+                        }
+                        // TODO: this is not optimal solution (END)
+
+                        if (firstNotFound) {
+                            streamSequence = streamSequence.dropWhile(
                                 when {
-                                    resumeSequence != null -> { { sequenceComparator(it.sequence, resumeSequence) } }
-                                    start == null -> { { false } }
-                                    else -> { { timestampComparator(it.timestamp, start) } }
+                                    resumeFromId != null -> {
+                                        { msg -> msg.direction == resumeFromId.stream.direction && sequenceComparator(msg.sequence, resumeFromId.sequence).also { firstNotFound = it } }
+                                    }
+                                    else /* start != null */ -> {
+                                        { msg -> timestampComparator(msg.timestamp, start).also { firstNotFound = it } }
+                                    }
                                 }
                             )
-                            .takeWhile(
-                                when {
-                                    end == null -> { { true } }
-                                    else -> { {
-                                        lastNotFound = timestampComparator(it.timestamp, end)
-                                        lastNotFound
-                                    } }
-                                }
-                            )
-                            .toList()
+                        }
+
+                        val trimmedMessages = streamSequence.takeWhile(
+                            when {
+                                end == null -> { { true } }
+                                else -> { { msg -> timestampComparator(msg.timestamp, end).also { lastNotFound = it } } }
+                            }
+                        ).toList()
 
                         val firstMessage = batch.orderedMessages.firstOrNull()
                         val lastMessage = batch.orderedMessages.lastOrNull()
@@ -234,6 +255,22 @@ class MessageExtractor<B, G, RM, PM>(
 
             LOGGER.debug { "no more data for stream $commonStreamName (lastId=${lastElement.toString()} lastTimestamp=${lastTimestamp})" }
         }
+    }
+
+    private fun <T: Comparable<T>> isSorted(batch: Collection<StoredMessage>): Boolean {
+        if (batch.size <= 1) return true
+
+        val iterator = batch.iterator()
+        var previous = iterator.next()
+        while (iterator.hasNext()) {
+            val current = iterator.next()
+            if (current.timestamp < previous.timestamp) {
+                return false
+            }
+            previous = current
+        }
+
+        return true
     }
 
     companion object {

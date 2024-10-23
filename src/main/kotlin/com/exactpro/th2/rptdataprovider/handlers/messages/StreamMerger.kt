@@ -47,21 +47,12 @@ class StreamMerger<B, G, RM, PM>(
     messageFlowCapacity: Int,
     private val pipelineStatus: PipelineStatus
 ) : PipelineComponent<B, G, RM, PM>(context, searchRequest, externalScope, messageFlowCapacity = messageFlowCapacity) {
-
-    companion object {
-        private val logger = KotlinLogging.logger { }
-    }
-
     private val messageStreams = MultipleStreamHolder(pipelineStreams)
-
     private var resultCountLimit = searchRequest.resultCountLimit
-
     private val processJob: Job
 
     init {
-        processJob = externalScope.launch {
-            processMessage()
-        }
+        processJob = externalScope.launch { processMessage() }
     }
 
     private fun timestampInRange(pipelineStepObject: PipelineStepObject): Boolean {
@@ -92,13 +83,12 @@ class StreamMerger<B, G, RM, PM>(
             } else {
                 PipelineKeepAlive(false, null, Instant.ofEpochMilli(0), scannedObjectCount)
             }
-            logger.trace { "Emitting keep alive object $keepAlive" }
+            LOGGER.trace { "Emitting keep alive object $keepAlive" }
             sendToChannel(keepAlive)
             delay(context.keepAliveTimeout)
         }
-        logger.debug { "Keep alive generation canceled" }
+        LOGGER.debug { "Keep alive generation canceled" }
     }
-
 
     @OptIn(ExperimentalTime::class)
     override suspend fun processMessage() {
@@ -108,7 +98,7 @@ class StreamMerger<B, G, RM, PM>(
                 try {
                     keepAliveGenerator()
                 } catch (ex: Exception) {
-                    logger.debug(ex) { "keep alive exception handled" }
+                    LOGGER.debug(ex) { "keep alive exception handled" }
                 }
             }
 
@@ -129,13 +119,13 @@ class StreamMerger<B, G, RM, PM>(
                     resultCountLimit = resultCountLimit?.dec()
                     pipelineStatus.countMerged()
 
-                    logger.trace {
+                    LOGGER.trace {
                         nextMessage.let {
                             "message ${it.lastProcessedId} (streamEmpty=${it.streamEmpty}) with timestamp ${it.lastScannedTime} has been sent downstream"
                         }
                     }
                 } else {
-                    logger.trace {
+                    LOGGER.trace {
                         nextMessage.let {
                             "skipped message ${it.lastProcessedId} (streamEmpty=${it.streamEmpty}) with timestamp ${it.lastScannedTime}"
                         }
@@ -144,9 +134,9 @@ class StreamMerger<B, G, RM, PM>(
             } while (!messageStreams.isAllStreamEmpty() && (resultCountLimit?.let { it > 0 } != false) && inTimeRange)
 
             sendToChannel(StreamEndObject(false, null, Instant.ofEpochMilli(0)))
-            logger.debug { "StreamEndObject has been sent" }
+            LOGGER.debug { "StreamEndObject has been sent" }
             job.cancelAndJoin()
-            logger.debug { "Merging is finished" }
+            LOGGER.debug { "Merging is finished" }
         }
     }
 
@@ -162,7 +152,7 @@ class StreamMerger<B, G, RM, PM>(
         return coroutineScope {
 
             val streams =
-                if (logger.isTraceEnabled)
+                if (LOGGER.isTraceEnabled())
                     messageStreams.getLoggingStreamInfo()
                 else null
 
@@ -177,7 +167,7 @@ class StreamMerger<B, G, RM, PM>(
                     }
                 }
             }.also {
-                logger.trace {
+                LOGGER.trace {
                     "selected ${it.lastProcessedId} - ${it.javaClass.kotlin}-${it.javaClass.hashCode()} ${it.lastScannedTime} out of [${streams}]"
                 }
             }
@@ -185,9 +175,9 @@ class StreamMerger<B, G, RM, PM>(
     }
 
     suspend fun getStreamsInfo(): List<StreamInfo> {
-        logger.info { "Getting streams info" }
+        LOGGER.info { "Getting streams info" }
         processJob.join()
-        logger.debug { "Merge job is finished" }
+        LOGGER.debug { "Merge job is finished" }
         return messageStreams.getStreamsInfo { current, prev ->
             if (searchRequest.searchDirection == TimeRelation.AFTER) {
                 current > prev
@@ -195,5 +185,9 @@ class StreamMerger<B, G, RM, PM>(
                 current < prev
             }
         }
+    }
+
+    companion object {
+        private val LOGGER = KotlinLogging.logger { }
     }
 }
