@@ -298,6 +298,7 @@ spec:
 
 ## 5.15.0
 * Migrate to native grouped message request
+* Updated cradle: `5.4.3-dev`
 
 ## 5.14.0
 * Reduced required memory for executing sse event request with `limitForParent` parameter
