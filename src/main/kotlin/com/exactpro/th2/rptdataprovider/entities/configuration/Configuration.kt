@@ -72,8 +72,6 @@ class CustomConfigurationClass {
 
     val useStrictMode = false
 
-    val searchBySessionGroup = true
-
     val useTransportMode: Boolean = true
 
     val serverType: ServerType = ServerType.HTTP
@@ -102,9 +100,6 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
 
     val messageCacheSize: Variable =
         Variable("messageCacheSize", customConfiguration.messageCacheSize.toString(), "1")
-
-    val searchBySessionGroup: Variable =
-    Variable("searchBySessionGroup", customConfiguration.searchBySessionGroup.toString(), "true")
 
     val aliasToGroupCacheSize: Variable = // TODO: added value check
         Variable("aliasToGroupCacheSize", customConfiguration.aliasToGroupCacheSize.toString(), "1000")
