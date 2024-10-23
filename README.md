@@ -1,4 +1,4 @@
-# Report data provider (5.14.0)
+# Report data provider (5.15.0)
 
 # Overview
 This component serves as a backend for rpt-viewer. It will connect to the cassandra database via cradle api and expose the data stored in there as REST resources.
@@ -296,13 +296,13 @@ spec:
 
 # Release notes
 
-## 5.14.0
+## 5.15.0
 * Migrate to native grouped message request
-* Updated:
-  * th2 gradle plugin: `0.1.2`
 
-## 5.13.2
+## 5.14.0
 * Reduced required memory for executing sse event request with `limitForParent` parameter
+* Updated th2 gradle plugin: `0.1.3`
+* Updated bom: `4.8.0`
 
 ## 5.13.1
 * Fixed the problem data provider can't handle `messageIds` request with `messageId` but without `startTimestamp` arguments
