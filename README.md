@@ -298,14 +298,14 @@ spec:
 
 ## 5.15.0
 * Migrate to native grouped message request
+* Updated th2 gradle plugin: `0.1.4` (th2-bom:4.8.0)
 
 ## 5.14.1
 * Updated cradle api: `5.4.4-dev`
 
 ## 5.14.0
 * Reduced required memory for executing sse event request with `limitForParent` parameter
-* Updated th2 gradle plugin: `0.1.3`
-* Updated bom: `4.8.0`
+* Updated th2 gradle plugin: `0.1.3` (th2-bom:4.8.0)
 
 ## 5.13.1
 * Fixed the problem data provider can't handle `messageIds` request with `messageId` but without `startTimestamp` arguments
