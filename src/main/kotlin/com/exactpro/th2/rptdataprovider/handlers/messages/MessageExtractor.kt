@@ -185,7 +185,7 @@ class MessageExtractor<B, G, RM, PM>(
                             streamSequence = streamSequence.dropWhile(
                                 when {
                                     resumeFromId != null -> {
-                                        { msg -> msg.direction == resumeFromId.stream.direction && sequenceComparator(msg.sequence, resumeFromId.sequence).also { firstNotFound = it } }
+                                        { msg -> (msg.direction != resumeFromId.stream.direction || sequenceComparator(msg.sequence, resumeFromId.sequence)).also { firstNotFound = it } }
                                     }
                                     else /* start != null */ -> {
                                         { msg -> timestampComparator(msg.timestamp, start).also { firstNotFound = it } }
