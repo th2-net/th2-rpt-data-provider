@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider.handlers.messages
 
-import com.exactpro.cradle.BookId
 import com.exactpro.cradle.Order.DIRECT
 import com.exactpro.cradle.Order.REVERSE
 import com.exactpro.cradle.TimeRelation.AFTER
@@ -131,7 +130,7 @@ class MessageExtractor<B, G, RM, PM>(
                 val cradleMessageIterable = context.cradleService.getGroupedMessages(
                     this,
                     GroupedMessageFilterBuilder().apply {
-                        bookId(BOOK_ID)
+                        bookId(commonStreamName.bookId)
                         groupName(sessionGroup)
                         order(order)
 
@@ -275,6 +274,5 @@ class MessageExtractor<B, G, RM, PM>(
 
     companion object {
         private val LOGGER = KotlinLogging.logger {}
-        private val BOOK_ID = BookId("test_book_01")
-    }
+     }
 }
