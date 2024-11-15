@@ -192,10 +192,10 @@ class MessageExtractor<B, G, RM, PM>(
                             }
                         }
 
-                        val trimmedMessages = if (endIndex - startIndex == orderedMessages.size) {
-                            orderedMessages
-                        } else {
-                            orderedMessages.subList(startIndex, endIndex)
+                        val trimmedMessages = when (endIndex - startIndex) {
+                            0 -> emptyList()
+                            orderedMessages.size -> orderedMessages
+                            else -> orderedMessages.subList(startIndex, endIndex)
                         }
 
                         LOGGER.trace {
