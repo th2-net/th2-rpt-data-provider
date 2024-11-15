@@ -106,7 +106,7 @@ abstract class MessageBatchConverter<B, G, RM, PM>(
 
             val timeStart = System.currentTimeMillis()
 
-            logger.trace { "received raw batch (stream=${commonStreamName.toString()} first-time=${pipelineMessage.storedBatchWrapper.batchFirstTime})" }
+            logger.trace { "received raw batch (stream=$commonStreamName first-time=${pipelineMessage.storedBatchWrapper.batchFirstTime})" }
 
             val filteredMessages: List<MessageHolder<G, RM>> = pipelineMessage.storedBatchWrapper.trimmedMessages.convertAndFilter()
 
@@ -130,9 +130,9 @@ abstract class MessageBatchConverter<B, G, RM, PM>(
 
             if (codecRequest.codecRequest.groupsCount > 0) {
                 sendToChannel(codecRequest)
-                logger.trace { "converted batch is sent downstream (stream=${commonStreamName.toString()} first-time=${codecRequest.storedBatchWrapper.batchFirstTime} requestHash=${codecRequest.codecRequest.requestHash})" }
+                logger.trace { "converted batch is sent downstream (stream=$commonStreamName first-time=${codecRequest.storedBatchWrapper.batchFirstTime} requestHash=${codecRequest.codecRequest.requestHash})" }
             } else {
-                logger.trace { "converted batch is discarded because it has no messages (stream=${commonStreamName.toString()} first-time=${pipelineMessage.storedBatchWrapper.batchFirstTime})" }
+                logger.trace { "converted batch is discarded because it has no messages (stream=$commonStreamName first-time=${pipelineMessage.storedBatchWrapper.batchFirstTime})" }
             }
 
             pipelineStatus.convertSendDownstream(
@@ -188,7 +188,7 @@ class ProtoMessageBatchConverter(
         ((included.isNullOrEmpty() || included.contains(protocol))
                 && (excluded.isNullOrEmpty() || !excluded.contains(protocol)))
             .also {
-                logger.trace { "message ${message?.sequence} has protocol $protocol (matchesProtocolFilter=${it}) (stream=${commonStreamName.toString()})" }
+                logger.trace { "message ${message?.sequence} has protocol $protocol (matchesProtocolFilter=${it}) (stream=$commonStreamName)" }
             }
     }.toList()
 

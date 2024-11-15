@@ -95,7 +95,7 @@ class MessageBatchDecoder<B, G, RM, PM>(
                     )
                 )
             } else {
-                logger.trace { "received converted batch (stream=${commonStreamName.toString()} first-time=${pipelineMessage.storedBatchWrapper.batchFirstTime} requestHash=${pipelineMessage.codecRequest.requestHash})" }
+                logger.trace { "received converted batch (stream=$commonStreamName first-time=${pipelineMessage.storedBatchWrapper.batchFirstTime} requestHash=${pipelineMessage.codecRequest.requestHash})" }
 
                 pipelineStatus.decodeStart(
                     commonStreamName.toString(),
@@ -120,7 +120,7 @@ class MessageBatchDecoder<B, G, RM, PM>(
                     pipelineMessage.codecRequest.groupsCount.toLong()
                 )
 
-                logger.trace { "decoded batch is sent downstream (stream=${commonStreamName.toString()} first-time=${result.storedBatchWrapper.batchFirstTime} requestHash=${pipelineMessage.codecRequest.requestHash})" }
+                logger.trace { "decoded batch is sent downstream (stream=$commonStreamName first-time=${result.storedBatchWrapper.batchFirstTime} requestHash=${pipelineMessage.codecRequest.requestHash})" }
             }
 
             pipelineStatus.countParseRequested(

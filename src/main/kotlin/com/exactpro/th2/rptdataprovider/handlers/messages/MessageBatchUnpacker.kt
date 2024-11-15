@@ -148,7 +148,7 @@ abstract class MessageBatchUnpacker<B, G, RM, PM>(
 
             val messages = pipelineMessage.storedBatchWrapper.trimmedMessages
 
-            logger.debug { "codec response unpacking took ${result.duration.toDouble(DurationUnit.MILLISECONDS)}ms (stream=${commonStreamName.toString()} firstId=${messages.first().id.sequence} lastId=${messages.last().id.sequence} messages=${messages.size})" }
+            logger.debug { "codec response unpacking took ${result.duration.toDouble(DurationUnit.MILLISECONDS)}ms (stream=$commonStreamName firstId=${messages.first().id.sequence} lastId=${messages.last().id.sequence} messages=${messages.size})" }
 
             pipelineMessage.info.buildMessage = result.duration.toDouble(DurationUnit.MILLISECONDS).toLong()
             StreamWriter.setBuildMessage(pipelineMessage.info)
@@ -165,7 +165,7 @@ abstract class MessageBatchUnpacker<B, G, RM, PM>(
                 pipelineMessage.storedBatchWrapper.trimmedMessages.size.toLong()
             )
 
-            logger.debug { "unpacked responses are sent (stream=${commonStreamName.toString()} firstId=${messages.first().id.sequence} lastId=${messages.last().id.sequence} messages=${result.value.size})" }
+            logger.debug { "unpacked responses are sent (stream=$commonStreamName firstId=${messages.first().id.sequence} lastId=${messages.last().id.sequence} messages=${result.value.size})" }
 
         } else {
             sendToChannel(pipelineMessage)
@@ -232,7 +232,7 @@ class ProtoMessageBatchUnpacker(
                 val messages = pipelineMessage.storedBatchWrapper.trimmedMessages
 
                 throw CodecResponseException(
-                    """codec dont parsed all messages
+                    """codec don't parsed all messages
                     | (stream=${commonStreamName} 
                     | firstRequestId=${messages.first().id.sequence}
                     | lastRequestId=${messages.last().id.sequence}
@@ -320,7 +320,7 @@ class TransportMessageBatchUnpacker(
                 val messages = pipelineMessage.storedBatchWrapper.trimmedMessages
 
                 throw CodecResponseException(
-                    """codec dont parsed all messages
+                    """codec don't parsed all messages
                     | (stream=${commonStreamName} 
                     | firstRequestId=${messages.first().id.sequence}
                     | lastRequestId=${messages.last().id.sequence}
