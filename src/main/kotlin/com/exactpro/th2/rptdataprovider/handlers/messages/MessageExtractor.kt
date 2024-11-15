@@ -159,51 +159,48 @@ class MessageExtractor<B, G, RM, PM>(
                         pipelineStatus.fetchedStart(commonStreamName.toString())
                         LOGGER.trace { "batch ${batch.firstTimestamp} of group $sessionGroup for stream $commonStreamName with ${batch.messageCount} messages (${batch.batchSize} bytes) has been extracted" }
 
-                        // TODO: this is not optimal solution (BEGIN)
-                        val isBatchOrdered = batch.messages.asSequence()
-                            .filter { it.sessionAlias == commonStreamName.name }
-                            .map { it.timestamp }
-                            .runningReduce { previous, current -> if (current < previous) null else current }
-                            .all { it != null }
-
-                        var streamSequence = if (isBatchOrdered) {
-                            batch.orderedMessages.asSequence().filter { it.sessionAlias == commonStreamName.name }
-                        } else {
-                            val orderedMessages = batch.messages
-                                .filter { it.sessionAlias == commonStreamName.name }
-                                .sortedBy { it.timestamp }
+                        val orderedMessages = run {
+                            val filteredMessages: MutableList<StoredMessage> = ArrayList()
+                            batch.messages.filterTo(filteredMessages) { it.sessionAlias == commonStreamName.name }
+                            filteredMessages.sortBy { it.timestamp }
 
                             when (request.searchDirection) {
-                                AFTER -> orderedMessages
-                                BEFORE -> orderedMessages.asReversed()
-                            }.asSequence()
+                                AFTER -> filteredMessages
+                                BEFORE -> filteredMessages.asReversed()
+                            }
                         }
-                        // TODO: this is not optimal solution (END)
 
-                        if (firstNotFound) {
-                            streamSequence = streamSequence.dropWhile(
+                        val startIndex = if (firstNotFound) {
+                            val idx = orderedMessages.indexOfFirst(
                                 when {
                                     resumeFromId != null -> {
-                                        { msg -> (msg.direction != resumeFromId.stream.direction || sequenceComparator(msg.sequence, resumeFromId.sequence)).also { firstNotFound = it } }
+                                        { msg -> (msg.direction == resumeFromId.stream.direction && !sequenceComparator(msg.sequence, resumeFromId.sequence)).also { firstNotFound = it } }
                                     }
                                     else /* start != null */ -> {
-                                        { msg -> timestampComparator(msg.timestamp, start).also { firstNotFound = it } }
+                                        { msg -> !timestampComparator(msg.timestamp, start).also { firstNotFound = it } }
                                     }
                                 }
                             )
+                            if (idx == -1) orderedMessages.size else idx
+                        } else 0
+
+                        var endIndex = orderedMessages.size
+                        if (end != null) {
+                            endIndex = startIndex
+                            while (endIndex < orderedMessages.size && timestampComparator(orderedMessages[endIndex].timestamp, end).also { lastNotFound = it }) {
+                                endIndex++
+                            }
                         }
 
-                        val trimmedMessages = streamSequence.takeWhile(
-                            when {
-                                end == null -> { { true } }
-                                else -> { { msg -> timestampComparator(msg.timestamp, end).also { lastNotFound = it } } }
-                            }
-                        ).toList()
-
-                        val firstMessage = batch.orderedMessages.firstOrNull()
-                        val lastMessage = batch.orderedMessages.lastOrNull()
+                        val trimmedMessages = if (endIndex - startIndex == orderedMessages.size) {
+                            orderedMessages
+                        } else {
+                            orderedMessages.subList(startIndex, endIndex)
+                        }
 
                         LOGGER.trace {
+                            val firstMessage = batch.orderedMessages.firstOrNull()
+                            val lastMessage = batch.orderedMessages.lastOrNull()
                             "batch ${batch.firstTimestamp} of group $sessionGroup for stream $commonStreamName has been trimmed (targetStartTimestamp=${request.startTimestamp} targetEndTimestamp=${request.endTimestamp} targetId=${resumeFromId?.sequence}) - ${trimmedMessages.size} of ${batch.messageCount} messages left (firstId=${firstMessage?.id?.sequence} firstTimestamp=${firstMessage?.timestamp} lastId=${lastMessage?.id?.sequence} lastTimestamp=${lastMessage?.timestamp})"
                         }
 
@@ -254,22 +251,6 @@ class MessageExtractor<B, G, RM, PM>(
 
             LOGGER.debug { "no more data for stream $commonStreamName (lastId=${lastElement.toString()} lastTimestamp=${lastTimestamp})" }
         }
-    }
-
-    private fun <T: Comparable<T>> isSorted(batch: Collection<StoredMessage>): Boolean {
-        if (batch.size <= 1) return true
-
-        val iterator = batch.iterator()
-        var previous = iterator.next()
-        while (iterator.hasNext()) {
-            val current = iterator.next()
-            if (current.timestamp < previous.timestamp) {
-                return false
-            }
-            previous = current
-        }
-
-        return true
     }
 
     companion object {
