@@ -28,6 +28,7 @@ import com.exactpro.th2.rptdataprovider.Context
 import com.exactpro.th2.rptdataprovider.entities.internal.CommonStreamName
 import com.exactpro.th2.rptdataprovider.entities.internal.EmptyPipelineObject
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineRawBatch
+import com.exactpro.th2.rptdataprovider.entities.internal.StreamPointer
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
 import com.exactpro.th2.rptdataprovider.entities.responses.StoredMessageBatchWrapper
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
@@ -72,6 +73,17 @@ class MessageExtractor<B, G, RM, PM>(
         REVERSE -> Instant::isAfter
     }
 
+    private val firstResumeId: Sequence<StreamPointer>.((StreamPointer) -> Instant) -> StreamPointer? =
+        when(order) {
+            DIRECT -> Sequence<StreamPointer>::minByOrNull
+            REVERSE -> Sequence<StreamPointer>::maxByOrNull
+        }
+
+    private val emptyStreamTimestamp = when (order) {
+        DIRECT -> Instant.MAX
+        REVERSE -> Instant.MIN
+    }
+
     init {
         externalScope.launch {
             try {
@@ -85,17 +97,10 @@ class MessageExtractor<B, G, RM, PM>(
         }
     }
 
-    private val StoredGroupedMessageBatch.orderedMessages: Collection<StoredMessage>
-        get() = when (order) {
-            DIRECT -> messages
-            REVERSE -> messagesReverse
-        }
-
     override suspend fun processMessage() {
         coroutineScope {
             launch {
                 while (this@coroutineScope.isActive) {
-
                     //FIXME: replace delay-based stream updates with synchronous updates from iterator
                     lastTimestamp?.also {
                         sendToChannel(EmptyPipelineObject(isStreamEmpty, lastElement, it).also { msg ->
@@ -108,12 +113,7 @@ class MessageExtractor<B, G, RM, PM>(
 
             val resumeFromId = request.resumeFromIdsList.asSequence()
                 .filter { it.stream.name == commonStreamName.name }
-                .run {
-                    when(request.searchDirection) {
-                        BEFORE -> maxByOrNull { it.timestamp }
-                        AFTER -> minByOrNull { it.timestamp }
-                    }
-                }
+                .firstResumeId { it.timestamp }
 
             LOGGER.debug { "acquiring cradle iterator for stream $commonStreamName" }
 
@@ -127,21 +127,26 @@ class MessageExtractor<B, G, RM, PM>(
                     request.startTimestamp,
                     request.endTimestamp,
                 )
+
                 val cradleMessageIterable = context.cradleService.getGroupedMessages(
                     this,
-                    GroupedMessageFilterBuilder().apply {
-                        bookId(commonStreamName.bookId)
-                        groupName(sessionGroup)
-                        order(order)
 
-                        if (order == REVERSE) { // default: DIRECT
-                            request.startTimestamp?.let { timestampTo().isLessThanOrEqualTo(it) }
-                            request.endTimestamp?.let { timestampFrom().isGreaterThan(it) }
-                        } else {
-                            request.startTimestamp?.let { timestampFrom().isGreaterThanOrEqualTo(it) }
-                            request.endTimestamp?.let { timestampTo().isLessThan(it) }
-                        }
-                    }.build()
+                    GroupedMessageFilterBuilder()
+                        .bookId(commonStreamName.bookId)
+                        .groupName(sessionGroup)
+                        .order(order)
+                        .also { builder ->
+                            when (order) {
+                                DIRECT -> {
+                                    request.startTimestamp?.let { builder.timestampFrom().isGreaterThanOrEqualTo(it) }
+                                    request.endTimestamp?.let { builder.timestampTo().isLessThan(it) }
+                                }
+                                REVERSE -> {
+                                    request.startTimestamp?.let { builder.timestampTo().isLessThanOrEqualTo(it) }
+                                    request.endTimestamp?.let { builder.timestampFrom().isGreaterThan(it) }
+                                }
+                            }
+                        }.build()
                 )
 
                 LOGGER.debug { "cradle iterator has been built for session group: $sessionGroup, alias: $commonStreamName" }
@@ -164,9 +169,9 @@ class MessageExtractor<B, G, RM, PM>(
                             batch.messages.filterTo(filteredMessages) { it.sessionAlias == commonStreamName.name }
                             filteredMessages.sortBy { it.timestamp }
 
-                            when (request.searchDirection) {
-                                AFTER -> filteredMessages
-                                BEFORE -> filteredMessages.asReversed()
+                            when (order) {
+                                DIRECT -> filteredMessages
+                                REVERSE -> filteredMessages.asReversed()
                             }
                         }
 
@@ -199,8 +204,9 @@ class MessageExtractor<B, G, RM, PM>(
                         }
 
                         LOGGER.trace {
-                            val firstMessage = batch.orderedMessages.firstOrNull()
-                            val lastMessage = batch.orderedMessages.lastOrNull()
+                            val messages = if (order == REVERSE) batch.messagesReverse else batch.messages
+                            val firstMessage = messages.firstOrNull()
+                            val lastMessage = messages.lastOrNull()
                             "batch ${batch.firstTimestamp} of group $sessionGroup for stream $commonStreamName has been trimmed (targetStartTimestamp=${request.startTimestamp} targetEndTimestamp=${request.endTimestamp} targetId=${resumeFromId?.sequence}) - ${trimmedMessages.size} of ${batch.messageCount} messages left (firstId=${firstMessage?.id?.sequence} firstTimestamp=${firstMessage?.timestamp} lastId=${lastMessage?.id?.sequence} lastTimestamp=${lastMessage?.timestamp})"
                         }
 
@@ -244,10 +250,7 @@ class MessageExtractor<B, G, RM, PM>(
             }
 
             isStreamEmpty = true
-            lastTimestamp = when (order) {
-                DIRECT -> Instant.MAX
-                REVERSE -> Instant.MIN
-            }
+            lastTimestamp = emptyStreamTimestamp
 
             LOGGER.debug { "no more data for stream $commonStreamName (lastId=${lastElement.toString()} lastTimestamp=${lastTimestamp})" }
         }

@@ -30,7 +30,13 @@ import com.exactpro.th2.rptdataprovider.handlers.PipelineStatus
 import com.exactpro.th2.rptdataprovider.handlers.messages.helpers.MultipleStreamHolder
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.time.Instant
 import kotlin.coroutines.coroutineContext
@@ -49,29 +55,31 @@ class StreamMerger<B, G, RM, PM>(
 ) : PipelineComponent<B, G, RM, PM>(context, searchRequest, externalScope, messageFlowCapacity = messageFlowCapacity) {
     private val messageStreams = MultipleStreamHolder(pipelineStreams)
     private var resultCountLimit = searchRequest.resultCountLimit
-    private val processJob: Job
 
+    private val messageFilterByTimestamp: (PipelineStepObject, PipelineStepObject) -> Boolean = when(searchRequest.searchDirection) {
+        TimeRelation.AFTER -> { msg1, msg2 -> msg1.lastScannedTime.isBefore(msg2.lastScannedTime) }
+        TimeRelation.BEFORE -> { msg1, msg2 -> msg2.lastScannedTime.isBefore(msg1.lastScannedTime) }
+    }
+
+    private val timestampFilter = when (searchRequest.searchDirection) {
+        TimeRelation.AFTER -> Instant::isBeforeOrEqual
+        TimeRelation.BEFORE -> Instant::isAfterOrEqual
+    }
+
+    private val sequenceFilter: (Long, Long) -> Boolean = when(searchRequest.searchDirection) {
+        TimeRelation.AFTER -> { current, prev -> current > prev }
+        TimeRelation.BEFORE -> { current, prev -> current < prev }
+    }
+
+    private val processJob: Job
     init {
         processJob = externalScope.launch { processMessage() }
     }
 
-    private fun timestampInRange(pipelineStepObject: PipelineStepObject): Boolean {
-        return pipelineStepObject.lastScannedTime.let { timestamp ->
-            if (searchRequest.searchDirection == TimeRelation.AFTER) {
-                searchRequest.endTimestamp == null || timestamp.isBeforeOrEqual(searchRequest.endTimestamp)
-            } else {
-                searchRequest.endTimestamp == null || timestamp.isAfterOrEqual(searchRequest.endTimestamp)
-            }
-        }
-    }
-
-    private fun inTimeRange(pipelineStepObject: PipelineStepObject): Boolean {
-        return if (pipelineStepObject !is EmptyPipelineObject) {
-            timestampInRange(pipelineStepObject)
-        } else {
-            true
-        }
-    }
+    private fun inTimeRange(pipelineStepObject: PipelineStepObject): Boolean =
+        pipelineStepObject is EmptyPipelineObject
+                || searchRequest.endTimestamp == null
+                || timestampFilter(pipelineStepObject.lastScannedTime, searchRequest.endTimestamp)
 
     private suspend fun keepAliveGenerator() {
         while (coroutineContext.isActive) {
@@ -140,36 +148,11 @@ class StreamMerger<B, G, RM, PM>(
         }
     }
 
-    private fun isLess(firstMessage: PipelineStepObject, secondMessage: PipelineStepObject): Boolean {
-        return firstMessage.lastScannedTime.isBefore(secondMessage.lastScannedTime)
-    }
-
-    private fun isGreater(firstMessage: PipelineStepObject, secondMessage: PipelineStepObject): Boolean {
-        return firstMessage.lastScannedTime.isAfter(secondMessage.lastScannedTime)
-    }
-
-    private suspend fun getNextMessage(): PipelineStepObject {
-        return coroutineScope {
-
-            val streams =
-                if (LOGGER.isTraceEnabled())
-                    messageStreams.getLoggingStreamInfo()
-                else null
-
-            let {
-                if (searchRequest.searchDirection == TimeRelation.AFTER) {
-                    messageStreams.selectMessage { new, old ->
-                        isLess(new, old)
-                    }
-                } else {
-                    messageStreams.selectMessage { new, old ->
-                        isGreater(new, old)
-                    }
-                }
-            }.also {
-                LOGGER.trace {
-                    "selected ${it.lastProcessedId} - ${it.javaClass.kotlin}-${it.javaClass.hashCode()} ${it.lastScannedTime} out of [${streams}]"
-                }
+    private suspend fun getNextMessage(): PipelineStepObject = coroutineScope {
+        val streams = if (LOGGER.isTraceEnabled()) messageStreams.getLoggingStreamInfo() else null
+        messageStreams.selectMessage(messageFilterByTimestamp).also {
+            LOGGER.trace {
+                "selected ${it.lastProcessedId} - ${it.javaClass.kotlin}-${it.javaClass.hashCode()} ${it.lastScannedTime} out of [${streams}]"
             }
         }
     }
@@ -178,13 +161,7 @@ class StreamMerger<B, G, RM, PM>(
         LOGGER.info { "Getting streams info" }
         processJob.join()
         LOGGER.debug { "Merge job is finished" }
-        return messageStreams.getStreamsInfo { current, prev ->
-            if (searchRequest.searchDirection == TimeRelation.AFTER) {
-                current > prev
-            } else {
-                current < prev
-            }
-        }
+        return messageStreams.getStreamsInfo(sequenceFilter)
     }
 
     companion object {
