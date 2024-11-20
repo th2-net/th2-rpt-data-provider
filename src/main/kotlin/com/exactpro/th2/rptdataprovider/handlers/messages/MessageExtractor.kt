@@ -154,7 +154,8 @@ class MessageExtractor<B, G, RM, PM>(
                 val start = request.startTimestamp
                 val end = request.endTimestamp
 
-                var firstNotFound = resumeFromId != null || start != null
+                var isResumeIdNotFound = resumeFromId != null
+                var isStartTimestampNotFound = start != null
                 var lastNotFound = true
 
                 for (batch: StoredGroupedMessageBatch in cradleMessageIterable) {
@@ -175,19 +176,19 @@ class MessageExtractor<B, G, RM, PM>(
                             }
                         }
 
-                        val startIndex = if (firstNotFound) {
-                            val idx = orderedMessages.indexOfFirst(
-                                when {
-                                    resumeFromId != null -> {
-                                        { msg -> (msg.direction == resumeFromId.stream.direction && !sequenceComparator(msg.sequence, resumeFromId.sequence)).also { firstNotFound = it } }
-                                    }
-                                    else /* start != null */ -> {
-                                        { msg -> !timestampComparator(msg.timestamp, start).also { firstNotFound = it } }
-                                    }
-                                }
-                            )
+                        val resumeIndex = if (isResumeIdNotFound) {
+                            resumeFromId!! // if isResumeIdNotFound==true, resumeFromId is always not null
+                            val idx = orderedMessages.indexOfFirst { msg -> (msg.direction == resumeFromId.stream.direction && !sequenceComparator(msg.sequence, resumeFromId.sequence)).also { isResumeIdNotFound = it } }
                             if (idx == -1) orderedMessages.size else idx
                         } else 0
+
+                        val startIndex = if (isStartTimestampNotFound) {
+                            var idx = resumeIndex
+                            while (idx < orderedMessages.size && timestampComparator(orderedMessages[idx].timestamp, start).also { isStartTimestampNotFound = it }) {
+                                idx++
+                            }
+                            idx
+                        } else resumeIndex
 
                         var endIndex = orderedMessages.size
                         if (end != null) {

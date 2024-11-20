@@ -52,6 +52,8 @@ import org.junit.jupiter.params.provider.MethodSource
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.atomic.AtomicLong
+import java.util.stream.Stream
+import kotlin.math.max
 import kotlin.random.Random
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -69,16 +71,20 @@ class ExtractorTest {
     }
 
     private fun getSearchRequest(
-        startTimestamp: Instant,
+        startTimestamp: Instant?,
         endTimestamp: Instant,
         resumeId: StoredMessageId? = null
     ): SseMessageSearchRequest<ProtoRawMessage, Message> {
         val parameters = mutableMapOf(
             "stream" to listOf(STREAM_NAME),
-            "startTimestamp" to listOf(startTimestamp.toEpochMilli().toString()),
             "endTimestamp" to listOf(endTimestamp.toEpochMilli().toString()),
             "bookId" to listOf(BOOK_ID.name)
         )
+
+        if (startTimestamp != null) {
+            parameters["startTimestamp"] = listOf(startTimestamp.toEpochMilli().toString())
+        }
+
         if (resumeId != null) {
             parameters["messageId"] = listOf(resumeId.toString())
         }
@@ -116,14 +122,17 @@ class ExtractorTest {
 
     private fun getMessages(
         sequencePattern: List<Direction>,
-        startTimestamp: Instant
+        startTimestamp: Instant,
+        timestampIncrementMillis: Long
     ): List<StoredMessage> {
         val indexFirst = AtomicLong(1)
         val indexSecond = AtomicLong(1)
 
+        var currentTimestamp = startTimestamp
         return sequencePattern.map { direction ->
+            currentTimestamp = currentTimestamp.plusMillis(timestampIncrementMillis)
             getMessage(
-                startTimestamp,
+                currentTimestamp,
                 if (direction == Direction.FIRST) indexFirst else indexSecond,
                 direction
             )
@@ -238,21 +247,61 @@ class ExtractorTest {
         }
     }
 
-    @Test
-    fun resumeExtract() {
-        val resumeIndex = 4
+    class ResumeExtractArgs(
+        val timestampIncrementMillis: Long = 1_000,
+        val isUnorderedBatch: Boolean = false,
+        val byResumeIdIndex: Int? = 4,
+        val byStartTimestampIndex: Int? = null
+    )
+
+    private fun resumeExtractParamsProvider() = Stream.of(
+        ResumeExtractArgs(),
+        ResumeExtractArgs(isUnorderedBatch = true),
+        ResumeExtractArgs(timestampIncrementMillis = 0),
+        ResumeExtractArgs(byResumeIdIndex = null, byStartTimestampIndex = 5),
+        ResumeExtractArgs(byResumeIdIndex = 3, byStartTimestampIndex = null),
+        ResumeExtractArgs(byResumeIdIndex = 4, byStartTimestampIndex = 5),
+        ResumeExtractArgs(byResumeIdIndex = 5, byStartTimestampIndex = 4)
+    )
+
+    private fun MutableList<StoredMessage>.swap(idx1: Int, idx2: Int) {
+        val temp = this[idx1]
+        this[idx1] = this[idx2]
+        this[idx2] = temp
+    }
+
+    @ParameterizedTest
+    @MethodSource("resumeExtractParamsProvider")
+    fun resumeExtract(args: ResumeExtractArgs) {
+        val resumeIndex = args.byResumeIdIndex
+        val startTimestampIndex = args.byStartTimestampIndex
         val startTimestamp = Instant.parse("2022-04-21T10:00:00Z")
         val messages = getMessages(
             listOf(Direction.SECOND, Direction.SECOND, Direction.FIRST, Direction.SECOND, Direction.FIRST, Direction.FIRST),
-            startTimestamp
+            startTimestamp,
+            args.timestampIncrementMillis
         )
-        val batch = StoredGroupedMessageBatch(SESSION_GROUP, messages, PageId(BookId("1"), startTimestamp, "1"), Instant.now())
+
+        val batchMessages = arrayListOf<StoredMessage>().apply { addAll(messages) }
+
+        if (args.isUnorderedBatch) {
+            batchMessages.swap(1, 2)
+            batchMessages.swap(3, 4)
+        }
+
+        val batch = StoredGroupedMessageBatch(SESSION_GROUP, batchMessages, PageId(BookId("1"), startTimestamp, "1"), Instant.now())
         val context = mockContextWithCradleService(batch)
 
+        val requestTimestamp = if (startTimestampIndex != null) {
+            startTimestamp.plusMillis(args.timestampIncrementMillis * (startTimestampIndex + 1))
+        } else null
+
+        val resumeId = if (resumeIndex != null) messages[resumeIndex].id else null
+
         val request = getSearchRequest(
-            startTimestamp,
+            requestTimestamp,
             startTimestamp.plus(1, ChronoUnit.MINUTES),
-            messages[resumeIndex].id
+            resumeId
         )
 
         val extractedMessages: List<StoredMessage>
@@ -268,9 +317,14 @@ class ExtractorTest {
             coroutineContext.cancelChildren()
         }
 
-        assertEquals(messages.size - resumeIndex, extractedMessages.size)
-        assertEquals(messages[resumeIndex].id, extractedMessages[0].id)
-        assertEquals(messages[resumeIndex + 1].id, extractedMessages[1].id)
+        val expectedResumeIndex: Int = max(resumeIndex ?: 0, startTimestampIndex ?: 0)
+        val expectedSize = messages.size - expectedResumeIndex
+
+        assertEquals(expectedSize, extractedMessages.size)
+
+        for (i in extractedMessages.indices) {
+            assertEquals(messages[expectedResumeIndex + i].id, extractedMessages[i].id)
+        }
     }
 
     private fun getOutOfStartBatch(startTimestamp: Instant, endTimestamp: Instant): StoredGroupedMessageBatch {
