@@ -121,11 +121,16 @@ class MessageExtractor<B, G, RM, PM>(
             request.startTimestamp?.let { LOGGER.debug { "start timestamp for stream $commonStreamName is set to $it" } }
 
             if (resumeFromId == null || resumeFromId.hasStarted) {
+                val (from, to) = when (order) {
+                    DIRECT -> request.startTimestamp to request.endTimestamp
+                    REVERSE -> request.endTimestamp to request.startTimestamp
+                }
+
                 val sessionGroup = context.cradleService.getSessionGroup(
                     commonStreamName.bookId,
                     commonStreamName.name,
-                    request.startTimestamp,
-                    request.endTimestamp,
+                    from,
+                    to,
                 )
 
                 val cradleMessageIterable = context.cradleService.getGroupedMessages(
