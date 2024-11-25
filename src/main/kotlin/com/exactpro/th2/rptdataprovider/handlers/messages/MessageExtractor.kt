@@ -154,7 +154,7 @@ class MessageExtractor<B, G, RM, PM>(
                         }.build()
                 )
 
-                LOGGER.debug { "cradle iterator has been built for session group: $sessionGroup, alias: $commonStreamName" }
+                LOGGER.debug { "cradle iterator has been built for session group: $sessionGroup, alias: $commonStreamName, order: $order" }
 
                 val start = request.startTimestamp
                 val end = request.endTimestamp
@@ -168,7 +168,7 @@ class MessageExtractor<B, G, RM, PM>(
                         val timeStart = System.currentTimeMillis()
 
                         pipelineStatus.fetchedStart(commonStreamName.toString())
-                        LOGGER.trace { "batch ${batch.firstTimestamp} of group $sessionGroup for stream $commonStreamName with ${batch.messageCount} messages (${batch.batchSize} bytes) has been extracted" }
+                        LOGGER.trace { "batch ${batch.firstTimestamp} of group $sessionGroup for stream $commonStreamName (order: $order) with ${batch.messageCount} messages (${batch.batchSize} bytes) has been extracted" }
 
                         val orderedMessages = run {
                             val filteredMessages: MutableList<StoredMessage> = ArrayList()
@@ -213,7 +213,7 @@ class MessageExtractor<B, G, RM, PM>(
                             val messages = if (order == REVERSE) batch.messagesReverse else batch.messages
                             val firstMessage = messages.firstOrNull()
                             val lastMessage = messages.lastOrNull()
-                            "batch ${batch.firstTimestamp} of group $sessionGroup for stream $commonStreamName has been trimmed (targetStartTimestamp=${request.startTimestamp} targetEndTimestamp=${request.endTimestamp} targetId=${resumeFromId?.sequence}) - ${trimmedMessages.size} of ${batch.messageCount} messages left (firstId=${firstMessage?.id?.sequence} firstTimestamp=${firstMessage?.timestamp} lastId=${lastMessage?.id?.sequence} lastTimestamp=${lastMessage?.timestamp})"
+                            "batch ${batch.firstTimestamp} of group $sessionGroup for stream $commonStreamName (order: $order) has been trimmed (targetStartTimestamp=${request.startTimestamp} targetEndTimestamp=${request.endTimestamp} targetId=${resumeFromId?.sequence}) - ${trimmedMessages.size} of ${batch.messageCount} messages left (firstId=${firstMessage?.id?.sequence} firstTimestamp=${firstMessage?.timestamp} lastId=${lastMessage?.id?.sequence} lastTimestamp=${lastMessage?.timestamp})"
                         }
 
                         pipelineStatus.fetchedEnd(commonStreamName.toString())
@@ -235,9 +235,9 @@ class MessageExtractor<B, G, RM, PM>(
                             lastElement = message.id
                             lastTimestamp = message.timestamp
 
-                            LOGGER.trace { "batch ${batch.firstTimestamp} of group $sessionGroup for stream $commonStreamName has been sent downstream" }
+                            LOGGER.trace { "batch ${batch.firstTimestamp} of group $sessionGroup for stream $commonStreamName (order: $order) has been sent downstream" }
                         } else {
-                            LOGGER.trace { "skipping batch ${batch.firstTimestamp} of group $sessionGroup for stream $commonStreamName - no messages left after trimming" }
+                            LOGGER.trace { "skipping batch ${batch.firstTimestamp} of group $sessionGroup for stream $commonStreamName (order: $order) - no messages left after trimming" }
                             pipelineStatus.countSkippedBatches(commonStreamName.toString())
                         }
 

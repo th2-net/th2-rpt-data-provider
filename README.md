@@ -298,7 +298,7 @@ spec:
 
 ## 5.15.0
 * Migrate to native grouped message request
-* Updated th2 gradle plugin: `0.1.4` (th2-bom:4.8.0)
+* Updated th2 gradle plugin: `0.1.5` (th2-bom:4.9.0)
 
 ## 5.14.1
 * Updated cradle api: `5.4.4-dev`

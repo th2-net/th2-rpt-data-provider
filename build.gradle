@@ -2,14 +2,13 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     id 'org.jetbrains.kotlin.jvm' version '1.8.22'
-    id "com.exactpro.th2.gradle.component" version "0.1.4"
+    id "com.exactpro.th2.gradle.component" version "0.1.5"
     id 'application'
 }
 
 ext {
     dockerImageVersion = release_version
     cradleVersion      = '5.4.4-dev'
-    nettyVersion = '4.1.115.Final'
 }
 
 group 'com.exactpro.th2'
@@ -56,17 +55,6 @@ dependencies {
     implementation(platform('io.ktor:ktor-bom:2.3.12'))
     implementation 'io.ktor:ktor-server-netty'
     implementation 'io.ktor:ktor-server'
-
-    // override transitive dependency because of CVE-2024-47535 vulnerability
-    implementation "io.netty:netty-buffer:$nettyVersion"
-    implementation "io.netty:netty-codec:$nettyVersion"
-    implementation "io.netty:netty-codec-http:$nettyVersion"
-    implementation "io.netty:netty-codec-http2:$nettyVersion"
-    implementation "io.netty:netty-codec-socks:$nettyVersion"
-    implementation "io.netty:netty-common:$nettyVersion"
-    implementation "io.netty:netty-handler-proxy:$nettyVersion"
-    implementation "io.netty:netty-transport-native-epoll:$nettyVersion"
-    implementation "io.netty:netty-transport-native-kqueue:$nettyVersion"
 
     implementation 'org.ehcache:ehcache:3.10.8'
     implementation('org.glassfish.jaxb:jaxb-runtime:2.3.9') {

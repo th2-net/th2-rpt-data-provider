@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 package com.exactpro.th2.rptdataprovider.services.cradle
 
 import com.exactpro.cradle.BookId
@@ -49,6 +48,7 @@ import kotlinx.coroutines.future.await
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.channels.ReceiveChannel
 import org.ehcache.Cache
 import org.ehcache.config.builders.CacheConfigurationBuilder
 import org.ehcache.config.builders.CacheManagerBuilder
@@ -130,20 +130,26 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
     suspend fun getGroupedMessages(
         scope: CoroutineScope,
         filter: GroupedMessageFilter,
-    ): Channel<StoredGroupedMessageBatch> {
+    ): ReceiveChannel<StoredGroupedMessageBatch> {
         val channel = Channel<StoredGroupedMessageBatch>(1)
         scope.launch {
             withContext(cradleDispatcher) {
-                storage.getGroupedMessageBatches(filter).forEach { batch ->
-                    K_LOGGER.trace {
-                        "message batch has been received from the iterator, " +
-                            "group: ${batch.group}, start: ${batch.firstTimestamp}, end: ${batch.lastTimestamp}"
+                try {
+                    storage.getGroupedMessageBatches(filter).forEach { batch ->
+                        K_LOGGER.trace {
+                            "message batch has been received from the iterator, " +
+                                    "group: ${batch.group}, start: ${batch.firstTimestamp}, " +
+                                    "end: ${batch.lastTimestamp}, request order: ${filter.order}"
+                        }
+                        channel.send(batch)
+                        K_LOGGER.trace {
+                            "message batch has been sent to the channel, " +
+                                    "group: ${batch.group}, start: ${batch.firstTimestamp}, " +
+                                    "end: ${batch.lastTimestamp}, request order: ${filter.order}"
+                        }
                     }
-                    channel.send(batch)
-                    K_LOGGER.trace {
-                        "message batch has been sent to the channel, " +
-                            "group: ${batch.group}, start: ${batch.firstTimestamp}, end: ${batch.lastTimestamp}"
-                    }
+                } finally {
+                    channel.close()
                 }
             }
         }
