@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2022-2024 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,12 +18,14 @@ package com.exactpro.th2.rptdataprovider.entities.internal
 
 import com.exactpro.cradle.BookId
 import com.exactpro.cradle.Direction
+import com.fasterxml.jackson.annotation.JsonIgnore
 import java.time.Instant
 
 class CommonStreamName(
     val bookId: BookId,
     val name: String
 ) {
+    @JsonIgnore
     internal val fullName = "${bookId.name}:$name"
 
     override fun toString(): String {
@@ -55,6 +57,7 @@ class StreamName(
     val name: String
         get() = common.name
 
+    @JsonIgnore
     internal val fullName = "${common.fullName}:$direction"
 
     override fun toString(): String {
@@ -78,7 +81,6 @@ class StreamName(
     }
 }
 
-
 data class StreamPointer(
     val stream: StreamName,
     val sequence: Long,
@@ -99,4 +101,3 @@ data class StreamPointer(
         hasStarted = hasStarted
     )
 }
-

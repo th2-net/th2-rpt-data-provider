@@ -19,6 +19,7 @@ package handlers.messages
 import com.exactpro.cradle.BookId
 import com.exactpro.cradle.Direction
 import com.exactpro.cradle.PageId
+import com.exactpro.cradle.TimeRelation
 import com.exactpro.cradle.messages.StoredGroupedMessageBatch
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
@@ -54,6 +55,7 @@ import java.time.temporal.ChronoUnit
 import java.util.concurrent.atomic.AtomicLong
 import java.util.stream.Stream
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.random.Random
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -73,7 +75,8 @@ class ExtractorTest {
     private fun getSearchRequest(
         startTimestamp: Instant?,
         endTimestamp: Instant,
-        resumeId: StoredMessageId? = null
+        resumeId: StoredMessageId? = null,
+        searchDirection: TimeRelation? = null
     ): SseMessageSearchRequest<ProtoRawMessage, Message> {
         val parameters = mutableMapOf(
             "stream" to listOf(STREAM_NAME),
@@ -88,6 +91,16 @@ class ExtractorTest {
         if (resumeId != null) {
             parameters["messageId"] = listOf(resumeId.toString())
         }
+
+        if (searchDirection != null) {
+            parameters["searchDirection"] = listOf(
+                when (searchDirection) {
+                    TimeRelation.AFTER -> "next"
+                    TimeRelation.BEFORE -> "previous"
+                }
+            )
+        }
+
         return SseMessageSearchRequest(parameters, FilterPredicate(emptyList()))
     }
 
@@ -148,7 +161,16 @@ class ExtractorTest {
         val cradle = mockk<CradleService>()
         coEvery {
             cradle.getSessionGroup(any(), any(), any(), any())
-        } answers { SESSION_GROUP }
+        } answers {
+            val from = invocation.args[2] as Instant?
+            val to = invocation.args[3] as Instant?
+
+            if (from != null && to != null && from.isAfter(to)) {
+                throw IllegalArgumentException("`from` timestamp is after `to` timestamp")
+            }
+
+            SESSION_GROUP
+        }
 
         coEvery { cradle.getGroupedMessages(any(), any()) } answers {
             runBlocking {
@@ -251,7 +273,8 @@ class ExtractorTest {
         val timestampIncrementMillis: Long = 1_000,
         val isUnorderedBatch: Boolean = false,
         val byResumeIdIndex: Int? = 4,
-        val byStartTimestampIndex: Int? = null
+        val byStartTimestampIndex: Int? = null,
+        val searchDirection: TimeRelation? = null
     )
 
     private fun resumeExtractParamsProvider() = Stream.of(
@@ -261,7 +284,9 @@ class ExtractorTest {
         ResumeExtractArgs(byResumeIdIndex = null, byStartTimestampIndex = 5),
         ResumeExtractArgs(byResumeIdIndex = 3, byStartTimestampIndex = null),
         ResumeExtractArgs(byResumeIdIndex = 4, byStartTimestampIndex = 5),
-        ResumeExtractArgs(byResumeIdIndex = 5, byStartTimestampIndex = 4)
+        ResumeExtractArgs(byResumeIdIndex = 5, byStartTimestampIndex = 4),
+        ResumeExtractArgs(byResumeIdIndex = 5, byStartTimestampIndex = 4),
+        ResumeExtractArgs(byResumeIdIndex = null, byStartTimestampIndex = 1, searchDirection = TimeRelation.BEFORE)
     )
 
     private fun MutableList<StoredMessage>.swap(idx1: Int, idx2: Int) {
@@ -281,6 +306,7 @@ class ExtractorTest {
             startTimestamp,
             args.timestampIncrementMillis
         )
+        val searchDirection = args.searchDirection ?: TimeRelation.AFTER
 
         val batchMessages = arrayListOf<StoredMessage>().apply { addAll(messages) }
 
@@ -298,10 +324,16 @@ class ExtractorTest {
 
         val resumeId = if (resumeIndex != null) messages[resumeIndex].id else null
 
+        val intervalMillis = messages.size * args.timestampIncrementMillis + 1
+
         val request = getSearchRequest(
             requestTimestamp,
-            startTimestamp.plus(1, ChronoUnit.MINUTES),
-            resumeId
+            when (searchDirection){
+                TimeRelation.AFTER -> startTimestamp.plusMillis(intervalMillis)
+                TimeRelation.BEFORE -> startTimestamp
+            },
+            resumeId,
+            searchDirection
         )
 
         val extractedMessages: List<StoredMessage>
@@ -317,13 +349,25 @@ class ExtractorTest {
             coroutineContext.cancelChildren()
         }
 
-        val expectedResumeIndex: Int = max(resumeIndex ?: 0, startTimestampIndex ?: 0)
-        val expectedSize = messages.size - expectedResumeIndex
+        val expectedResumeIndex: Int = when(searchDirection){
+            TimeRelation.AFTER -> max(resumeIndex ?: 0, startTimestampIndex ?: 0)
+            TimeRelation.BEFORE -> min(resumeIndex ?: Int.MAX_VALUE, startTimestampIndex ?: Int.MAX_VALUE)
+        }
+
+        val expectedSize: Int = when(searchDirection){
+            TimeRelation.AFTER -> messages.size - expectedResumeIndex
+            TimeRelation.BEFORE -> expectedResumeIndex + 1
+        }
 
         assertEquals(expectedSize, extractedMessages.size)
 
         for (i in extractedMessages.indices) {
-            assertEquals(messages[expectedResumeIndex + i].id, extractedMessages[i].id)
+            val msgIdx: Int = when(searchDirection){
+                TimeRelation.AFTER -> expectedResumeIndex + i
+                TimeRelation.BEFORE -> expectedResumeIndex - i
+            }
+
+            assertEquals(messages[msgIdx].id, extractedMessages[i].id)
         }
     }
 
