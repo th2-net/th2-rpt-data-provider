@@ -63,9 +63,9 @@ class MessageExtractor<B, G, RM, PM>(
         BEFORE -> REVERSE
     }
 
-    private val sequenceComparator = when (order)  {
-        DIRECT -> { l1: Long, l2: Long -> l1 < l2 }
-        REVERSE -> { l1: Long, l2: Long -> l2 < l1 }
+    private val sequenceComparator: (Long, Long) -> Boolean = when (order)  {
+        DIRECT -> { resumeSequence, messageSequence -> messageSequence >= resumeSequence }
+        REVERSE -> { resumeSequence, messageSequence -> messageSequence <= resumeSequence }
     }
 
     private val timestampComparator = when (order) {
@@ -183,8 +183,13 @@ class MessageExtractor<B, G, RM, PM>(
 
                         val resumeIndex = if (isResumeIdNotFound) {
                             resumeFromId!! // if isResumeIdNotFound==true, resumeFromId is always not null
-                            val idx = orderedMessages.indexOfFirst { msg -> (msg.direction == resumeFromId.stream.direction && !sequenceComparator(msg.sequence, resumeFromId.sequence)).also { isResumeIdNotFound = it } }
-                            if (idx == -1) orderedMessages.size else idx
+                            val idx = orderedMessages.indexOfFirst { msg -> (msg.direction == resumeFromId.stream.direction && sequenceComparator(resumeFromId.sequence, msg.sequence)) }
+                            if (idx == -1) {
+                                orderedMessages.size
+                            } else {
+                                isResumeIdNotFound = false
+                                idx
+                            }
                         } else 0
 
                         val startIndex = if (isStartTimestampNotFound) {
