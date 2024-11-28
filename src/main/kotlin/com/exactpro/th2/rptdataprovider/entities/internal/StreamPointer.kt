@@ -25,7 +25,7 @@ class CommonStreamName(
     val bookId: BookId,
     val name: String
 ) {
-    @JsonIgnore
+    @get:JsonIgnore
     internal val fullName = "${bookId.name}:$name"
 
     override fun toString(): String {
@@ -57,7 +57,7 @@ class StreamName(
     val name: String
         get() = common.name
 
-    @JsonIgnore
+    @get:JsonIgnore
     internal val fullName = "${common.fullName}:$direction"
 
     override fun toString(): String {
