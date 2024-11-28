@@ -16,26 +16,26 @@
 
 package com.exactpro.th2.rptdataprovider.entities.responses
 
+import com.exactpro.cradle.Direction
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.th2.dataprovider.grpc.Stream
 import com.exactpro.th2.rptdataprovider.convertToProto
 import com.exactpro.th2.rptdataprovider.cradleDirectionToGrpc
-import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
+import com.exactpro.th2.rptdataprovider.entities.internal.CommonStreamName
 import com.fasterxml.jackson.annotation.JsonIgnore
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.time.Instant
 
-data class StreamInfo(val streamPointer: StreamName, @JsonIgnore val messageId: StoredMessageId? = null) {
-
+data class StreamInfo(val streamPointer: CommonStreamName, @JsonIgnore val messageId: StoredMessageId? = null) {
     @JsonIgnore
     private val lastMessage = messageId ?: let {
         // set sequence to a negative value if stream has not started to avoid mistaking it for the default value
         // FIXME change interface to make that case explicit
-        logger.trace { "lastElement is null - StreamInfo should be build as if the stream $streamPointer has no messages" }
+        LOGGER.trace { "lastElement is null - StreamInfo should be build as if the stream $streamPointer has no messages" }
         StoredMessageId(
             streamPointer.bookId,
             streamPointer.name,
-            streamPointer.direction,
+            Direction.FIRST,
             Instant.ofEpochMilli(0),
             0
         )
@@ -43,21 +43,18 @@ data class StreamInfo(val streamPointer: StreamName, @JsonIgnore val messageId: 
 
     val lastElement = lastMessage.toString()
 
-    companion object {
-        val logger = KotlinLogging.logger { }
+    fun convertToProto(): Stream {
+        return lastMessage.run {
+            LOGGER.trace { "stream $streamPointer - lastElement is $sequence" }
+            Stream.newBuilder()
+                .setDirection(cradleDirectionToGrpc(direction))
+                .setSession(sessionAlias)
+                .setLastId(this.convertToProto())
+                .build()
+        }
     }
 
-    fun convertToProto(): Stream {
-        return Stream.newBuilder()
-            .setDirection(cradleDirectionToGrpc(streamPointer.direction))
-            .setSession(streamPointer.name)
-            .setLastId(
-                lastMessage.let {
-                    logger.trace { "stream $streamPointer - lastElement is ${it.sequence}" }
-                    it.convertToProto()
-
-                }
-            )
-            .build()
+    companion object {
+        private val LOGGER = KotlinLogging.logger { }
     }
 }

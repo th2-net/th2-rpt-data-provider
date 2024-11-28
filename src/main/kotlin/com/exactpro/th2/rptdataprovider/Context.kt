@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2024 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,7 +37,6 @@ import com.exactpro.th2.rptdataprovider.producers.MessageProducer
 import com.exactpro.th2.rptdataprovider.serialization.InstantBackwardCompatibilitySerializer
 import com.exactpro.th2.rptdataprovider.server.ServerType
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
-import com.exactpro.th2.rptdataprovider.services.cradle.MessageGroupCradleService
 import com.exactpro.th2.rptdataprovider.services.rabbitmq.RabbitMqService
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -68,7 +67,7 @@ abstract class Context<B, G, RM, PM>(
 
     val grpcConfig: GrpcConfiguration,
 
-    val cradleService: CradleService = createCradleService(configuration, cradleManager),
+    val cradleService: CradleService = CradleService(configuration, cradleManager),
 
     val rabbitMqService:  RabbitMqService<B, G, PM>,
 
@@ -142,16 +141,6 @@ abstract class Context<B, G, RM, PM>(
                     visibility = CacheControl.Visibility.Public
                 )
             }
-        }
-
-        @JvmStatic
-        protected fun createCradleService(
-            configuration: Configuration,
-            cradleManager: CradleManager
-        ) = if (configuration.searchBySessionGroup.value.toBoolean()) {
-            MessageGroupCradleService(configuration, cradleManager)
-        } else {
-            CradleService(configuration, cradleManager)
         }
     }
 }

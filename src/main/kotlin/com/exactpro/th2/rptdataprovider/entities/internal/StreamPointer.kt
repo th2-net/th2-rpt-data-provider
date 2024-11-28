@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2022-2024 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,21 +18,68 @@ package com.exactpro.th2.rptdataprovider.entities.internal
 
 import com.exactpro.cradle.BookId
 import com.exactpro.cradle.Direction
+import com.fasterxml.jackson.annotation.JsonIgnore
 import java.time.Instant
 
-
-data class StreamName(
-    val name: String,
-    val direction: Direction,
-    val bookId: BookId
+class CommonStreamName(
+    val bookId: BookId,
+    val name: String
 ) {
-    private val fullName = "$name:$direction"
+    @get:JsonIgnore
+    internal val fullName = "${bookId.name}:$name"
 
     override fun toString(): String {
         return fullName
     }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as CommonStreamName
+
+        return fullName == other.fullName
+    }
+
+    override fun hashCode(): Int {
+        return fullName.hashCode()
+    }
 }
 
+class StreamName(
+    bookId: BookId,
+    name: String,
+    val direction: Direction,
+) {
+    val common = CommonStreamName(bookId, name)
+    val bookId: BookId
+        get() = common.bookId
+    val name: String
+        get() = common.name
+
+    @get:JsonIgnore
+    internal val fullName = "${common.fullName}:$direction"
+
+    override fun toString(): String {
+        return fullName
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+        if (!super.equals(other)) return false
+
+        other as StreamName
+
+        return fullName == other.fullName
+    }
+
+    override fun hashCode(): Int {
+        var result = super.hashCode()
+        result = 31 * result + fullName.hashCode()
+        return result
+    }
+}
 
 data class StreamPointer(
     val stream: StreamName,
@@ -48,10 +95,9 @@ data class StreamPointer(
         timestamp: Instant,
         hasStarted: Boolean
     ) : this(
-        stream = StreamName(streamName, direction, bookId),
+        stream = StreamName(bookId, streamName, direction),
         sequence = sequence,
         timestamp = timestamp,
         hasStarted = hasStarted
     )
 }
-

@@ -1,5 +1,5 @@
 ﻿/*
- * Copyright 2021-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2021-2024 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import kotlinx.coroutines.*
 class MessageFilter<B, G, RM, PM>(
     context: Context<B, G, RM, PM>,
     searchRequest: SseMessageSearchRequest<RM, PM>,
-    streamName: StreamName?,
+    streamName: CommonStreamName?,
     externalScope: CoroutineScope,
     previousComponent: PipelineComponent<B, G, RM, PM>?,
     messageFlowCapacity: Int
@@ -49,7 +49,7 @@ class MessageFilter<B, G, RM, PM>(
     ) : this(
         pipelineComponent.context,
         pipelineComponent.searchRequest,
-        pipelineComponent.streamName,
+        pipelineComponent.commonStreamName,
         pipelineComponent.externalScope,
         pipelineComponent,
         messageFlowCapacity

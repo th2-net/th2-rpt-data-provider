@@ -2,7 +2,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     id 'org.jetbrains.kotlin.jvm' version '1.8.22'
-    id "com.exactpro.th2.gradle.component" version "0.1.3"
+    id "com.exactpro.th2.gradle.component" version "0.1.5"
     id 'application'
 }
 
@@ -14,9 +14,7 @@ ext {
 group 'com.exactpro.th2'
 version release_version
 
-kotlin {
-    jvmToolchain(11)
-}
+kotlin.jvmToolchain(11)
 
 repositories {
     mavenCentral()
@@ -37,29 +35,23 @@ configurations.configureEach {
 
 dependencies {
     implementation 'org.slf4j:slf4j-api'
-
     implementation 'com.fasterxml.jackson.core:jackson-core'
     implementation 'com.fasterxml.jackson.module:jackson-module-kotlin'
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
-
     implementation 'org.apache.commons:commons-lang3'
 
     implementation('com.exactpro.th2:common:5.14.0-dev') {
         exclude group: 'com.exactpro.th2', module: 'cradle-core'
         exclude group: 'com.exactpro.th2', module: 'cradle-cassandra'
     }
+
     implementation 'com.exactpro.th2:common-utils:2.3.0-dev'
-
     implementation "com.exactpro.th2:cradle-core:${cradleVersion}"
-
     implementation "com.exactpro.th2:cradle-cassandra:${cradleVersion}"
-
     implementation 'com.exactpro.th2:grpc-data-provider:0.2.0-dev'
 
     implementation 'io.github.oshai:kotlin-logging:5.1.4'
-
     implementation 'io.prometheus:simpleclient'
-
     implementation(platform('io.ktor:ktor-bom:2.3.12'))
     implementation 'io.ktor:ktor-server-netty'
     implementation 'io.ktor:ktor-server'
@@ -69,16 +61,17 @@ dependencies {
         because("'2.3.9' version has 'EDL 1.0' license instead of 'CDDL GPL 1.1' in the '2.3.1'")
     }
 
-    testImplementation('io.mockk:mockk:1.13.12') { // The last version bases on kotlin 1.6.0
+    testImplementation('io.mockk:mockk:1.13.13') { // The last version bases on kotlin 1.6.0
         exclude group: 'org.jetbrains.kotlin', module: 'kotlin-reflect' // because we need kotlin reflect with different version
     }
+
     testImplementation('org.jetbrains.kotlin:kotlin-reflect') {
         because('mockk needs it')
     }
-    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.11.0'
-    testImplementation "org.junit.jupiter:junit-jupiter-params:5.11.0"
 
-    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.11.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.11.3'
+    testImplementation "org.junit.jupiter:junit-jupiter-params:5.11.3"
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.11.3'
 }
 
 tasks.withType(KotlinCompile).configureEach {
@@ -87,15 +80,6 @@ tasks.withType(KotlinCompile).configureEach {
     }
 }
 
-application {
-    mainClassName = "com.exactpro.th2.rptdataprovider.MainKt"
-}
-
-
-test {
-    useJUnitPlatform()
-}
-
-dependencyCheck {
-    suppressionFile='supressions.xml'
-}
+application.mainClass = "com.exactpro.th2.rptdataprovider.MainKt"
+test.useJUnitPlatform()
+dependencyCheck.suppressionFile = 'suppressions.xml'

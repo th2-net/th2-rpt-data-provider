@@ -17,19 +17,19 @@
 package com.exactpro.th2.rptdataprovider.handlers
 
 import com.exactpro.th2.rptdataprovider.Context
+import com.exactpro.th2.rptdataprovider.entities.internal.CommonStreamName
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineStepObject
-import com.exactpro.th2.rptdataprovider.entities.internal.StreamName
 import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchRequest
+import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
-import io.github.oshai.kotlinlogging.KotlinLogging
 
 
 abstract class PipelineComponent<B, G, RM, PM>(
     val context: Context<B, G, RM, PM>,
     val searchRequest: SseMessageSearchRequest<RM, PM>,
     val externalScope: CoroutineScope,
-    val streamName: StreamName? = null,
+    open val commonStreamName: CommonStreamName? = null,
     val previousComponent: PipelineComponent<B, G, RM, PM>? = null,
     messageFlowCapacity: Int
 ) {
