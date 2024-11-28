@@ -297,7 +297,9 @@ spec:
 # Release notes
 
 ## 5.15.0
-* Migrate to native grouped message request
+* Migrated to native grouped message request:
+  * The `searchBySessionGroup` option has been removed. Now all requests always query the `grouped_message` table
+  * The `/messageIds` request now searches for the nearest message, regardless of its direction.
 * Updated th2 gradle plugin: `0.1.5` (th2-bom:4.9.0)
 
 ## 5.14.1
