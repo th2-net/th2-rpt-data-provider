@@ -18,8 +18,10 @@ package handlers.messages
 
 import com.exactpro.cradle.BookId
 import com.exactpro.cradle.Direction
+import com.exactpro.cradle.Order
 import com.exactpro.cradle.PageId
 import com.exactpro.cradle.TimeRelation
+import com.exactpro.cradle.messages.GroupedMessageFilter
 import com.exactpro.cradle.messages.StoredGroupedMessageBatch
 import com.exactpro.cradle.messages.StoredMessage
 import com.exactpro.cradle.messages.StoredMessageId
@@ -153,7 +155,7 @@ class ExtractorTest {
     }
 
     @OptIn(DelicateCoroutinesApi::class)
-    private fun mockContextWithCradleService(batch: StoredGroupedMessageBatch): ProtoContext {
+    private fun mockContextWithCradleService(vararg batches: StoredGroupedMessageBatch): ProtoContext {
         val context: ProtoContext = mockk()
 
         every { context.configuration.sendEmptyDelay.value } answers { "10" }
@@ -174,9 +176,12 @@ class ExtractorTest {
 
         coEvery { cradle.getGroupedMessages(any(), any()) } answers {
             runBlocking {
+                val filter = secondArg<GroupedMessageFilter>()
                 Channel<StoredGroupedMessageBatch>(1).also {
                     GlobalScope.launch {
-                        it.send(batch)
+                        for (index in if (filter.order == Order.REVERSE) batches.indices.reversed() else batches.indices) {
+                            it.send(batches[index])
+                        }
                         it.close()
                     }
                 }
@@ -274,7 +279,7 @@ class ExtractorTest {
         val isUnorderedBatch: Boolean = false,
         val byResumeIdIndex: Int? = 4,
         val byStartTimestampIndex: Int? = null,
-        val searchDirection: TimeRelation? = null
+        val reverseSearch: Boolean = false
     )
 
     private fun resumeExtractParamsProvider() = Stream.of(
@@ -283,10 +288,11 @@ class ExtractorTest {
         ResumeExtractArgs(timestampIncrementMillis = 0),
         ResumeExtractArgs(byResumeIdIndex = null, byStartTimestampIndex = 5),
         ResumeExtractArgs(byResumeIdIndex = 3, byStartTimestampIndex = null),
+        ResumeExtractArgs(byResumeIdIndex = 2, byStartTimestampIndex = null),
         ResumeExtractArgs(byResumeIdIndex = 4, byStartTimestampIndex = 5),
         ResumeExtractArgs(byResumeIdIndex = 5, byStartTimestampIndex = 4),
         ResumeExtractArgs(byResumeIdIndex = 5, byStartTimestampIndex = 4),
-        ResumeExtractArgs(byResumeIdIndex = null, byStartTimestampIndex = 1, searchDirection = TimeRelation.BEFORE)
+        ResumeExtractArgs(byResumeIdIndex = null, byStartTimestampIndex = 1, reverseSearch = true)
     )
 
     private fun MutableList<StoredMessage>.swap(idx1: Int, idx2: Int) {
@@ -306,17 +312,20 @@ class ExtractorTest {
             startTimestamp,
             args.timestampIncrementMillis
         )
-        val searchDirection = args.searchDirection ?: TimeRelation.AFTER
 
-        val batchMessages = arrayListOf<StoredMessage>().apply { addAll(messages) }
+        val searchDirection = if (args.reverseSearch) TimeRelation.BEFORE else TimeRelation.AFTER
+
+        val batchOneMessages = ArrayList(messages.subList(0, 3))
+        val batchTwoMessages = ArrayList(messages.subList(3, 6))
 
         if (args.isUnorderedBatch) {
-            batchMessages.swap(1, 2)
-            batchMessages.swap(3, 4)
+            batchOneMessages.swap(1, 2)
+            batchTwoMessages.swap(0, 1)
         }
 
-        val batch = StoredGroupedMessageBatch(SESSION_GROUP, batchMessages, PageId(BookId("1"), startTimestamp, "1"), Instant.now())
-        val context = mockContextWithCradleService(batch)
+        val batchOne = StoredGroupedMessageBatch(SESSION_GROUP, batchOneMessages, PageId(BookId("1"), startTimestamp, "1"), Instant.now())
+        val batchTwo = StoredGroupedMessageBatch(SESSION_GROUP, batchTwoMessages, PageId(BookId("1"), startTimestamp, "1"), Instant.now())
+        val context = mockContextWithCradleService(batchOne, batchTwo)
 
         val requestTimestamp = if (startTimestampIndex != null) {
             startTimestamp.plusMillis(args.timestampIncrementMillis * (startTimestampIndex + 1))
@@ -336,17 +345,18 @@ class ExtractorTest {
             searchDirection
         )
 
-        val extractedMessages: List<StoredMessage>
-        runBlocking {
-            val extractor = MessageExtractor(context, request, STREAM_NAME_OBJECT, this, 1, PipelineStatus())
-            var extractedMessagesCollection: Collection<StoredMessage> = emptyList()
+        val extractedMessages: List<StoredMessage> = runBlocking {
+            val extractor = MessageExtractor(context, request, STREAM_NAME_OBJECT, this, 10, PipelineStatus())
+            val extractedMessagesCollection = mutableListOf<StoredMessage>()
+
             do {
                 val message = extractor.pollMessage()
                 if (message is PipelineRawBatch)
-                    extractedMessagesCollection = message.storedBatchWrapper.trimmedMessages
+                    extractedMessagesCollection.addAll(message.storedBatchWrapper.trimmedMessages)
             } while (!message.streamEmpty)
-            extractedMessages = ArrayList(extractedMessagesCollection)
+
             coroutineContext.cancelChildren()
+            extractedMessagesCollection
         }
 
         val expectedResumeIndex: Int = when(searchDirection){
