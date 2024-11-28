@@ -182,7 +182,8 @@ class MessageExtractor<B, G, RM, PM>(
                         }
 
                         val resumeIndex = if (isResumeIdNotFound) {
-                            resumeFromId!! // if isResumeIdNotFound==true, resumeFromId is always not null
+                            requireNotNull(resumeFromId) { "if isResumeIdNotFound is true, resumeFromId is always not null" }
+
                             val idx = orderedMessages.indexOfFirst { msg -> (msg.direction == resumeFromId.stream.direction && sequenceComparator(resumeFromId.sequence, msg.sequence)) }
                             if (idx == -1) {
                                 orderedMessages.size
