@@ -1,0 +1,12 @@
+name: Scan licenses and vulnerabilities in java project
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 1'
+
+jobs:
+  build:
+    uses: th2-net/.github/.github/workflows/compound-java-scan.yml@main
+    secrets:
+      nvd-api-key: ${{ secrets.NVD_APIKEY }}
