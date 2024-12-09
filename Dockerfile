@@ -1,4 +1,4 @@
-FROM gradle:8.7-jdk11 AS build
+FROM gradle:8.11.1-jdk11 AS build
 ARG Prelease_version=0.0.0
 COPY ./ .
 RUN gradle clean build dockerPrepare -Prelease_version=${Prelease_version}
