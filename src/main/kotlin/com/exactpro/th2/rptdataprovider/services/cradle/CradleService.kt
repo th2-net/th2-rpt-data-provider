@@ -27,20 +27,16 @@ import com.exactpro.cradle.PageInfo
 import com.exactpro.cradle.cassandra.CassandraStorageSettings
 import com.exactpro.cradle.counters.Interval
 import com.exactpro.cradle.messages.GroupedMessageFilter
-import com.exactpro.cradle.messages.MessageFilter
 import com.exactpro.cradle.messages.StoredGroupedMessageBatch
 import com.exactpro.cradle.messages.StoredMessage
-import com.exactpro.cradle.messages.StoredMessageBatch
 import com.exactpro.cradle.messages.StoredMessageId
 import com.exactpro.cradle.testevents.StoredTestEvent
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.TestEventFilter
 import com.exactpro.th2.rptdataprovider.Metrics
-import com.exactpro.th2.rptdataprovider.convertToString
 import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.logTime
-import com.exactpro.th2.rptdataprovider.toGroupedMessageFilter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.channels.Channel
@@ -156,56 +152,6 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
         return channel
     }
 
-    // FIXME:
-    // It is not correct to create scope manually inside the suspend function
-    // If the function is going to launch extra coroutines it should accept a coroutine scope.
-    // Otherwise, the top-level scope will never know about exceptions inside that inner scope.
-    // How it should look:
-    //
-    // fun getMessagesBatchesSuspend(filter: MessageFilter, scope: CoroutineScope): Channel<StoredMessageBatch> {
-    //   val channel = Channel<StoredMessageBatch>(1)
-    //   scope.launch {
-    //      withContext(cradleDispatcher) {
-    //        // do all work here
-    //      }
-    //   }
-    //   return channel
-    // }
-    //
-    //FIXME: change cradle api or wrap every blocking iterator the same way
-    suspend fun getMessagesBatchesSuspend(filter: MessageFilter): Channel<StoredMessageBatch> {
-        val iteratorScope = CoroutineScope(cradleDispatcher)
-
-        return withContext(cradleDispatcher) {
-            (logMetrics(GET_MESSAGES_BATCHES) {
-                logTime("getMessagesBatches (filter=${filter.convertToString()})") {
-                    getMessageBatches(filter)
-                }
-            } ?: emptySequence())
-                .let { iterable ->
-                    Channel<StoredMessageBatch>(1)
-                        .also { channel ->
-                            iteratorScope.launch {
-                                var error: Throwable? = null
-                                try {
-                                    iterable.forEach {
-                                        K_LOGGER.trace { "message batch ${it.id} has been received from the iterator" }
-                                        channel.send(it)
-                                        K_LOGGER.trace { "message batch ${it.id} has been sent to the channel" }
-                                    }
-                                } catch (ex: Exception) {
-                                    K_LOGGER.error(ex) { "cannot sent next batch to the channel" }
-                                    error = ex
-                                } finally {
-                                    channel.close(error)
-                                    K_LOGGER.debug(error) { "message batch channel for stream ${filter.sessionAlias}:${filter.direction} has been closed" }
-                                }
-                            }
-                        }
-                }
-        }
-    }
-
     suspend fun getMessageSuspend(id: StoredMessageId): StoredMessage? {
         return withContext(cradleDispatcher) {
             logMetrics(GET_MESSAGE_ASYNC_METRIC) {
@@ -274,34 +220,6 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
             storage.getScopes(bookId).filterNotNull().toList()
         } ?: emptyList()
     }
-
-    private suspend fun getMessageBatches(
-        filter: MessageFilter
-    ): Sequence<StoredMessageBatch> =
-        getSessionGroup(filter)?.let { group ->
-            val groupedMessageFilter = filter.toGroupedMessageFilter(group).also {
-                K_LOGGER.debug { "Start searching group batches by $it" }
-            }
-            storage.getGroupedMessageBatchesAsync(groupedMessageFilter).await().asSequence()
-                .mapNotNull { batch ->
-                    val messages = batch.messages.filter { message ->
-                        filter.sessionAlias == message.sessionAlias
-                                && filter.direction == message.direction
-                                && filter.timestampFrom?.check(message.timestamp) ?: true
-                                && filter.timestampTo?.check(message.timestamp) ?: true
-                    }
-                    if (messages.isEmpty()) {
-                        null
-                    } else {
-                        StoredMessageBatch(
-                            messages,
-                            storage.findPage(batch.bookId, batch.recDate).id,
-                            batch.recDate
-                        )
-                    }
-                }
-
-        } ?: emptySequence()
 
     private suspend fun getMessageBatches(
         id: StoredMessageId
@@ -463,15 +381,6 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
             }
         return null
     }
-
-    private suspend fun getSessionGroup(
-        filter: MessageFilter
-    ): String? = getSessionGroup(
-        filter.bookId,
-        filter.sessionAlias,
-        filter.timestampFrom?.value,
-        filter.timestampTo?.value
-    )
 
     private suspend fun getSessionGroup(
         id: StoredMessageId
