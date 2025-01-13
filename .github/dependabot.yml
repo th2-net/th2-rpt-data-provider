@@ -9,6 +9,9 @@ updates:
       - dependencies
     schedule:
       interval: daily
+    ignore:
+      - versions:
+        - "*-SNAPSHOT"
   - package-ecosystem: github-actions
     directory: /
     reviewers:
