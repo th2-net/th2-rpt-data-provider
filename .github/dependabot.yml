@@ -9,9 +9,9 @@ updates:
       - dependencies
     schedule:
       interval: daily
-    ignore:
-      - versions:
-        - "*-SNAPSHOT"
+    allow:
+      - dependency-name: '*'
+        dependency-type: production
   - package-ecosystem: github-actions
     directory: /
     reviewers:
