@@ -57,7 +57,7 @@ dependencies {
     implementation 'io.ktor:ktor-server'
 
     implementation 'org.ehcache:ehcache:3.10.8'
-    implementation('org.glassfish.jaxb:jaxb-runtime:2.3.9') {
+    implementation('org.glassfish.jaxb:jaxb-runtime:4.0.5') {
         because("'2.3.9' version has 'EDL 1.0' license instead of 'CDDL GPL 1.1' in the '2.3.1'")
     }
 
