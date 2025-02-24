@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2025 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,14 +27,13 @@ import com.exactpro.th2.rptdataprovider.server.HttpServer
 import com.exactpro.th2.rptdataprovider.server.ServerType
 import com.exactpro.th2.rptdataprovider.server.ServerType.GRPC
 import com.exactpro.th2.rptdataprovider.server.ServerType.HTTP
-import io.ktor.server.engine.*
-import io.ktor.util.*
+import io.github.oshai.kotlinlogging.KotlinLogging
+import io.ktor.utils.io.InternalAPI
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.IO_PARALLELISM_PROPERTY_NAME
 import kotlinx.coroutines.InternalCoroutinesApi
-import io.github.oshai.kotlinlogging.KotlinLogging
-import java.util.*
+import java.util.Deque
 import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.locks.Condition
 import java.util.concurrent.locks.ReentrantLock

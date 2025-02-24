@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2025 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,23 +32,50 @@ import com.exactpro.th2.rptdataprovider.entities.sse.EventType
 import com.exactpro.th2.rptdataprovider.entities.sse.HttpWriter
 import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
+import com.exactpro.th2.rptdataprovider.handlers.events.SearchEventsCalledFun
+import com.exactpro.th2.rptdataprovider.handlers.messages.SearchMessagesCalledFun
 import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.server.handler.AbortableRequestHandler
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.ktor.http.*
-import io.ktor.server.application.*
-import io.ktor.server.engine.*
-import io.ktor.server.netty.*
+import io.ktor.http.CacheControl
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
+import io.ktor.server.application.ApplicationCallPipeline
+import io.ktor.server.application.BaseApplicationPlugin
+import io.ktor.server.application.call
+import io.ktor.server.application.install
+import io.ktor.server.engine.connector
+import io.ktor.server.engine.embeddedServer
+import io.ktor.server.netty.Netty
 import io.ktor.server.plugins.compression.Compression
-import io.ktor.server.request.*
-import io.ktor.server.response.*
-import io.ktor.server.routing.*
+import io.ktor.server.request.uri
+import io.ktor.server.response.cacheControl
+import io.ktor.server.response.respondText
+import io.ktor.server.response.respondTextWriter
+import io.ktor.server.routing.IgnoreTrailingSlash
+import io.ktor.server.routing.get
+import io.ktor.server.routing.routing
 import io.ktor.server.util.getOrFail
-import io.ktor.util.*
-import io.ktor.util.pipeline.*
+import io.ktor.util.AttributeKey
+import io.ktor.util.rootCause
+import io.ktor.util.toMap
+import io.ktor.utils.io.InternalAPI
 import io.prometheus.client.Counter
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.InternalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.nio.channels.ClosedChannelException
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.coroutineContext
@@ -159,7 +186,6 @@ class HttpServer<B, G, RM, PM>(
     @InternalAPI
     private suspend fun handleRequest(
         call: ApplicationCall,
-        context: ApplicationCall,
         requestName: String,
         cacheControl: CacheControl?,
         probe: Boolean,
@@ -178,9 +204,9 @@ class HttpServer<B, G, RM, PM>(
                             if (useSse) {
                                 val function = calledFun.invoke()
                                 @Suppress("UNCHECKED_CAST")
-                                handleSseRequest(call, context, function as suspend (StreamWriter<RM, PM>) -> Unit)
+                                handleSseRequest(call, function as suspend (StreamWriter<RM, PM>) -> Unit)
                             } else {
-                                handleRestApiRequest(call, context, cacheControl, probe, calledFun)
+                                handleRestApiRequest(call, cacheControl, probe, calledFun)
                             }
                         } catch (e: Exception) {
                             throw e.rootCause ?: e
@@ -212,13 +238,12 @@ class HttpServer<B, G, RM, PM>(
     @InternalAPI
     private suspend fun handleSseRequest(
         call: ApplicationCall,
-        context: ApplicationCall,
         calledFun: suspend (StreamWriter<RM, PM>) -> Unit
     ) {
         coroutineScope {
             launch {
                 val job = launch {
-                    checkContext(context)
+                    checkContext(call)
                 }
                 call.response.headers.append(HttpHeaders.CacheControl, "no-cache, no-store, no-transform")
                 call.respondTextWriter(contentType = ContentType.Text.EventStream) {
@@ -249,7 +274,6 @@ class HttpServer<B, G, RM, PM>(
     @InternalAPI
     private suspend fun handleRestApiRequest(
         call: ApplicationCall,
-        context: ApplicationCall,
         cacheControl: CacheControl?,
         probe: Boolean,
         calledFun: suspend () -> Any
@@ -258,7 +282,7 @@ class HttpServer<B, G, RM, PM>(
             try {
                 launch {
                     launch {
-                        checkContext(context)
+                        checkContext(call)
                     }
                     cacheControl?.let { call.response.cacheControl(it) }
                     call.respondText(
@@ -305,14 +329,18 @@ class HttpServer<B, G, RM, PM>(
         val messageFiltersPredicateFactory = this.applicationContext.messageFiltersPredicateFactory
 
         val getEventsLimit = this.applicationContext.configuration.eventSearchChunkSize.value.toInt()
-
-        embeddedServer(Netty, configuration.port.value.toInt(), configure = {
-            responseWriteTimeoutSeconds = -1
-            channelPipelineConfig = {
-                addLast("cancellationDetector", AbortableRequestHandler())
+        embeddedServer(
+            factory = Netty,
+            configure = {
+                connector {
+                    port = configuration.port.value.toInt()
+                }
+                responseWriteTimeoutSeconds = -1
+                channelPipelineConfig = {
+                    addLast("cancellationDetector", AbortableRequestHandler())
+                }
             }
-        }) {
-
+        ) {
             install(Compression)
             install(Timeouts) {
                 requestTimeout = applicationContext.timeout
@@ -324,7 +352,7 @@ class HttpServer<B, G, RM, PM>(
                 get("/event/{id}") {
                     val probe = call.parameters["probe"]?.toBoolean() ?: false
                     handleRequest(
-                        call, context, "get single event", notModifiedCacheControl, probe,
+                        call, "get single event", notModifiedCacheControl, probe,
                         false, call.parameters.toMap()
                     ) {
                         eventCache.getOrPut(call.parameters.getOrFail("id")).convertToEvent()
@@ -334,7 +362,7 @@ class HttpServer<B, G, RM, PM>(
                 get("/events") {
                     val queryParametersMap = call.request.queryParameters.toMap()
                     handleRequest(
-                        call, context, "get single event", notModifiedCacheControl, false,
+                        call, "get single event", notModifiedCacheControl, false,
                         false, queryParametersMap
                     ) {
                         val ids = queryParametersMap["ids"]
@@ -350,7 +378,7 @@ class HttpServer<B, G, RM, PM>(
 
                 get("/messageStreams") {
                     handleRequest(
-                        call, context, "get message streams",
+                        call, "get message streams",
                         rarelyModifiedCacheControl, probe = false, useSse = false
                     ) {
                         val bookId = call.request.queryParameters.getOrFail("bookId")
@@ -361,7 +389,7 @@ class HttpServer<B, G, RM, PM>(
                 get("/message/{id}") {
                     val probe = call.parameters["probe"]?.toBoolean() ?: false
                     handleRequest(
-                        call, context, "get single message",
+                        call, "get single message",
                         rarelyModifiedCacheControl, probe, false, call.parameters.toMap(),
                     ) {
                         MessageWithMetadata(messageCache.getOrPut(call.parameters.getOrFail("id"))).let(convertFun)
@@ -370,45 +398,39 @@ class HttpServer<B, G, RM, PM>(
 
                 get("search/sse/messages") {
                     val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, context, "search messages sse", null, false, true, queryParametersMap) {
-                        suspend fun(streamWriter: StreamWriter<RM, PM>) {
-                            val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
-                            val request = SseMessageSearchRequest(queryParametersMap, filterPredicate)
-                            request.checkRequest()
-                            searchMessagesHandler.searchMessagesSse(request, streamWriter)
-                        }
+                    handleRequest(call, "search messages sse", null, false, true, queryParametersMap) {
+                        val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
+                        val request = SseMessageSearchRequest(queryParametersMap, filterPredicate)
+                        SearchMessagesCalledFun(searchMessagesHandler, request)::calledFun
                     }
                 }
 
                 get("search/sse/events") {
                     val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, context, "search events sse", null, false, true, queryParametersMap) {
-                        suspend fun(streamWriter: StreamWriter<RM, PM>) {
-                            val filterPredicate = eventFiltersPredicateFactory.build(queryParametersMap)
-                            val request = SseEventSearchRequest(queryParametersMap, filterPredicate)
-                            request.checkRequest()
-                            searchEventsHandler.searchEventsSse(request, streamWriter)
-                        }
+                    handleRequest(call, "search events sse", null, false, true, queryParametersMap) {
+                        val filterPredicate = eventFiltersPredicateFactory.build(queryParametersMap)
+                        val request = SseEventSearchRequest(queryParametersMap, filterPredicate)
+                        SearchEventsCalledFun<RM, PM>(searchEventsHandler, request)::calledFun
                     }
                 }
 
                 get("filters/sse-messages") {
                     val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, context, "get message filters", null, false, false, queryParametersMap) {
+                    handleRequest(call, "get message filters", null, false, false, queryParametersMap) {
                         messageFiltersPredicateFactory.getFiltersNames()
                     }
                 }
 
                 get("filters/sse-events") {
                     val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, context, "get event filters", null, false, false, queryParametersMap) {
+                    handleRequest(call, "get event filters", null, false, false, queryParametersMap) {
                         eventFiltersPredicateFactory.getFiltersNames()
                     }
                 }
 
                 get("filters/sse-messages/{name}") {
                     val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, context, "get message filters", null, false, false, queryParametersMap) {
+                    handleRequest(call, "get message filters", null, false, false, queryParametersMap) {
                         messageFiltersPredicateFactory.getFilterInfo(call.parameters.getOrFail("name"))
                     }
                 }
@@ -416,14 +438,14 @@ class HttpServer<B, G, RM, PM>(
 
                 get("filters/sse-events/{name}") {
                     val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, context, "get event filters", null, false, false, queryParametersMap) {
+                    handleRequest(call, "get event filters", null, false, false, queryParametersMap) {
                         eventFiltersPredicateFactory.getFilterInfo(call.parameters.getOrFail("name"))
                     }
                 }
 
                 get("match/event/{id}") {
                     val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, context, "match event", null, false, false, queryParametersMap) {
+                    handleRequest(call, "match event", null, false, false, queryParametersMap) {
                         val filterPredicate = eventFiltersPredicateFactory.build(queryParametersMap)
                         filterPredicate.apply(eventCache.getOrPut(call.parameters.getOrFail("id")))
                     }
@@ -431,7 +453,7 @@ class HttpServer<B, G, RM, PM>(
 
                 get("/match/message/{id}") {
                     val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, context, "match message", null, false, false, queryParametersMap) {
+                    handleRequest(call, "match message", null, false, false, queryParametersMap) {
                         val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
                         val message = messageCache.getOrPut(call.parameters.getOrFail("id"))
                         filterPredicate.apply(MessageWithMetadata(message))
@@ -440,7 +462,7 @@ class HttpServer<B, G, RM, PM>(
 
                 get("/messageIds") {
                     val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, context, "message ids", null, false, false, queryParametersMap) {
+                    handleRequest(call, "message ids", null, false, false, queryParametersMap) {
                         val request = SseMessageSearchRequest(
                             queryParametersMap,
                             messageFiltersPredicateFactory.getEmptyPredicate(),
@@ -450,14 +472,14 @@ class HttpServer<B, G, RM, PM>(
                 }
 
                 get("/bookIds") {
-                    handleRequest(call, context, "book ids", null, probe = false, useSse = false) {
+                    handleRequest(call, "book ids", null, probe = false, useSse = false) {
                         cradleService.getBookIds()
                     }
                 }
 
                 get("/scopeIds") {
                     val book = call.parameters["bookId"]!!
-                    handleRequest(call, context, "event scopes", null, probe = false, useSse = false) {
+                    handleRequest(call, "event scopes", null, probe = false, useSse = false) {
                         cradleService.getEventScopes(BookId(book))
                     }
                 }

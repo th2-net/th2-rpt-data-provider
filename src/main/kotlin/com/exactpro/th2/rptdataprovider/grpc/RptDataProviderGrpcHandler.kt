@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2025 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -44,6 +44,8 @@ import com.exactpro.th2.rptdataprovider.entities.requests.SseMessageSearchReques
 import com.exactpro.th2.rptdataprovider.entities.sse.GrpcWriter
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.grpcDirectionToCradle
+import com.exactpro.th2.rptdataprovider.handlers.events.SearchEventsCalledFun
+import com.exactpro.th2.rptdataprovider.handlers.messages.SearchMessagesCalledFun
 import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import com.google.protobuf.MessageOrBuilder
@@ -51,7 +53,7 @@ import com.google.protobuf.TextFormat
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.grpc.Status
 import io.grpc.stub.StreamObserver
-import io.ktor.util.InternalAPI
+import io.ktor.utils.io.InternalAPI
 import io.prometheus.client.Counter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -305,30 +307,20 @@ class RptDataProviderGrpcHandler<B, G, RM, PM>(
     @FlowPreview
     override fun searchMessages(grpcRequest: MessageSearchRequest, responseObserver: StreamObserver<StreamResponse>) {
         handleRequest(responseObserver, "grpc search message", useStream = true, request = grpcRequest) {
-            suspend fun(streamWriter: StreamWriter<RM, PM>) {
-                val filterPredicate = messageFiltersPredicateFactory.build(grpcRequest.filtersList)
-                val request = SseMessageSearchRequest(grpcRequest, filterPredicate, BookId(""))
-                request.checkRequest()
-                searchMessagesHandler.searchMessagesSse(request, streamWriter)
-            }
+            val filterPredicate = messageFiltersPredicateFactory.build(grpcRequest.filtersList)
+            val request: SseMessageSearchRequest<RM, PM> = SseMessageSearchRequest(grpcRequest, filterPredicate, BookId(""))
+            SearchMessagesCalledFun(searchMessagesHandler, request)::calledFun
         }
     }
-
 
     @FlowPreview
     override fun searchEvents(grpcRequest: EventSearchRequest, responseObserver: StreamObserver<StreamResponse>) {
         handleRequest(responseObserver, "grpc search events", useStream = true, request = grpcRequest) {
-
-            suspend fun(streamWriter: StreamWriter<RM, PM>) {
-                val filterPredicate = eventFiltersPredicateFactory.build(grpcRequest.filtersList)
-                val request = SseEventSearchRequest(grpcRequest, filterPredicate, BookId(""))
-                request.checkRequest()
-
-                searchEventsHandler.searchEventsSse(request, streamWriter)
-            }
+            val filterPredicate = eventFiltersPredicateFactory.build(grpcRequest.filtersList)
+            val request = SseEventSearchRequest(grpcRequest, filterPredicate, BookId(""))
+            SearchEventsCalledFun<RM, PM>(searchEventsHandler, request)::calledFun
         }
     }
-
 
     override fun getMessagesFilters(
         request: com.google.protobuf.Empty,
