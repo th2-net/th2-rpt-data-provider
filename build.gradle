@@ -14,7 +14,9 @@ ext {
 group 'com.exactpro.th2'
 version release_version
 
-kotlin.jvmToolchain(11)
+th2JavaRelease {
+    targetJavaVersion.set(JavaVersion.VERSION_11)
+}
 
 repositories {
     mavenCentral()

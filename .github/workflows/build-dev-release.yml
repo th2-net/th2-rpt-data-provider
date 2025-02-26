@@ -13,3 +13,6 @@ jobs:
     secrets:
       docker-password: ${{ secrets.GITHUB_TOKEN }}
       nvd-api-key: ${{ secrets.NVD_APIKEY }}
+      cisa-domain: ${{ secrets.CISA_DOMAIN }}
+      cisa-user: ${{ secrets.CISA_USER }}
+      cisa-password: ${{ secrets.CISA_PWD }}
