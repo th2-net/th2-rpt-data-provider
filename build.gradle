@@ -52,16 +52,13 @@ dependencies {
     implementation "com.exactpro.th2:cradle-cassandra:${cradleVersion}"
     implementation 'com.exactpro.th2:grpc-data-provider:0.2.0-dev'
 
-    implementation 'io.github.oshai:kotlin-logging:5.1.4'
+    implementation 'io.github.oshai:kotlin-logging:7.0.4'
     implementation 'io.prometheus:simpleclient'
-    implementation(platform('io.ktor:ktor-bom:3.1.0'))
+    implementation(platform('io.ktor:ktor-bom:3.1.1'))
     implementation 'io.ktor:ktor-server-netty'
     implementation 'io.ktor:ktor-server'
 
     implementation 'org.ehcache:ehcache:3.10.8'
-    implementation('org.glassfish.jaxb:jaxb-runtime:2.3.9') {
-        because("'2.3.9' version has 'EDL 1.0' license instead of 'CDDL GPL 1.1' in the '2.3.1'")
-    }
 
     testImplementation('io.mockk:mockk:1.13.16') { // The last version bases on kotlin 1.6.0
         exclude group: 'org.jetbrains.kotlin', module: 'kotlin-reflect' // because we need kotlin reflect with different version
