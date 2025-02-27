@@ -1,5 +1,5 @@
 /*
- * Copyright 2023-2024 Exactpro (Exactpro Systems Limited)
+ * Copyright 2023-2025 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,9 +38,10 @@ internal class AbortableRequestHandler : ChannelInboundHandlerAdapter() {
     }
 
     override fun channelInactive(ctx: ChannelHandlerContext) {
-        ref.getAndSet(null)?.attributes?.getOrNull(ABORT_HANDLER_KEY)?.let {
+        val call = ref.getAndSet(null)?.attributes?.getOrNull(ABORT_HANDLER_KEY)
+        if (call != null) {
             K_LOGGER.debug { "Calling abort callback" }
-            it.invoke()
+            call.invoke()
         }
 
         super.channelInactive(ctx)
