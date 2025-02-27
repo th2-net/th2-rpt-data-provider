@@ -1,4 +1,4 @@
-# Report data provider (5.15.0)
+# Report data provider (5.16.0)
 
 # Overview
 This component serves as a backend for rpt-viewer. It will connect to the cassandra database via cradle api and expose the data stored in there as REST resources.
@@ -295,6 +295,13 @@ spec:
 ```
 
 # Release notes
+
+## 5.16.0
+* Migrated to ktor: `3.1.1`
+* Updated:
+  * kotlin.jvm: `2.1.10`
+  * kotlin-logging: `7.0.4`
+  * th2 gradle plugin: `0.2.3` (th2-bom: `4.11.0`)
 
 ## 5.15.0
 * Migrated to native grouped message request:
