@@ -302,6 +302,9 @@ spec:
   * kotlin.jvm: `2.1.10`
   * kotlin-logging: `7.0.4`
   * th2 gradle plugin: `0.2.2` (th2-bom: `4.10.0`)
+* Added suppressions:
+  * CVE-2025-25193 - This vulnerability does not affect us because the component don’t use netty for reading environment files, only for network interaction.
+  * CVE-2025-24970 - The component doesn’t directly use SSL for communication between each other because they are deployed in cluster. 
 
 ## 5.15.0
 * Migrated to native grouped message request:

@@ -11,4 +11,16 @@
         <packageUrl regex="true">^pkg:maven/io\.netty/netty-handler@.*$</packageUrl>
         <vulnerabilityName>CVE-2025-24970</vulnerabilityName>
     </suppress>
+    <suppress>
+        <!-- This is false negative vulnerability because the maven artifact isn't related to jetty -->
+        <notes><![CDATA[file name: ktor-server-netty-metadata-3.1.1.jar]]></notes>
+        <packageUrl regex="true">^pkg:maven/aws\.smithy\.kotlin/runtime-core@.*$</packageUrl>
+        <cpe>cpe:/a:jetty:jetty_http_server</cpe>
+    </suppress>
+    <suppress>
+        <!-- This is false negative vulnerability because the maven artifact isn't related to jetty -->
+        <notes><![CDATA[file name: ktor-server-netty-metadata-3.1.1.jar]]></notes>
+        <packageUrl regex="true">^pkg:maven/aws\.smithy\.kotlin/runtime-core@.*$</packageUrl>
+        <cpe>cpe:/a:jetty:jetty_http_server</cpe>
+    </suppress>
 </suppressions>
