@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2023-2024 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 package com.exactpro.th2.rptdataprovider.server.handler
 
+import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.server.application.ApplicationCall
 import io.ktor.util.AttributeKey
 import io.netty.channel.ChannelHandlerContext
@@ -23,6 +24,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 internal class AbortableRequestHandler : ChannelInboundHandlerAdapter() {
     companion object {
+        private val K_LOGGER = KotlinLogging.logger { }
         val ABORT_HANDLER_KEY = AttributeKey<() -> Unit>("abortFuture")
     }
 
@@ -36,9 +38,9 @@ internal class AbortableRequestHandler : ChannelInboundHandlerAdapter() {
     }
 
     override fun channelInactive(ctx: ChannelHandlerContext) {
-        val call = ref.getAndSet(null)
-        if (call != null) {
-            call.attributes.getOrNull(ABORT_HANDLER_KEY)?.invoke()
+        ref.getAndSet(null)?.attributes?.getOrNull(ABORT_HANDLER_KEY)?.let {
+            K_LOGGER.debug { "Calling about call back" }
+            it.invoke()
         }
 
         super.channelInactive(ctx)

@@ -111,7 +111,7 @@ class HttpServer<B, G, RM, PM>(
 
 
     companion object {
-        private val logger = KotlinLogging.logger {}
+        private val K_LOGGER = KotlinLogging.logger {}
     }
 
     private val jacksonMapper = applicationContext.jacksonMapper
@@ -150,10 +150,12 @@ class HttpServer<B, G, RM, PM>(
 
         while (coroutineContext.isActive) {
             if (flag.get()) {
+                K_LOGGER.debug { "Aborting coroutine context" }
                 throw ClosedChannelException()
             }
             delay(checkRequestAliveDelay)
         }
+        K_LOGGER.debug { "Coroutine context closed" }
     }
 
 
@@ -197,7 +199,7 @@ class HttpServer<B, G, RM, PM>(
         logMetrics(if (useSse) sseRequestsProcessedInParallelQuantity else restRequestsProcessedInParallelQuantity) {
             coroutineScope {
                 measureTimeMillis {
-                    logger.debug { "handling '$requestName' request with parameters '${stringParameters.value}'" }
+                    K_LOGGER.debug { "handling '$requestName' request with parameters '${stringParameters.value}'" }
                     try {
                         if (useSse) sseRequestGet.inc() else restRequestGet.inc()
                         try {
@@ -214,21 +216,21 @@ class HttpServer<B, G, RM, PM>(
                             if (useSse) sseRequestProcessed.inc() else restRequestProcessed.inc()
                         }
                     } catch (e: CancellationException) {
-                        logger.debug(e) { "request processing was cancelled with CancellationException" }
+                        K_LOGGER.debug(e) { "request processing was cancelled with CancellationException" }
                     } catch (e: InvalidRequestException) {
-                        logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - invalid request" }
+                        K_LOGGER.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - invalid request" }
                     } catch (e: CradleObjectNotFoundException) {
-                        logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - event or message is missing" }
+                        K_LOGGER.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - event or message is missing" }
                     } catch (e: CodecResponseException) {
-                        logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - codec was unable to decode a message" }
+                        K_LOGGER.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - codec was unable to decode a message" }
                     } catch (e: ClosedChannelException) {
-                        logger.debug { "request '$requestName' with parameters '${stringParameters.value}' has been cancelled by a client" }
+                        K_LOGGER.debug { "request '$requestName' with parameters '${stringParameters.value}' has been cancelled by a client" }
                     } catch (e: CradleIdException) {
-                        logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - invalid id format" }
+                        K_LOGGER.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - invalid id format" }
                     } catch (e: Exception) {
-                        logger.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - unexpected exception" }
+                        K_LOGGER.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - unexpected exception" }
                     }
-                }.let { logger.debug { "request '$requestName' with parameters '${stringParameters.value}' handled - time=${it}ms" } }
+                }.let { K_LOGGER.debug { "request '$requestName' with parameters '${stringParameters.value}' handled - time=${it}ms" } }
             }
         }
     }
@@ -262,7 +264,7 @@ class HttpServer<B, G, RM, PM>(
                             httpWriter.closeWriter()
                             job.cancel()
                         }.onFailure { e ->
-                            logger.error(e) { "unexpected exception while trying to close http writer" }
+                            K_LOGGER.error(e) { "unexpected exception while trying to close http writer" }
                         }
                     }
                 }
@@ -486,6 +488,6 @@ class HttpServer<B, G, RM, PM>(
             }
         }.start(false)
 
-        logger.info { "serving on: http://${configuration.hostname.value}:${configuration.port.value}" }
+        K_LOGGER.info { "serving on: http://${configuration.hostname.value}:${configuration.port.value}" }
     }
 }
