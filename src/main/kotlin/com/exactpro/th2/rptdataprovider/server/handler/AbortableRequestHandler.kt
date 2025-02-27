@@ -39,7 +39,7 @@ internal class AbortableRequestHandler : ChannelInboundHandlerAdapter() {
 
     override fun channelInactive(ctx: ChannelHandlerContext) {
         ref.getAndSet(null)?.attributes?.getOrNull(ABORT_HANDLER_KEY)?.let {
-            K_LOGGER.debug { "Calling about call back" }
+            K_LOGGER.debug { "Calling abort callback" }
             it.invoke()
         }
 
