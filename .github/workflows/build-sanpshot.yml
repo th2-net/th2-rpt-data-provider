@@ -15,7 +15,6 @@ jobs:
     with:
       build-target: 'Docker'
       docker-username: ${{ github.actor }}
-      strict-scanner: false # FIXME: remove this parameter
     secrets:
       docker-password: ${{ secrets.GITHUB_TOKEN }}
       nvd-api-key: ${{ secrets.NVD_APIKEY }}
