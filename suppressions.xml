@@ -1,16 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- FIXME: find out approach to solve problem when any artifact with grpc word in name is marked as cpe:/a:grpc:grpc -->
 <suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
-    <suppress>
-        <notes><![CDATA[file name: netty-common-4.1.117.Final.jar]]></notes>
-        <packageUrl regex="true">^pkg:maven/io\.netty/netty-common@.*$</packageUrl>
-        <vulnerabilityName>CVE-2025-25193</vulnerabilityName>
-    </suppress>
-    <suppress>
-        <notes><![CDATA[file name: netty-handler-4.1.117.Final.jar]]></notes>
-        <packageUrl regex="true">^pkg:maven/io\.netty/netty-handler@.*$</packageUrl>
-        <vulnerabilityName>CVE-2025-24970</vulnerabilityName>
-    </suppress>
     <suppress>
         <!-- This is false negative vulnerability because the maven artifact isn't related to jetty -->
         <notes><![CDATA[file name: ktor-server-netty-metadata-3.1.1.jar]]></notes>
