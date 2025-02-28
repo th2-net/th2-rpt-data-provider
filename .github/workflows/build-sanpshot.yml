@@ -5,7 +5,6 @@ on:
     branches-ignore:
       - master
       - version-*
-      - dependabot**
     paths-ignore:
       - README.md
 
