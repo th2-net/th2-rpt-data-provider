@@ -43,7 +43,7 @@ dependencies {
         exclude group: 'com.exactpro.th2', module: 'cradle-cassandra'
     }
 
-    implementation 'com.exactpro.th2:common-utils:2.3.0-dev'
+    implementation 'com.exactpro.th2:common-utils:2.3.1-dev'
     implementation "com.exactpro.th2:cradle-core:${cradleVersion}"
     implementation "com.exactpro.th2:cradle-cassandra:${cradleVersion}"
     implementation 'com.exactpro.th2:grpc-data-provider:0.2.0-dev'
