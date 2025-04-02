@@ -297,11 +297,14 @@ spec:
 # Release notes
 
 ## 5.16.0
-* Migrated to ktor: `3.1.1`
+* Migrated to ktor: `3.1.2`
 * Updated:
-  * kotlin.jvm: `2.1.10`
-  * kotlin-logging: `7.0.4`
-  * th2 gradle plugin: `0.2.3` (th2-bom: `4.11.0`)
+  * kotlin.jvm: `2.1.20`
+  * kotlin-logging: `7.0.6`
+  * th2 gradle plugin: `0.2.4` (th2-bom: `4.11.0`)
+  * th2 common: `5.15.0-dev` 
+  * th2 common utils: `2.3.1-dev` 
+  * cradle API: `5.5.0-dev` 
 
 ## 5.15.0
 * Migrated to native grouped message request:
