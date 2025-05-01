@@ -58,7 +58,7 @@ dependencies {
         exclude group: 'org.glassfish.jaxb', module: 'jaxb-runtime'
     }
 
-    testImplementation('io.mockk:mockk:1.14.0') { // The last version bases on kotlin 1.6.0
+    testImplementation('io.mockk:mockk:1.14.2') { // The last version bases on kotlin 1.6.0
         exclude group: 'org.jetbrains.kotlin', module: 'kotlin-reflect' // because we need kotlin reflect with different version
     }
 
