@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 Exactpro (Exactpro Systems Limited)
+ * Copyright 2024-2025 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -67,7 +67,10 @@ internal interface IParentEventCounter {
     companion object {
         private val MAX_EVENT_COUNTER = AtomicLong(Long.MAX_VALUE)
 
-        fun create(limitForParent: Long? = null): IParentEventCounter =
-            limitForParent?.let { LimitedParentEventCounter(it) } ?: NoLimitedParentEventCounter
+        fun create(limitForParent: Long? = null, ignoreLimitForParent: Boolean = false): IParentEventCounter = if (ignoreLimitForParent || limitForParent == null) {
+            NoLimitedParentEventCounter
+        } else {
+            LimitedParentEventCounter(limitForParent)
+        }
     }
 }
