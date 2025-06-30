@@ -48,7 +48,9 @@ internal interface IParentEventCounter {
                 } else {
                     val next = value + 1
                     if (value == MAX_EVENT_COUNTER || next > limitForParent) {
-                        parentEventCounter.putIfAbsent(event.id.eventId.id, MAX_EVENT_COUNTER)
+                        if (event.batchId == null) {
+                            parentEventCounter.putIfAbsent(event.id.eventId.id, MAX_EVENT_COUNTER)
+                        }
                         MAX_EVENT_COUNTER
                     } else {
                         next
@@ -73,7 +75,9 @@ internal interface IParentEventCounter {
                 } else {
                     val next = value + 1
                     if (value == MAX_EVENT_COUNTER || next > limitForParent) {
-                        parentEventCounter.putIfAbsent(event.id.eventId.id.toLongHash(), MAX_EVENT_COUNTER)
+                        if (event.batchId == null) {
+                            parentEventCounter.putIfAbsent(event.id.eventId.id.toLongHash(), MAX_EVENT_COUNTER)
+                        }
                         MAX_EVENT_COUNTER
                     } else {
                         next

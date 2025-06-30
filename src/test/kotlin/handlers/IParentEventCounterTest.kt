@@ -193,7 +193,7 @@ class IParentEventCounterTest {
             batchId = null,
             eventId = StoredTestEventId(BOOK_ID, SCOPE, Instant.now(), NEXT_UUID),
         )
-        val batchId = StoredTestEventId(BOOK_ID, SCOPE, Instant.now(), NEXT_UUID)
+        var batchId = StoredTestEventId(BOOK_ID, SCOPE, Instant.now(), NEXT_UUID)
 
         repeat(limitForParent) {
             assertTrue(
@@ -211,6 +211,7 @@ class IParentEventCounterTest {
         }
 
         val nextEventId = StoredTestEventId(BOOK_ID, SCOPE, Instant.now(), NEXT_UUID)
+        batchId = StoredTestEventId(BOOK_ID, SCOPE, Instant.now(), NEXT_UUID)
         assertAll(
             {
                 assertFalse(
@@ -227,6 +228,25 @@ class IParentEventCounterTest {
                 )
             },
             {
+                repeat(limitForParent) {
+                    assertTrue(
+                        eventCounter.checkCountAndGet(
+                            createEventEntity(
+                                ProviderEventId(
+                                    batchId = batchId,
+                                    eventId = StoredTestEventId(BOOK_ID, SCOPE, Instant.now(), NEXT_UUID),
+                                ),
+                                ProviderEventId(
+                                    batchId = batchId,
+                                    eventId = nextEventId
+                                )
+                            ),
+                        ),
+                        "child of single event id, attempt ${limitForParent + 1}",
+                    )
+                }
+            },
+            {
                 assertFalse(
                     eventCounter.checkCountAndGet(
                         createEventEntity(
@@ -240,7 +260,7 @@ class IParentEventCounterTest {
                             )
                         ),
                     ),
-                    "child of single event id, attempt ${limitForParent + 1}",
+                    "child of single event id, attempt",
                 )
             },
         )
