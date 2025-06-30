@@ -100,12 +100,11 @@ internal interface IParentEventCounter {
     companion object {
         private const val MAX_EVENT_COUNTER = Long.MAX_VALUE
 
-        fun create(limitForParent: Long? = null, mode: String = "limit"): IParentEventCounter = if ((mode != "limit" && mode != "hash") || limitForParent == null) {
+        fun create(limitForParent: Long? = null, mode: String = "limit"): IParentEventCounter = if (limitForParent == null) {
             NoLimitedParentEventCounter
         } else {
             when(mode) {
                 "hash" -> HashParentEventCounter(limitForParent)
-                "limit" -> LimitedParentEventCounter(limitForParent)
                 else -> LimitedParentEventCounter(limitForParent)
             }
         }
