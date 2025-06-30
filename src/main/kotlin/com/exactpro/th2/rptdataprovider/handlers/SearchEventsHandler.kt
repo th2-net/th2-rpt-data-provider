@@ -83,7 +83,7 @@ class SearchEventsHandler(context: Context<*, *, *, *>) {
     private val sseEventSearchStep: Long = context.configuration.sseEventSearchStep.value.toLong()
     private val eventSearchChunkSize: Int = context.configuration.eventSearchChunkSize.value.toInt()
     private val keepAliveTimeout: Long = context.configuration.keepAliveTimeout.value.toLong()
-    private val ignoreLimitForParent: Boolean = context.configuration.ignoreLimitForParent.value.toBoolean()
+    private val ignoreLimitForParent: String = context.configuration.ignoreLimitForParent.value
 
     private suspend fun keepAlive(
         writer: StreamWriter<*, *>,

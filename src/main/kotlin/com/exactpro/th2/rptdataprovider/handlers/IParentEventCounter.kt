@@ -17,8 +17,8 @@
 package com.exactpro.th2.rptdataprovider.handlers
 
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
+import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicLong
 
 internal interface IParentEventCounter {
     /**
@@ -35,42 +35,79 @@ internal interface IParentEventCounter {
     private class LimitedParentEventCounter(
         private val limitForParent: Long
     ) : IParentEventCounter {
-        private val parentEventCounter = ConcurrentHashMap<String, AtomicLong>()
+        private val parentEventCounter = ConcurrentHashMap<String, Long>()
 
         override fun checkCountAndGet(event: BaseEventEntity): Boolean {
             if (event.parentEventId == null) {
                 return true
             }
 
-            val value = parentEventCounter.compute(event.parentEventId.eventId.id) { _, value ->
+            return parentEventCounter.compute(event.parentEventId.eventId.id) { _, value ->
                 if (value == null) {
-                    AtomicLong(1)
+                    1L
                 } else {
-                    if (value === MAX_EVENT_COUNTER) {
+                    val next = value + 1
+                    if (value == MAX_EVENT_COUNTER || next > limitForParent) {
                         parentEventCounter.putIfAbsent(event.id.eventId.id, MAX_EVENT_COUNTER)
                         MAX_EVENT_COUNTER
                     } else {
-                        if (value.incrementAndGet() > limitForParent) {
-                            parentEventCounter.putIfAbsent(event.id.eventId.id, MAX_EVENT_COUNTER)
-                            MAX_EVENT_COUNTER
-                        } else {
-                            value
-                        }
+                        next
                     }
                 }
-            }
+            } != MAX_EVENT_COUNTER
+        }
+    }
 
-            return value !== MAX_EVENT_COUNTER
+    private class HashParentEventCounter(
+        private val limitForParent: Long
+    ) : IParentEventCounter {
+        private val parentEventCounter = ConcurrentHashMap<Long, Long>()
+
+        override fun checkCountAndGet(event: BaseEventEntity): Boolean {
+            if (event.parentEventId == null) {
+                return true
+            }
+            return parentEventCounter.compute(event.parentEventId.eventId.id.toLongHash()) { _, value ->
+                if (value == null) {
+                    1L
+                } else {
+                    val next = value + 1
+                    if (value == MAX_EVENT_COUNTER || next > limitForParent) {
+                        parentEventCounter.putIfAbsent(event.id.eventId.id.toLongHash(), MAX_EVENT_COUNTER)
+                        MAX_EVENT_COUNTER
+                    } else {
+                        next
+                    }
+                }
+            } != MAX_EVENT_COUNTER
+        }
+
+        companion object {
+            private val messageDigest = ThreadLocal.withInitial { MessageDigest.getInstance("MD5") }
+
+            fun String.toLongHash(): Long {
+                val hashBytes = messageDigest.get().digest(this.toByteArray())
+
+                var longHash: Long = 0
+                for (i in 0 until 8) {
+                    longHash = (longHash shl 8) or (hashBytes[i].toLong() and 0xFF)
+                }
+                return longHash
+            }
         }
     }
 
     companion object {
-        private val MAX_EVENT_COUNTER = AtomicLong(Long.MAX_VALUE)
+        private const val MAX_EVENT_COUNTER = Long.MAX_VALUE
 
-        fun create(limitForParent: Long? = null, ignoreLimitForParent: Boolean = false): IParentEventCounter = if (ignoreLimitForParent || limitForParent == null) {
+        fun create(limitForParent: Long? = null, mode: String = "limit"): IParentEventCounter = if ((mode != "limit" && mode != "hash") || limitForParent == null) {
             NoLimitedParentEventCounter
         } else {
-            LimitedParentEventCounter(limitForParent)
+            when(mode) {
+                "hash" -> HashParentEventCounter(limitForParent)
+                "limit" -> LimitedParentEventCounter(limitForParent)
+                else -> LimitedParentEventCounter(limitForParent)
+            }
         }
     }
 }

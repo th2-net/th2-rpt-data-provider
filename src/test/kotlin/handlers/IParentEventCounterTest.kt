@@ -24,6 +24,8 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertAll
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import java.time.Instant
 import java.util.UUID
 
@@ -87,10 +89,11 @@ class IParentEventCounterTest {
         )
     }
 
-    @Test
-    fun `limit root event test`() {
+    @ParameterizedTest
+    @ValueSource(strings = ["limit", "hash"])
+    fun `limit root event test`(mode: String) {
         val limitForParent = 50
-        val eventCounter = IParentEventCounter.create(limitForParent.toLong())
+        val eventCounter = IParentEventCounter.create(limitForParent.toLong(), mode)
 
         val rootEventId = NEXT_UUID
 
@@ -118,10 +121,11 @@ class IParentEventCounterTest {
         }
     }
 
-    @Test
-    fun `singe event test`() {
+    @ParameterizedTest
+    @ValueSource(strings = ["limit", "hash"])
+    fun `singe event test`(mode: String) {
         val limitForParent = 50
-        val eventCounter = IParentEventCounter.create(limitForParent.toLong())
+        val eventCounter = IParentEventCounter.create(limitForParent.toLong(), mode)
 
         val parentEventId = ProviderEventId(
             batchId = null,
@@ -179,10 +183,11 @@ class IParentEventCounterTest {
         )
     }
 
-    @Test
-    fun `batched event test`() {
+    @ParameterizedTest
+    @ValueSource(strings = ["limit", "hash"])
+    fun `batched event test`(mode: String) {
         val limitForParent = 50
-        val eventCounter = IParentEventCounter.create(limitForParent.toLong())
+        val eventCounter = IParentEventCounter.create(limitForParent.toLong(), mode)
 
         val parentEventId = ProviderEventId(
             batchId = null,

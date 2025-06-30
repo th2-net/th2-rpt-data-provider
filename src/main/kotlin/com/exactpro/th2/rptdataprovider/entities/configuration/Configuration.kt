@@ -41,7 +41,7 @@ class CustomConfigurationClass {
     val sseEventSearchStep: Long = 200
 
     val keepAliveTimeout: Long = 5_000
-    val ignoreLimitForParent: Boolean = false
+    val ignoreLimitForParent: String = "none"
 
     val messageExtractorOutputBatchBuffer: Int = 1
     val messageConverterOutputBatchBuffer: Int = 1
@@ -133,7 +133,7 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
         Variable("keepAliveTimeout", customConfiguration.keepAliveTimeout.toString())
 
     val ignoreLimitForParent: Variable =
-        Variable("ignoreLimitForParent", customConfiguration.ignoreLimitForParent.toString())
+        Variable("ignoreLimitForParent", customConfiguration.ignoreLimitForParent)
 
     val messageExtractorOutputBatchBuffer: Variable =
         Variable(
