@@ -17,6 +17,8 @@
 package com.exactpro.th2.rptdataprovider.handlers
 
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
+import io.prometheus.client.Gauge
+import java.lang.ref.Cleaner
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 
@@ -37,6 +39,12 @@ internal interface IParentEventCounter {
     ) : IParentEventCounter {
         private val parentEventCounter = ConcurrentHashMap<String, Long>()
 
+        init {
+            CLEANER.register(this) {
+                PARENT_EVENT_COUNTER.dec(parentEventCounter.size.toDouble())
+            }
+        }
+
         override fun checkCountAndGet(event: BaseEventEntity): Boolean {
             if (event.parentEventId == null) {
                 return true
@@ -44,12 +52,15 @@ internal interface IParentEventCounter {
 
             return parentEventCounter.compute(event.parentEventId.eventId.id) { _, value ->
                 if (value == null) {
+                    PARENT_EVENT_COUNTER.inc()
                     1L
                 } else {
                     val next = value + 1
                     if (value == MAX_EVENT_COUNTER || next > limitForParent) {
                         if (event.batchId == null) {
-                            parentEventCounter.putIfAbsent(event.id.eventId.id, MAX_EVENT_COUNTER)
+                            if (parentEventCounter.putIfAbsent(event.id.eventId.id, MAX_EVENT_COUNTER) == null) {
+                                PARENT_EVENT_COUNTER.inc()
+                            }
                         }
                         MAX_EVENT_COUNTER
                     } else {
@@ -65,18 +76,27 @@ internal interface IParentEventCounter {
     ) : IParentEventCounter {
         private val parentEventCounter = ConcurrentHashMap<Long, Long>()
 
+        init {
+            CLEANER.register(this) {
+                PARENT_EVENT_COUNTER.dec(parentEventCounter.size.toDouble())
+            }
+        }
+
         override fun checkCountAndGet(event: BaseEventEntity): Boolean {
             if (event.parentEventId == null) {
                 return true
             }
             return parentEventCounter.compute(event.parentEventId.eventId.id.toLongHash()) { _, value ->
                 if (value == null) {
+                    PARENT_EVENT_COUNTER.inc()
                     1L
                 } else {
                     val next = value + 1
                     if (value == MAX_EVENT_COUNTER || next > limitForParent) {
                         if (event.batchId == null) {
-                            parentEventCounter.putIfAbsent(event.id.eventId.id.toLongHash(), MAX_EVENT_COUNTER)
+                            if (parentEventCounter.putIfAbsent(event.id.eventId.id.toLongHash(), MAX_EVENT_COUNTER) == null) {
+                                PARENT_EVENT_COUNTER.inc()
+                            }
                         }
                         MAX_EVENT_COUNTER
                     } else {
@@ -102,6 +122,12 @@ internal interface IParentEventCounter {
     }
 
     companion object {
+        private val PARENT_EVENT_COUNTER = Gauge
+            .build("th2_rpt_parent_event_count", "Number of parent events are cached in memory")
+            .register()
+
+        private val CLEANER = Cleaner.create()
+
         private const val MAX_EVENT_COUNTER = Long.MAX_VALUE
 
         fun create(limitForParent: Long? = null, mode: String = "limit"): IParentEventCounter = if (limitForParent == null) {
