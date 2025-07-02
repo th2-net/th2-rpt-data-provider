@@ -228,7 +228,7 @@ class IParentEventCounterTest {
                 )
             },
             {
-                repeat(limitForParent) {
+                repeat(limitForParent + 1) {
                     assertTrue(
                         eventCounter.checkCountAndGet(
                             createEventEntity(
@@ -247,17 +247,14 @@ class IParentEventCounterTest {
                 }
             },
             {
-                assertFalse(
+                assertFalse (
                     eventCounter.checkCountAndGet(
                         createEventEntity(
                             ProviderEventId(
-                                batchId = batchId,
+                                batchId = null,
                                 eventId = StoredTestEventId(BOOK_ID, SCOPE, Instant.now(), NEXT_UUID),
                             ),
-                            ProviderEventId(
-                                batchId = batchId,
-                                eventId = nextEventId
-                            )
+                            parentEventId
                         ),
                     ),
                     "child of single event id, attempt",

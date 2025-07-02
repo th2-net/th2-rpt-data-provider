@@ -46,9 +46,8 @@ internal interface IParentEventCounter {
         }
 
         override fun checkCountAndGet(event: BaseEventEntity): Boolean {
-            if (event.parentEventId == null) {
-                return true
-            }
+            if (event.parentEventId == null) return true // exclude root events
+            if (event.parentEventId.batchId != null) return true // exclude parents inside batch
 
             return parentEventCounter.compute(event.parentEventId.eventId.id) { _, value ->
                 if (value == null) {
@@ -57,7 +56,7 @@ internal interface IParentEventCounter {
                 } else {
                     val next = value + 1
                     if (value == MAX_EVENT_COUNTER || next > limitForParent) {
-                        if (event.batchId == null) {
+                        if (!event.isBatched) { // exclude batched events
                             if (parentEventCounter.putIfAbsent(event.id.eventId.id, MAX_EVENT_COUNTER) == null) {
                                 PARENT_EVENT_COUNTER.inc()
                             }
@@ -83,9 +82,9 @@ internal interface IParentEventCounter {
         }
 
         override fun checkCountAndGet(event: BaseEventEntity): Boolean {
-            if (event.parentEventId == null) {
-                return true
-            }
+            if (event.parentEventId == null) return true // exclude root events
+            if (event.parentEventId.batchId != null) return true // exclude parents inside batch
+
             return parentEventCounter.compute(event.parentEventId.eventId.id.toLongHash()) { _, value ->
                 if (value == null) {
                     PARENT_EVENT_COUNTER.inc()
@@ -93,7 +92,7 @@ internal interface IParentEventCounter {
                 } else {
                     val next = value + 1
                     if (value == MAX_EVENT_COUNTER || next > limitForParent) {
-                        if (event.batchId == null) {
+                        if (!event.isBatched) { // exclude batched events
                             if (parentEventCounter.putIfAbsent(event.id.eventId.id.toLongHash(), MAX_EVENT_COUNTER) == null) {
                                 PARENT_EVENT_COUNTER.inc()
                             }
