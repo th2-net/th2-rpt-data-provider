@@ -49,7 +49,9 @@ internal interface IParentEventCounter {
             if (event.parentEventId == null) return true // exclude root events
             if (event.parentEventId.batchId != null) return true // exclude parents inside batch
 
-            return parentEventCounter.compute(event.parentEventId.eventId.id) { _, value ->
+            val parentEventId = event.batchParentEventId?.id ?: event.parentEventId.eventId.id
+
+            return parentEventCounter.compute(parentEventId) { _, value ->
                 if (value == null) {
                     PARENT_EVENT_COUNTER.inc()
                     1L
@@ -85,7 +87,9 @@ internal interface IParentEventCounter {
             if (event.parentEventId == null) return true // exclude root events
             if (event.parentEventId.batchId != null) return true // exclude parents inside batch
 
-            return parentEventCounter.compute(event.parentEventId.eventId.id.toLongHash()) { _, value ->
+            val parentEventId = event.batchParentEventId?.id ?: event.parentEventId.eventId.id
+
+            return parentEventCounter.compute(parentEventId.toLongHash()) { _, value ->
                 if (value == null) {
                     PARENT_EVENT_COUNTER.inc()
                     1L

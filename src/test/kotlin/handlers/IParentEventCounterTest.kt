@@ -222,6 +222,7 @@ class IParentEventCounterTest {
                                 eventId = nextEventId,
                             ),
                             parentEventId,
+                            parentEventId.eventId,
                         ),
                     ),
                     "single event id, attempt ${limitForParent + 1}",
@@ -239,7 +240,8 @@ class IParentEventCounterTest {
                                 ProviderEventId(
                                     batchId = batchId,
                                     eventId = nextEventId
-                                )
+                                ),
+                                parentEventId.eventId
                             ),
                         ),
                         "child of single event id, attempt ${limitForParent + 1}",
@@ -273,6 +275,7 @@ class IParentEventCounterTest {
         private fun createEventEntity(
             id: ProviderEventId,
             parentEventId: ProviderEventId? = null,
+            batchParentEventId: StoredTestEventId? = null,
         ) = BaseEventEntity(
             type = "event",
             id = id,
@@ -283,6 +286,7 @@ class IParentEventCounterTest {
             startTimestamp = id.eventId.startTimestamp,
             endTimestamp = null,
             parentEventId = parentEventId,
+            batchParentEventId = batchParentEventId,
             successful = true,
         )
     }

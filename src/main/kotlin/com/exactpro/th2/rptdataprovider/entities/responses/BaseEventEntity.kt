@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2025 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.rptdataprovider.entities.responses
 
-import com.exactpro.cradle.testevents.StoredTestEvent
 import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.TestEventSingle
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
@@ -36,7 +35,8 @@ data class BaseEventEntity(
     val startTimestamp: Instant,
 
     val parentEventId: ProviderEventId?,
-    val successful: Boolean
+    val batchParentEventId: StoredTestEventId?,
+    val successful: Boolean,
 ) {
 
     var attachedMessageIds: Set<String> = emptySet()
@@ -52,7 +52,8 @@ data class BaseEventEntity(
         stored: TestEventSingle,
         eventId: ProviderEventId,
         batchId: StoredTestEventId?,
-        parentEventId: ProviderEventId?
+        parentEventId: ProviderEventId?,
+        batchParentEventId: StoredTestEventId?,
     ) : this(
         batchId = batchId,
         isBatched = batchId != null,
@@ -62,6 +63,7 @@ data class BaseEventEntity(
         startTimestamp = stored.startTimestamp,
         endTimestamp = stored.endTimestamp,
         parentEventId = parentEventId,
+        batchParentEventId = batchParentEventId,
         successful = stored.isSuccess
     ) {
         this.rawValue = stored
