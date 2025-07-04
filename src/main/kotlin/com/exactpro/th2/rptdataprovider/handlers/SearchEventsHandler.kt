@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2025 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -83,6 +83,7 @@ class SearchEventsHandler(context: Context<*, *, *, *>) {
     private val sseEventSearchStep: Long = context.configuration.sseEventSearchStep.value.toLong()
     private val eventSearchChunkSize: Int = context.configuration.eventSearchChunkSize.value.toInt()
     private val keepAliveTimeout: Long = context.configuration.keepAliveTimeout.value.toLong()
+    private val limitForParentMode: String = context.configuration.limitForParentMode.value
 
     private suspend fun keepAlive(
         writer: StreamWriter<*, *>,
@@ -294,7 +295,7 @@ class SearchEventsHandler(context: Context<*, *, *, *>) {
                 requireNotNull(resumeTimestamp) { "timestamp for $resumeProviderId cannot be extracted" }
             }
             val timeIntervals = getTimeIntervals(request, sseEventSearchStep, startTimestamp)
-            val parentEventCounter = IParentEventCounter.create(request.limitForParent)
+            val parentEventCounter = IParentEventCounter.create(request.limitForParent, limitForParentMode)
 
             flow {
                 for ((start, end) in timeIntervals) {
