@@ -21,6 +21,7 @@ import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import com.exactpro.th2.rptdataprovider.handlers.IParentEventCounter
 import com.exactpro.th2.rptdataprovider.handlers.IParentEventCounter.Companion.HASH_MODE
+import com.exactpro.th2.rptdataprovider.handlers.IParentEventCounter.Companion.OPTIMIZED_HASH_MODE
 import com.exactpro.th2.rptdataprovider.handlers.IParentEventCounter.Companion.OPTIMIZED_MODE
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -246,9 +247,10 @@ class IParentEventCounterTest {
         )
     }
 
-    @Test
-    fun `event tree test`() {
-        val eventCounter = IParentEventCounter.create(2)
+    @ParameterizedTest
+    @ValueSource(strings = [HASH_MODE, "none"])
+    fun `event tree test`(mode: String) {
+        val eventCounter = IParentEventCounter.create(2, mode)
         val names = mutableSetOf<String>()
         EVENTS.asSequence().forEach {
             println(it)
@@ -277,7 +279,7 @@ class IParentEventCounterTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = [OPTIMIZED_MODE, HASH_MODE])
+    @ValueSource(strings = [OPTIMIZED_MODE, OPTIMIZED_HASH_MODE])
     fun `optimized event tree test`(mode: String) {
         val eventCounter = IParentEventCounter.create(2, mode)
         val names = mutableSetOf<String>()

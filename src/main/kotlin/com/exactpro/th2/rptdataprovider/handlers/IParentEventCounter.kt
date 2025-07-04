@@ -71,6 +71,43 @@ internal interface IParentEventCounter {
         }
     }
 
+    private class HashLimitedParentEventCounter(
+        private val limitForParent: Long
+    ) : IParentEventCounter {
+        private val parentEventCounter = ConcurrentHashMap<Long, Long>()
+
+        init {
+            CLEANER.register(this) {
+                PARENT_EVENT_COUNTER.dec(parentEventCounter.size.toDouble())
+            }
+        }
+
+        override fun checkCountAndGet(event: BaseEventEntity): Boolean {
+            if (event.parentEventId == null) {
+                return true
+            }
+
+            val value = parentEventCounter.compute(event.parentEventId.eventId.id.toLongHash()) { _, value ->
+                if (value == null) {
+                    PARENT_EVENT_COUNTER.inc()
+                    1L
+                } else {
+                    val next = value + 1
+                    if (value == MAX_EVENT_COUNTER || next > limitForParent) {
+                        if (parentEventCounter.putIfAbsent(event.id.eventId.id.toLongHash(), MAX_EVENT_COUNTER) == null) {
+                            PARENT_EVENT_COUNTER.inc()
+                        }
+                        MAX_EVENT_COUNTER
+                    } else {
+                        next
+                    }
+                }
+            }
+
+            return value != MAX_EVENT_COUNTER
+        }
+    }
+
     private class OptimizedLimitedParentEventCounter(
         private val limitForParent: Long
     ) : IParentEventCounter {
@@ -108,7 +145,7 @@ internal interface IParentEventCounter {
         }
     }
 
-    private class HashLimitedParentEventCounter(
+    private class OptimizedHashLimitedParentEventCounter(
         private val limitForParent: Long
     ) : IParentEventCounter {
         private val parentEventCounter = ConcurrentHashMap<Long, Long>()
@@ -143,25 +180,12 @@ internal interface IParentEventCounter {
                 }
             } != MAX_EVENT_COUNTER
         }
-
-        companion object {
-            private val messageDigest = ThreadLocal.withInitial { MessageDigest.getInstance("MD5") }
-
-            fun String.toLongHash(): Long {
-                val hashBytes = messageDigest.get().digest(this.toByteArray())
-
-                var longHash: Long = 0
-                for (i in 0 until 8) {
-                    longHash = (longHash shl 8) or (hashBytes[i].toLong() and 0xFF)
-                }
-                return longHash
-            }
-        }
     }
 
     companion object {
         const val OPTIMIZED_MODE = "optimized"
         const val HASH_MODE = "hash"
+        const val OPTIMIZED_HASH_MODE = "optimized-hash"
 
         private val PARENT_EVENT_COUNTER = Gauge
             .build("th2_rpt_parent_event_count", "Number of parent events are cached in memory")
@@ -171,11 +195,24 @@ internal interface IParentEventCounter {
 
         private const val MAX_EVENT_COUNTER = Long.MAX_VALUE
 
+        private val messageDigest = ThreadLocal.withInitial { MessageDigest.getInstance("MD5") }
+
+        fun String.toLongHash(): Long {
+            val hashBytes = messageDigest.get().digest(this.toByteArray())
+
+            var longHash: Long = 0
+            for (i in 0 until 8) {
+                longHash = (longHash shl 8) or (hashBytes[i].toLong() and 0xFF)
+            }
+            return longHash
+        }
+
         fun create(limitForParent: Long? = null, mode: String = "orig"): IParentEventCounter =
             limitForParent?.let {
                 when(mode) {
                     OPTIMIZED_MODE -> OptimizedLimitedParentEventCounter(it)
                     HASH_MODE -> HashLimitedParentEventCounter(it)
+                    OPTIMIZED_HASH_MODE -> OptimizedHashLimitedParentEventCounter(it)
                     else -> LimitedParentEventCounter(it)
                 }
             } ?: NoLimitedParentEventCounter
