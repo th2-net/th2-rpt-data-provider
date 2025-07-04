@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 Exactpro (Exactpro Systems Limited)
+ * Copyright 2024-2025 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,8 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertAll
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import java.time.Instant
 import java.util.UUID
 
@@ -31,7 +33,7 @@ class IParentEventCounterTest {
 
     @Test
     fun `no limit test`() {
-        val eventCounter = IParentEventCounter.create(null)
+        val eventCounter = IParentEventCounter.create()
 
         val rootEventId = NEXT_UUID
         val parentEventId = ProviderEventId(
@@ -87,10 +89,11 @@ class IParentEventCounterTest {
         )
     }
 
-    @Test
-    fun `limit root event test`() {
+    @ParameterizedTest
+    @ValueSource(strings = ["limit", "hash"])
+    fun `limit root event test`(mode: String) {
         val limitForParent = 50
-        val eventCounter = IParentEventCounter.create(limitForParent.toLong())
+        val eventCounter = IParentEventCounter.create(limitForParent.toLong(), mode)
 
         val rootEventId = NEXT_UUID
 
@@ -118,10 +121,11 @@ class IParentEventCounterTest {
         }
     }
 
-    @Test
-    fun `singe event test`() {
+    @ParameterizedTest
+    @ValueSource(strings = ["limit", "hash"])
+    fun `singe event test`(mode: String) {
         val limitForParent = 50
-        val eventCounter = IParentEventCounter.create(limitForParent.toLong())
+        val eventCounter = IParentEventCounter.create(limitForParent.toLong(), mode)
 
         val parentEventId = ProviderEventId(
             batchId = null,
@@ -179,16 +183,17 @@ class IParentEventCounterTest {
         )
     }
 
-    @Test
-    fun `batched event test`() {
+    @ParameterizedTest
+    @ValueSource(strings = ["limit", "hash"])
+    fun `batched event test`(mode: String) {
         val limitForParent = 50
-        val eventCounter = IParentEventCounter.create(limitForParent.toLong())
+        val eventCounter = IParentEventCounter.create(limitForParent.toLong(), mode)
 
         val parentEventId = ProviderEventId(
             batchId = null,
             eventId = StoredTestEventId(BOOK_ID, SCOPE, Instant.now(), NEXT_UUID),
         )
-        val batchId = StoredTestEventId(BOOK_ID, SCOPE, Instant.now(), NEXT_UUID)
+        var batchId = StoredTestEventId(BOOK_ID, SCOPE, Instant.now(), NEXT_UUID)
 
         repeat(limitForParent) {
             assertTrue(
@@ -206,6 +211,7 @@ class IParentEventCounterTest {
         }
 
         val nextEventId = StoredTestEventId(BOOK_ID, SCOPE, Instant.now(), NEXT_UUID)
+        batchId = StoredTestEventId(BOOK_ID, SCOPE, Instant.now(), NEXT_UUID)
         assertAll(
             {
                 assertFalse(
@@ -216,26 +222,44 @@ class IParentEventCounterTest {
                                 eventId = nextEventId,
                             ),
                             parentEventId,
+                            parentEventId.eventId,
                         ),
                     ),
                     "single event id, attempt ${limitForParent + 1}",
                 )
             },
             {
-                assertFalse(
+                repeat(limitForParent + 1) {
+                    assertTrue(
+                        eventCounter.checkCountAndGet(
+                            createEventEntity(
+                                ProviderEventId(
+                                    batchId = batchId,
+                                    eventId = StoredTestEventId(BOOK_ID, SCOPE, Instant.now(), NEXT_UUID),
+                                ),
+                                ProviderEventId(
+                                    batchId = batchId,
+                                    eventId = nextEventId
+                                ),
+                                parentEventId.eventId
+                            ),
+                        ),
+                        "child of single event id, attempt ${limitForParent + 1}",
+                    )
+                }
+            },
+            {
+                assertFalse (
                     eventCounter.checkCountAndGet(
                         createEventEntity(
                             ProviderEventId(
-                                batchId = batchId,
+                                batchId = null,
                                 eventId = StoredTestEventId(BOOK_ID, SCOPE, Instant.now(), NEXT_UUID),
                             ),
-                            ProviderEventId(
-                                batchId = batchId,
-                                eventId = nextEventId
-                            )
+                            parentEventId
                         ),
                     ),
-                    "child of single event id, attempt ${limitForParent + 1}",
+                    "child of single event id, attempt",
                 )
             },
         )
@@ -251,6 +275,7 @@ class IParentEventCounterTest {
         private fun createEventEntity(
             id: ProviderEventId,
             parentEventId: ProviderEventId? = null,
+            batchParentEventId: StoredTestEventId? = null,
         ) = BaseEventEntity(
             type = "event",
             id = id,
@@ -261,6 +286,7 @@ class IParentEventCounterTest {
             startTimestamp = id.eventId.startTimestamp,
             endTimestamp = null,
             parentEventId = parentEventId,
+            batchParentEventId = batchParentEventId,
             successful = true,
         )
     }
