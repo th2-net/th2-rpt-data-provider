@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2025 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -260,19 +260,23 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
     }
 
     suspend fun getBookIds(): List<BookId> {
-        return logMetrics(GET_STREAMS_METRIC) {
-            logTime("getBookIds") {
-                storage.listBooks()
-                    .filter { it.schemaVersion == CassandraStorageSettings.SCHEMA_VERSION }
-                    .map { BookId(it.name) }
-            }
-        } ?: emptyList()
+        return withContext(cradleDispatcher) {
+            logMetrics(GET_STREAMS_METRIC) {
+                logTime("getBookIds") {
+                    storage.listBooks()
+                        .filter { it.schemaVersion == CassandraStorageSettings.SCHEMA_VERSION }
+                        .map { BookId(it.name) }
+                }
+            } ?: emptyList()
+        }
     }
 
     suspend fun getEventScopes(bookId: BookId): List<String> {
-        return logTime("getEventScopes") {
-            storage.getScopes(bookId).filterNotNull().toList()
-        } ?: emptyList()
+        return withContext(cradleDispatcher) {
+            logTime("getEventScopes") {
+                storage.getScopes(bookId).filterNotNull().toList()
+            } ?: emptyList()
+        }
     }
 
     private suspend fun getMessageBatches(
