@@ -16,25 +16,29 @@
 
 package com.exactpro.th2.rptdataprovider.metrics
 
-import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.atomic.AtomicInteger
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
 
-private val REQUEST_ID_COUNTER = AtomicInteger(0)
-private val REQUEST_ID_QUEUE = LinkedBlockingQueue<Int>()
+class RequestIdProviderTest {
 
-fun acquireRequestId(): Int {
-    return REQUEST_ID_QUEUE.poll() ?: REQUEST_ID_COUNTER.incrementAndGet()
-}
-
-fun releaseRequestId(id: Int) {
-    REQUEST_ID_QUEUE.put(id)
-}
-
-inline fun <T> withRequestId(block: (id: String) -> T): T {
-    val id = acquireRequestId()
-    try {
-        return block.invoke(id.toString())
-    } finally {
-        releaseRequestId(id)
+    @Test
+    @Timeout(1)
+    fun `blocking test`() {
+        withRequestId {
+            print("got $it")
+            withRequestId {
+                print("got $it")
+                withRequestId {
+                    print("got $it")
+                    withRequestId {
+                        print("got $it")
+                        withRequestId {
+                            print("got $it")
+                        }
+                    }
+                }
+            }
+        }
     }
+
 }
