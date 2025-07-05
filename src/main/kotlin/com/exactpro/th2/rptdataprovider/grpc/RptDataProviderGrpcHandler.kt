@@ -318,7 +318,7 @@ class RptDataProviderGrpcHandler<B, G, RM, PM>(
         handleRequest(responseObserver, "grpc search events", useStream = true, request = grpcRequest) {
             val filterPredicate = eventFiltersPredicateFactory.build(grpcRequest.filtersList)
             val request = SseEventSearchRequest(grpcRequest, filterPredicate, BookId(""))
-            SearchEventsCalledFun<RM, PM>(searchEventsHandler, request)::calledFun
+            SearchEventsCalledFun<RM, PM>(searchEventsHandler, request, "0")::calledFun
         }
     }
 

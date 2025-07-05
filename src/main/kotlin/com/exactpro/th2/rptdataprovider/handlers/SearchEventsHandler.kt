@@ -32,6 +32,7 @@ import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import com.exactpro.th2.rptdataprovider.maxInstant
+import com.exactpro.th2.rptdataprovider.metrics.measure
 import com.exactpro.th2.rptdataprovider.minInstant
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
@@ -280,79 +281,80 @@ class SearchEventsHandler(context: Context<*, *, *, *>) {
 
     @ExperimentalCoroutinesApi
     @FlowPreview
-    suspend fun searchEventsSse(request: SseEventSearchRequest, writer: StreamWriter<*, *>) {
+    suspend fun searchEventsSse(request: SseEventSearchRequest, requestId: String, writer: StreamWriter<*, *>) {
         coroutineScope {
+            measure("searchEventsSse", requestId) {
+                val lastScannedObject = LastScannedEventInfo()
+                val lastEventId = AtomicLong(0)
+                val scanCnt = AtomicLong(0)
 
-            val lastScannedObject = LastScannedEventInfo()
-            val lastEventId = AtomicLong(0)
-            val scanCnt = AtomicLong(0)
-
-            val resumeProviderId = request.resumeFromId?.let(::ProviderEventId)
-            val resumeTimestamp: Instant? = resumeProviderId?.let { eventProducer.resumeTimestamp(it) }
-            val startTimestamp: Instant = if (resumeProviderId == null) {
-                requireNotNull(request.startTimestamp) { "start timestamp must be set" }
-            } else {
-                requireNotNull(resumeTimestamp) { "timestamp for $resumeProviderId cannot be extracted" }
-            }
-            val timeIntervals = getTimeIntervals(request, sseEventSearchStep, startTimestamp)
-            val parentEventCounter = IParentEventCounter.create(request.limitForParent, limitForParentMode)
-
-            flow {
-                for ((start, end) in timeIntervals) {
-
-                    lastScannedObject.update(start)
-
-                    getEventFlow(
-                        request, start, end, currentCoroutineContext()
-                    ).collect { emit(it) }
-
-                    if (request.parentEvent?.batchId != null) break
+                val resumeProviderId = request.resumeFromId?.let(::ProviderEventId)
+                val resumeTimestamp: Instant? = resumeProviderId?.let { eventProducer.resumeTimestamp(it) }
+                val startTimestamp: Instant = if (resumeProviderId == null) {
+                    requireNotNull(request.startTimestamp) { "start timestamp must be set" }
+                } else {
+                    requireNotNull(resumeTimestamp) { "timestamp for $resumeProviderId cannot be extracted" }
                 }
-            }
-                .map { it.await() }
-                .flatMapConcat { it.asFlow() }
-                .let { eventFlow: Flow<BaseEventEntity> ->
-                    if (resumeProviderId != null) {
-                        dropBeforeResumeId(eventFlow, resumeProviderId)
-                    } else {
-                        eventFlow
+                val timeIntervals = getTimeIntervals(request, sseEventSearchStep, startTimestamp)
+                val parentEventCounter = IParentEventCounter.create(request.limitForParent, limitForParentMode)
+
+                flow {
+                    for ((start, end) in timeIntervals) {
+
+                        lastScannedObject.update(start)
+
+                        getEventFlow(
+                            request, start, end, currentCoroutineContext()
+                        ).collect { emit(it) }
+
+                        if (request.parentEvent?.batchId != null) break
                     }
                 }
-                .takeWhile { event ->
-                    request.endTimestamp?.let {
-                        if (request.searchDirection == AFTER) {
-                            event.startTimestamp.isBeforeOrEqual(it)
+                    .map { it.await() }
+                    .flatMapConcat { it.asFlow() }
+                    .let { eventFlow: Flow<BaseEventEntity> ->
+                        if (resumeProviderId != null) {
+                            dropBeforeResumeId(eventFlow, resumeProviderId)
                         } else {
-                            event.startTimestamp.isAfterOrEqual(it)
-                        }
-                    } ?: true
-                }
-                .onEach { event ->
-                    lastScannedObject.update(event, scanCnt)
-                    processedEventCount.inc()
-                }
-                .filter { request.filterPredicate.apply(it) && parentEventCounter.checkCountAndGet(it) }
-                .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
-                .onStart {
-                    launch {
-                        keepAlive(writer, lastScannedObject, lastEventId)
-                    }
-                }.onCompletion {
-                    currentCoroutineContext().cancelChildren()
-                    it?.let { throwable -> throw throwable }
-                }.let { eventFlow ->
-                    if (request.metadataOnly) {
-                        eventFlow.collect {
-                            coroutineContext.ensureActive()
-                            writer.write(it.convertToEventTreeNode(), lastEventId)
-                        }
-                    } else {
-                        eventFlow.collect {
-                            coroutineContext.ensureActive()
-                            writer.write(it.convertToEvent(), lastEventId)
+                            eventFlow
                         }
                     }
-                }
+                    .takeWhile { event ->
+                        request.endTimestamp?.let {
+                            if (request.searchDirection == AFTER) {
+                                event.startTimestamp.isBeforeOrEqual(it)
+                            } else {
+                                event.startTimestamp.isAfterOrEqual(it)
+                            }
+                        } ?: true
+                    }
+                    .onEach { event ->
+                        lastScannedObject.update(event, scanCnt)
+                        processedEventCount.inc()
+                    }
+                    .filter { request.filterPredicate.apply(it) && parentEventCounter.checkCountAndGet(it) }
+                    .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
+                    .onStart {
+                        launch {
+                            keepAlive(writer, lastScannedObject, lastEventId)
+                        }
+                    }.onCompletion {
+                        currentCoroutineContext().cancelChildren()
+                        it?.let { throwable -> throw throwable }
+                    }.let { eventFlow ->
+                        if (request.metadataOnly) {
+                            eventFlow.collect {
+                                coroutineContext.ensureActive()
+                                writer.write(it.convertToEventTreeNode(), lastEventId)
+                            }
+                        } else {
+                            eventFlow.collect {
+                                coroutineContext.ensureActive()
+                                writer.write(it.convertToEvent(), lastEventId)
+                            }
+                        }
+                    }
+            }
         }
     }
 }
