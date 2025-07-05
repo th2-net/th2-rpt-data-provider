@@ -33,7 +33,7 @@ fun releaseRequestId(id: Int) {
 inline fun <T> withRequestId(block: (id: String) -> T): T {
     val id = acquireRequestId()
     try {
-        return block(id.toString())
+        return block.invoke(id.toString())
     } finally {
         releaseRequestId(id)
     }

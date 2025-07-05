@@ -32,8 +32,8 @@ private val METHOD_SUMMARY = Summary.build(
 
 fun getMethodSummary(method: String, id: String): Summary.Child = METHOD_SUMMARY.labels(method, id)
 
-fun handlingLog(message: String, level: Level) = K_LOGGER.at(level) { "handling $message" }
-fun handledLog(timeSec: Double, message: String, level: Level) = K_LOGGER.at(level) { "handled $message - time=${timeSec}sec" }
+fun handlingLog(message: String, level: Level) = K_LOGGER.at(level) { this.message = "handling $message" }
+fun handledLog(timeSec: Double, message: String, level: Level) = K_LOGGER.at(level) { this.message = "handled $message - time=${timeSec}sec" }
 
 inline fun <T> measure(
     method: String,
@@ -45,7 +45,7 @@ inline fun <T> measure(
     val timer: Summary.Timer = getMethodSummary(method, id).startTimer()
     handlingLog(description, level)
     try {
-        return block()
+        return block.invoke()
     } finally {
         timer.observeDuration().also {
             handledLog(it, description, level)
