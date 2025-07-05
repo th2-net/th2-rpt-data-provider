@@ -23,11 +23,12 @@ import kotlinx.coroutines.FlowPreview
 
 class SearchEventsCalledFun<RM, PM>(
     private val searchEventsHandler: SearchEventsHandler,
-    val request: SseEventSearchRequest
+    val request: SseEventSearchRequest,
+    private val requestId: String
 ) {
     @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
     suspend fun calledFun(streamWriter: StreamWriter<RM, PM>) {
         request.checkRequest()
-        searchEventsHandler.searchEventsSse(request, streamWriter)
+        searchEventsHandler.searchEventsSse(request, requestId, streamWriter)
     }
 }

@@ -167,7 +167,8 @@ class EventProducer(private val cradle: CradleService, private val mapper: Objec
                 } else {
                     ProviderEventId(null, parentId)
                 }
-            }
+            },
+            batch?.parentId
         )
     }
 

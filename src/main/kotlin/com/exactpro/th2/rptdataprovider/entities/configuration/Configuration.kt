@@ -41,6 +41,7 @@ class CustomConfigurationClass {
     val sseEventSearchStep: Long = 200
 
     val keepAliveTimeout: Long = 5_000
+    val limitForParentMode: String = "none"
 
     val messageExtractorOutputBatchBuffer: Int = 1
     val messageConverterOutputBatchBuffer: Int = 1
@@ -63,6 +64,8 @@ class CustomConfigurationClass {
     val eventSearchTimeOffset = 5_000
 
     val cradleDispatcherPoolSize: Long = 1
+    val requestDispatcherPoolSize: Long = 1
+    val responseDispatcherPoolSize: Long = 1
 
     val sendEmptyDelay = 100
 
@@ -131,6 +134,9 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
     val keepAliveTimeout: Variable =
         Variable("keepAliveTimeout", customConfiguration.keepAliveTimeout.toString(), "5000")
 
+    val limitForParentMode: Variable =
+        Variable("limitForParentMode", customConfiguration.limitForParentMode, "none")
+
     val messageExtractorOutputBatchBuffer: Variable =
         Variable(
             "messageExtractorOutputBatchBuffer",
@@ -198,6 +204,12 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
 
     val cradleDispatcherPoolSize: Variable =
         Variable("cradleDispatcherPoolSize", customConfiguration.cradleDispatcherPoolSize.toString(), "1")
+
+    val requestDispatcherPoolSize: Variable =
+        Variable("requestDispatcherPoolSize", customConfiguration.requestDispatcherPoolSize.toString(), "1")
+
+    val responseDispatcherPoolSize: Variable =
+        Variable("responseDispatcherPoolSize", customConfiguration.responseDispatcherPoolSize.toString(), "1")
 
     val sendEmptyDelay: Variable =
         Variable("sendEmptyDelay", customConfiguration.sendEmptyDelay.toString(), "100")

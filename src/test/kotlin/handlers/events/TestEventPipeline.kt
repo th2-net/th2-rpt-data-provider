@@ -238,7 +238,7 @@ class TestEventPipeline {
         val writer = mockWriter(resultEvents)
 
         runBlocking {
-            searchEvent.searchEventsSse(request, writer)
+            searchEvent.searchEventsSse(request, "test-id", writer)
             coroutineContext.cancelChildren()
         }
 
