@@ -18,6 +18,7 @@ package com.exactpro.th2.rptdataprovider.metrics
 
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.github.oshai.kotlinlogging.Level
+import io.prometheus.client.Gauge
 import io.prometheus.client.Summary
 
 private const val METHOD_LABEL = "method"
@@ -25,12 +26,19 @@ private const val ID_LABEL = "id"
 
 private val K_LOGGER = KotlinLogging.logger {}
 
-private val METHOD_SUMMARY = Summary.build(
-    "th2_rpt_method",
+
+private val ACTIVE_METHOD_GAUGE = Gauge.build(
+    "th2_rpt_active_method",
+    "This metric provide information about active method"
+).labelNames(METHOD_LABEL, ID_LABEL).register()
+
+private val METHOD_EXECUTION_SUMMARY = Summary.build(
+    "th2_rpt_method_execution",
     "This metric provide information about method duration"
 ).labelNames(METHOD_LABEL, ID_LABEL).register()
 
-fun getMethodSummary(method: String, id: String): Summary.Child = METHOD_SUMMARY.labels(method, id)
+fun getMethodExecution(method: String, id: String): Summary.Child = METHOD_EXECUTION_SUMMARY.labels(method, id)
+fun getActiveMethod(method: String, id: String): Gauge.Child = ACTIVE_METHOD_GAUGE.labels(method, id)
 
 fun handlingLog(message: String, level: Level) = K_LOGGER.at(level) { this.message = "handling $message" }
 fun handledLog(timeSec: Double, message: String, level: Level) = K_LOGGER.at(level) { this.message = "handled $message - time=${timeSec}sec" }
@@ -42,13 +50,16 @@ inline fun <T> measure(
     level: Level = Level.DEBUG,
     block: () -> T
 ): T {
-    val timer: Summary.Timer = getMethodSummary(method, id).startTimer()
+    val active: Gauge.Child = getActiveMethod(method, id)
+    val timer: Summary.Timer = getMethodExecution(method, id).startTimer()
     handlingLog(description, level)
     try {
+        active.inc()
         return block.invoke()
     } finally {
         timer.observeDuration().also {
             handledLog(it, description, level)
         }
+        active.dec()
     }
 }
