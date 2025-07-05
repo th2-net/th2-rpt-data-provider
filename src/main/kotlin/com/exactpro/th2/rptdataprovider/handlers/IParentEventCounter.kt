@@ -19,11 +19,10 @@ package com.exactpro.th2.rptdataprovider.handlers
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import io.prometheus.client.Gauge
 import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap
-import java.lang.ref.Cleaner
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 
-internal interface IParentEventCounter {
+internal interface IParentEventCounter : AutoCloseable {
     /**
      * This method use parent event id or event id to limit number of child events.
      * WARNING: event id isn't grantee event unique then this method can't be used for strict limitation.
@@ -33,18 +32,13 @@ internal interface IParentEventCounter {
 
     private object NoLimitedParentEventCounter : IParentEventCounter {
         override fun checkCountAndGet(event: BaseEventEntity): Boolean = true
+        override fun close() { }
     }
 
     private class LimitedParentEventCounter(
         private val limitForParent: Long
     ) : IParentEventCounter {
         private val parentEventCounter = ConcurrentHashMap<String, Long>()
-
-        init {
-            CLEANER.register(this) {
-                PARENT_EVENT_COUNTER.dec(parentEventCounter.size.toDouble())
-            }
-        }
 
         override fun checkCountAndGet(event: BaseEventEntity): Boolean {
             if (event.parentEventId == null) {
@@ -70,6 +64,11 @@ internal interface IParentEventCounter {
 
             return value != MAX_EVENT_COUNTER
         }
+
+        override fun close() {
+            PARENT_EVENT_COUNTER.dec(parentEventCounter.size.toDouble())
+            parentEventCounter.clear()
+        }
     }
 
     private class HashLimitedParentEventCounter(
@@ -77,12 +76,6 @@ internal interface IParentEventCounter {
     ) : IParentEventCounter {
         private val parentEventCounter = Long2LongOpenHashMap().apply {
             defaultReturnValue(DEFAULT_RETURN_VALUE)
-        }
-
-        init {
-            CLEANER.register(this) {
-                PARENT_EVENT_COUNTER.dec(parentEventCounter.size.toDouble())
-            }
         }
 
         override fun checkCountAndGet(event: BaseEventEntity): Boolean {
@@ -110,6 +103,11 @@ internal interface IParentEventCounter {
             return value != MAX_EVENT_COUNTER
         }
 
+        override fun close() {
+            PARENT_EVENT_COUNTER.dec(parentEventCounter.size.toDouble())
+            parentEventCounter.clear()
+        }
+
         companion object {
             private const val DEFAULT_RETURN_VALUE = -1L
         }
@@ -119,12 +117,6 @@ internal interface IParentEventCounter {
         private val limitForParent: Long
     ) : IParentEventCounter {
         private val parentEventCounter = ConcurrentHashMap<String, Long>()
-
-        init {
-            CLEANER.register(this) {
-                PARENT_EVENT_COUNTER.dec(parentEventCounter.size.toDouble())
-            }
-        }
 
         override fun checkCountAndGet(event: BaseEventEntity): Boolean {
             if (event.parentEventId == null) return true // exclude root events
@@ -150,18 +142,17 @@ internal interface IParentEventCounter {
                 }
             } != MAX_EVENT_COUNTER
         }
+
+        override fun close() {
+            PARENT_EVENT_COUNTER.dec(parentEventCounter.size.toDouble())
+            parentEventCounter.clear()
+        }
     }
 
     private class OptimizedHashLimitedParentEventCounter(
         private val limitForParent: Long
     ) : IParentEventCounter {
         private val parentEventCounter = ConcurrentHashMap<Long, Long>()
-
-        init {
-            CLEANER.register(this) {
-                PARENT_EVENT_COUNTER.dec(parentEventCounter.size.toDouble())
-            }
-        }
 
         override fun checkCountAndGet(event: BaseEventEntity): Boolean {
             if (event.parentEventId == null) return true // exclude root events
@@ -187,6 +178,11 @@ internal interface IParentEventCounter {
                 }
             } != MAX_EVENT_COUNTER
         }
+
+        override fun close() {
+            PARENT_EVENT_COUNTER.dec(parentEventCounter.size.toDouble())
+            parentEventCounter.clear()
+        }
     }
 
     companion object {
@@ -197,8 +193,6 @@ internal interface IParentEventCounter {
         private val PARENT_EVENT_COUNTER = Gauge
             .build("th2_rpt_parent_event_count", "Number of parent events are cached in memory")
             .register()
-
-        private val CLEANER = Cleaner.create()
 
         private const val MAX_EVENT_COUNTER = Long.MAX_VALUE
 

@@ -349,6 +349,7 @@ class SearchEventsHandler(context: Context<*, *, *, *>) {
                             keepAlive(writer, lastScannedObject, lastEventId)
                         }
                     }.onCompletion {
+                        parentEventCounter.close()
                         currentCoroutineContext().cancelChildren()
                         it?.let { throwable -> throw throwable }
                     }.let { eventFlow ->
