@@ -172,31 +172,38 @@ class SearchEventsHandler(context: Context<*, *, *, *>) {
     @ExperimentalCoroutinesApi
     private suspend fun getEventFlow(
         request: SseEventSearchRequest,
+        requestId: String,
         timestampFrom: Instant,
         timestampTo: Instant,
         parentContext: CoroutineContext
     ): Flow<Deferred<List<BaseEventEntity>>> {
         return coroutineScope {
-            logger.info { "Requesting event from $timestampFrom to $timestampTo" }
-            flow {
-                val eventsCollection =
-                    getEventsSuspend(request, timestampFrom, timestampTo)
-                        .asSequence()
-                        .chunked(eventSearchChunkSize)
-                // Cradle suppose to return events in the right order depending on the order in the request
-                // We don't need to sort entities between each other.
-                // However, there still might be an issue with batches if it contains events for a long period of time
-                // For now just keep it in mind when you are investigating the reason
-                // some events returned in unexpected order
-                for (event in eventsCollection)
-                    emit(event)
-            }
-                .map { wrappers ->
-                    async(parentContext) {
-                        prepareEvents(wrappers, request, timestampFrom, timestampTo)
-                            .also { parentContext.ensureActive() }
+            measure("getEventFlow", requestId) {
+                logger.info { "Requesting event from $timestampFrom to $timestampTo" }
+                flow {
+                    measure("getEventFlow.collect-chunks", requestId) {
+                        val eventsCollection =
+                            getEventsSuspend(request, timestampFrom, timestampTo)
+                                .asSequence()
+                                .chunked(eventSearchChunkSize)
+                        // Cradle suppose to return events in the right order depending on the order in the request
+                        // We don't need to sort entities between each other.
+                        // However, there still might be an issue with batches if it contains events for a long period of time
+                        // For now just keep it in mind when you are investigating the reason
+                        // some events returned in unexpected order
+                        for (event in eventsCollection)
+                            emit(event)
                     }
-                }.buffer(BUFFERED)
+                }
+                    .map { wrappers ->
+                        measure("getEventFlow.prepare", requestId) {
+                            async(parentContext) {
+                                prepareEvents(wrappers, request, timestampFrom, timestampTo)
+                                    .also { parentContext.ensureActive() }
+                            }
+                        }
+                    }.buffer(BUFFERED)
+            }
         }
     }
 
@@ -300,13 +307,14 @@ class SearchEventsHandler(context: Context<*, *, *, *>) {
 
                 flow {
                     for ((start, end) in timeIntervals) {
+                        measure("searchEventsSse.interval-flow", requestId) {
+                            lastScannedObject.update(start)
 
-                        lastScannedObject.update(start)
+                            getEventFlow(
+                                request, requestId,start, end, currentCoroutineContext()
+                            ).collect { emit(it) }
 
-                        getEventFlow(
-                            request, start, end, currentCoroutineContext()
-                        ).collect { emit(it) }
-
+                        }
                         if (request.parentEvent?.batchId != null) break
                     }
                 }
@@ -342,15 +350,17 @@ class SearchEventsHandler(context: Context<*, *, *, *>) {
                         currentCoroutineContext().cancelChildren()
                         it?.let { throwable -> throw throwable }
                     }.let { eventFlow ->
-                        if (request.metadataOnly) {
-                            eventFlow.collect {
-                                coroutineContext.ensureActive()
-                                writer.write(it.convertToEventTreeNode(), lastEventId)
-                            }
-                        } else {
-                            eventFlow.collect {
-                                coroutineContext.ensureActive()
-                                writer.write(it.convertToEvent(), lastEventId)
+                        measure("searchEventsSse.write", requestId) {
+                            if (request.metadataOnly) {
+                                eventFlow.collect {
+                                    coroutineContext.ensureActive()
+                                    writer.write(it.convertToEventTreeNode(), lastEventId)
+                                }
+                            } else {
+                                eventFlow.collect {
+                                    coroutineContext.ensureActive()
+                                    writer.write(it.convertToEvent(), lastEventId)
+                                }
                             }
                         }
                     }
