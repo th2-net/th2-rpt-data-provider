@@ -37,11 +37,13 @@ import com.exactpro.th2.rptdataprovider.minInstant
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.tryToGetTestEvents
+import com.google.common.util.concurrent.ThreadFactoryBuilder
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.prometheus.client.Counter
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.channels.Channel.Factory.BUFFERED
@@ -63,9 +65,11 @@ import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneOffset
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.coroutineContext
@@ -85,6 +89,10 @@ class SearchEventsHandler(context: Context<*, *, *, *>) {
     private val eventSearchChunkSize: Int = context.configuration.eventSearchChunkSize.value.toInt()
     private val keepAliveTimeout: Long = context.configuration.keepAliveTimeout.value.toLong()
     private val limitForParentMode: String = context.configuration.limitForParentMode.value
+    private val responseDispatcher = Executors.newFixedThreadPool(
+        context.configuration.responseDispatcherPoolSize.value.toInt(),
+        ThreadFactoryBuilder().setNameFormat("rpt-response-%d").build()
+    ).asCoroutineDispatcher()
 
     private suspend fun keepAlive(
         writer: StreamWriter<*, *>,
@@ -181,26 +189,22 @@ class SearchEventsHandler(context: Context<*, *, *, *>) {
             measure("getEventFlow", requestId) {
                 logger.info { "Requesting event from $timestampFrom to $timestampTo" }
                 flow {
-                    measure("getEventFlow.collect-chunks", requestId) {
-                        val eventsCollection =
-                            getEventsSuspend(request, timestampFrom, timestampTo)
-                                .asSequence()
-                                .chunked(eventSearchChunkSize)
-                        // Cradle suppose to return events in the right order depending on the order in the request
-                        // We don't need to sort entities between each other.
-                        // However, there still might be an issue with batches if it contains events for a long period of time
-                        // For now just keep it in mind when you are investigating the reason
-                        // some events returned in unexpected order
-                        for (event in eventsCollection)
-                            emit(event)
-                    }
+                    val eventsCollection =
+                        getEventsSuspend(request, timestampFrom, timestampTo)
+                            .asSequence()
+                            .chunked(eventSearchChunkSize)
+                    // Cradle suppose to return events in the right order depending on the order in the request
+                    // We don't need to sort entities between each other.
+                    // However, there still might be an issue with batches if it contains events for a long period of time
+                    // For now just keep it in mind when you are investigating the reason
+                    // some events returned in unexpected order
+                    for (event in eventsCollection)
+                        emit(event)
                 }
                     .map { wrappers ->
-                        measure("getEventFlow.prepare", requestId) {
-                            async(parentContext) {
-                                prepareEvents(wrappers, request, timestampFrom, timestampTo)
-                                    .also { parentContext.ensureActive() }
-                            }
+                        async(parentContext) {
+                            prepareEvents(wrappers, request, timestampFrom, timestampTo)
+                                .also { parentContext.ensureActive() }
                         }
                     }.buffer(BUFFERED)
             }
@@ -307,14 +311,12 @@ class SearchEventsHandler(context: Context<*, *, *, *>) {
 
                 flow {
                     for ((start, end) in timeIntervals) {
-                        measure("searchEventsSse.interval-flow", requestId) {
-                            lastScannedObject.update(start)
+                        lastScannedObject.update(start)
 
-                            getEventFlow(
-                                request, requestId,start, end, currentCoroutineContext()
-                            ).collect { emit(it) }
+                        getEventFlow(
+                            request, requestId,start, end, currentCoroutineContext()
+                        ).collect { emit(it) }
 
-                        }
                         if (request.parentEvent?.batchId != null) break
                     }
                 }
@@ -350,16 +352,18 @@ class SearchEventsHandler(context: Context<*, *, *, *>) {
                         currentCoroutineContext().cancelChildren()
                         it?.let { throwable -> throw throwable }
                     }.let { eventFlow ->
-                        measure("searchEventsSse.write", requestId) {
-                            if (request.metadataOnly) {
-                                eventFlow.collect {
-                                    coroutineContext.ensureActive()
-                                    writer.write(it.convertToEventTreeNode(), lastEventId)
-                                }
-                            } else {
-                                eventFlow.collect {
-                                    coroutineContext.ensureActive()
-                                    writer.write(it.convertToEvent(), lastEventId)
+                        withContext(responseDispatcher) {
+                            measure("searchEventsSse.write", requestId) {
+                                if (request.metadataOnly) {
+                                    eventFlow.collect {
+                                        coroutineContext.ensureActive()
+                                        writer.write(it.convertToEventTreeNode(), lastEventId)
+                                    }
+                                } else {
+                                    eventFlow.collect {
+                                        coroutineContext.ensureActive()
+                                        writer.write(it.convertToEvent(), lastEventId)
+                                    }
                                 }
                             }
                         }

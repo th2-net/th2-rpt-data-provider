@@ -41,6 +41,7 @@ import com.exactpro.th2.rptdataprovider.entities.configuration.Configuration
 import com.exactpro.th2.rptdataprovider.logMetrics
 import com.exactpro.th2.rptdataprovider.logTime
 import com.exactpro.th2.rptdataprovider.toGroupedMessageFilter
+import com.google.common.util.concurrent.ThreadFactoryBuilder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.channels.Channel
@@ -125,7 +126,10 @@ class CradleService(configuration: Configuration, cradleManager: CradleManager) 
 
     private val storage: CradleStorage = cradleManager.storage
 
-    private val cradleDispatcher = Executors.newFixedThreadPool(cradleDispatcherPoolSize).asCoroutineDispatcher()
+    private val cradleDispatcher = Executors.newFixedThreadPool(
+        cradleDispatcherPoolSize,
+        ThreadFactoryBuilder().setNameFormat("rpt-cradle-%d").build()
+    ).asCoroutineDispatcher()
 
     suspend fun getGroupedMessages(
         scope: CoroutineScope,

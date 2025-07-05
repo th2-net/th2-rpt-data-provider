@@ -64,6 +64,8 @@ class CustomConfigurationClass {
     val eventSearchTimeOffset = 5_000
 
     val cradleDispatcherPoolSize: Long = 1
+    val requestDispatcherPoolSize: Long = 1
+    val responseDispatcherPoolSize: Long = 1
 
     val sendEmptyDelay = 100
 
@@ -202,6 +204,12 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
 
     val cradleDispatcherPoolSize: Variable =
         Variable("cradleDispatcherPoolSize", customConfiguration.cradleDispatcherPoolSize.toString(), "1")
+
+    val requestDispatcherPoolSize: Variable =
+        Variable("requestDispatcherPoolSize", customConfiguration.requestDispatcherPoolSize.toString(), "1")
+
+    val responseDispatcherPoolSize: Variable =
+        Variable("responseDispatcherPoolSize", customConfiguration.responseDispatcherPoolSize.toString(), "1")
 
     val sendEmptyDelay: Variable =
         Variable("sendEmptyDelay", customConfiguration.sendEmptyDelay.toString(), "100")

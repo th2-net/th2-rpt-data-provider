@@ -37,6 +37,7 @@ import com.exactpro.th2.rptdataprovider.metrics.measure
 import com.exactpro.th2.rptdataprovider.metrics.withRequestId
 import com.exactpro.th2.rptdataprovider.server.handler.AbortableRequestHandler
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
+import com.google.common.util.concurrent.ThreadFactoryBuilder
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.github.oshai.kotlinlogging.Level
 import io.ktor.http.CacheControl
@@ -70,6 +71,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.InternalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -78,6 +80,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.nio.channels.ClosedChannelException
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.coroutineContext
 
@@ -103,7 +106,6 @@ class HttpServer<B, G, RM, PM>(
         Counter.build("th2_sse_requests_processed", "SSE requests processed")
             .register()
 
-
     companion object {
         private val K_LOGGER = KotlinLogging.logger {}
 
@@ -115,6 +117,10 @@ class HttpServer<B, G, RM, PM>(
     private val jacksonMapper = applicationContext.jacksonMapper
     private val checkRequestAliveDelay = applicationContext.configuration.checkRequestsAliveDelay.value.toLong()
     private val configuration = applicationContext.configuration
+    private val requestDispatcher = Executors.newFixedThreadPool(
+        applicationContext.configuration.requestDispatcherPoolSize.value.toInt(),
+        ThreadFactoryBuilder().setNameFormat("rpt-request-%d").build()
+    ).asCoroutineDispatcher()
 
     private class Timeouts {
         class Config(var requestTimeout: Long = 5000L, var excludes: List<String> = listOf("sse"))
@@ -194,35 +200,37 @@ class HttpServer<B, G, RM, PM>(
         calledFun: suspend () -> Any
     ) {
         coroutineScope {
-            try {
-                if (useSse) sseRequestGet.inc() else restRequestGet.inc()
+            withContext(requestDispatcher) {
                 try {
-                    if (useSse) {
-                        val function = calledFun.invoke()
-                        @Suppress("UNCHECKED_CAST")
-                        handleSseRequest(call, requestId, function as suspend (StreamWriter<RM, PM>) -> Unit)
-                    } else {
-                        handleRestApiRequest(call, requestId, cacheControl, probe, calledFun)
+                    if (useSse) sseRequestGet.inc() else restRequestGet.inc()
+                    try {
+                        if (useSse) {
+                            val function = calledFun.invoke()
+                            @Suppress("UNCHECKED_CAST")
+                            handleSseRequest(call, requestId, function as suspend (StreamWriter<RM, PM>) -> Unit)
+                        } else {
+                            handleRestApiRequest(call, requestId, cacheControl, probe, calledFun)
+                        }
+                    } catch (e: Exception) {
+                        throw e.rootCause ?: e
+                    } finally {
+                        if (useSse) sseRequestProcessed.inc() else restRequestProcessed.inc()
                     }
+                } catch (e: CancellationException) {
+                    K_LOGGER.debug(e) { "request $requestDescription processing was cancelled with CancellationException" }
+                } catch (e: InvalidRequestException) {
+                    K_LOGGER.error(e) { "unable to handle request $requestDescription - invalid request" }
+                } catch (e: CradleObjectNotFoundException) {
+                    K_LOGGER.error(e) { "unable to handle request $requestDescription - event or message is missing" }
+                } catch (e: CodecResponseException) {
+                    K_LOGGER.error(e) { "unable to handle request $requestDescription - codec was unable to decode a message" }
+                } catch (e: ClosedChannelException) {
+                    K_LOGGER.debug { "request $requestDescription has been cancelled by a client" }
+                } catch (e: CradleIdException) {
+                    K_LOGGER.error(e) { "unable to handle request $requestDescription - invalid id format" }
                 } catch (e: Exception) {
-                    throw e.rootCause ?: e
-                } finally {
-                    if (useSse) sseRequestProcessed.inc() else restRequestProcessed.inc()
+                    K_LOGGER.error(e) { "unable to handle request $requestDescription - unexpected exception" }
                 }
-            } catch (e: CancellationException) {
-                K_LOGGER.debug(e) { "request $requestDescription processing was cancelled with CancellationException" }
-            } catch (e: InvalidRequestException) {
-                K_LOGGER.error(e) { "unable to handle request $requestDescription - invalid request" }
-            } catch (e: CradleObjectNotFoundException) {
-                K_LOGGER.error(e) { "unable to handle request $requestDescription - event or message is missing" }
-            } catch (e: CodecResponseException) {
-                K_LOGGER.error(e) { "unable to handle request $requestDescription - codec was unable to decode a message" }
-            } catch (e: ClosedChannelException) {
-                K_LOGGER.debug { "request $requestDescription has been cancelled by a client" }
-            } catch (e: CradleIdException) {
-                K_LOGGER.error(e) { "unable to handle request $requestDescription - invalid id format" }
-            } catch (e: Exception) {
-                K_LOGGER.error(e) { "unable to handle request $requestDescription - unexpected exception" }
             }
         }
     }
