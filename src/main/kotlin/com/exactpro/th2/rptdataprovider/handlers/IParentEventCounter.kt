@@ -18,6 +18,7 @@ package com.exactpro.th2.rptdataprovider.handlers
 
 import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import io.prometheus.client.Gauge
+import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap
 import java.lang.ref.Cleaner
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
@@ -74,7 +75,9 @@ internal interface IParentEventCounter {
     private class HashLimitedParentEventCounter(
         private val limitForParent: Long
     ) : IParentEventCounter {
-        private val parentEventCounter = ConcurrentHashMap<Long, Long>()
+        private val parentEventCounter = Long2LongOpenHashMap().apply {
+            defaultReturnValue(DEFAULT_RETURN_VALUE)
+        }
 
         init {
             CLEANER.register(this) {
@@ -94,7 +97,7 @@ internal interface IParentEventCounter {
                 } else {
                     val next = value + 1
                     if (value == MAX_EVENT_COUNTER || next > limitForParent) {
-                        if (parentEventCounter.putIfAbsent(event.id.eventId.id.toLongHash(), MAX_EVENT_COUNTER) == null) {
+                        if (parentEventCounter.putIfAbsent(event.id.eventId.id.toLongHash(), MAX_EVENT_COUNTER) == DEFAULT_RETURN_VALUE) {
                             PARENT_EVENT_COUNTER.inc()
                         }
                         MAX_EVENT_COUNTER
@@ -105,6 +108,10 @@ internal interface IParentEventCounter {
             }
 
             return value != MAX_EVENT_COUNTER
+        }
+
+        companion object {
+            private const val DEFAULT_RETURN_VALUE = -1L
         }
     }
 

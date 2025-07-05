@@ -53,6 +53,9 @@ dependencies {
     implementation(platform('io.ktor:ktor-bom:3.1.2'))
     implementation 'io.ktor:ktor-server-netty'
     implementation 'io.ktor:ktor-server'
+    implementation('it.unimi.dsi:fastutil:8.5.16') {
+        because('limit parent event implementation')
+    }
 
     implementation('org.ehcache:ehcache:3.10.8') {
         exclude group: 'org.glassfish.jaxb', module: 'jaxb-runtime'
