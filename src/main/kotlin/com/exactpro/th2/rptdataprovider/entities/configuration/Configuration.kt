@@ -41,7 +41,7 @@ class CustomConfigurationClass {
     val sseEventSearchStep: Long = 200
 
     val keepAliveTimeout: Long = 5_000
-    val limitForParentMode: String = "none"
+    val limitForParentMode: String = "default"
 
     val messageExtractorOutputBatchBuffer: Int = 1
     val messageConverterOutputBatchBuffer: Int = 1

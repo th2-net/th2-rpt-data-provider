@@ -34,7 +34,6 @@ import com.exactpro.th2.dataprovider.grpc.MessageSearchRequest
 import com.exactpro.th2.dataprovider.grpc.StreamResponse
 import com.exactpro.th2.dataprovider.grpc.StringList
 import com.exactpro.th2.rptdataprovider.Context
-import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.CodecResponseException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.InvalidRequestException
@@ -46,11 +45,13 @@ import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.grpcDirectionToCradle
 import com.exactpro.th2.rptdataprovider.handlers.events.SearchEventsCalledFun
 import com.exactpro.th2.rptdataprovider.handlers.messages.SearchMessagesCalledFun
-import com.exactpro.th2.rptdataprovider.logMetrics
+import com.exactpro.th2.rptdataprovider.metrics.measure
+import com.exactpro.th2.rptdataprovider.metrics.withRequestId
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
 import com.google.protobuf.MessageOrBuilder
 import com.google.protobuf.TextFormat
 import io.github.oshai.kotlinlogging.KotlinLogging
+import io.github.oshai.kotlinlogging.Level
 import io.grpc.Status
 import io.grpc.stub.StreamObserver
 import io.ktor.utils.io.InternalAPI
@@ -71,7 +72,6 @@ import org.apache.commons.lang3.exception.ExceptionUtils
 import java.time.Instant
 import java.util.concurrent.Executors
 import kotlin.coroutines.coroutineContext
-import kotlin.system.measureTimeMillis
 
 //@EngineAPI
 @InternalAPI
@@ -82,18 +82,6 @@ class RptDataProviderGrpcHandler<B, G, RM, PM>(
 ) : DataProviderGrpc.DataProviderImplBase() {
 
     companion object {
-
-        private val grpcStreamRequestsProcessedInParallelQuantity: Metrics =
-            Metrics(
-                "th2_grpc_stream_requests_processed_in_parallel_quantity",
-                "GRPC stream requests processed in parallel"
-            )
-
-        private val grpcSingleRequestsProcessedInParallelQuantity: Metrics =
-            Metrics(
-                "th2_grpc_single_requests_processed_in_parallel_quantity",
-                "GRPC single requests processed in parallel"
-            )
 
         private val singleRequestGet: Counter =
             Counter.build("th2_grpc_single_requests_get", "GRPC single requests get")
@@ -111,7 +99,11 @@ class RptDataProviderGrpcHandler<B, G, RM, PM>(
             Counter.build("th2_grpc_stream_requests_processed", "GRPC stream requests processed")
                 .register()
 
-        private val logger = KotlinLogging.logger {}
+        private val K_LOGGER = KotlinLogging.logger {}
+
+        private fun makeRequestDescription(name: String, id: String, request: MessageOrBuilder): String {
+            return "'$name ($id)' request with parameters '${TextFormat.shortDebugString(request)}'"
+        }
 
     }
 
@@ -146,71 +138,62 @@ class RptDataProviderGrpcHandler<B, G, RM, PM>(
         )
     }
 
-    private fun errorLogging(e: Exception, requestName: String, stringParameters: String, type: String) {
-        logger.error(e) { "unable to handle request '$requestName' with parameters '$stringParameters' - $type" }
+    private fun errorLogging(e: Exception, requestDescription: String, type: String) {
+        K_LOGGER.error(e) { "unable to handle request $requestDescription - $type" }
     }
 
     private fun <T> handleRequest(
         responseObserver: StreamObserver<T>,
-        requestName: String,
         useStream: Boolean,
-        request: MessageOrBuilder?,
+        requestDescription: String,
         calledFun: suspend () -> Any
     ) {
-        val stringParameters = lazy { request?.let { TextFormat.shortDebugString(request) } ?: "" }
         val context = io.grpc.Context.current()
 
         val handler = CoroutineExceptionHandler { _, exception ->
-            logger.error(exception) { "coroutine context exception from the handleRequest method with $requestName" }
+            K_LOGGER.error(exception) { "coroutine context exception from the handleRequest $requestDescription" }
         }
 
         CoroutineScope(grpcThreadPool + handler).launch {
-            logMetrics(if (useStream) grpcStreamRequestsProcessedInParallelQuantity else grpcSingleRequestsProcessedInParallelQuantity) {
-                measureTimeMillis {
-                    logger.debug { "handling '$requestName' request with parameters '${stringParameters.value}'" }
-                    try {
-                        if (useStream) streamRequestGet.inc() else singleRequestGet.inc()
-                        try {
-                            if (useStream) {
-                                @Suppress("UNCHECKED_CAST")
-                                handleSseRequest(
-                                    responseObserver as StreamObserver<StreamResponse>,
-                                    context,
-                                    calledFun.invoke() as suspend (StreamWriter<RM, PM>) -> Unit
-                                )
-                            } else {
-                                handleRestApiRequest(responseObserver, context, calledFun as suspend () -> T)
-                            }
-                            responseObserver.onCompleted()
-                        } catch (e: Exception) {
-                            throw ExceptionUtils.getRootCause(e) ?: e
-                        } finally {
-                            if (useStream) streamRequestProcessed.inc() else singleRequestProcessed.inc()
-                        }
-                    } catch (e: CancellationException) {
-                        logger.debug(e) { "request processing was cancelled with CancellationException" }
-                    } catch (e: InvalidRequestException) {
-                        errorLogging(e, requestName, stringParameters.value, "invalid request")
-                        sendErrorCode(responseObserver, e, Status.INVALID_ARGUMENT)
-                    } catch (e: CradleObjectNotFoundException) {
-                        errorLogging(e, requestName, stringParameters.value, "missing cradle data")
-                        sendErrorCode(responseObserver, e, Status.NOT_FOUND)
-                    } catch (e: ChannelClosedException) {
-                        errorLogging(e, requestName, stringParameters.value, "channel closed")
-                        sendErrorCode(responseObserver, e, Status.DEADLINE_EXCEEDED)
-                    } catch (e: CodecResponseException) {
-                        errorLogging(e, requestName, stringParameters.value, "codec parses messages incorrectly")
-                        sendErrorCode(responseObserver, e, Status.INTERNAL)
-                    } catch (e: CradleIdException) {
-                        errorLogging(e, requestName, stringParameters.value, "unexpected cradle id exception")
-                        sendErrorCode(responseObserver, e, Status.INTERNAL)
-                    } catch (e: Exception) {
-                        errorLogging(e, requestName, stringParameters.value, "unexpected exception")
-                        sendErrorCode(responseObserver, e, Status.INTERNAL)
+            try {
+                if (useStream) streamRequestGet.inc() else singleRequestGet.inc()
+                try {
+                    if (useStream) {
+                        @Suppress("UNCHECKED_CAST")
+                        handleSseRequest(
+                            responseObserver as StreamObserver<StreamResponse>,
+                            context,
+                            calledFun.invoke() as suspend (StreamWriter<RM, PM>) -> Unit
+                        )
+                    } else {
+                        handleRestApiRequest(responseObserver, context, calledFun as suspend () -> T)
                     }
-                }.let {
-                    logger.debug { "request '$requestName' with parameters '$stringParameters' handled - time=${it}ms" }
+                    responseObserver.onCompleted()
+                } catch (e: Exception) {
+                    throw ExceptionUtils.getRootCause(e) ?: e
+                } finally {
+                    if (useStream) streamRequestProcessed.inc() else singleRequestProcessed.inc()
                 }
+            } catch (e: CancellationException) {
+                K_LOGGER.debug(e) { "request processing was cancelled with CancellationException" }
+            } catch (e: InvalidRequestException) {
+                errorLogging(e, requestDescription, "invalid request")
+                sendErrorCode(responseObserver, e, Status.INVALID_ARGUMENT)
+            } catch (e: CradleObjectNotFoundException) {
+                errorLogging(e, requestDescription, "missing cradle data")
+                sendErrorCode(responseObserver, e, Status.NOT_FOUND)
+            } catch (e: ChannelClosedException) {
+                errorLogging(e, requestDescription, "channel closed")
+                sendErrorCode(responseObserver, e, Status.DEADLINE_EXCEEDED)
+            } catch (e: CodecResponseException) {
+                errorLogging(e, requestDescription, "codec parses messages incorrectly")
+                sendErrorCode(responseObserver, e, Status.INTERNAL)
+            } catch (e: CradleIdException) {
+                errorLogging(e, requestDescription, "unexpected cradle id exception")
+                sendErrorCode(responseObserver, e, Status.INTERNAL)
+            } catch (e: Exception) {
+                errorLogging(e, requestDescription, "unexpected exception")
+                sendErrorCode(responseObserver, e, Status.INTERNAL)
             }
         }
     }
@@ -259,7 +242,7 @@ class RptDataProviderGrpcHandler<B, G, RM, PM>(
                     grpcWriter.closeWriter()
                     job.cancel()
                 }.onFailure { e ->
-                    logger.error(e) { "unexpected exception while closing grpc writer" }
+                    K_LOGGER.error(e) { "unexpected exception while closing grpc writer" }
                 }
             }
         }
@@ -267,38 +250,56 @@ class RptDataProviderGrpcHandler<B, G, RM, PM>(
 
 
     override fun getEvent(request: EventID, responseObserver: StreamObserver<EventData>) {
-        handleRequest(responseObserver, "get event", useStream = false, request = request) {
-            eventCache.getOrPut(request.id)
-                .convertToEvent()
-                .convertToGrpcEventData()
+        withRequestId { requestId ->
+            val requestName = "get event"
+            val requestDescription = makeRequestDescription(requestName, requestId, request)
+            measure(requestName, requestId, requestDescription, Level.INFO) {
+                handleRequest(responseObserver, useStream = false, requestDescription = requestDescription) {
+                    eventCache.getOrPut(request.id)
+                        .convertToEvent()
+                        .convertToGrpcEventData()
+                }
+            }
         }
     }
 
     @InternalCoroutinesApi
     override fun getMessage(request: MessageID, responseObserver: StreamObserver<MessageData>) {
-        handleRequest(responseObserver, "get message", useStream = false, request = request) {
-            val messageIdWithoutSubsequence = request.toBuilder().clearSubsequence().build()
-            messageCache.getOrPut(
-                StoredMessageId(
-                    BookId(""),
-                    messageIdWithoutSubsequence.connectionId.sessionAlias,
-                    grpcDirectionToCradle(messageIdWithoutSubsequence.direction),
-                    Instant.now(),
-                    messageIdWithoutSubsequence.sequence
-                ).toString()
-            ).let {
-                converterFun(MessageWithMetadata(it, request))
+        withRequestId { requestId ->
+            val requestName = "get message"
+            val requestDescription = makeRequestDescription(requestName, requestId, request)
+            measure(requestName, requestId, requestDescription, Level.INFO) {
+                handleRequest(responseObserver, useStream = false, requestDescription = requestDescription) {
+                    val messageIdWithoutSubsequence = request.toBuilder().clearSubsequence().build()
+                    messageCache.getOrPut(
+                        StoredMessageId(
+                            BookId(""),
+                            messageIdWithoutSubsequence.connectionId.sessionAlias,
+                            grpcDirectionToCradle(messageIdWithoutSubsequence.direction),
+                            Instant.now(),
+                            messageIdWithoutSubsequence.sequence
+                        ).toString()
+                    ).let {
+                        converterFun(MessageWithMetadata(it, request))
+                    }
+                }
             }
         }
     }
 
 
     override fun getMessageStreams(request: com.google.protobuf.Empty, responseObserver: StreamObserver<StringList>) {
-        handleRequest(responseObserver, "get message streams", useStream = false, request = request) {
-            val bookId = ""
-            StringList.newBuilder()
-                .addAllListString(cradleService.getSessionAliases(BookId(bookId)))
-                .build()
+        withRequestId { requestId ->
+            val requestName = "get message streams"
+            val requestDescription = makeRequestDescription(requestName, requestId, request)
+            measure(requestName, requestId, requestDescription, Level.INFO) {
+                handleRequest(responseObserver, useStream = false, requestDescription = requestDescription) {
+                    val bookId = ""
+                    StringList.newBuilder()
+                        .addAllListString(cradleService.getSessionAliases(BookId(bookId)))
+                        .build()
+                }
+            }
         }
     }
 
@@ -306,19 +307,32 @@ class RptDataProviderGrpcHandler<B, G, RM, PM>(
     @InternalCoroutinesApi
     @FlowPreview
     override fun searchMessages(grpcRequest: MessageSearchRequest, responseObserver: StreamObserver<StreamResponse>) {
-        handleRequest(responseObserver, "grpc search message", useStream = true, request = grpcRequest) {
-            val filterPredicate = messageFiltersPredicateFactory.build(grpcRequest.filtersList)
-            val request: SseMessageSearchRequest<RM, PM> = SseMessageSearchRequest(grpcRequest, filterPredicate, BookId(""))
-            SearchMessagesCalledFun(searchMessagesHandler, request)::calledFun
+        withRequestId { requestId ->
+            val requestName = "grpc search message"
+            val requestDescription = makeRequestDescription(requestName, requestId, grpcRequest)
+            measure(requestName, requestId, requestDescription, Level.INFO) {
+                handleRequest(responseObserver, useStream = true, requestDescription = requestDescription) {
+                    val filterPredicate = messageFiltersPredicateFactory.build(grpcRequest.filtersList)
+                    val request: SseMessageSearchRequest<RM, PM> =
+                        SseMessageSearchRequest(grpcRequest, filterPredicate, BookId(""))
+                    SearchMessagesCalledFun(searchMessagesHandler, request)::calledFun
+                }
+            }
         }
     }
 
     @FlowPreview
     override fun searchEvents(grpcRequest: EventSearchRequest, responseObserver: StreamObserver<StreamResponse>) {
-        handleRequest(responseObserver, "grpc search events", useStream = true, request = grpcRequest) {
-            val filterPredicate = eventFiltersPredicateFactory.build(grpcRequest.filtersList)
-            val request = SseEventSearchRequest(grpcRequest, filterPredicate, BookId(""))
-            SearchEventsCalledFun<RM, PM>(searchEventsHandler, request, "0")::calledFun
+        withRequestId { requestId ->
+            val requestName = "grpc search events"
+            val requestDescription = makeRequestDescription(requestName, requestId, grpcRequest)
+            measure(requestName, requestId, requestDescription, Level.INFO) {
+                handleRequest(responseObserver, useStream = true, requestDescription = requestDescription) {
+                    val filterPredicate = eventFiltersPredicateFactory.build(grpcRequest.filtersList)
+                    val request = SseEventSearchRequest(grpcRequest, filterPredicate, BookId(""))
+                    SearchEventsCalledFun<RM, PM>(searchEventsHandler, request, requestId)::calledFun
+                }
+            }
         }
     }
 
@@ -326,13 +340,19 @@ class RptDataProviderGrpcHandler<B, G, RM, PM>(
         request: com.google.protobuf.Empty,
         responseObserver: StreamObserver<ListFilterName>
     ) {
-        handleRequest(responseObserver, "get message filters names", useStream = false, request = request) {
-            ListFilterName.newBuilder()
-                .addAllFilterNames(
-                    messageFiltersPredicateFactory.getFiltersNames().map {
-                        FilterName.newBuilder().setFilterName(it).build()
-                    }
-                ).build()
+        withRequestId { requestId ->
+            val requestName = "get message filters names"
+            val requestDescription = makeRequestDescription(requestName, requestId, request)
+            measure(requestName, requestId, requestDescription, Level.INFO) {
+                handleRequest(responseObserver, useStream = false, requestDescription = requestDescription) {
+                    ListFilterName.newBuilder()
+                        .addAllFilterNames(
+                            messageFiltersPredicateFactory.getFiltersNames().map {
+                                FilterName.newBuilder().setFilterName(it).build()
+                            }
+                        ).build()
+                }
+            }
         }
     }
 
@@ -341,37 +361,61 @@ class RptDataProviderGrpcHandler<B, G, RM, PM>(
         request: com.google.protobuf.Empty,
         responseObserver: StreamObserver<ListFilterName>
     ) {
-        handleRequest(responseObserver, "get event filters names", useStream = false, request = request) {
-            ListFilterName.newBuilder()
-                .addAllFilterNames(
-                    eventFiltersPredicateFactory.getFiltersNames().map {
-                        FilterName.newBuilder().setFilterName(it).build()
-                    }
-                ).build()
+        withRequestId { requestId ->
+            val requestName = "get event filters names"
+            val requestDescription = makeRequestDescription(requestName, requestId, request)
+            measure(requestName, requestId, requestDescription, Level.INFO) {
+                handleRequest(responseObserver, useStream = false, requestDescription = requestDescription) {
+                    ListFilterName.newBuilder()
+                        .addAllFilterNames(
+                            eventFiltersPredicateFactory.getFiltersNames().map {
+                                FilterName.newBuilder().setFilterName(it).build()
+                            }
+                        ).build()
+                }
+            }
         }
     }
 
 
     override fun getEventFilterInfo(request: FilterName, responseObserver: StreamObserver<FilterInfo>) {
-        handleRequest(responseObserver, "get event filter info", useStream = false, request = request) {
-            eventFiltersPredicateFactory.getFilterInfo(request.filterName).convertToProto()
+        withRequestId { requestId ->
+            val requestName = "get event filter info"
+            val requestDescription = makeRequestDescription(requestName, requestId, request)
+            measure(requestName, requestId, requestDescription, Level.INFO) {
+                handleRequest(responseObserver, useStream = false, requestDescription = requestDescription) {
+                    eventFiltersPredicateFactory.getFilterInfo(request.filterName).convertToProto()
+                }
+            }
         }
     }
 
 
     override fun getMessageFilterInfo(request: FilterName, responseObserver: StreamObserver<FilterInfo>) {
-        handleRequest(responseObserver, "get message filter info", useStream = false, request = request) {
-            messageFiltersPredicateFactory.getFilterInfo(request.filterName).convertToProto()
+        withRequestId { requestId ->
+            val requestName = "get message filter info"
+            val requestDescription = makeRequestDescription(requestName, requestId, request)
+            measure(requestName, requestId, requestDescription, Level.INFO) {
+                handleRequest(responseObserver, useStream = false, requestDescription = requestDescription) {
+                    messageFiltersPredicateFactory.getFilterInfo(request.filterName).convertToProto()
+                }
+            }
         }
     }
 
 
     override fun matchEvent(request: MatchRequest, responseObserver: StreamObserver<IsMatched>) {
-        handleRequest(responseObserver, "match event", useStream = false, request = request) {
-            val filterPredicate = eventFiltersPredicateFactory.build(request.filtersList)
-            IsMatched.newBuilder().setIsMatched(
-                filterPredicate.apply(eventCache.getOrPut(request.eventId.id))
-            ).build()
+        withRequestId { requestId ->
+            val requestName = "match event"
+            val requestDescription = makeRequestDescription(requestName, requestId, request)
+            measure(requestName, requestId, requestDescription, Level.INFO) {
+                handleRequest(responseObserver, useStream = false, requestDescription = requestDescription) {
+                    val filterPredicate = eventFiltersPredicateFactory.build(request.filtersList)
+                    IsMatched.newBuilder().setIsMatched(
+                        filterPredicate.apply(eventCache.getOrPut(request.eventId.id))
+                    ).build()
+                }
+            }
         }
     }
 

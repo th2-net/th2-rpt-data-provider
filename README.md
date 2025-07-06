@@ -1,4 +1,4 @@
-# Report data provider (5.16.0)
+# Report data provider (5.17.0)
 
 # Overview
 This component serves as a backend for rpt-viewer. It will connect to the cassandra database via cradle api and expose the data stored in there as REST resources.
@@ -210,10 +210,14 @@ spec:
     enableCaching: true // enables proxy and client cache (Cache-control response headers)
     notModifiedObjectsLifetime: 3600 // max-age in seconds
     rarelyModifiedObjects: 500 // max-age in seconds
-              
+
+    limitForParentMode: 'defailt' // mode of approach to store event id to children number. Supported: default, hash values
+
     sseEventSearchStep: 200 // step size in seconds when requesting events 
     keepAliveTimeout: 5000 // timeout in milliseconds. keep_alive sending frequency
     cradleDispatcherPoolSize: 1 // number of threads in the cradle dispatcher
+    requestDispatcherPoolSize: 1 // number of threads in the request dispatcher
+    responseDispatcherPoolSize: 1 // number of threads in the response dispatcher
       
     messageExtractorOutputBatchBuffer: 1       // buffer size of message search pipeline
     messageConverterOutputBatchBuffer: 1
@@ -295,6 +299,14 @@ spec:
 ```
 
 # Release notes
+
+## 5.17.0
+* Added `limitForParentMode` option (default value is `default`) to manage logic of holding mapping between event id and number of children during event sse query execution.<br>
+  Supported two values:
+  * `default` - event ids are stored as string. Usual event id has length 40 chas or longer.
+  * `hash` - event ids are stored as long hash calculated from origin value.
+* Added `requestDispatcherPoolSize` (default value is `1`) to manage number of threads processed event / message stream during a sse query.
+* Added `responseDispatcherPoolSize` (default value is `1`) to manage number of threads serialised event stream during a sse query.
 
 ## 5.16.0
 * Migrated to ktor: `3.1.2`

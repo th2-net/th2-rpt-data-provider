@@ -342,7 +342,7 @@ class SearchEventsHandler(context: Context<*, *, *, *>) {
                         lastScannedObject.update(event, scanCnt)
                         processedEventCount.inc()
                     }
-                    .filter { request.filterPredicate.apply(it) && parentEventCounter.checkCountAndGet(it) }
+                    .filter { request.filterPredicate.apply(it) && parentEventCounter.updateCountAndCheck(it) }
                     .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
                     .onStart {
                         launch {

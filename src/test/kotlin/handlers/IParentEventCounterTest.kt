@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 Exactpro (Exactpro Systems Limited)
+ * Copyright 2024-2025 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,7 +48,7 @@ class IParentEventCounterTest {
         assertAll(
             {
                 assertTrue(
-                    eventCounter.checkCountAndGet(createEventEntity(ProviderEventId(
+                    eventCounter.updateCountAndCheck(createEventEntity(ProviderEventId(
                         batchId = null,
                         eventId = StoredTestEventId(BOOK_ID, SCOPE, Instant.now(), NEXT_UUID),
                     ))),
@@ -57,7 +57,7 @@ class IParentEventCounterTest {
             },
             {
                 assertTrue(
-                    eventCounter.checkCountAndGet(createEventEntity(ProviderEventId(
+                    eventCounter.updateCountAndCheck(createEventEntity(ProviderEventId(
                         batchId = null,
                         eventId = StoredTestEventId(BOOK_ID, SCOPE, Instant.now(), rootEventId),
                     ))),
@@ -66,7 +66,7 @@ class IParentEventCounterTest {
             },
             {
                 assertTrue(
-                    eventCounter.checkCountAndGet(
+                    eventCounter.updateCountAndCheck(
                         createEventEntity(
                             ProviderEventId(
                                 batchId = null,
@@ -80,7 +80,7 @@ class IParentEventCounterTest {
             },
             {
                 assertTrue(
-                    eventCounter.checkCountAndGet(createEventEntity(
+                    eventCounter.updateCountAndCheck(createEventEntity(
                         ProviderEventId(
                             batchId = StoredTestEventId(BOOK_ID, SCOPE, Instant.now(), NEXT_UUID),
                             eventId = StoredTestEventId(BOOK_ID, SCOPE, Instant.now(), NEXT_UUID),
@@ -104,7 +104,7 @@ class IParentEventCounterTest {
             assertAll(
                 {
                     assertTrue(
-                        eventCounter.checkCountAndGet(createEventEntity(ProviderEventId(
+                        eventCounter.updateCountAndCheck(createEventEntity(ProviderEventId(
                             batchId = null,
                             eventId = StoredTestEventId(BOOK_ID, SCOPE, Instant.now(), NEXT_UUID),
                         ))),
@@ -113,7 +113,7 @@ class IParentEventCounterTest {
                 },
                 {
                     assertTrue(
-                        eventCounter.checkCountAndGet(createEventEntity(ProviderEventId(
+                        eventCounter.updateCountAndCheck(createEventEntity(ProviderEventId(
                             batchId = null,
                             eventId = StoredTestEventId(BOOK_ID, SCOPE, Instant.now(), rootEventId),
                         ))),
@@ -136,7 +136,7 @@ class IParentEventCounterTest {
 
         repeat(limitForParent) {
             assertTrue(
-                eventCounter.checkCountAndGet(
+                eventCounter.updateCountAndCheck(
                     createEventEntity(
                         ProviderEventId(
                             batchId = null,
@@ -153,7 +153,7 @@ class IParentEventCounterTest {
         assertAll(
             {
                 assertFalse(
-                    eventCounter.checkCountAndGet(
+                    eventCounter.updateCountAndCheck(
                         createEventEntity(
                             ProviderEventId(
                                 batchId = null,
@@ -167,7 +167,7 @@ class IParentEventCounterTest {
             },
             {
                 assertFalse(
-                    eventCounter.checkCountAndGet(
+                    eventCounter.updateCountAndCheck(
                         createEventEntity(
                             ProviderEventId(
                                 batchId = null,
@@ -198,7 +198,7 @@ class IParentEventCounterTest {
 
         repeat(limitForParent) {
             assertTrue(
-                eventCounter.checkCountAndGet(
+                eventCounter.updateCountAndCheck(
                     createEventEntity(
                         ProviderEventId(
                             batchId = batchId,
@@ -215,7 +215,7 @@ class IParentEventCounterTest {
         assertAll(
             {
                 assertFalse(
-                    eventCounter.checkCountAndGet(
+                    eventCounter.updateCountAndCheck(
                         createEventEntity(
                             ProviderEventId(
                                 batchId = batchId,
@@ -229,7 +229,7 @@ class IParentEventCounterTest {
             },
             {
                 assertFalse(
-                    eventCounter.checkCountAndGet(
+                    eventCounter.updateCountAndCheck(
                         createEventEntity(
                             ProviderEventId(
                                 batchId = batchId,
@@ -254,7 +254,7 @@ class IParentEventCounterTest {
         val names = mutableSetOf<String>()
         EVENTS.asSequence().forEach {
             println(it)
-            if (eventCounter.checkCountAndGet(createEventEntity(it.id, it.parent))) {
+            if (eventCounter.updateCountAndCheck(createEventEntity(it.id, it.parent))) {
                 names.add(it.name)
             }
         }
@@ -285,7 +285,7 @@ class IParentEventCounterTest {
         val names = mutableSetOf<String>()
         EVENTS.asSequence().forEach {
             println(it)
-            if (eventCounter.checkCountAndGet(createEventEntity(
+            if (eventCounter.updateCountAndCheck(createEventEntity(
                     it.id,
                     it.parent,
                     it.batchParent?.eventId

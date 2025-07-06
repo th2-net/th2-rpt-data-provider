@@ -20,7 +20,6 @@ import com.exactpro.th2.rptdataprovider.entities.responses.BaseEventEntity
 import io.prometheus.client.Gauge
 import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap
 import java.security.MessageDigest
-import java.util.concurrent.ConcurrentHashMap
 
 internal interface IParentEventCounter : AutoCloseable {
     /**
@@ -28,161 +27,117 @@ internal interface IParentEventCounter : AutoCloseable {
      * WARNING: event id isn't grantee event unique then this method can't be used for strict limitation.
      * @return false if limit exceeded otherwise true
      */
-    fun checkCountAndGet(event: BaseEventEntity): Boolean
+    fun updateCountAndCheck(event: BaseEventEntity): Boolean
 
     private object NoLimitedParentEventCounter : IParentEventCounter {
-        override fun checkCountAndGet(event: BaseEventEntity): Boolean = true
+        override fun updateCountAndCheck(event: BaseEventEntity): Boolean = true
         override fun close() { }
     }
 
-    private class LimitedParentEventCounter(
-        private val limitForParent: Long
+    private abstract class LimitedCounter<K>(
+        private val limit: Long
     ) : IParentEventCounter {
-        private val parentEventCounter = ConcurrentHashMap<String, Long>()
+        private val holder = createHolder()
 
-        override fun checkCountAndGet(event: BaseEventEntity): Boolean {
-            if (event.parentEventId == null) {
-                return true
-            }
+        protected open val defaultValue: Long?
+            get() = null
 
-            val value = parentEventCounter.compute(event.parentEventId.eventId.id) { _, value ->
+        override fun close() {
+            PARENT_EVENT_COUNTER.dec(holder.size.toDouble())
+            holder.clear()
+        }
+
+        protected open fun createHolder(): MutableMap<K, Long> = HashMap()
+
+        protected abstract fun String.toKey(): K
+
+        protected fun updateCountAndCheck(key: K): Boolean =
+            holder.compute(key) { _, value ->
                 if (value == null) {
                     PARENT_EVENT_COUNTER.inc()
                     1L
                 } else {
                     val next = value + 1
-                    if (value == MAX_EVENT_COUNTER || next > limitForParent) {
-                        if (parentEventCounter.putIfAbsent(event.id.eventId.id, MAX_EVENT_COUNTER) == null) {
-                            PARENT_EVENT_COUNTER.inc()
-                        }
+                    if (value == MAX_EVENT_COUNTER || next > limit) {
                         MAX_EVENT_COUNTER
                     } else {
                         next
                     }
                 }
+            } != MAX_EVENT_COUNTER
+
+        @Suppress("SameParameterValue")
+        protected fun putIfAbsent(key: K, value: Long) {
+            if (holder.putIfAbsent(key, value) == defaultValue) {
+                PARENT_EVENT_COUNTER.inc()
             }
-
-            return value != MAX_EVENT_COUNTER
-        }
-
-        override fun close() {
-            PARENT_EVENT_COUNTER.dec(parentEventCounter.size.toDouble())
-            parentEventCounter.clear()
         }
     }
 
+    private abstract class DefaultLimitedCounter<K>(
+        limitForParent: Long
+    ) : LimitedCounter<K>(limitForParent) {
+
+        override fun updateCountAndCheck(event: BaseEventEntity): Boolean {
+            if (event.parentEventId == null) return true
+
+            return updateCountAndCheck(event.parentEventId.eventId.id.toKey()).also {
+                if (!it) putIfAbsent(event.id.eventId.id.toKey(), MAX_EVENT_COUNTER)
+            }
+        }
+    }
+
+    private class LimitedParentEventCounter(
+        limitForParent: Long
+    ) : DefaultLimitedCounter<String>(limitForParent) {
+        override fun String.toKey(): String = this
+    }
+
     private class HashLimitedParentEventCounter(
-        private val limitForParent: Long
-    ) : IParentEventCounter {
-        private val parentEventCounter = Long2LongOpenHashMap().apply {
-            defaultReturnValue(DEFAULT_RETURN_VALUE)
+        limitForParent: Long
+    ) : DefaultLimitedCounter<Long>(limitForParent) {
+        override val defaultValue: Long
+            get() = -1
+
+        override fun createHolder(): MutableMap<Long, Long> = Long2LongOpenHashMap().apply {
+            defaultReturnValue(defaultValue)
         }
 
-        override fun checkCountAndGet(event: BaseEventEntity): Boolean {
-            if (event.parentEventId == null) {
-                return true
+        override fun String.toKey(): Long = toLongHash()
+    }
+
+    private abstract class OptimizedLimitedCounter<K>(
+        limitForParent: Long
+    ) : LimitedCounter<K>(limitForParent) {
+
+        override fun updateCountAndCheck(event: BaseEventEntity): Boolean {
+            if (event.parentEventId == null) return true // exclude root events
+
+            val parentEventId = event.batchParentEventId?.id ?: event.parentEventId.eventId.id
+
+            return updateCountAndCheck(parentEventId.toKey()).also {
+                if (!it && !event.isBatched) putIfAbsent(event.id.eventId.id.toKey(), MAX_EVENT_COUNTER)
             }
-
-            val value = parentEventCounter.compute(event.parentEventId.eventId.id.toLongHash()) { _, value ->
-                if (value == null) {
-                    PARENT_EVENT_COUNTER.inc()
-                    1L
-                } else {
-                    val next = value + 1
-                    if (value == MAX_EVENT_COUNTER || next > limitForParent) {
-                        if (parentEventCounter.putIfAbsent(event.id.eventId.id.toLongHash(), MAX_EVENT_COUNTER) == DEFAULT_RETURN_VALUE) {
-                            PARENT_EVENT_COUNTER.inc()
-                        }
-                        MAX_EVENT_COUNTER
-                    } else {
-                        next
-                    }
-                }
-            }
-
-            return value != MAX_EVENT_COUNTER
-        }
-
-        override fun close() {
-            PARENT_EVENT_COUNTER.dec(parentEventCounter.size.toDouble())
-            parentEventCounter.clear()
-        }
-
-        companion object {
-            private const val DEFAULT_RETURN_VALUE = -1L
         }
     }
 
     private class OptimizedLimitedParentEventCounter(
-        private val limitForParent: Long
-    ) : IParentEventCounter {
-        private val parentEventCounter = ConcurrentHashMap<String, Long>()
-
-        override fun checkCountAndGet(event: BaseEventEntity): Boolean {
-            if (event.parentEventId == null) return true // exclude root events
-
-            val parentEventId = event.batchParentEventId?.id ?: event.parentEventId.eventId.id
-
-            return parentEventCounter.compute(parentEventId) { _, value ->
-                if (value == null) {
-                    PARENT_EVENT_COUNTER.inc()
-                    1L
-                } else {
-                    val next = value + 1
-                    if (value == MAX_EVENT_COUNTER || next > limitForParent) {
-                        if (!event.isBatched) { // exclude batched events
-                            if (parentEventCounter.putIfAbsent(event.id.eventId.id, MAX_EVENT_COUNTER) == null) {
-                                PARENT_EVENT_COUNTER.inc()
-                            }
-                        }
-                        MAX_EVENT_COUNTER
-                    } else {
-                        next
-                    }
-                }
-            } != MAX_EVENT_COUNTER
-        }
-
-        override fun close() {
-            PARENT_EVENT_COUNTER.dec(parentEventCounter.size.toDouble())
-            parentEventCounter.clear()
-        }
+        limitForParent: Long
+    ) : OptimizedLimitedCounter<String>(limitForParent) {
+        override fun String.toKey(): String = this
     }
 
     private class OptimizedHashLimitedParentEventCounter(
-        private val limitForParent: Long
-    ) : IParentEventCounter {
-        private val parentEventCounter = ConcurrentHashMap<Long, Long>()
+        limitForParent: Long
+    ) : OptimizedLimitedCounter<Long>(limitForParent) {
+        override val defaultValue: Long
+            get() = -1
 
-        override fun checkCountAndGet(event: BaseEventEntity): Boolean {
-            if (event.parentEventId == null) return true // exclude root events
-
-            val parentEventId = event.batchParentEventId?.id ?: event.parentEventId.eventId.id
-
-            return parentEventCounter.compute(parentEventId.toLongHash()) { _, value ->
-                if (value == null) {
-                    PARENT_EVENT_COUNTER.inc()
-                    1L
-                } else {
-                    val next = value + 1
-                    if (value == MAX_EVENT_COUNTER || next > limitForParent) {
-                        if (!event.isBatched) { // exclude batched events
-                            if (parentEventCounter.putIfAbsent(event.id.eventId.id.toLongHash(), MAX_EVENT_COUNTER) == null) {
-                                PARENT_EVENT_COUNTER.inc()
-                            }
-                        }
-                        MAX_EVENT_COUNTER
-                    } else {
-                        next
-                    }
-                }
-            } != MAX_EVENT_COUNTER
+        override fun createHolder(): MutableMap<Long, Long> = Long2LongOpenHashMap().apply {
+            defaultReturnValue(defaultValue)
         }
 
-        override fun close() {
-            PARENT_EVENT_COUNTER.dec(parentEventCounter.size.toDouble())
-            parentEventCounter.clear()
-        }
+        override fun String.toKey(): Long = toLongHash()
     }
 
     companion object {
@@ -190,16 +145,15 @@ internal interface IParentEventCounter : AutoCloseable {
         const val HASH_MODE = "hash"
         const val OPTIMIZED_HASH_MODE = "optimized-hash"
 
+        private const val MAX_EVENT_COUNTER = Long.MAX_VALUE
         private val PARENT_EVENT_COUNTER = Gauge
             .build("th2_rpt_parent_event_count", "Number of parent events are cached in memory")
             .register()
 
-        private const val MAX_EVENT_COUNTER = Long.MAX_VALUE
+        private val MESSAGE_DIGEST = ThreadLocal.withInitial { MessageDigest.getInstance("MD5") }
 
-        private val messageDigest = ThreadLocal.withInitial { MessageDigest.getInstance("MD5") }
-
-        fun String.toLongHash(): Long {
-            val hashBytes = messageDigest.get().digest(this.toByteArray())
+        private fun String.toLongHash(): Long {
+            val hashBytes = MESSAGE_DIGEST.get().digest(this.toByteArray())
 
             var longHash: Long = 0
             for (i in 0 until 8) {
@@ -208,7 +162,7 @@ internal interface IParentEventCounter : AutoCloseable {
             return longHash
         }
 
-        fun create(limitForParent: Long? = null, mode: String = "orig"): IParentEventCounter =
+        fun create(limitForParent: Long? = null, mode: String = "default"): IParentEventCounter =
             limitForParent?.let {
                 when(mode) {
                     OPTIMIZED_MODE -> OptimizedLimitedParentEventCounter(it)
