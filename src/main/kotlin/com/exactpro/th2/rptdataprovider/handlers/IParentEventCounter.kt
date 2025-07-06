@@ -39,9 +39,6 @@ internal interface IParentEventCounter : AutoCloseable {
     ) : IParentEventCounter {
         private val holder = createHolder()
 
-        protected open val defaultValue: Long?
-            get() = null
-
         override fun close() {
             PARENT_EVENT_COUNTER.dec(holder.size.toDouble())
             holder.clear()
@@ -68,7 +65,7 @@ internal interface IParentEventCounter : AutoCloseable {
 
         @Suppress("SameParameterValue")
         protected fun putIfAbsent(key: K, value: Long) {
-            if (holder.putIfAbsent(key, value) == defaultValue) {
+            if (holder.putIfAbsent(key, value) == null) {
                 PARENT_EVENT_COUNTER.inc()
             }
         }
@@ -96,12 +93,8 @@ internal interface IParentEventCounter : AutoCloseable {
     private class HashLimitedParentEventCounter(
         limitForParent: Long
     ) : DefaultLimitedCounter<Long>(limitForParent) {
-        override val defaultValue: Long
-            get() = -1
 
-        override fun createHolder(): MutableMap<Long, Long> = Long2LongOpenHashMap().apply {
-            defaultReturnValue(defaultValue)
-        }
+        override fun createHolder(): MutableMap<Long, Long> = Long2LongOpenHashMap()
 
         override fun String.toKey(): Long = toLongHash()
     }
@@ -130,12 +123,7 @@ internal interface IParentEventCounter : AutoCloseable {
     private class OptimizedHashLimitedParentEventCounter(
         limitForParent: Long
     ) : OptimizedLimitedCounter<Long>(limitForParent) {
-        override val defaultValue: Long
-            get() = -1
-
-        override fun createHolder(): MutableMap<Long, Long> = Long2LongOpenHashMap().apply {
-            defaultReturnValue(defaultValue)
-        }
+        override fun createHolder(): MutableMap<Long, Long> = Long2LongOpenHashMap()
 
         override fun String.toKey(): Long = toLongHash()
     }

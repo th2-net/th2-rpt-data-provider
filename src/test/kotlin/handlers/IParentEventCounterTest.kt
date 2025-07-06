@@ -23,6 +23,7 @@ import com.exactpro.th2.rptdataprovider.handlers.IParentEventCounter
 import com.exactpro.th2.rptdataprovider.handlers.IParentEventCounter.Companion.HASH_MODE
 import com.exactpro.th2.rptdataprovider.handlers.IParentEventCounter.Companion.OPTIMIZED_HASH_MODE
 import com.exactpro.th2.rptdataprovider.handlers.IParentEventCounter.Companion.OPTIMIZED_MODE
+import io.prometheus.client.CollectorRegistry
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -248,64 +249,78 @@ class IParentEventCounterTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = [HASH_MODE, "none"])
+    @ValueSource(strings = [HASH_MODE, "default"])
     fun `event tree test`(mode: String) {
-        val eventCounter = IParentEventCounter.create(2, mode)
-        val names = mutableSetOf<String>()
-        EVENTS.asSequence().forEach {
-            println(it)
-            if (eventCounter.updateCountAndCheck(createEventEntity(it.id, it.parent))) {
-                names.add(it.name)
+        IParentEventCounter.create(2, mode).use { eventCounter ->
+            val names = mutableSetOf<String>()
+            EVENTS.asSequence().forEach {
+                println(it)
+                if (eventCounter.updateCountAndCheck(createEventEntity(it.id, it.parent))) {
+                    names.add(it.name)
+                }
             }
+    
+            assertAll(
+                { assertEquals(15.0, getParentEventMetric()) },
+                {
+                    assertEquals(setOf(
+                        "1",
+                            "1.1",
+                                "1.1.1",
+                                    "1.1.1.1",
+                        "2", // batch {
+                            "2.1",
+                                "2.1.1",
+                                "2.1.2", // batch }
+                        "3", // batch {
+                            "3.1",
+                                "3.1.1",
+                                "3.1.2",
+                            "3.2",
+                                "3.2.1",
+                                "3.2.2", // batch }
+                    ), names)
+                },
+            )
         }
-
-        assertEquals(setOf(
-            "1",
-                "1.1",
-                    "1.1.1",
-                        "1.1.1.1",
-            "2", // batch {
-                "2.1",
-                    "2.1.1",
-                    "2.1.2", // batch }
-            "3", // batch {
-                "3.1",
-                    "3.1.1",
-                    "3.1.2",
-                "3.2",
-                    "3.2.1",
-                    "3.2.2", // batch }
-        ), names)
+        assertEquals(0.0, getParentEventMetric())
     }
 
     @ParameterizedTest
     @ValueSource(strings = [OPTIMIZED_MODE, OPTIMIZED_HASH_MODE])
     fun `optimized event tree test`(mode: String) {
-        val eventCounter = IParentEventCounter.create(2, mode)
-        val names = mutableSetOf<String>()
-        EVENTS.asSequence().forEach {
-            println(it)
-            if (eventCounter.updateCountAndCheck(createEventEntity(
-                    it.id,
-                    it.parent,
-                    it.batchParent?.eventId
-                ))) {
-                names.add(it.name)
+        IParentEventCounter.create(2, mode).use { eventCounter ->
+            val names = mutableSetOf<String>()
+            EVENTS.asSequence().forEach {
+                println(it)
+                if (eventCounter.updateCountAndCheck(createEventEntity(
+                        it.id,
+                        it.parent,
+                        it.batchParent?.eventId
+                    ))) {
+                    names.add(it.name)
+                }
             }
+            
+            assertAll(
+                { assertEquals(5.0, getParentEventMetric()) },
+                {
+                    assertEquals(setOf(
+                        "1",
+                            "1.1",
+                                "1.1.1",
+                                    "1.1.1.1",
+                        "2", // batch {
+                            "2.1",
+                                "2.1.1",// batch }
+                        "3", // batch {
+                            "3.1",
+                                "3.1.1",// batch }
+                    ), names)
+                },
+            )
         }
-
-        assertEquals(setOf(
-            "1",
-                "1.1",
-                    "1.1.1",
-                        "1.1.1.1",
-            "2", // batch {
-                "2.1",
-                    "2.1.1",// batch }
-            "3", // batch {
-                "3.1",
-                    "3.1.1",// batch }
-        ), names)
+        assertEquals(0.0, getParentEventMetric())
     }
 
     companion object {
@@ -371,6 +386,8 @@ class IParentEventCounterTest {
             successful = true,
         )
 
+        private fun getParentEventMetric(): Double = CollectorRegistry.defaultRegistry.getSampleValue("th2_rpt_parent_event_count")
+        
         interface Event {
             val name: String
             val id: ProviderEventId
