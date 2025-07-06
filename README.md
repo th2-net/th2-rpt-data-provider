@@ -1,4 +1,4 @@
-# Report data provider (5.16.0)
+# Report data provider (5.17.0)
 
 # Overview
 This component serves as a backend for rpt-viewer. It will connect to the cassandra database via cradle api and expose the data stored in there as REST resources.
@@ -192,63 +192,67 @@ metadata:
   name: rpt-data-provider
 spec:
   imageName: ghcr.io/th2-net/th2-rpt-data-provider
-  imageVersion: 5.7.0 // change this line if you want to use a newer version
+  imageVersion: 5.17.0-dev // change this line if you want to use a newer version
   type: th2-rpt-data-provider
   customConfig:
     hostname: localhost
     port: 8080
-    responseTimeout: 60000 // maximum request processing time in milliseconds
+    responseTimeout: 60000 # maximum request processing time in milliseconds
     
-    eventCacheSize: 1000 // internal event cache size
-    messageCacheSize: 1000 // internal message cache size
-    serverCacheTimeout: 60000 // cached event lifetime in milliseconds
+    eventCacheSize: 1000      # internal event cache size
+    messageCacheSize: 1000    # internal message cache size
+    serverCacheTimeout: 60000 # cached event lifetime in milliseconds
     
-    ioDispatcherThreadPoolSize: 10 // thread pool size for blocking database calls
-    codecResponseTimeout: 6000 // if a codec doesn't respond in time, requested message is returned with a 'null' body
-    checkRequestsAliveDelay: 2000 // response channel check interval in milliseconds
+    ioDispatcherThreadPoolSize: 10  # thread pool size for blocking database calls
+    codecResponseTimeout: 6000      # if a codec doesn't respond in time, requested message is returned with a 'null' body
+    checkRequestsAliveDelay: 2000   # response channel check interval in milliseconds
     
-    enableCaching: true // enables proxy and client cache (Cache-control response headers)
-    notModifiedObjectsLifetime: 3600 // max-age in seconds
-    rarelyModifiedObjects: 500 // max-age in seconds
-              
-    sseEventSearchStep: 200 // step size in seconds when requesting events 
-    keepAliveTimeout: 5000 // timeout in milliseconds. keep_alive sending frequency
-    cradleDispatcherPoolSize: 1 // number of threads in the cradle dispatcher
+    enableCaching: true               # enables proxy and client cache (Cache-control response headers)
+    notModifiedObjectsLifetime: 3600  # max-age in seconds
+    rarelyModifiedObjects: 500        # max-age in seconds
+
+    limitForParentMode: 'defailt' # mode of approach to store event id to children number. Supported: default, hash values
+
+    sseEventSearchStep: 200       # step size in seconds when requesting events 
+    keepAliveTimeout: 5000        # timeout in milliseconds. keep_alive sending frequency
+    cradleDispatcherPoolSize: 1   # number of threads in the cradle dispatcher
+    requestDispatcherPoolSize: 1  # number of threads in the request dispatcher
+    responseDispatcherPoolSize: 1 # number of threads in the response dispatcher
       
-    messageExtractorOutputBatchBuffer: 1       // buffer size of message search pipeline
+    messageExtractorOutputBatchBuffer: 1 # buffer size of message search pipeline
     messageConverterOutputBatchBuffer: 1
     messageDecoderOutputBatchBuffer: 1
     messageUnpackerOutputMessageBuffer: 100
     messageFilterOutputMessageBuffer: 100
     messageMergerOutputMessageBuffer: 10
     
-    messageIdsLookupLimitDays: 7            // lookup limit value for seacing next and previous message ids.  
+    messageIdsLookupLimitDays: 7 # lookup limit value for seacing next and previous message ids.  
    
-    codecPendingBatchLimit: 16              // the total number of messages sent to the codec batches in parallel for all pipelines
-    codecCallbackThreadPool: 4              // thread pool for parsing messages received from codecs
-    codecRequestThreadPool: 1               // thread pool for sending message to codecs
-    grpcWriterMessageBuffer: 10            // buffer before send grpc response
+    codecPendingBatchLimit: 16  # the total number of messages sent to the codec batches in parallel for all pipelines
+    codecCallbackThreadPool: 4  # thread pool for parsing messages received from codecs
+    codecRequestThreadPool: 1   # thread pool for sending message to codecs
+    grpcWriterMessageBuffer: 10 # buffer before send grpc response
 
-    sendEmptyDelay: 100 // frequency of sending empty messages
+    sendEmptyDelay: 100 # frequency of sending empty messages
 
-    eventSearchChunkSize: 64 // the size of event chunks during sse search and the maximum size of the batch of messages upon request getEvents
+    eventSearchChunkSize: 64 # the size of event chunks during sse search and the maximum size of the batch of messages upon request getEvents
 
-    grpcThreadPoolSize: 20 // thread pool size for grpc requests
+    grpcThreadPoolSize: 20 # thread pool size for grpc requests
 
-    useStrictMode: false // if true throw an exception when bad messages are received from the codec otherwise return messages with null body and type
+    useStrictMode: false # if true throw an exception when bad messages are received from the codec otherwise return messages with null body and type
 
-    serverType: HTTP // provider server type. Allows 'HTTP' and 'GRPC' (case sensetive).
+    serverType: HTTP # provider server type. Allows 'HTTP' and 'GRPC' (case sensetive).
 
-    codecUsePinAttributes: true // send raw message to specified codec (true) or send to all codecs (false)
+    codecUsePinAttributes: true # send raw message to specified codec (true) or send to all codecs (false)
     
-    eventSearchTimeOffset: 5000 // sets the offset in milliseconds on search events. (startTimestamp - eventSearchTimeOffset) and (endTimestamp + eventSearchTimeOffset)     
+    eventSearchTimeOffset: 5000 # sets the offset in milliseconds on search events. (startTimestamp - eventSearchTimeOffset) and (endTimestamp + eventSearchTimeOffset)     
 
-    searchBySessionGroup: true // if true data-provider uses the session alias to group cache and translates http / gRPC requests by session alias to group th2 storage request 
-    aliasToGroupCacheSize: 1000 // the size of cache for the mapping between session alias and group.
+    searchBySessionGroup: true # if true data-provider uses the session alias to group cache and translates http / gRPC requests by session alias to group th2 storage request 
+    aliasToGroupCacheSize: 1000 # the size of cache for the mapping between session alias and group.
 
-    useTransportMode: true // if true data-provider uses th2 transport protocol to interact with thw codecs
+    useTransportMode: true # if true data-provider uses th2 transport protocol to interact with thw codecs
 
-  pins: // pins are used to communicate with codec components to parse message data
+  pins: # pins are used to communicate with codec components to parse message data
     mq:
       subscribers:
       - name: from_codec
@@ -295,6 +299,20 @@ spec:
 ```
 
 # Release notes
+
+## 5.17.0
+* Added `limitForParentMode` option (default value is `default`) to manage logic of holding mapping between event id and number of children during event sse query execution.<br>
+  Supported two values:
+  * `default` - event ids are stored as string. Usual event id has length 40 chas or longer.
+  * `hash` - event ids are stored as long hash calculated from origin value.
+* Added `requestDispatcherPoolSize` (default value is `1`) to manage number of threads processed event / message stream during a sse query.
+* Added `responseDispatcherPoolSize` (default value is `1`) to manage number of threads serialised event stream during a sse query.
+* Updated:
+  * cradle API: `5.6.0-dev`
+  * kotlin: `2.2.0`
+  * ktor-bom: `3.2.1`
+  * kotlin-logging: `7.0.7`
+  * fastutil: `8.5.16`
 
 ## 5.16.0
 * Migrated to ktor: `3.1.2`

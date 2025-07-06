@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2025 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,8 +21,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 
 class Variable(
     name: String,
-    param: String?,
-    defaultValue: String,
+    param: String,
     showInLog: Boolean = true
 ) {
     private val logger = KotlinLogging.logger { }
@@ -30,13 +29,9 @@ class Variable(
     val value: String = param
         .also {
             logger.info {
-                val valueToLog = if (showInLog) it ?: defaultValue else "*****"
+                val valueToLog = if (showInLog) it else "*****"
 
-                if (it == null)
-                    "property '$name' is not set - defaulting to '$valueToLog'"
-                else
-                    "property '$name' is set to '$valueToLog'"
+                "property '$name' is set to '$valueToLog'"
             }
         }
-        ?: defaultValue
 }
