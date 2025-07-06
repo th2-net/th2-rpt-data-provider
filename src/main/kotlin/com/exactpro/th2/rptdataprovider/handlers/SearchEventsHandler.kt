@@ -257,21 +257,8 @@ class SearchEventsHandler(context: Context<*, *, *, *>) {
         }
     }
 
-    private suspend fun dropByTimestampFilter(
-        request: SseEventSearchRequest, resumeFromTimestamp: Instant
-    ): (BaseEventEntity) -> Boolean {
-        return { event: BaseEventEntity ->
-            if (request.searchDirection == AFTER) {
-                event.startTimestamp.isBeforeOrEqual(resumeFromTimestamp)
-            } else {
-                event.startTimestamp.isAfterOrEqual(resumeFromTimestamp)
-            }
-        }
-    }
-
-
     @ExperimentalCoroutinesApi
-    private suspend fun dropBeforeResumeId(
+    private fun dropBeforeResumeId(
         eventFlow: Flow<BaseEventEntity>,
         resumeFromId: ProviderEventId,
     ): Flow<BaseEventEntity> {
