@@ -48,7 +48,7 @@ dependencies {
     implementation "com.exactpro.th2:cradle-cassandra:${cradleVersion}"
     implementation 'com.exactpro.th2:grpc-data-provider:0.2.0-dev'
 
-    implementation 'io.github.oshai:kotlin-logging:7.0.12'
+    implementation 'io.github.oshai:kotlin-logging:7.0.13'
     implementation 'io.prometheus:simpleclient'
     implementation(platform('io.ktor:ktor-bom:3.2.3'))
     implementation 'io.ktor:ktor-server-netty'
