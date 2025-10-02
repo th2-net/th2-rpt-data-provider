@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2024 Exactpro (Exactpro Systems Limited)
+ * Copyright 2022-2025 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,10 +20,16 @@ import com.exactpro.cradle.BookId
 import com.exactpro.cradle.Order
 import com.exactpro.cradle.PageId
 import com.exactpro.cradle.TimeRelation
-import com.exactpro.cradle.testevents.*
+import com.exactpro.cradle.testevents.StoredTestEvent
+import com.exactpro.cradle.testevents.StoredTestEventBatch
+import com.exactpro.cradle.testevents.StoredTestEventId
 import com.exactpro.cradle.testevents.StoredTestEventIdUtils.timestampToString
+import com.exactpro.cradle.testevents.TestEventBatchToStore
+import com.exactpro.cradle.testevents.TestEventFilter
+import com.exactpro.cradle.testevents.TestEventSingleToStoreBuilder
 import com.exactpro.th2.common.grpc.Message
-import com.exactpro.th2.rptdataprovider.*
+import com.exactpro.th2.rptdataprovider.ProtoContext
+import com.exactpro.th2.rptdataprovider.ProtoRawMessage
 import com.exactpro.th2.rptdataprovider.entities.filters.FilterPredicate
 import com.exactpro.th2.rptdataprovider.entities.internal.PipelineFilteredMessage
 import com.exactpro.th2.rptdataprovider.entities.internal.ProviderEventId
@@ -34,6 +40,9 @@ import com.exactpro.th2.rptdataprovider.entities.responses.StreamInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.LastScannedObjectInfo
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.SearchEventsHandler
+import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
+import com.exactpro.th2.rptdataprovider.maxInstant
+import com.exactpro.th2.rptdataprovider.minInstant
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -238,7 +247,7 @@ class TestEventPipeline {
         val writer = mockWriter(resultEvents)
 
         runBlocking {
-            searchEvent.searchEventsSse(request, writer)
+            searchEvent.searchEventsSse(request, "test-id", writer)
             coroutineContext.cancelChildren()
         }
 
