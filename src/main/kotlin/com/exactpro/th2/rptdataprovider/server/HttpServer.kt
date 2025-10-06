@@ -19,7 +19,6 @@ package com.exactpro.th2.rptdataprovider.server
 import com.exactpro.cradle.BookId
 import com.exactpro.cradle.utils.CradleIdException
 import com.exactpro.th2.rptdataprovider.Context
-import com.exactpro.th2.rptdataprovider.Metrics
 import com.exactpro.th2.rptdataprovider.asStringSuspend
 import com.exactpro.th2.rptdataprovider.entities.exceptions.ChannelClosedException
 import com.exactpro.th2.rptdataprovider.entities.exceptions.CodecResponseException
@@ -34,10 +33,13 @@ import com.exactpro.th2.rptdataprovider.entities.sse.SseEvent
 import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.handlers.events.SearchEventsCalledFun
 import com.exactpro.th2.rptdataprovider.handlers.messages.SearchMessagesCalledFun
-import com.exactpro.th2.rptdataprovider.logMetrics
+import com.exactpro.th2.rptdataprovider.metrics.measure
+import com.exactpro.th2.rptdataprovider.metrics.withRequestId
 import com.exactpro.th2.rptdataprovider.server.handler.AbortableRequestHandler
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleObjectNotFoundException
+import com.google.common.util.concurrent.ThreadFactoryBuilder
 import io.github.oshai.kotlinlogging.KotlinLogging
+import io.github.oshai.kotlinlogging.Level
 import io.ktor.http.CacheControl
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -69,6 +71,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.InternalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -77,20 +80,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.nio.channels.ClosedChannelException
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.coroutineContext
-import kotlin.system.measureTimeMillis
 
 class HttpServer<B, G, RM, PM>(
     private val applicationContext: Context<B, G, RM, PM>,
     private val convertFun: (messageWithMetadata: MessageWithMetadata<RM, PM>) -> HttpMessage,
 ) {
-
-    private val sseRequestsProcessedInParallelQuantity: Metrics =
-        Metrics("th2_sse_requests_processed_in_parallel_quantity", "SSE requests processed in parallel")
-
-    private val restRequestsProcessedInParallelQuantity: Metrics =
-        Metrics("th2_rest_requests_processed_in_parallel_quantity", "REST requests processed in parallel")
 
     private val restRequestGet: Counter =
         Counter.build("th2_rest_requests_get", "REST requests get")
@@ -109,14 +106,21 @@ class HttpServer<B, G, RM, PM>(
         Counter.build("th2_sse_requests_processed", "SSE requests processed")
             .register()
 
-
     companion object {
         private val K_LOGGER = KotlinLogging.logger {}
+
+        private fun makeRequestDescription(name: String, id: String, parameters: Map<String, List<String>>): String {
+            return "'$name ($id)' request with parameters '$parameters'"
+        }
     }
 
     private val jacksonMapper = applicationContext.jacksonMapper
     private val checkRequestAliveDelay = applicationContext.configuration.checkRequestsAliveDelay.value.toLong()
     private val configuration = applicationContext.configuration
+    private val requestDispatcher = Executors.newFixedThreadPool(
+        applicationContext.configuration.requestDispatcherPoolSize.value.toInt(),
+        ThreadFactoryBuilder().setNameFormat("rpt-request-%d").build()
+    ).asCoroutineDispatcher()
 
     private class Timeouts {
         class Config(var requestTimeout: Long = 5000L, var excludes: List<String> = listOf("sse"))
@@ -188,49 +192,45 @@ class HttpServer<B, G, RM, PM>(
     @InternalAPI
     private suspend fun handleRequest(
         call: ApplicationCall,
-        requestName: String,
+        requestId: String,
         cacheControl: CacheControl?,
         probe: Boolean,
         useSse: Boolean,
-        vararg parameters: Any?,
+        requestDescription: String,
         calledFun: suspend () -> Any
     ) {
-        val stringParameters = lazy { parameters.contentDeepToString() }
-        logMetrics(if (useSse) sseRequestsProcessedInParallelQuantity else restRequestsProcessedInParallelQuantity) {
-            coroutineScope {
-                measureTimeMillis {
-                    K_LOGGER.debug { "handling '$requestName' request with parameters '${stringParameters.value}'" }
+        coroutineScope {
+            withContext(requestDispatcher) {
+                try {
+                    if (useSse) sseRequestGet.inc() else restRequestGet.inc()
                     try {
-                        if (useSse) sseRequestGet.inc() else restRequestGet.inc()
-                        try {
-                            if (useSse) {
-                                val function = calledFun.invoke()
-                                @Suppress("UNCHECKED_CAST")
-                                handleSseRequest(call, function as suspend (StreamWriter<RM, PM>) -> Unit)
-                            } else {
-                                handleRestApiRequest(call, cacheControl, probe, calledFun)
-                            }
-                        } catch (e: Exception) {
-                            throw e.rootCause ?: e
-                        } finally {
-                            if (useSse) sseRequestProcessed.inc() else restRequestProcessed.inc()
+                        if (useSse) {
+                            val function = calledFun.invoke()
+                            @Suppress("UNCHECKED_CAST")
+                            handleSseRequest(call, requestId, function as suspend (StreamWriter<RM, PM>) -> Unit)
+                        } else {
+                            handleRestApiRequest(call, requestId, cacheControl, probe, calledFun)
                         }
-                    } catch (e: CancellationException) {
-                        K_LOGGER.debug(e) { "request processing was cancelled with CancellationException" }
-                    } catch (e: InvalidRequestException) {
-                        K_LOGGER.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - invalid request" }
-                    } catch (e: CradleObjectNotFoundException) {
-                        K_LOGGER.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - event or message is missing" }
-                    } catch (e: CodecResponseException) {
-                        K_LOGGER.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - codec was unable to decode a message" }
-                    } catch (e: ClosedChannelException) {
-                        K_LOGGER.debug { "request '$requestName' with parameters '${stringParameters.value}' has been cancelled by a client" }
-                    } catch (e: CradleIdException) {
-                        K_LOGGER.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - invalid id format" }
                     } catch (e: Exception) {
-                        K_LOGGER.error(e) { "unable to handle request '$requestName' with parameters '${stringParameters.value}' - unexpected exception" }
+                        throw e.rootCause ?: e
+                    } finally {
+                        if (useSse) sseRequestProcessed.inc() else restRequestProcessed.inc()
                     }
-                }.let { K_LOGGER.debug { "request '$requestName' with parameters '${stringParameters.value}' handled - time=${it}ms" } }
+                } catch (e: CancellationException) {
+                    K_LOGGER.debug(e) { "request $requestDescription processing was cancelled with CancellationException" }
+                } catch (e: InvalidRequestException) {
+                    K_LOGGER.error(e) { "unable to handle request $requestDescription - invalid request" }
+                } catch (e: CradleObjectNotFoundException) {
+                    K_LOGGER.error(e) { "unable to handle request $requestDescription - event or message is missing" }
+                } catch (e: CodecResponseException) {
+                    K_LOGGER.error(e) { "unable to handle request $requestDescription - codec was unable to decode a message" }
+                } catch (e: ClosedChannelException) {
+                    K_LOGGER.debug { "request $requestDescription has been cancelled by a client" }
+                } catch (e: CradleIdException) {
+                    K_LOGGER.error(e) { "unable to handle request $requestDescription - invalid id format" }
+                } catch (e: Exception) {
+                    K_LOGGER.error(e) { "unable to handle request $requestDescription - unexpected exception" }
+                }
             }
         }
     }
@@ -240,35 +240,39 @@ class HttpServer<B, G, RM, PM>(
     @InternalAPI
     private suspend fun handleSseRequest(
         call: ApplicationCall,
+        requestId: String,
         calledFun: suspend (StreamWriter<RM, PM>) -> Unit
     ) {
-        coroutineScope {
-            launch {
-                val job = launch {
-                    checkContext(call)
-                }
-                call.response.headers.append(HttpHeaders.CacheControl, "no-cache, no-store, no-transform")
-                call.respondTextWriter(contentType = ContentType.Text.EventStream) {
-                    val httpWriter = HttpWriter(this, jacksonMapper, convertFun)
 
-                    try {
-                        calledFun.invoke(httpWriter)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        httpWriter.eventWrite(SseEvent.build(jacksonMapper, e))
-                        throw e
-                    } finally {
-                        kotlin.runCatching {
-                            httpWriter.eventWrite(SseEvent(event = EventType.CLOSE))
-                            httpWriter.closeWriter()
-                            job.cancel()
-                        }.onFailure { e ->
-                            K_LOGGER.error(e) { "unexpected exception while trying to close http writer" }
+        coroutineScope {
+            measure("handleSseRequest", requestId) {
+                launch {
+                    val job = launch {
+                        checkContext(call)
+                    }
+                    call.response.headers.append(HttpHeaders.CacheControl, "no-cache, no-store, no-transform")
+                    call.respondTextWriter(contentType = ContentType.Text.EventStream) {
+                        val httpWriter = HttpWriter(this, jacksonMapper, convertFun)
+
+                        try {
+                            calledFun.invoke(httpWriter)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            httpWriter.eventWrite(SseEvent.build(jacksonMapper, e))
+                            throw e
+                        } finally {
+                            kotlin.runCatching {
+                                httpWriter.eventWrite(SseEvent(event = EventType.CLOSE))
+                                httpWriter.closeWriter()
+                                job.cancel()
+                            }.onFailure { e ->
+                                K_LOGGER.error(e) { "unexpected exception while trying to close http writer" }
+                            }
                         }
                     }
-                }
-            }.join()
+                }.join()
+            }
         }
     }
 
@@ -276,36 +280,47 @@ class HttpServer<B, G, RM, PM>(
     @InternalAPI
     private suspend fun handleRestApiRequest(
         call: ApplicationCall,
+        requestId: String,
         cacheControl: CacheControl?,
         probe: Boolean,
         calledFun: suspend () -> Any
     ) {
+
         coroutineScope {
-            try {
-                launch {
+            measure("handleRestApiRequest", requestId) {
+                try {
                     launch {
-                        checkContext(call)
+                        launch {
+                            checkContext(call)
+                        }
+                        cacheControl?.let { call.response.cacheControl(it) }
+                        call.respondText(
+                            jacksonMapper.asStringSuspend(calledFun.invoke()),
+                            ContentType.Application.Json
+                        )
+                        coroutineContext.cancelChildren()
+                    }.join()
+                } catch (e: Exception) {
+                    when (val exception = e.rootCause ?: e) {
+                        is InvalidRequestException -> sendErrorCode(call, exception, HttpStatusCode.BadRequest)
+                        is CradleObjectNotFoundException -> sendErrorCodeOrEmptyJson(
+                            probe, call, exception, HttpStatusCode.NotFound
+                        )
+
+                        is ChannelClosedException -> sendErrorCode(call, exception, HttpStatusCode.RequestTimeout)
+                        is CradleIdException -> sendErrorCodeOrEmptyJson(
+                            probe,
+                            call,
+                            e,
+                            HttpStatusCode.InternalServerError
+                        )
+
+                        is CodecResponseException -> sendErrorCode(call, exception, HttpStatusCode.InternalServerError)
+                        is CancellationException -> Unit
+                        else -> sendErrorCode(call, exception as Exception, HttpStatusCode.InternalServerError)
                     }
-                    cacheControl?.let { call.response.cacheControl(it) }
-                    call.respondText(
-                        jacksonMapper.asStringSuspend(calledFun.invoke()),
-                        ContentType.Application.Json
-                    )
-                    coroutineContext.cancelChildren()
-                }.join()
-            } catch (e: Exception) {
-                when (val exception = e.rootCause ?: e) {
-                    is InvalidRequestException -> sendErrorCode(call, exception, HttpStatusCode.BadRequest)
-                    is CradleObjectNotFoundException -> sendErrorCodeOrEmptyJson(
-                        probe, call, exception, HttpStatusCode.NotFound
-                    )
-                    is ChannelClosedException -> sendErrorCode(call, exception, HttpStatusCode.RequestTimeout)
-                    is CradleIdException -> sendErrorCodeOrEmptyJson(probe, call, e, HttpStatusCode.InternalServerError)
-                    is CodecResponseException -> sendErrorCode(call, exception, HttpStatusCode.InternalServerError)
-                    is CancellationException -> Unit
-                    else -> sendErrorCode(call, exception as Exception, HttpStatusCode.InternalServerError)
+                    throw e
                 }
-                throw e
             }
         }
     }
@@ -352,137 +367,244 @@ class HttpServer<B, G, RM, PM>(
             routing {
 
                 get("/event/{id}") {
-                    val probe = call.parameters["probe"]?.toBoolean() ?: false
-                    handleRequest(
-                        call, "get single event", notModifiedCacheControl, probe,
-                        false, call.parameters.toMap()
-                    ) {
-                        eventCache.getOrPut(call.parameters.getOrFail("id")).convertToEvent()
+                    withRequestId { requestId ->
+                        val probe = call.parameters["probe"]?.toBoolean() ?: false
+                        val parameters = call.request.queryParameters.toMap()
+                        val requestName = "get single event"
+                        val requestDescription = makeRequestDescription(requestName, requestId, parameters)
+                        measure(requestName, requestId, requestDescription, Level.INFO) {
+                            handleRequest(
+                                call, requestId, notModifiedCacheControl, probe,
+                                false, requestDescription
+                            ) { eventCache.getOrPut(call.parameters.getOrFail("id")).convertToEvent() }
+                        }
                     }
                 }
 
                 get("/events") {
-                    val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(
-                        call, "get single event", notModifiedCacheControl, false,
-                        false, queryParametersMap
-                    ) {
-                        val ids = queryParametersMap["ids"]
-                        when {
-                            ids.isNullOrEmpty() ->
-                                throw InvalidRequestException("Ids set must not be empty: $ids")
-                            ids.size > getEventsLimit ->
-                                throw InvalidRequestException("Too many id in request: ${ids.size}, max is: $getEventsLimit")
-                            else -> eventCache.getOrPutMany(ids.toSet()).map { it.convertToEvent() }
+                    withRequestId { requestId ->
+                        val parameters = call.request.queryParameters.toMap()
+                        val requestName = "get single event"
+                        val requestDescription = makeRequestDescription(requestName, requestId, parameters)
+                        measure(requestName, requestId, requestDescription, Level.INFO) {
+                            handleRequest(
+                                call, requestId, notModifiedCacheControl, false,
+                                false, requestDescription
+                            ) {
+                                val ids = parameters["ids"]
+                                when {
+                                    ids.isNullOrEmpty() ->
+                                        throw InvalidRequestException("Ids set must not be empty: $ids")
+
+                                    ids.size > getEventsLimit ->
+                                        throw InvalidRequestException("Too many id in request: ${ids.size}, max is: $getEventsLimit")
+
+                                    else -> eventCache.getOrPutMany(ids.toSet()).map { it.convertToEvent() }
+                                }
+                            }
                         }
                     }
                 }
 
                 get("/messageStreams") {
-                    handleRequest(
-                        call, "get message streams",
-                        rarelyModifiedCacheControl, probe = false, useSse = false
-                    ) {
-                        val bookId = call.request.queryParameters.getOrFail("bookId")
-                        cradleService.getSessionAliases(BookId(bookId))
+                    withRequestId { requestId ->
+                        val parameters = call.request.queryParameters.toMap()
+                        val requestName = "get message streams"
+                        val requestDescription = makeRequestDescription(requestName, requestId, parameters)
+                        measure(requestName, requestId, requestDescription, Level.INFO) {
+                            handleRequest(
+                                call, requestId,
+                                rarelyModifiedCacheControl, probe = false, useSse = false, requestDescription
+                            ) {
+                                val bookId = call.request.queryParameters.getOrFail("bookId")
+                                cradleService.getSessionAliases(BookId(bookId))
+                            }
+                        }
                     }
                 }
 
                 get("/message/{id}") {
-                    val probe = call.parameters["probe"]?.toBoolean() ?: false
-                    handleRequest(
-                        call, "get single message",
-                        rarelyModifiedCacheControl, probe, false, call.parameters.toMap(),
-                    ) {
-                        MessageWithMetadata(messageCache.getOrPut(call.parameters.getOrFail("id"))).let(convertFun)
+                    withRequestId { requestId ->
+                        val parameters = call.request.queryParameters.toMap()
+                        val requestName = "get single message"
+                        val requestDescription = makeRequestDescription(requestName, requestId, parameters)
+                        measure(requestName, requestId, requestDescription, Level.INFO) {
+                            val probe = call.parameters["probe"]?.toBoolean() ?: false
+                            handleRequest(
+                                call, requestId,
+                                rarelyModifiedCacheControl, probe, false, requestDescription,
+                            ) {
+                                MessageWithMetadata(messageCache.getOrPut(call.parameters.getOrFail("id"))).let(
+                                    convertFun
+                                )
+                            }
+                        }
                     }
                 }
 
                 get("search/sse/messages") {
-                    val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, "search messages sse", null, false, true, queryParametersMap) {
-                        val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
-                        val request = SseMessageSearchRequest(queryParametersMap, filterPredicate)
-                        SearchMessagesCalledFun(searchMessagesHandler, request)::calledFun
+                    withRequestId { requestId ->
+                        val parameters = call.request.queryParameters.toMap()
+                        val requestName = "search messages sse"
+                        val requestDescription = makeRequestDescription(requestName, requestId, parameters)
+                        measure(requestName, requestId, requestDescription, Level.INFO) {
+                            handleRequest(call, requestId, null, false, true, requestDescription) {
+                                val filterPredicate = messageFiltersPredicateFactory.build(parameters)
+                                val request = SseMessageSearchRequest(parameters, filterPredicate)
+                                SearchMessagesCalledFun(searchMessagesHandler, request)::calledFun
+                            }
+                        }
                     }
                 }
 
                 get("search/sse/events") {
-                    val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, "search events sse", null, false, true, queryParametersMap) {
-                        val filterPredicate = eventFiltersPredicateFactory.build(queryParametersMap)
-                        val request = SseEventSearchRequest(queryParametersMap, filterPredicate)
-                        SearchEventsCalledFun<RM, PM>(searchEventsHandler, request)::calledFun
+                    withRequestId { requestId ->
+                        val parameters = call.request.queryParameters.toMap()
+                        val requestName = "search events sse"
+                        val requestDescription = makeRequestDescription(requestName, requestId, parameters)
+                        measure(requestName, requestId, requestDescription, Level.INFO) {
+                            handleRequest(
+                                call,
+                                requestId,
+                                null,
+                                probe = false,
+                                useSse = true,
+                                requestDescription = requestDescription
+                            ) {
+                                val filterPredicate = eventFiltersPredicateFactory.build(parameters)
+                                val request = SseEventSearchRequest(parameters, filterPredicate)
+                                SearchEventsCalledFun<RM, PM>(searchEventsHandler, request, requestId)::calledFun
+                            }
+                        }
                     }
                 }
 
                 get("filters/sse-messages") {
-                    val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, "get message filters", null, false, false, queryParametersMap) {
-                        messageFiltersPredicateFactory.getFiltersNames()
+                    withRequestId { requestId ->
+                        val parameters = call.request.queryParameters.toMap()
+                        val requestName = "get message filters"
+                        val requestDescription = makeRequestDescription(requestName, requestId, parameters)
+                        measure(requestName, requestId, requestDescription, Level.INFO) {
+                            handleRequest(call, requestId, null, false, false, requestDescription) {
+                                messageFiltersPredicateFactory.getFiltersNames()
+                            }
+                        }
                     }
                 }
 
                 get("filters/sse-events") {
-                    val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, "get event filters", null, false, false, queryParametersMap) {
-                        eventFiltersPredicateFactory.getFiltersNames()
+                    withRequestId { requestId ->
+                        val parameters = call.request.queryParameters.toMap()
+                        val requestName = "get event filters"
+                        val requestDescription = makeRequestDescription(requestName, requestId, parameters)
+                        measure(requestName, requestId, requestDescription, Level.INFO) {
+                            handleRequest(call, requestId, null, false, false, requestDescription) {
+                                eventFiltersPredicateFactory.getFiltersNames()
+                            }
+                        }
                     }
                 }
 
                 get("filters/sse-messages/{name}") {
-                    val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, "get message filters", null, false, false, queryParametersMap) {
-                        messageFiltersPredicateFactory.getFilterInfo(call.parameters.getOrFail("name"))
+                    withRequestId { requestId ->
+                        val parameters = call.request.queryParameters.toMap()
+                        val requestName = "get message filters"
+                        val requestDescription = makeRequestDescription(requestName, requestId, parameters)
+                        measure(requestName, requestId, requestDescription, Level.INFO) {
+                            handleRequest(call, requestId, null, false, false, requestDescription) {
+                                messageFiltersPredicateFactory.getFilterInfo(call.parameters.getOrFail("name"))
+                            }
+                        }
                     }
                 }
 
 
                 get("filters/sse-events/{name}") {
-                    val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, "get event filters", null, false, false, queryParametersMap) {
-                        eventFiltersPredicateFactory.getFilterInfo(call.parameters.getOrFail("name"))
+                    withRequestId { requestId ->
+                        val parameters = call.request.queryParameters.toMap()
+                        val requestName = "get event filters"
+                        val requestDescription = makeRequestDescription(requestName, requestId, parameters)
+                        measure(requestName, requestId, requestDescription, Level.INFO) {
+                            handleRequest(call, requestId, null, false, false, requestDescription) {
+                                eventFiltersPredicateFactory.getFilterInfo(call.parameters.getOrFail("name"))
+                            }
+                        }
                     }
                 }
 
                 get("match/event/{id}") {
-                    val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, "match event", null, false, false, queryParametersMap) {
-                        val filterPredicate = eventFiltersPredicateFactory.build(queryParametersMap)
-                        filterPredicate.apply(eventCache.getOrPut(call.parameters.getOrFail("id")))
+                    withRequestId { requestId ->
+                        val parameters = call.request.queryParameters.toMap()
+                        val requestName = "match event"
+                        val requestDescription = makeRequestDescription(requestName, requestId, parameters)
+                        measure(requestName, requestId, requestDescription, Level.INFO) {
+                            handleRequest(call, requestId, null, false, false, requestDescription) {
+                                val filterPredicate = eventFiltersPredicateFactory.build(parameters)
+                                filterPredicate.apply(eventCache.getOrPut(call.parameters.getOrFail("id")))
+                            }
+                        }
                     }
                 }
 
                 get("/match/message/{id}") {
-                    val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, "match message", null, false, false, queryParametersMap) {
-                        val filterPredicate = messageFiltersPredicateFactory.build(queryParametersMap)
-                        val message = messageCache.getOrPut(call.parameters.getOrFail("id"))
-                        filterPredicate.apply(MessageWithMetadata(message))
+                    withRequestId { requestId ->
+                        val parameters = call.request.queryParameters.toMap()
+                        val requestName = "match message"
+                        val requestDescription = makeRequestDescription(requestName, requestId, parameters)
+                        measure(requestName, requestId, requestDescription, Level.INFO) {
+                            handleRequest(call, requestId, null, false, false, requestDescription) {
+                                val filterPredicate = messageFiltersPredicateFactory.build(parameters)
+                                val message = messageCache.getOrPut(call.parameters.getOrFail("id"))
+                                filterPredicate.apply(MessageWithMetadata(message))
+                            }
+                        }
                     }
                 }
 
                 get("/messageIds") {
-                    val queryParametersMap = call.request.queryParameters.toMap()
-                    handleRequest(call, "message ids", null, false, false, queryParametersMap) {
-                        val request = SseMessageSearchRequest(
-                            queryParametersMap,
-                            messageFiltersPredicateFactory.getEmptyPredicate(),
-                        ).also(SseMessageSearchRequest<*, *>::checkIdsRequest)
-                        searchMessagesHandler.getIds(request, configuration.messageIdsLookupLimitDays.value.toLong())
+                    withRequestId { requestId ->
+                        val parameters = call.request.queryParameters.toMap()
+                        val requestName = "message ids"
+                        val requestDescription = makeRequestDescription(requestName, requestId, parameters)
+                        measure(requestName, requestId, requestDescription, Level.INFO) {
+                            handleRequest(call, requestId, null, false, false, requestDescription) {
+                                val request = SseMessageSearchRequest(
+                                    parameters,
+                                    messageFiltersPredicateFactory.getEmptyPredicate(),
+                                ).also(SseMessageSearchRequest<*, *>::checkIdsRequest)
+                                searchMessagesHandler.getIds(
+                                    request,
+                                    configuration.messageIdsLookupLimitDays.value.toLong()
+                                )
+                            }
+                        }
                     }
                 }
 
                 get("/bookIds") {
-                    handleRequest(call, "book ids", null, probe = false, useSse = false) {
-                        cradleService.getBookIds()
+                    withRequestId { requestId ->
+                        val parameters = call.request.queryParameters.toMap()
+                        val requestName = "book ids"
+                        val requestDescription = makeRequestDescription(requestName, requestId, parameters)
+                        measure(requestName, requestId, requestDescription, Level.INFO) {
+                            handleRequest(call, requestId, null, probe = false, useSse = false, requestDescription) {
+                                cradleService.getBookIds()
+                            }
+                        }
                     }
                 }
 
                 get("/scopeIds") {
-                    val book = call.parameters["bookId"]!!
-                    handleRequest(call, "event scopes", null, probe = false, useSse = false) {
-                        cradleService.getEventScopes(BookId(book))
+                    withRequestId { requestId ->
+                        val parameters = call.request.queryParameters.toMap()
+                        val requestName = "event scopes"
+                        val requestDescription = makeRequestDescription(requestName, requestId, parameters)
+                        measure(requestName, requestId, requestDescription, Level.INFO) {
+                            val book = call.parameters["bookId"]!!
+                            handleRequest(call, requestId, null, probe = false, useSse = false, requestDescription) {
+                                cradleService.getEventScopes(BookId(book))
+                            }
+                        }
                     }
                 }
             }

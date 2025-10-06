@@ -41,6 +41,7 @@ class CustomConfigurationClass {
     val sseEventSearchStep: Long = 200
 
     val keepAliveTimeout: Long = 5_000
+    val limitForParentMode: String = "default"
 
     val messageExtractorOutputBatchBuffer: Int = 1
     val messageConverterOutputBatchBuffer: Int = 1
@@ -63,6 +64,8 @@ class CustomConfigurationClass {
     val eventSearchTimeOffset = 5_000
 
     val cradleDispatcherPoolSize: Long = 1
+    val requestDispatcherPoolSize: Long = 1
+    val responseDispatcherPoolSize: Long = 1
 
     val sendEmptyDelay = 100
 
@@ -84,142 +87,144 @@ class Configuration(customConfiguration: CustomConfigurationClass) {
     }
 
     val hostname: Variable =
-        Variable("hostname", customConfiguration.hostname, "localhost")
+        Variable("hostname", customConfiguration.hostname)
 
     val port: Variable =
-        Variable("port", customConfiguration.port.toString(), "8080")
+        Variable("port", customConfiguration.port.toString())
 
     val responseTimeout: Variable =
-        Variable("responseTimeout", customConfiguration.responseTimeout.toString(), "60000")
+        Variable("responseTimeout", customConfiguration.responseTimeout.toString())
 
     val serverCacheTimeout: Variable =
-        Variable("serverCacheTimeout", customConfiguration.serverCacheTimeout.toString(), "60000")
+        Variable("serverCacheTimeout", customConfiguration.serverCacheTimeout.toString())
 
     val eventCacheSize: Variable =
-        Variable("eventCacheSize", customConfiguration.eventCacheSize.toString(), "1")
+        Variable("eventCacheSize", customConfiguration.eventCacheSize.toString())
 
     val messageCacheSize: Variable =
-        Variable("messageCacheSize", customConfiguration.messageCacheSize.toString(), "1")
+        Variable("messageCacheSize", customConfiguration.messageCacheSize.toString())
 
     val aliasToGroupCacheSize: Variable = // TODO: added value check
-        Variable("aliasToGroupCacheSize", customConfiguration.aliasToGroupCacheSize.toString(), "1000")
+        Variable("aliasToGroupCacheSize", customConfiguration.aliasToGroupCacheSize.toString())
 
     val useTransportMode: Variable =
-        Variable("useTransportMode", customConfiguration.useTransportMode.toString(), "true")
+        Variable("useTransportMode", customConfiguration.useTransportMode.toString())
 
     val ioDispatcherThreadPoolSize: Variable =
         Variable("ioDispatcherThreadPoolSize", customConfiguration.ioDispatcherThreadPoolSize.let {
             if (it < 10) logger.warn { "The optimal value of the ioDispatcherThreadPoolSize is 10. Current: $it" }
 
             it.toString()
-        }, "10")
+        })
 
     val checkRequestsAliveDelay: Variable =
-        Variable("checkRequestsAliveDelay", customConfiguration.checkRequestsAliveDelay.toString(), "2000")
+        Variable("checkRequestsAliveDelay", customConfiguration.checkRequestsAliveDelay.toString())
 
-    val enableCaching: Variable = Variable("enableCaching", customConfiguration.enableCaching.toString(), "true")
+    val enableCaching: Variable = Variable("enableCaching", customConfiguration.enableCaching.toString())
 
     val notModifiedObjectsLifetime: Variable =
-        Variable("notModifiedObjectsLifetime", customConfiguration.notModifiedObjectsLifetime.toString(), "3600")
+        Variable("notModifiedObjectsLifetime", customConfiguration.notModifiedObjectsLifetime.toString())
 
     val rarelyModifiedObjects: Variable =
-        Variable("rarelyModifiedObjects", customConfiguration.rarelyModifiedObjects.toString(), "500")
+        Variable("rarelyModifiedObjects", customConfiguration.rarelyModifiedObjects.toString())
 
     val sseEventSearchStep: Variable =
-        Variable("sseEventSearchStep", customConfiguration.sseEventSearchStep.toString(), "200")
+        Variable("sseEventSearchStep", customConfiguration.sseEventSearchStep.toString())
 
     val keepAliveTimeout: Variable =
-        Variable("keepAliveTimeout", customConfiguration.keepAliveTimeout.toString(), "5000")
+        Variable("keepAliveTimeout", customConfiguration.keepAliveTimeout.toString())
+
+    val limitForParentMode: Variable =
+        Variable("limitForParentMode", customConfiguration.limitForParentMode)
 
     val messageExtractorOutputBatchBuffer: Variable =
         Variable(
             "messageExtractorOutputBatchBuffer",
-            customConfiguration.messageExtractorOutputBatchBuffer.toString(),
-            "2"
+            customConfiguration.messageExtractorOutputBatchBuffer.toString()
         )
 
     val messageConverterOutputBatchBuffer: Variable =
         Variable(
             "messageConverterOutputBatchBuffer",
-            customConfiguration.messageConverterOutputBatchBuffer.toString(),
-            "2"
+            customConfiguration.messageConverterOutputBatchBuffer.toString()
         )
 
     val messageDecoderOutputBatchBuffer: Variable =
         Variable(
             "messageDecoderOutputBatchBuffer",
-            customConfiguration.messageDecoderOutputBatchBuffer.toString(),
-            "2"
+            customConfiguration.messageDecoderOutputBatchBuffer.toString()
         )
 
     val messageUnpackerOutputMessageBuffer: Variable =
         Variable(
             "messageUnpackerOutputMessageBuffer",
-            customConfiguration.messageUnpackerOutputMessageBuffer.toString(),
-            "1000"
+            customConfiguration.messageUnpackerOutputMessageBuffer.toString()
         )
 
     val messageFilterOutputMessageBuffer: Variable =
         Variable(
             "messageFilterOutputMessageBuffer",
-            customConfiguration.messageFilterOutputMessageBuffer.toString(),
-            "1000"
+            customConfiguration.messageFilterOutputMessageBuffer.toString()
         )
 
     val messageMergerOutputMessageBuffer: Variable =
         Variable(
             "messageMergerOutputMessageBuffer",
-            customConfiguration.messageMergerOutputMessageBuffer.toString(),
-            "10"
+            customConfiguration.messageMergerOutputMessageBuffer.toString()
         )
 
     val messageIdsLookupLimitDays: Variable = Variable(
         "messageIdsLookupLimitDays",
-        customConfiguration.messageIdsLookupLimitDays.toString(),
-        "7"
+        customConfiguration.messageIdsLookupLimitDays.toString()
     )
 
     val codecResponseTimeout: Variable = Variable(
         "codecResponseTimeout",
-        customConfiguration.codecResponseTimeout.toString(), "6000"
+        customConfiguration.codecResponseTimeout.toString()
     )
 
     val codecPendingBatchLimit: Variable =
-        Variable("codecPendingBatchLimit", customConfiguration.codecPendingBatchLimit.toString(), "200")
+        Variable("codecPendingBatchLimit", customConfiguration.codecPendingBatchLimit.toString())
 
     val codecCallbackThreadPool: Variable =
-        Variable("codecCallbackThreadPool", customConfiguration.codecCallbackThreadPool.toString(), "10")
+        Variable("codecCallbackThreadPool", customConfiguration.codecCallbackThreadPool.toString())
 
     val codecRequestThreadPool: Variable =
-        Variable("codecRequestThreadPool", customConfiguration.codecRequestThreadPool.toString(), "1")
+        Variable("codecRequestThreadPool", customConfiguration.codecRequestThreadPool.toString())
 
     val grpcWriterMessageBuffer: Variable =
-        Variable("grpcWriterMessageBuffer", customConfiguration.grpcWriterMessageBuffer.toString(), "100")
+        Variable("grpcWriterMessageBuffer", customConfiguration.grpcWriterMessageBuffer.toString())
 
     val cradleDispatcherPoolSize: Variable =
-        Variable("cradleDispatcherPoolSize", customConfiguration.cradleDispatcherPoolSize.toString(), "1")
+        Variable("cradleDispatcherPoolSize", customConfiguration.cradleDispatcherPoolSize.toString())
+
+    val requestDispatcherPoolSize: Variable =
+        Variable("requestDispatcherPoolSize", customConfiguration.requestDispatcherPoolSize.toString())
+
+    val responseDispatcherPoolSize: Variable =
+        Variable("responseDispatcherPoolSize", customConfiguration.responseDispatcherPoolSize.toString())
 
     val sendEmptyDelay: Variable =
-        Variable("sendEmptyDelay", customConfiguration.sendEmptyDelay.toString(), "100")
+        Variable("sendEmptyDelay", customConfiguration.sendEmptyDelay.toString())
 
     val eventSearchChunkSize: Variable =
-        Variable("eventSearchChunkSize", customConfiguration.eventSearchChunkSize.toString(), "64")
+        Variable("eventSearchChunkSize", customConfiguration.eventSearchChunkSize.toString())
 
     val useStrictMode: Variable =
-        Variable("useStrictMode", customConfiguration.useStrictMode.toString(), "false")
+        Variable("useStrictMode", customConfiguration.useStrictMode.toString())
 
     val serverType: Variable =
-        Variable("serverType", customConfiguration.serverType.toString(), "HTTP")
+        Variable("serverType", customConfiguration.serverType.toString())
 
     val codecUsePinAttributes: Variable =
-        Variable("codecUsePinAttributes", customConfiguration.codecUsePinAttributes.toString(), "true")
+        Variable("codecUsePinAttributes", customConfiguration.codecUsePinAttributes.toString())
 
     val grpcThreadPoolSize: Variable =
-        Variable("grpcThreadPoolSize", customConfiguration.grpcThreadPoolSize.toString(), "20")
+        Variable("grpcThreadPoolSize", customConfiguration.grpcThreadPoolSize.toString())
 
     val eventSearchTimeOffset: Variable =
-        Variable("eventSearchTimeOffset", customConfiguration.eventSearchTimeOffset.toString(), "5000")
+        Variable("eventSearchTimeOffset", customConfiguration.eventSearchTimeOffset.toString())
 
     val eventSearchGap: Variable =
-        Variable("eventSearchGap", customConfiguration.eventSearchGap.toString(), "60")
+        Variable("eventSearchGap", customConfiguration.eventSearchGap.toString())
 }

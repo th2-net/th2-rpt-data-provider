@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2025 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,15 +32,18 @@ import com.exactpro.th2.rptdataprovider.entities.sse.StreamWriter
 import com.exactpro.th2.rptdataprovider.isAfterOrEqual
 import com.exactpro.th2.rptdataprovider.isBeforeOrEqual
 import com.exactpro.th2.rptdataprovider.maxInstant
+import com.exactpro.th2.rptdataprovider.metrics.measure
 import com.exactpro.th2.rptdataprovider.minInstant
 import com.exactpro.th2.rptdataprovider.producers.EventProducer
 import com.exactpro.th2.rptdataprovider.services.cradle.CradleService
 import com.exactpro.th2.rptdataprovider.tryToGetTestEvents
+import com.google.common.util.concurrent.ThreadFactoryBuilder
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.prometheus.client.Counter
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.channels.Channel.Factory.BUFFERED
@@ -62,9 +65,11 @@ import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneOffset
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.coroutineContext
@@ -83,6 +88,11 @@ class SearchEventsHandler(context: Context<*, *, *, *>) {
     private val sseEventSearchStep: Long = context.configuration.sseEventSearchStep.value.toLong()
     private val eventSearchChunkSize: Int = context.configuration.eventSearchChunkSize.value.toInt()
     private val keepAliveTimeout: Long = context.configuration.keepAliveTimeout.value.toLong()
+    private val limitForParentMode: String = context.configuration.limitForParentMode.value
+    private val responseDispatcher = Executors.newFixedThreadPool(
+        context.configuration.responseDispatcherPoolSize.value.toInt(),
+        ThreadFactoryBuilder().setNameFormat("rpt-response-%d").build()
+    ).asCoroutineDispatcher()
 
     private suspend fun keepAlive(
         writer: StreamWriter<*, *>,
@@ -170,31 +180,34 @@ class SearchEventsHandler(context: Context<*, *, *, *>) {
     @ExperimentalCoroutinesApi
     private suspend fun getEventFlow(
         request: SseEventSearchRequest,
+        requestId: String,
         timestampFrom: Instant,
         timestampTo: Instant,
         parentContext: CoroutineContext
     ): Flow<Deferred<List<BaseEventEntity>>> {
         return coroutineScope {
-            logger.info { "Requesting event from $timestampFrom to $timestampTo" }
-            flow {
-                val eventsCollection =
-                    getEventsSuspend(request, timestampFrom, timestampTo)
-                        .asSequence()
-                        .chunked(eventSearchChunkSize)
-                // Cradle suppose to return events in the right order depending on the order in the request
-                // We don't need to sort entities between each other.
-                // However, there still might be an issue with batches if it contains events for a long period of time
-                // For now just keep it in mind when you are investigating the reason
-                // some events returned in unexpected order
-                for (event in eventsCollection)
-                    emit(event)
+            measure("getEventFlow", requestId) {
+                logger.info { "Requesting event from $timestampFrom to $timestampTo" }
+                flow {
+                    val eventsCollection =
+                        getEventsSuspend(request, timestampFrom, timestampTo)
+                            .asSequence()
+                            .chunked(eventSearchChunkSize)
+                    // Cradle suppose to return events in the right order depending on the order in the request
+                    // We don't need to sort entities between each other.
+                    // However, there still might be an issue with batches if it contains events for a long period of time
+                    // For now just keep it in mind when you are investigating the reason
+                    // some events returned in unexpected order
+                    for (event in eventsCollection)
+                        emit(event)
+                }
+                    .map { wrappers ->
+                        async(parentContext) {
+                            prepareEvents(wrappers, request, timestampFrom, timestampTo)
+                                .also { parentContext.ensureActive() }
+                        }
+                    }.buffer(BUFFERED)
             }
-                .map { wrappers ->
-                    async(parentContext) {
-                        prepareEvents(wrappers, request, timestampFrom, timestampTo)
-                            .also { parentContext.ensureActive() }
-                    }
-                }.buffer(BUFFERED)
         }
     }
 
@@ -244,21 +257,8 @@ class SearchEventsHandler(context: Context<*, *, *, *>) {
         }
     }
 
-    private suspend fun dropByTimestampFilter(
-        request: SseEventSearchRequest, resumeFromTimestamp: Instant
-    ): (BaseEventEntity) -> Boolean {
-        return { event: BaseEventEntity ->
-            if (request.searchDirection == AFTER) {
-                event.startTimestamp.isBeforeOrEqual(resumeFromTimestamp)
-            } else {
-                event.startTimestamp.isAfterOrEqual(resumeFromTimestamp)
-            }
-        }
-    }
-
-
     @ExperimentalCoroutinesApi
-    private suspend fun dropBeforeResumeId(
+    private fun dropBeforeResumeId(
         eventFlow: Flow<BaseEventEntity>,
         resumeFromId: ProviderEventId,
     ): Flow<BaseEventEntity> {
@@ -279,79 +279,84 @@ class SearchEventsHandler(context: Context<*, *, *, *>) {
 
     @ExperimentalCoroutinesApi
     @FlowPreview
-    suspend fun searchEventsSse(request: SseEventSearchRequest, writer: StreamWriter<*, *>) {
+    suspend fun searchEventsSse(request: SseEventSearchRequest, requestId: String, writer: StreamWriter<*, *>) {
         coroutineScope {
+            measure("searchEventsSse", requestId) {
+                val lastScannedObject = LastScannedEventInfo()
+                val lastEventId = AtomicLong(0)
+                val scanCnt = AtomicLong(0)
 
-            val lastScannedObject = LastScannedEventInfo()
-            val lastEventId = AtomicLong(0)
-            val scanCnt = AtomicLong(0)
-
-            val resumeProviderId = request.resumeFromId?.let(::ProviderEventId)
-            val resumeTimestamp: Instant? = resumeProviderId?.let { eventProducer.resumeTimestamp(it) }
-            val startTimestamp: Instant = if (resumeProviderId == null) {
-                requireNotNull(request.startTimestamp) { "start timestamp must be set" }
-            } else {
-                requireNotNull(resumeTimestamp) { "timestamp for $resumeProviderId cannot be extracted" }
-            }
-            val timeIntervals = getTimeIntervals(request, sseEventSearchStep, startTimestamp)
-            val parentEventCounter = IParentEventCounter.create(request.limitForParent)
-
-            flow {
-                for ((start, end) in timeIntervals) {
-
-                    lastScannedObject.update(start)
-
-                    getEventFlow(
-                        request, start, end, currentCoroutineContext()
-                    ).collect { emit(it) }
-
-                    if (request.parentEvent?.batchId != null) break
+                val resumeProviderId = request.resumeFromId?.let(::ProviderEventId)
+                val resumeTimestamp: Instant? = resumeProviderId?.let { eventProducer.resumeTimestamp(it) }
+                val startTimestamp: Instant = if (resumeProviderId == null) {
+                    requireNotNull(request.startTimestamp) { "start timestamp must be set" }
+                } else {
+                    requireNotNull(resumeTimestamp) { "timestamp for $resumeProviderId cannot be extracted" }
                 }
-            }
-                .map { it.await() }
-                .flatMapConcat { it.asFlow() }
-                .let { eventFlow: Flow<BaseEventEntity> ->
-                    if (resumeProviderId != null) {
-                        dropBeforeResumeId(eventFlow, resumeProviderId)
-                    } else {
-                        eventFlow
+                val timeIntervals = getTimeIntervals(request, sseEventSearchStep, startTimestamp)
+                val parentEventCounter = IParentEventCounter.create(request.limitForParent, limitForParentMode)
+
+                flow {
+                    for ((start, end) in timeIntervals) {
+                        lastScannedObject.update(start)
+
+                        getEventFlow(
+                            request, requestId,start, end, currentCoroutineContext()
+                        ).collect { emit(it) }
+
+                        if (request.parentEvent?.batchId != null) break
                     }
                 }
-                .takeWhile { event ->
-                    request.endTimestamp?.let {
-                        if (request.searchDirection == AFTER) {
-                            event.startTimestamp.isBeforeOrEqual(it)
+                    .map { it.await() }
+                    .flatMapConcat { it.asFlow() }
+                    .let { eventFlow: Flow<BaseEventEntity> ->
+                        if (resumeProviderId != null) {
+                            dropBeforeResumeId(eventFlow, resumeProviderId)
                         } else {
-                            event.startTimestamp.isAfterOrEqual(it)
-                        }
-                    } ?: true
-                }
-                .onEach { event ->
-                    lastScannedObject.update(event, scanCnt)
-                    processedEventCount.inc()
-                }
-                .filter { request.filterPredicate.apply(it) && parentEventCounter.checkCountAndGet(it) }
-                .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
-                .onStart {
-                    launch {
-                        keepAlive(writer, lastScannedObject, lastEventId)
-                    }
-                }.onCompletion {
-                    currentCoroutineContext().cancelChildren()
-                    it?.let { throwable -> throw throwable }
-                }.let { eventFlow ->
-                    if (request.metadataOnly) {
-                        eventFlow.collect {
-                            coroutineContext.ensureActive()
-                            writer.write(it.convertToEventTreeNode(), lastEventId)
-                        }
-                    } else {
-                        eventFlow.collect {
-                            coroutineContext.ensureActive()
-                            writer.write(it.convertToEvent(), lastEventId)
+                            eventFlow
                         }
                     }
-                }
+                    .takeWhile { event ->
+                        request.endTimestamp?.let {
+                            if (request.searchDirection == AFTER) {
+                                event.startTimestamp.isBeforeOrEqual(it)
+                            } else {
+                                event.startTimestamp.isAfterOrEqual(it)
+                            }
+                        } ?: true
+                    }
+                    .onEach { event ->
+                        lastScannedObject.update(event, scanCnt)
+                        processedEventCount.inc()
+                    }
+                    .filter { request.filterPredicate.apply(it) && parentEventCounter.updateCountAndCheck(it) }
+                    .let { fl -> request.resultCountLimit?.let { fl.take(it) } ?: fl }
+                    .onStart {
+                        launch {
+                            keepAlive(writer, lastScannedObject, lastEventId)
+                        }
+                    }.onCompletion {
+                        parentEventCounter.close()
+                        currentCoroutineContext().cancelChildren()
+                        it?.let { throwable -> throw throwable }
+                    }.let { eventFlow ->
+                        withContext(responseDispatcher) {
+                            measure("searchEventsSse.write", requestId) {
+                                if (request.metadataOnly) {
+                                    eventFlow.collect {
+                                        coroutineContext.ensureActive()
+                                        writer.write(it.convertToEventTreeNode(), lastEventId)
+                                    }
+                                } else {
+                                    eventFlow.collect {
+                                        coroutineContext.ensureActive()
+                                        writer.write(it.convertToEvent(), lastEventId)
+                                    }
+                                }
+                            }
+                        }
+                    }
+            }
         }
     }
 }
