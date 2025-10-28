@@ -2,7 +2,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     id 'org.jetbrains.kotlin.jvm' version '2.2.21'
-    id "com.exactpro.th2.gradle.component" version "0.3.9"
+    id "com.exactpro.th2.gradle.component" version "0.3.10"
     id 'application'
 }
 
