@@ -8,7 +8,7 @@ plugins {
 
 ext {
     dockerImageVersion = release_version
-    cradleVersion      = '5.7.0-dev'
+    cradleVersion      = '5.7.1-dev'
 }
 
 group 'com.exactpro.th2'
@@ -38,7 +38,7 @@ dependencies {
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
     implementation 'org.apache.commons:commons-lang3'
 
-    implementation('com.exactpro.th2:common:5.16.1-dev') {
+    implementation('com.exactpro.th2:common:5.17.0-dev') {
         exclude group: 'com.exactpro.th2', module: 'cradle-core'
         exclude group: 'com.exactpro.th2', module: 'cradle-cassandra'
     }
