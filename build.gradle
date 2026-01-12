@@ -38,7 +38,7 @@ dependencies {
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
     implementation 'org.apache.commons:commons-lang3'
 
-    implementation('com.exactpro.th2:common:5.17.0-dev') {
+    implementation('com.exactpro.th2:common:5.17.1-dev') {
         exclude group: 'com.exactpro.th2', module: 'cradle-core'
         exclude group: 'com.exactpro.th2', module: 'cradle-cassandra'
     }
